@@ -51,6 +51,9 @@ type ToolsetEntry struct {
 	ToolSelectionMode string
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

@@ -18,18 +18,21 @@ const (
 type errorCode int
 
 const (
-	methodNotAllowed errorCode = -32000
-	parseError       errorCode = -32700
-	invalidRequest   errorCode = -32600
-	methodNotFound   errorCode = -32601
-	invalidParams    errorCode = -32602
-	internalError    errorCode = -32603
+	methodNotAllowed  errorCode = -32000
+	rateLimitExceeded errorCode = -32029
+	parseError        errorCode = -32700
+	invalidRequest    errorCode = -32600
+	methodNotFound    errorCode = -32601
+	invalidParams     errorCode = -32602
+	internalError     errorCode = -32603
 )
 
 func (e errorCode) UserMessage() string {
 	switch e {
 	case methodNotAllowed:
 		return "method not allowed"
+	case rateLimitExceeded:
+		return "rate limit exceeded"
 	case parseError:
 		return "invalid json was received by the server"
 	case invalidRequest:

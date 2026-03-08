@@ -84,6 +84,10 @@ var Toolset = Type("Toolset", func() {
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
+	Attribute("rate_limit_rpm", Int, "Maximum requests per minute for this MCP server. When set, requests exceeding this limit receive a rate limit error.", func() {
+		Minimum(1)
+		Maximum(10000)
+	})
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
 	Attribute("oauth_proxy_server", OAuthProxyServer, "The OAuth proxy server details")
 	Attribute("created_at", String, func() {
@@ -122,6 +126,10 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
+	Attribute("rate_limit_rpm", Int, "Maximum requests per minute for this MCP server. When set, requests exceeding this limit receive a rate limit error.", func() {
+		Minimum(1)
+		Maximum(10000)
+	})
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
 		Format(FormatDateTime)

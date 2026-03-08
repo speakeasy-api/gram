@@ -2947,6 +2947,7 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 		McpEnabled:        v.McpEnabled,
 		ToolSelectionMode: v.ToolSelectionMode,
 		CustomDomainID:    v.CustomDomainID,
+		RateLimitRpm:      v.RateLimitRpm,
 		CreatedAt:         v.CreatedAt,
 		UpdatedAt:         v.UpdatedAt,
 	}

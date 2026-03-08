@@ -198,7 +198,10 @@ type UpdateToolsetPayload struct {
 	CustomDomainID *string
 	// The mode to use for tool selection
 	ToolSelectionMode *string
-	ProjectSlugInput  *string
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm     *int
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

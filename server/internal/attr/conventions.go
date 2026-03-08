@@ -129,6 +129,8 @@ const (
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
+	RateLimitLayerKey              = attribute.Key("gram.ratelimit.layer")
+	RateLimitKeyKey                = attribute.Key("gram.ratelimit.key")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
@@ -788,6 +790,9 @@ func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(Toolse
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
+
+func RateLimitLayer(v string) attribute.KeyValue { return RateLimitLayerKey.String(v) }
+func RateLimitKey(v string) attribute.KeyValue   { return RateLimitKeyKey.String(v) }
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }

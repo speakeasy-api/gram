@@ -301,6 +301,10 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
+	Attribute("rate_limit_rpm", Int, "Maximum requests per minute for this MCP server. When set, requests exceeding this limit receive a rate limit error.", func() {
+		Minimum(1)
+		Maximum(10000)
+	})
 	security.ProjectPayload()
 	Required("slug")
 })

@@ -12,8 +12,9 @@ import (
 )
 
 type metrics struct {
-	mcpToolCallCounter metric.Int64Counter
-	mcpRequestDuration metric.Float64Histogram
+	mcpToolCallCounter    metric.Int64Counter
+	mcpRequestDuration    metric.Float64Histogram
+	rateLimitCheckCounter metric.Int64Counter
 }
 
 func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
@@ -36,9 +37,19 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		logger.ErrorContext(context.Background(), "failed to create mcp request duration", attr.SlogError(err))
 	}
 
+	rateLimitCheckCounter, err := meter.Int64Counter(
+		"mcp.ratelimit.check",
+		metric.WithDescription("Rate limit checks on MCP requests"),
+		metric.WithUnit("{check}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create rate limit check counter", attr.SlogError(err))
+	}
+
 	return &metrics{
-		mcpToolCallCounter: mcpToolCallCounter,
-		mcpRequestDuration: mcpRequestDuration,
+		mcpToolCallCounter:    mcpToolCallCounter,
+		mcpRequestDuration:    mcpRequestDuration,
+		rateLimitCheckCounter: rateLimitCheckCounter,
 	}
 }
 
@@ -53,6 +64,24 @@ func (m *metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		attr.OrganizationID(orgID),
 	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+func (m *metrics) RecordRateLimitCheck(ctx context.Context, layer string, key string, allowed bool) {
+	if m.rateLimitCheckCounter == nil {
+		return
+	}
+
+	outcome := "allowed"
+	if !allowed {
+		outcome = "limited"
+	}
+
+	kv := []attribute.KeyValue{
+		attr.RateLimitLayer(layer),
+		attr.RateLimitKey(key),
+		attr.Outcome(outcome),
+	}
+	m.rateLimitCheckCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
 func (m *metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {

@@ -613,6 +613,15 @@ type PackageVersion struct {
 	Deleted      bool
 }
 
+type PlatformRateLimit struct {
+	ID                uuid.UUID
+	AttributeType     string
+	AttributeValue    string
+	RequestsPerMinute int32
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
 type Project struct {
 	ID                     uuid.UUID
 	Name                   string
@@ -771,6 +780,7 @@ type Toolset struct {
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
 	McpEnabled             bool
+	RateLimitRpm           pgtype.Int4
 	ToolSelectionMode      string
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID

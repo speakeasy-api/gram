@@ -634,6 +634,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   ),
   mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
   mcp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  rate_limit_rpm integer,
   tool_selection_mode TEXT NOT NULL DEFAULT 'static',
   custom_domain_id uuid,
 
@@ -1477,3 +1478,16 @@ WHERE deleted IS FALSE AND status = 'pending';
 -- Index for looking up invites by token (unconditional to prevent token reuse)
 CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
 ON team_invites (token);
+
+-- Platform-level rate limit overrides for Gram operators
+CREATE TABLE IF NOT EXISTS platform_rate_limits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  attribute_type text NOT NULL,
+  attribute_value text NOT NULL,
+  requests_per_minute integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT platform_rate_limits_attribute_type_value_key UNIQUE (attribute_type, attribute_value),
+  CONSTRAINT platform_rate_limits_attribute_type_check CHECK (attribute_type IN ('mcp_slug', 'project', 'organization')),
+  CONSTRAINT platform_rate_limits_requests_per_minute_check CHECK (requests_per_minute > 0)
+);

@@ -54,6 +54,7 @@ SET
   , custom_domain_id = COALESCE(@custom_domain_id, custom_domain_id)
   , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
   , tool_selection_mode = COALESCE(@tool_selection_mode, tool_selection_mode)
+  , rate_limit_rpm = COALESCE(@rate_limit_rpm, rate_limit_rpm)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;

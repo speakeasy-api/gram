@@ -56,6 +56,9 @@ type UpdateToolsetRequestBody struct {
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 }
 
 // AddExternalOAuthServerRequestBody is the type of the "toolsets" service
@@ -124,6 +127,9 @@ type CreateToolsetResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -193,6 +199,9 @@ type UpdateToolsetResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -255,6 +264,9 @@ type GetToolsetResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -317,6 +329,9 @@ type CloneToolsetResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -379,6 +394,9 @@ type AddExternalOAuthServerResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -441,6 +459,9 @@ type RemoveOAuthServerResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -503,6 +524,9 @@ type AddOAuthProxyServerResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -2899,6 +2923,9 @@ type ToolsetEntryResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Maximum requests per minute for this MCP server. When set, requests
+	// exceeding this limit receive a rate limit error.
+	RateLimitRpm *int `form:"rate_limit_rpm,omitempty" json:"rate_limit_rpm,omitempty" xml:"rate_limit_rpm,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -2986,6 +3013,7 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		RateLimitRpm:      res.RateLimitRpm,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3136,6 +3164,7 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		RateLimitRpm:      res.RateLimitRpm,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3267,6 +3296,7 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		RateLimitRpm:      res.RateLimitRpm,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3398,6 +3428,7 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		RateLimitRpm:      res.RateLimitRpm,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3529,6 +3560,7 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		RateLimitRpm:      res.RateLimitRpm,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3660,6 +3692,7 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		RateLimitRpm:      res.RateLimitRpm,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3791,6 +3824,7 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		RateLimitRpm:      res.RateLimitRpm,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -5392,6 +5426,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 		McpIsPublic:       body.McpIsPublic,
 		CustomDomainID:    body.CustomDomainID,
 		ToolSelectionMode: body.ToolSelectionMode,
+		RateLimitRpm:      body.RateLimitRpm,
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
@@ -5546,6 +5581,16 @@ func ValidateUpdateToolsetRequestBody(body *UpdateToolsetRequestBody) (err error
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.RateLimitRpm != nil {
+		if *body.RateLimitRpm < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.rate_limit_rpm", *body.RateLimitRpm, 1, true))
+		}
+	}
+	if body.RateLimitRpm != nil {
+		if *body.RateLimitRpm > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.rate_limit_rpm", *body.RateLimitRpm, 10000, false))
 		}
 	}
 	return

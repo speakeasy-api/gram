@@ -17541,6 +17541,12 @@ components:
                     items:
                         $ref: '#/components/schemas/PromptTemplate'
                     description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+                rate_limit_rpm:
+                    type: integer
+                    description: Maximum requests per minute for this MCP server. When set, requests exceeding this limit receive a rate limit error.
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
                 resource_urns:
                     type: array
                     items:
@@ -17660,6 +17666,12 @@ components:
                     items:
                         $ref: '#/components/schemas/PromptTemplateEntry'
                     description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+                rate_limit_rpm:
+                    type: integer
+                    description: Maximum requests per minute for this MCP server. When set, requests exceeding this limit receive a rate limit error.
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
                 resource_urns:
                     type: array
                     items:
@@ -17958,6 +17970,12 @@ components:
                     items:
                         type: string
                     description: 'List of prompt template names to include (note: for actual prompts, not tools)'
+                rate_limit_rpm:
+                    type: integer
+                    description: Maximum requests per minute for this MCP server. When set, requests exceeding this limit receive a rate limit error.
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
                 resource_urns:
                     type: array
                     items:
@@ -18011,6 +18029,12 @@ components:
                     items:
                         type: string
                     description: 'List of prompt template names to include (note: for actual prompts, not tools)'
+                rate_limit_rpm:
+                    type: integer
+                    description: Maximum requests per minute for this MCP server. When set, requests exceeding this limit receive a rate limit error.
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
                 resource_urns:
                     type: array
                     items:

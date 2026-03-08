@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -90,6 +91,7 @@ type Service struct {
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
 	enc                 *encryption.Client
+	rateLimiter         *ratelimit.RateLimiter
 }
 
 type oauthTokenInputs struct {
@@ -140,6 +142,7 @@ func NewService(
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal *temporal.Environment,
+	rateLimiter *ratelimit.RateLimiter,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -182,6 +185,7 @@ func NewService(
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
+		rateLimiter:         rateLimiter,
 	}
 }
 
@@ -382,6 +386,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	// Layer 2: customer-configured rate limit check
+	if limited, rlErr := s.checkCustomerRateLimit(ctx, w, toolset.RateLimitRpm, mcpSlug); limited {
+		if rlErr != nil {
+			return oops.E(oops.CodeUnexpected, rlErr, "rate limit response write failed").Log(ctx, s.logger)
+		}
+		return nil
 	}
 
 	baseURL := s.serverURL.String()
@@ -759,6 +771,14 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	})
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	}
+
+	// Layer 2: customer-configured rate limit check (use toolset ID to avoid cross-org collisions)
+	if limited, rlErr := s.checkCustomerRateLimit(ctx, w, toolset.RateLimitRpm, toolset.ID.String()); limited {
+		if rlErr != nil {
+			return oops.E(oops.CodeUnexpected, rlErr, "rate limit response write failed").Log(ctx, s.logger)
+		}
+		return nil
 	}
 
 	// Load header display names for remapping

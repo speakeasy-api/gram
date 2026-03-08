@@ -41,6 +41,7 @@ type Toolset struct {
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
 	McpEnabled             bool
+	RateLimitRpm           pgtype.Int4
 	ToolSelectionMode      string
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
