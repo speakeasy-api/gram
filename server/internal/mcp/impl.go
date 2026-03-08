@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -88,6 +89,7 @@ type Service struct {
 	sessions            *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
+	customdomainsRepo   *customdomains_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
 	enc                 *encryption.Client
 }
@@ -146,20 +148,21 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("mcp"))
 
 	return &Service{
-		logger:          logger,
-		tracer:          tracer,
-		metrics:         newMetrics(meter, logger),
-		db:              db,
-		authRepo:        auth_repo.New(db),
-		toolsetsRepo:    toolsets_repo.New(db),
-		mcpMetadataRepo: metadata_repo.New(db),
-		orgsRepo:        organizations_repo.New(db),
-		deploymentsRepo: deployments_repo.New(db),
-		externalmcpRepo: externalmcp_repo.New(db),
-		auth:            auth.New(logger, db, sessions),
-		env:             env,
-		serverURL:       serverURL,
-		posthog:         posthog,
+		logger:            logger,
+		tracer:            tracer,
+		metrics:           newMetrics(meter, logger),
+		db:                db,
+		authRepo:          auth_repo.New(db),
+		toolsetsRepo:      toolsets_repo.New(db),
+		mcpMetadataRepo:   metadata_repo.New(db),
+		orgsRepo:          organizations_repo.New(db),
+		deploymentsRepo:   deployments_repo.New(db),
+		externalmcpRepo:   externalmcp_repo.New(db),
+		customdomainsRepo: customdomains_repo.New(db),
+		auth:              auth.New(logger, db, sessions),
+		env:               env,
+		serverURL:         serverURL,
+		posthog:           posthog,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -192,6 +195,12 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP)
+
+	// MCP proxy for cross-origin external MCP servers (used by Elements playground)
+	mcpProxyHandler := oops.ErrHandle(service.logger, service.ServeMCPProxy).ServeHTTP
+	o11y.AttachHandler(mux, "POST", "/mcp-proxy/*", mcpProxyHandler)
+	o11y.AttachHandler(mux, "GET", "/mcp-proxy/*", mcpProxyHandler)
+	o11y.AttachHandler(mux, "DELETE", "/mcp-proxy/*", mcpProxyHandler)
 
 	// OAuth 2.1 Authorization Server Metadata
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
@@ -364,6 +373,101 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 	if writeErr != nil {
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
 	}
+
+	return nil
+}
+
+// ServeMCPProxy proxies requests to MCP servers, keeping them same-origin so the
+// browser sends the gram_session cookie. Same-origin targets (matching the Gram
+// server host) are allowed through directly. Cross-origin targets must be a
+// registered custom domain the caller's organization owns.
+func (s *Service) ServeMCPProxy(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Extract target URL from wildcard path: /mcp-proxy/example.com/mcp/slug
+	mcpTarget := chi.URLParam(r, "*")
+	if mcpTarget == "" {
+		return oops.E(oops.CodeBadRequest, nil, "missing proxy target").Log(ctx, s.logger)
+	}
+
+	// Parse with a placeholder scheme first to extract the hostname, then
+	// choose the real scheme: same-origin targets reuse the server's scheme
+	// (http in local dev), cross-origin custom domains are always https.
+	target, err := url.Parse("https://" + mcpTarget)
+	if err != nil || target.Host == "" {
+		return oops.E(oops.CodeBadRequest, err, "invalid proxy target URL").Log(ctx, s.logger)
+	}
+
+	sameOrigin := target.Hostname() == s.serverURL.Hostname()
+	if sameOrigin {
+		target.Scheme = s.serverURL.Scheme
+		target.Host = s.serverURL.Host
+	}
+
+	// Authenticate via session cookie and verify project membership
+	ctx, err = s.sessions.AuthenticateWithCookie(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "session authentication required").Log(ctx, s.logger)
+	}
+
+	projectSlug := r.Header.Get(constants.ProjectHeader)
+	if projectSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "%s header is required", constants.ProjectHeader).Log(ctx, s.logger)
+	}
+
+	ctx, err = s.auth.Authorize(ctx, projectSlug, &security.APIKeyScheme{
+		Name:           constants.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	})
+	if err != nil {
+		return oops.E(oops.CodeForbidden, err, "project access denied").Log(ctx, s.logger)
+	}
+
+	// Cross-origin targets must be a verified custom domain belonging to the caller's org.
+	if !sameOrigin {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			return oops.C(oops.CodeUnauthorized)
+		}
+
+		domain, err := s.customdomainsRepo.GetCustomDomainByDomain(ctx, target.Host)
+		if err != nil {
+			return oops.E(oops.CodeForbidden, err, "target host is not a registered custom domain").Log(ctx, s.logger)
+		}
+
+		if domain.OrganizationID != authCtx.ActiveOrganizationID {
+			return oops.E(oops.CodeForbidden, nil, "custom domain does not belong to your organization").Log(ctx, s.logger)
+		}
+
+		if !domain.Verified || !domain.Activated {
+			return oops.E(oops.CodeForbidden, nil, "custom domain is not active").Log(ctx, s.logger)
+		}
+	}
+
+	// Proxy the request. Strip cookies for cross-origin targets to prevent
+	// gram_session leakage to external servers. Keep cookies for same-origin
+	// targets so downstream handlers (ServePublic) can authenticate.
+	proxy := &httputil.ReverseProxy{
+		Director: nil,
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			// SetURL joins paths; override with the exact target path.
+			pr.Out.URL.Path = target.Path
+			pr.Out.URL.RawPath = target.RawPath
+			pr.Out.Host = target.Host
+			if !sameOrigin {
+				pr.Out.Header.Del("Cookie")
+			}
+		},
+		Transport:      nil,
+		FlushInterval:  -1, // flush immediately for SSE streaming
+		ErrorLog:       nil,
+		BufferPool:     nil,
+		ModifyResponse: nil,
+		ErrorHandler:   nil,
+	}
+	proxy.ServeHTTP(w, r)
 
 	return nil
 }

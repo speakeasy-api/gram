@@ -7,7 +7,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import { mcpProxyUrl, useMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -177,7 +177,7 @@ export function PlaygroundElements({
           showThreadList: true,
           initialThreadId,
         },
-        mcp: mcpUrl,
+        mcp: mcpProxyUrl(mcpUrl),
         gramEnvironment: environmentSlug ?? undefined,
         environment: {
           ...userProvidedHeaders,
