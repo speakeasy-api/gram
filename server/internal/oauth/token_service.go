@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 )
 
 // TokenService handles OAuth token operations
@@ -57,6 +58,13 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 		return nil, fmt.Errorf("invalid authorization code: %w", err)
 	}
 
+	if err := inv.Check("grant",
+		"has exactly 1 external secret", len(grant.ExternalSecrets) == 1,
+	); err != nil {
+		return nil, fmt.Errorf("invalid grant (invariant): %w", err)
+	}
+	secret := grant.ExternalSecrets[0]
+
 	// Validate PKCE if present
 	if req.CodeVerifier != "" {
 		if err := ts.pkceService.ValidatePKCEFlow(ctx, grant, req.CodeVerifier); err != nil {
@@ -74,6 +82,26 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
+	// When the upstream server didn't issue a refresh token, we can't refresh
+	// the external secret, so our token's lifetime is bounded by the upstream
+	// token's expiry. In that case, use the upstream expiry directly.
+	//
+	// However, if the upstream token lives longer than our standard access
+	// token duration, cap it to our standard duration minus a 10-minute buffer.
+	// The buffer ensures our token expires before the upstream token, giving
+	// clients a window to detect expiry and re-authenticate rather than
+	// failing mid-request with a stale upstream token. Additionally, we using
+	// this lower bound to better mitigate against token exposure. A short
+	// expiry means that if an access token is leaked, it will be valid for a
+	// shorter period of time, reducing the potential impact of the leak.
+	expires := time.Now().Add(ts.accessTokenExpiration)
+	if secret.RefreshToken == "" && secret.ExpiresAt != nil && !secret.ExpiresAt.IsZero() {
+		expires = *secret.ExpiresAt
+		if time.Until(expires) > ts.accessTokenExpiration {
+			expires = time.Now().Add(ts.accessTokenExpiration).Add(-10 * time.Minute)
+		}
+	}
+
 	// Create token response
 	token := &Token{
 		ToolsetID:       toolsetId,
@@ -83,7 +111,7 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 		Scope:           grant.Scope,
 		ExternalSecrets: grant.ExternalSecrets,
 		CreatedAt:       time.Now(),
-		ExpiresAt:       time.Now().Add(ts.accessTokenExpiration),
+		ExpiresAt:       expires,
 	}
 
 	if err := ts.storeToken(ctx, *token); err != nil {
