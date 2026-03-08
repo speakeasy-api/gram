@@ -329,9 +329,60 @@ export class Gram<
 
   /**
    * Registers a UI resource (MCP Apps / SEP-1865) with `text/html+mcp` MIME type.
+   *
+   * Accepts either raw `content` (full HTML string) or `body` + optional `styles`
+   * which are wrapped in an HTML scaffold with a `Gram.onData(cb)` helper injected.
+   *
+   * If `uri` is omitted, it defaults to `ui://{name}`.
+   *
+   * @example
+   * ```ts
+   * gram.uiResource({
+   *   name: "bar-chart",
+   *   description: "Interactive bar chart",
+   *   title: "Bar Chart",
+   *   styles: `.chart { display: flex; align-items: end; gap: 4px; }`,
+   *   body: `
+   *     <div id="chart"></div>
+   *     <script>
+   *       Gram.onData((data) => {
+   *         document.getElementById("chart").textContent = JSON.stringify(data);
+   *       });
+   *     </script>
+   *   `,
+   * });
+   * ```
    */
-  uiResource(def: Omit<ResourceEntry, "mimeType">): this {
-    return this.resource({ ...def, mimeType: "text/html+mcp" });
+  uiResource(
+    def: {
+      name: string;
+      description: string;
+      title?: string;
+      uri?: string;
+    } & (
+      | {
+          /** Raw HTML content for the resource. */
+          content: string | (() => string | Promise<string>);
+        }
+      | {
+          /** HTML body content — will be wrapped in a scaffold with Gram.onData() helper. */
+          body: string;
+          /** CSS styles injected into the scaffold's <style> tag. */
+          styles?: string;
+        }
+    ),
+  ): this {
+    const uri = def.uri ?? `ui://${def.name}`;
+    const content =
+      "body" in def ? buildUIScaffold(def.body, def.styles) : def.content;
+    return this.resource({
+      name: def.name,
+      uri,
+      description: def.description,
+      title: def.title,
+      mimeType: "text/html+mcp",
+      content,
+    });
   }
 
   /**
@@ -539,6 +590,28 @@ export class Gram<
       ...(resources.length > 0 ? { resources } : {}),
     };
   }
+}
+
+/**
+ * Wraps body HTML and optional styles in a full HTML document with the
+ * Gram.onData() communication helper injected.
+ */
+function buildUIScaffold(body: string, styles?: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<style>
+body{margin:0;padding:16px;font-family:system-ui,sans-serif}
+${styles ?? ""}
+</style>
+</head>
+<body>
+${body}
+<script>
+window.Gram={onData(cb){window.addEventListener("message",e=>{if(e.data!=null)cb(e.data)})}};
+</script>
+</body>
+</html>`;
 }
 
 function envMapFromJSONSchema(jsonSchema: unknown): ManifestVariables {

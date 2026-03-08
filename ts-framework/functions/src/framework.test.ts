@@ -698,6 +698,58 @@ test("uiResource() sets mimeType to text/html+mcp", () => {
   ]);
 });
 
+test("uiResource() auto-generates uri from name when omitted", () => {
+  const g = new Gram().uiResource({
+    name: "bar-chart",
+    description: "Interactive bar chart",
+    content: "<html><body>chart</body></html>",
+  });
+
+  const manifest = g.manifest();
+  expect(manifest.resources?.[0]?.uri).toBe("ui://bar-chart");
+});
+
+test("uiResource() with body/styles wraps in scaffold with Gram.onData", async () => {
+  const g = new Gram().uiResource({
+    name: "chart",
+    description: "A chart",
+    body: '<div id="chart"></div>',
+    styles: ".chart { color: red; }",
+  });
+
+  const response = await g.handleResourceRead({ uri: "ui://chart" });
+  const html = await response.text();
+
+  // Scaffold structure
+  expect(html).toContain("<!DOCTYPE html>");
+  expect(html).toContain("<html>");
+  expect(html).toContain("</html>");
+
+  // Styles injected
+  expect(html).toContain(".chart { color: red; }");
+
+  // Body injected
+  expect(html).toContain('<div id="chart"></div>');
+
+  // Gram.onData helper injected
+  expect(html).toContain("Gram={onData");
+  expect(html).toContain('addEventListener("message"');
+});
+
+test("uiResource() with body but no styles still works", async () => {
+  const g = new Gram().uiResource({
+    name: "simple",
+    description: "Simple UI",
+    body: "<p>hello</p>",
+  });
+
+  const response = await g.handleResourceRead({ uri: "ui://simple" });
+  const html = await response.text();
+  expect(html).toContain("<!DOCTYPE html>");
+  expect(html).toContain("<p>hello</p>");
+  expect(html).toContain("Gram={onData");
+});
+
 test("handleResourceRead() returns static content", async () => {
   const g = new Gram().resource({
     name: "greeting",
