@@ -30,6 +30,11 @@ type Result struct {
 	ResetAt time.Time
 }
 
+// Limiter checks whether a request is within its rate limit.
+type Limiter interface {
+	Allow(ctx context.Context, key string, limit int) (Result, error)
+}
+
 // RateLimiter performs rate limit checks against Redis using a fixed-window counter.
 type RateLimiter struct {
 	client *redis.Client

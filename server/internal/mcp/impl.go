@@ -91,7 +91,7 @@ type Service struct {
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
 	enc                 *encryption.Client
-	rateLimiter         *ratelimit.RateLimiter
+	rateLimiter         ratelimit.Limiter
 }
 
 type oauthTokenInputs struct {
@@ -142,7 +142,7 @@ func NewService(
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal *temporal.Environment,
-	rateLimiter *ratelimit.RateLimiter,
+	rateLimiter ratelimit.Limiter,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")

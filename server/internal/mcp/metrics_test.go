@@ -72,3 +72,24 @@ func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
 		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", 100*time.Millisecond)
 	})
 }
+
+func TestMetrics_RecordRateLimitCheckWithValidCounter(t *testing.T) {
+	t.Parallel()
+	meter := noop.NewMeterProvider().Meter("test")
+	logger := slog.New(slog.DiscardHandler)
+	m := newMetrics(meter, logger)
+
+	// Should not panic for allowed and limited outcomes.
+	m.RecordRateLimitCheck(context.Background(), "customer", "test-key", true)
+	m.RecordRateLimitCheck(context.Background(), "platform", "test-slug", false)
+}
+
+func TestMetrics_RecordRateLimitCheckNilCounter(t *testing.T) {
+	t.Parallel()
+	m := &metrics{
+		rateLimitCheckCounter: nil,
+	}
+
+	// Should not panic when counter is nil.
+	m.RecordRateLimitCheck(context.Background(), "customer", "test-key", true)
+}

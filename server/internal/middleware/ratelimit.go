@@ -39,7 +39,7 @@ type rateLimitErrorResponse struct {
 // It extracts the MCP slug from the URL path and checks against the rate limiter.
 // Only applies to POST requests to /mcp/{slug} and /mcp/{project}/{toolset}/{environment} paths.
 // Non-MCP requests and non-POST methods pass through unchanged.
-func RateLimitMiddleware(limiter *ratelimit.RateLimiter, configLoader RateLimitConfigLoader, logger *slog.Logger) func(http.Handler) http.Handler {
+func RateLimitMiddleware(limiter ratelimit.Limiter, configLoader RateLimitConfigLoader, logger *slog.Logger) func(http.Handler) http.Handler {
 	logger = logger.With(attr.SlogComponent("ratelimit"))
 
 	meter := otel.GetMeterProvider().Meter("github.com/speakeasy-api/gram/server/internal/middleware")
