@@ -10,7 +10,7 @@ import { $ } from "zx";
 import { confirm, isCancel } from "@clack/prompts";
 
 async function run() {
-  const gitDir = (await $`git rev-parse --git-dir`).stdout.trim();
+  const gitDir = (await $`git rev-parse --git-common-dir`).stdout.trim();
   const hooksDir = join(gitDir, "hooks");
   const preCommit = join(hooksDir, "pre-commit");
 
