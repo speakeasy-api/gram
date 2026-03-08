@@ -16,29 +16,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 )
 
+const defaultTokenExpiration = 30 * 24 * time.Hour
+
 // TokenService handles OAuth token operations
 type TokenService struct {
-	tokenStorage          cache.TypedCacheObject[Token]
-	clientRegistration    *ClientRegistrationService
-	grantManager          *GrantManager
-	pkceService           *PKCEService
-	logger                *slog.Logger
-	accessTokenExpiration time.Duration
-	tokenLength           int
-	enc                   *encryption.Client
+	tokenStorage       cache.TypedCacheObject[Token]
+	clientRegistration *ClientRegistrationService
+	grantManager       *GrantManager
+	pkceService        *PKCEService
+	logger             *slog.Logger
+	tokenLength        int
+	enc                *encryption.Client
 }
 
 func NewTokenService(cacheImpl cache.Cache, clientRegistration *ClientRegistrationService, grantManager *GrantManager, pkceService *PKCEService, logger *slog.Logger, enc *encryption.Client) *TokenService {
 	tokenStorage := cache.NewTypedObjectCache[Token](logger.With(attr.SlogCacheNamespace("oauth_token")), cacheImpl, cache.SuffixNone)
 	return &TokenService{
-		tokenStorage:          tokenStorage,
-		clientRegistration:    clientRegistration,
-		grantManager:          grantManager,
-		pkceService:           pkceService,
-		logger:                logger,
-		accessTokenExpiration: 30 * 24 * time.Hour, // This is an overarching default, it is actually driven by the underlying credentials
-		tokenLength:           32,
-		enc:                   enc,
+		tokenStorage:       tokenStorage,
+		clientRegistration: clientRegistration,
+		grantManager:       grantManager,
+		pkceService:        pkceService,
+		logger:             logger,
+		tokenLength:        32,
+		enc:                enc,
 	}
 }
 
@@ -94,11 +94,11 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 	// this lower bound to better mitigate against token exposure. A short
 	// expiry means that if an access token is leaked, it will be valid for a
 	// shorter period of time, reducing the potential impact of the leak.
-	expires := time.Now().Add(ts.accessTokenExpiration)
+	expires := time.Now().Add(defaultTokenExpiration)
 	if secret.RefreshToken == "" && secret.ExpiresAt != nil && !secret.ExpiresAt.IsZero() {
 		expires = *secret.ExpiresAt
-		if time.Until(expires) > ts.accessTokenExpiration {
-			expires = time.Now().Add(ts.accessTokenExpiration).Add(-10 * time.Minute)
+		if time.Until(expires) > defaultTokenExpiration {
+			expires = time.Now().Add(defaultTokenExpiration).Add(-10 * time.Minute)
 		}
 	}
 
@@ -143,6 +143,13 @@ func (ts *TokenService) ExchangeRefreshToken(ctx context.Context, req *TokenRequ
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
 	}
 
+	if err := inv.Check("grant",
+		"has exactly 1 external secret", len(oldToken.ExternalSecrets) == 1,
+	); err != nil {
+		return nil, fmt.Errorf("invalid outgoing access token (invariant): %w", err)
+	}
+	secret := oldToken.ExternalSecrets[0]
+
 	// Decrypt external secrets and check expiration
 	for i, externalSecret := range oldToken.ExternalSecrets {
 		decrypted, err := ts.enc.Decrypt(externalSecret.Token)
@@ -179,6 +186,26 @@ func (ts *TokenService) ExchangeRefreshToken(ctx context.Context, req *TokenRequ
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
+	// When the upstream server didn't issue a refresh token, we can't refresh
+	// the external secret, so our token's lifetime is bounded by the upstream
+	// token's expiry. In that case, use the upstream expiry directly.
+	//
+	// However, if the upstream token lives longer than our standard access
+	// token duration, cap it to our standard duration minus a 10-minute buffer.
+	// The buffer ensures our token expires before the upstream token, giving
+	// clients a window to detect expiry and re-authenticate rather than
+	// failing mid-request with a stale upstream token. Additionally, we using
+	// this lower bound to better mitigate against token exposure. A short
+	// expiry means that if an access token is leaked, it will be valid for a
+	// shorter period of time, reducing the potential impact of the leak.
+	expires := time.Now().Add(defaultTokenExpiration)
+	if secret.RefreshToken == "" && secret.ExpiresAt != nil && !secret.ExpiresAt.IsZero() {
+		expires = *secret.ExpiresAt
+		if time.Until(expires) > defaultTokenExpiration {
+			expires = time.Now().Add(defaultTokenExpiration).Add(-10 * time.Minute)
+		}
+	}
+
 	newToken := &Token{
 		ToolsetID:       toolsetID,
 		AccessToken:     newAccessToken,
@@ -187,7 +214,7 @@ func (ts *TokenService) ExchangeRefreshToken(ctx context.Context, req *TokenRequ
 		Scope:           oldToken.Scope,
 		ExternalSecrets: oldToken.ExternalSecrets,
 		CreatedAt:       time.Now(),
-		ExpiresAt:       time.Now().Add(ts.accessTokenExpiration),
+		ExpiresAt:       expires,
 	}
 
 	if err := ts.storeToken(ctx, *newToken); err != nil {
@@ -283,11 +310,6 @@ func (ts *TokenService) CreateErrorResponse(errorType, description string) map[s
 	}
 
 	return response
-}
-
-// SetTokenExpiration sets custom token expiration time
-func (ts *TokenService) SetTokenExpiration(accessTokenExpiration time.Duration) {
-	ts.accessTokenExpiration = accessTokenExpiration
 }
 
 // RefreshExternalSecrets updates the external secrets on an existing token in the cache.
