@@ -15,6 +15,10 @@ import {
   type ListToolsResult,
   CallToolRequestSchema,
   type CallToolResult,
+  ListResourcesRequestSchema,
+  type ListResourcesResult,
+  ReadResourceRequestSchema,
+  type ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Server } from "@modelcontextprotocol/sdk/server";
 
@@ -195,11 +199,16 @@ export function fromGram(
   const imageLike = /^image\//i;
   const audioLike = /^audio\//i;
 
+  const manifest = g.manifest();
+  const hasResources =
+    manifest.resources != null && manifest.resources.length > 0;
+
   const server = new Server(
     { name, version },
     {
       capabilities: {
         tools: {},
+        ...(hasResources ? { resources: {} } : {}),
       },
     },
   );
@@ -207,7 +216,7 @@ export function fromGram(
   server.setRequestHandler(
     ListToolsRequestSchema,
     async (): Promise<ListToolsResult> => {
-      const tools = (g.manifest().tools || []).map((t) => {
+      const tools = (manifest.tools || []).map((t) => {
         return {
           name: t.name,
           description: t.description,
@@ -221,6 +230,9 @@ export function fromGram(
                 openWorldHint: t.annotations.openWorldHint,
               }
             : undefined,
+          ...(t.meta != null
+            ? { _meta: t.meta as Record<string, unknown> }
+            : {}),
         };
       }) as ListToolsResult["tools"];
 
@@ -285,6 +297,41 @@ export function fromGram(
       }
     },
   );
+
+  if (hasResources) {
+    server.setRequestHandler(
+      ListResourcesRequestSchema,
+      async (): Promise<ListResourcesResult> => {
+        return {
+          resources: (manifest.resources || []).map((r) => ({
+            name: r.name,
+            uri: r.uri,
+            description: r.description,
+            mimeType: r.mimeType,
+            title: r.title,
+          })),
+        };
+      },
+    );
+
+    server.setRequestHandler(
+      ReadResourceRequestSchema,
+      async (req): Promise<ReadResourceResult> => {
+        const { uri } = req.params;
+        const resp = await g.handleResourceRead({ uri });
+        const text = await resp.text();
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: resp.headers.get("Content-Type") || "text/plain",
+              text,
+            },
+          ],
+        };
+      },
+    );
+  }
 
   return server;
 }
