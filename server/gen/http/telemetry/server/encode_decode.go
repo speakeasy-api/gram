@@ -2638,6 +2638,26 @@ func EncodeGetHooksSummaryError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// unmarshalLogFilterRequestBodyToTelemetryLogFilter builds a value of type
+// *telemetry.LogFilter from a value of type *LogFilterRequestBody.
+func unmarshalLogFilterRequestBodyToTelemetryLogFilter(v *LogFilterRequestBody) *telemetry.LogFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.LogFilter{
+		Path:  *v.Path,
+		Value: v.Value,
+	}
+	if v.Op != nil {
+		res.Op = *v.Op
+	}
+	if v.Op == nil {
+		res.Op = "eq"
+	}
+
+	return res
+}
+
 // unmarshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter builds a
 // value of type *telemetry.SearchLogsFilter from a value of type
 // *SearchLogsFilterRequestBody.
@@ -2667,37 +2687,6 @@ func unmarshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter(v *SearchLo
 		for i, val := range v.GramUrns {
 			res.GramUrns[i] = val
 		}
-	}
-	if v.AttributeFilters != nil {
-		res.AttributeFilters = make([]*telemetry.AttributeFilter, len(v.AttributeFilters))
-		for i, val := range v.AttributeFilters {
-			if val == nil {
-				res.AttributeFilters[i] = nil
-				continue
-			}
-			res.AttributeFilters[i] = unmarshalAttributeFilterRequestBodyToTelemetryAttributeFilter(val)
-		}
-	}
-
-	return res
-}
-
-// unmarshalAttributeFilterRequestBodyToTelemetryAttributeFilter builds a value
-// of type *telemetry.AttributeFilter from a value of type
-// *AttributeFilterRequestBody.
-func unmarshalAttributeFilterRequestBodyToTelemetryAttributeFilter(v *AttributeFilterRequestBody) *telemetry.AttributeFilter {
-	if v == nil {
-		return nil
-	}
-	res := &telemetry.AttributeFilter{
-		Path:  *v.Path,
-		Value: v.Value,
-	}
-	if v.Op != nil {
-		res.Op = *v.Op
-	}
-	if v.Op == nil {
-		res.Op = "eq"
 	}
 
 	return res

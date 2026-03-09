@@ -1,4 +1,4 @@
-import { Op } from "@gram/client/models/components/attributefilter";
+import { Op } from "@gram/client/models/components/logfilter";
 import type { ActiveAttributeFilter } from "./attribute-filter-types";
 
 /**

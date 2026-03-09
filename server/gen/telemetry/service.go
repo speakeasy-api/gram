@@ -66,17 +66,6 @@ const ServiceName = "telemetry"
 // MethodKey key.
 var MethodNames = [11]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary"}
 
-// Filter on a log attribute by path.
-type AttributeFilter struct {
-	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
-	// bare path for system attributes (e.g. 'http.route').
-	Path string
-	// Comparison operator
-	Op string
-	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
-	Value *string
-}
-
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
 type CaptureEventPayload struct {
@@ -298,6 +287,17 @@ type ListFilterOptionsResult struct {
 	Options []*FilterOption
 }
 
+// A single filter condition for a log search query.
+type LogFilter struct {
+	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
+	// bare path for system attributes (e.g. 'http.route').
+	Path string
+	// Comparison operator
+	Op string
+	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
+	Value *string
+}
+
 // Model usage statistics
 type ModelUsage struct {
 	// Model name
@@ -443,8 +443,6 @@ type SearchLogsFilter struct {
 	ExternalUserID *string
 	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
 	EventSource *string
-	// Filters on custom log attributes
-	AttributeFilters []*AttributeFilter
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -463,7 +461,13 @@ type SearchLogsPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Filter criteria for the search
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string
+	// Filter conditions for the search query
+	Filters []*LogFilter
+	// [Deprecated] Use 'filters' and top-level 'from'/'to' instead.
 	Filter *SearchLogsFilter
 	// Cursor for pagination
 	Cursor *string

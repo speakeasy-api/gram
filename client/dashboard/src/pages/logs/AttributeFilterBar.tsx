@@ -10,7 +10,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Op } from "@gram/client/models/components/attributefilter";
+import { Op } from "@gram/client/models/components/logfilter";
 import { Command as CmdkRoot } from "cmdk";
 import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";

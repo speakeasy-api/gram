@@ -21,9 +21,9 @@ export const Op = {
 export type Op = ClosedEnum<typeof Op>;
 
 /**
- * Filter on a log attribute by path.
+ * A single filter condition for a log search query.
  */
-export type AttributeFilter = {
+export type LogFilter = {
   /**
    * Comparison operator
    */
@@ -42,24 +42,22 @@ export type AttributeFilter = {
 export const Op$outboundSchema: z.ZodMiniEnum<typeof Op> = z.enum(Op);
 
 /** @internal */
-export type AttributeFilter$Outbound = {
+export type LogFilter$Outbound = {
   op: string;
   path: string;
   value?: string | undefined;
 };
 
 /** @internal */
-export const AttributeFilter$outboundSchema: z.ZodMiniType<
-  AttributeFilter$Outbound,
-  AttributeFilter
+export const LogFilter$outboundSchema: z.ZodMiniType<
+  LogFilter$Outbound,
+  LogFilter
 > = z.object({
   op: z._default(Op$outboundSchema, "eq"),
   path: z.string(),
   value: z.optional(z.string()),
 });
 
-export function attributeFilterToJSON(
-  attributeFilter: AttributeFilter,
-): string {
-  return JSON.stringify(AttributeFilter$outboundSchema.parse(attributeFilter));
+export function logFilterToJSON(logFilter: LogFilter): string {
+  return JSON.stringify(LogFilter$outboundSchema.parse(logFilter));
 }

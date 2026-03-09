@@ -17,7 +17,7 @@ import {
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import type {
-  AttributeFilter,
+  LogFilter,
   GetHooksSummaryResult,
   HooksServerSummary,
   TelemetryLogRecord,
@@ -205,8 +205,8 @@ function HooksContent() {
   );
 
   // Build attribute filters for server, search query, and user email
-  const attributeFilters = useMemo(() => {
-    const filters: AttributeFilter[] = [];
+  const logFilters = useMemo(() => {
+    const filters: LogFilter[] = [];
 
     // Filter by tool source (gram.tool_call.source)
     if (selectedServer) {
@@ -262,12 +262,10 @@ function HooksContent() {
         unwrapAsync(
           telemetrySearchLogs(client, {
             searchLogsPayload: {
-              filter: {
-                eventSource: "hook",
-                from,
-                to,
-                attributeFilters,
-              },
+              from,
+              to,
+              filters: logFilters,
+              filter: { eventSource: "hook" },
               cursor: pageParam,
               limit: perPage,
               sort: "desc",

@@ -2687,6 +2687,27 @@ func DecodeGetHooksSummaryResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// marshalTelemetryLogFilterToLogFilterRequestBody builds a value of type
+// *LogFilterRequestBody from a value of type *telemetry.LogFilter.
+func marshalTelemetryLogFilterToLogFilterRequestBody(v *telemetry.LogFilter) *LogFilterRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &LogFilterRequestBody{
+		Path:  v.Path,
+		Op:    v.Op,
+		Value: v.Value,
+	}
+	{
+		var zero string
+		if res.Op == zero {
+			res.Op = "eq"
+		}
+	}
+
+	return res
+}
+
 // marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody builds a value
 // of type *SearchLogsFilterRequestBody from a value of type
 // *telemetry.SearchLogsFilter.
@@ -2717,28 +2738,17 @@ func marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody(v *telemetry.
 			res.GramUrns[i] = val
 		}
 	}
-	if v.AttributeFilters != nil {
-		res.AttributeFilters = make([]*AttributeFilterRequestBody, len(v.AttributeFilters))
-		for i, val := range v.AttributeFilters {
-			if val == nil {
-				res.AttributeFilters[i] = nil
-				continue
-			}
-			res.AttributeFilters[i] = marshalTelemetryAttributeFilterToAttributeFilterRequestBody(val)
-		}
-	}
 
 	return res
 }
 
-// marshalTelemetryAttributeFilterToAttributeFilterRequestBody builds a value
-// of type *AttributeFilterRequestBody from a value of type
-// *telemetry.AttributeFilter.
-func marshalTelemetryAttributeFilterToAttributeFilterRequestBody(v *telemetry.AttributeFilter) *AttributeFilterRequestBody {
+// marshalLogFilterRequestBodyToTelemetryLogFilter builds a value of type
+// *telemetry.LogFilter from a value of type *LogFilterRequestBody.
+func marshalLogFilterRequestBodyToTelemetryLogFilter(v *LogFilterRequestBody) *telemetry.LogFilter {
 	if v == nil {
 		return nil
 	}
-	res := &AttributeFilterRequestBody{
+	res := &telemetry.LogFilter{
 		Path:  v.Path,
 		Op:    v.Op,
 		Value: v.Value,
@@ -2781,38 +2791,6 @@ func marshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter(v *SearchLogs
 		res.GramUrns = make([]string, len(v.GramUrns))
 		for i, val := range v.GramUrns {
 			res.GramUrns[i] = val
-		}
-	}
-	if v.AttributeFilters != nil {
-		res.AttributeFilters = make([]*telemetry.AttributeFilter, len(v.AttributeFilters))
-		for i, val := range v.AttributeFilters {
-			if val == nil {
-				res.AttributeFilters[i] = nil
-				continue
-			}
-			res.AttributeFilters[i] = marshalAttributeFilterRequestBodyToTelemetryAttributeFilter(val)
-		}
-	}
-
-	return res
-}
-
-// marshalAttributeFilterRequestBodyToTelemetryAttributeFilter builds a value
-// of type *telemetry.AttributeFilter from a value of type
-// *AttributeFilterRequestBody.
-func marshalAttributeFilterRequestBodyToTelemetryAttributeFilter(v *AttributeFilterRequestBody) *telemetry.AttributeFilter {
-	if v == nil {
-		return nil
-	}
-	res := &telemetry.AttributeFilter{
-		Path:  v.Path,
-		Op:    v.Op,
-		Value: v.Value,
-	}
-	{
-		var zero string
-		if res.Op == zero {
-			res.Op = "eq"
 		}
 	}
 

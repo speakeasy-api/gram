@@ -820,7 +820,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 	}
 }
 
-func TestSearchLogs_AttributeFilters(t *testing.T) {
+func TestSearchLogs_LogFilters(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -903,61 +903,61 @@ func TestSearchLogs_AttributeFilters(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		filters       []*gen.AttributeFilter
+		filters       []*gen.LogFilter
 		expectedCount int
 	}{
 		{
 			name: "@ prefix equality matches user attribute",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "@user.region", Op: eq, Value: &[]string{"us-east-1"}[0]},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "@ prefix not-equal excludes matching user attribute",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "@user.region", Op: notEq, Value: &[]string{"us-east-1"}[0]},
 			},
 			expectedCount: 2, // eu-west-1 + log with no attribute (toString returns '' which != 'us-east-1')
 		},
 		{
 			name: "@ prefix contains searches within value",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "@user.region", Op: contains, Value: &[]string{"east"}[0]},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "@ prefix exists returns logs with attribute set",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "@user.tier", Op: exists},
 			},
 			expectedCount: 3,
 		},
 		{
 			name: "@ prefix not_exists returns logs without attribute",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "@user.tier", Op: notExists},
 			},
 			expectedCount: 1,
 		},
 		{
 			name: "bare path matches system attribute directly",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "http.route", Op: eq, Value: &[]string{"/api/health"}[0]},
 			},
 			expectedCount: 1,
 		},
 		{
 			name: "combine @ filter with existing filter field",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "@env", Op: eq, Value: &[]string{"production"}[0]},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "multiple attribute filters are ANDed",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "@user.region", Op: eq, Value: &[]string{"us-east-1"}[0]},
 				{Path: "@user.tier", Op: eq, Value: &[]string{"premium"}[0]},
 			},
@@ -965,7 +965,7 @@ func TestSearchLogs_AttributeFilters(t *testing.T) {
 		},
 		{
 			name: "invalid path is silently skipped",
-			filters: []*gen.AttributeFilter{
+			filters: []*gen.LogFilter{
 				{Path: "1invalid", Op: eq, Value: &[]string{"test"}[0]},
 			},
 			expectedCount: 4, // no filter applied, all logs returned
@@ -977,13 +977,11 @@ func TestSearchLogs_AttributeFilters(t *testing.T) {
 			t.Parallel()
 
 			result, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-				Filter: &gen.SearchLogsFilter{
-					From:             &from,
-					To:               &to,
-					AttributeFilters: tt.filters,
-				},
-				Limit: 100,
-				Sort:  "desc",
+				From:    &from,
+				To:      &to,
+				Filters: tt.filters,
+				Limit:   100,
+				Sort:    "desc",
 			})
 
 			require.NoError(t, err)

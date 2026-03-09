@@ -1,5 +1,5 @@
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
-import type { AttributeFilter } from "@gram/client/models/components/attributefilter";
+import type { LogFilter } from "@gram/client/models/components/logfilter";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord";
 import type { ToolCallSummary } from "@gram/client/models/components/toolcallsummary";
 import { useGramContext } from "@gram/client/react-query";
@@ -82,7 +82,7 @@ export function logsToTraceSummaries(
   return summaries;
 }
 
-function toSdkFilters(filters: ActiveAttributeFilter[]): AttributeFilter[] {
+function toSdkFilters(filters: ActiveAttributeFilter[]): LogFilter[] {
   return filters.map((f) => ({
     path: f.path,
     op: f.op,
@@ -121,12 +121,10 @@ export function useAttributeLogsQuery({
       const result = await unwrapAsync(
         telemetrySearchLogs(client, {
           searchLogsPayload: {
-            filter: {
-              attributeFilters: toSdkFilters(attributeFilters),
-              ...(gramUrn ? { gramUrn } : {}),
-              from,
-              to,
-            },
+            from,
+            to,
+            filters: toSdkFilters(attributeFilters),
+            ...(gramUrn ? { filter: { gramUrn } } : {}),
             cursor: pageParam,
             limit: PER_PAGE,
             sort: "desc",
