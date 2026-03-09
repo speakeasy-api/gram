@@ -15,6 +15,33 @@ var _ = Service("mcpRegistries", func() {
 	})
 	shared.DeclareErrorResponses()
 
+	Method("clearCache", func() {
+		Description("Clear the registry cache for a specific registry (admin only)")
+
+		Payload(func() {
+			Attribute("registry_id", String, "The registry to clear cache for", func() {
+				Format(FormatUUID)
+			})
+			Required("registry_id")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/mcpRegistries.clearCache")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("registry_id")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "clearMCPRegistryCache")
+		Meta("openapi:extension:x-speakeasy-name-override", "clearCache")
+	})
+
 	Method("listCatalog", func() {
 		Description("List available MCP servers from configured registries")
 

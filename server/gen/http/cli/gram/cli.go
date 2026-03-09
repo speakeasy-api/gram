@@ -58,7 +58,7 @@ func UsageCommands() []string {
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
-		"mcp-registries (list-catalog|get-server-details)",
+		"mcp-registries (clear-cache|list-catalog|get-server-details)",
 		"functions get-signed-asset-url",
 		"hooks (claude|logs)",
 		"instances get-instance",
@@ -400,6 +400,12 @@ func ParseEndpoint(
 		environmentsGetToolsetEnvironmentProjectSlugInputFlag = environmentsGetToolsetEnvironmentFlags.String("project-slug-input", "", "")
 
 		mcpRegistriesFlags = flag.NewFlagSet("mcp-registries", flag.ContinueOnError)
+
+		mcpRegistriesClearCacheFlags                = flag.NewFlagSet("clear-cache", flag.ExitOnError)
+		mcpRegistriesClearCacheRegistryIDFlag       = mcpRegistriesClearCacheFlags.String("registry-id", "REQUIRED", "")
+		mcpRegistriesClearCacheSessionTokenFlag     = mcpRegistriesClearCacheFlags.String("session-token", "", "")
+		mcpRegistriesClearCacheApikeyTokenFlag      = mcpRegistriesClearCacheFlags.String("apikey-token", "", "")
+		mcpRegistriesClearCacheProjectSlugInputFlag = mcpRegistriesClearCacheFlags.String("project-slug-input", "", "")
 
 		mcpRegistriesListCatalogFlags                = flag.NewFlagSet("list-catalog", flag.ExitOnError)
 		mcpRegistriesListCatalogRegistryIDFlag       = mcpRegistriesListCatalogFlags.String("registry-id", "", "")
@@ -905,6 +911,7 @@ func ParseEndpoint(
 	environmentsGetToolsetEnvironmentFlags.Usage = environmentsGetToolsetEnvironmentUsage
 
 	mcpRegistriesFlags.Usage = mcpRegistriesUsage
+	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
 	mcpRegistriesListCatalogFlags.Usage = mcpRegistriesListCatalogUsage
 	mcpRegistriesGetServerDetailsFlags.Usage = mcpRegistriesGetServerDetailsUsage
 
@@ -1287,6 +1294,9 @@ func ParseEndpoint(
 
 		case "mcp-registries":
 			switch epn {
+			case "clear-cache":
+				epf = mcpRegistriesClearCacheFlags
+
 			case "list-catalog":
 				epf = mcpRegistriesListCatalogFlags
 
@@ -1796,6 +1806,9 @@ func ParseEndpoint(
 		case "mcp-registries":
 			c := mcpregistriesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "clear-cache":
+				endpoint = c.ClearCache()
+				data, err = mcpregistriesc.BuildClearCachePayload(*mcpRegistriesClearCacheRegistryIDFlag, *mcpRegistriesClearCacheSessionTokenFlag, *mcpRegistriesClearCacheApikeyTokenFlag, *mcpRegistriesClearCacheProjectSlugInputFlag)
 			case "list-catalog":
 				endpoint = c.ListCatalog()
 				data, err = mcpregistriesc.BuildListCatalogPayload(*mcpRegistriesListCatalogRegistryIDFlag, *mcpRegistriesListCatalogSearchFlag, *mcpRegistriesListCatalogCursorFlag, *mcpRegistriesListCatalogSessionTokenFlag, *mcpRegistriesListCatalogApikeyTokenFlag, *mcpRegistriesListCatalogProjectSlugInputFlag)
@@ -3407,12 +3420,37 @@ func mcpRegistriesUsage() {
 	fmt.Fprintln(os.Stderr, `External MCP registry operations`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-registries COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    clear-cache: Clear the registry cache for a specific registry (admin only)`)
 	fmt.Fprintln(os.Stderr, `    list-catalog: List available MCP servers from configured registries`)
 	fmt.Fprintln(os.Stderr, `    get-server-details: Get detailed information about an MCP server including remotes`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-registries COMMAND --help\n", os.Args[0])
 }
+func mcpRegistriesClearCacheUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries clear-cache", os.Args[0])
+	fmt.Fprint(os.Stderr, " -registry-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clear the registry cache for a specific registry (admin only)`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -registry-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries clear-cache --registry-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func mcpRegistriesListCatalogUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries list-catalog", os.Args[0])

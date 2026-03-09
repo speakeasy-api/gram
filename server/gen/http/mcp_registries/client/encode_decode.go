@@ -19,6 +19,234 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildClearCacheRequest instantiates a HTTP request object with method and
+// path set to call the "mcpRegistries" service "clearCache" endpoint
+func (c *Client) BuildClearCacheRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ClearCacheMcpRegistriesPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "clearCache", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeClearCacheRequest returns an encoder for requests sent to the
+// mcpRegistries clearCache server.
+func EncodeClearCacheRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.ClearCachePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "clearCache", "*mcpregistries.ClearCachePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("registry_id", p.RegistryID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeClearCacheResponse returns a decoder for responses returned by the
+// mcpRegistries clearCache endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeClearCacheResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeClearCacheResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body ClearCacheUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+			}
+			err = ValidateClearCacheUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+			}
+			return nil, NewClearCacheUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ClearCacheForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+			}
+			err = ValidateClearCacheForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+			}
+			return nil, NewClearCacheForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ClearCacheBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+			}
+			err = ValidateClearCacheBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+			}
+			return nil, NewClearCacheBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ClearCacheNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+			}
+			err = ValidateClearCacheNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+			}
+			return nil, NewClearCacheNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ClearCacheConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+			}
+			err = ValidateClearCacheConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+			}
+			return nil, NewClearCacheConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ClearCacheUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+			}
+			err = ValidateClearCacheUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+			}
+			return nil, NewClearCacheUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ClearCacheInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+			}
+			err = ValidateClearCacheInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+			}
+			return nil, NewClearCacheInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ClearCacheInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+				}
+				err = ValidateClearCacheInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+				}
+				return nil, NewClearCacheInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ClearCacheUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+				}
+				err = ValidateClearCacheUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+				}
+				return nil, NewClearCacheUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "clearCache", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ClearCacheGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "clearCache", err)
+			}
+			err = ValidateClearCacheGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "clearCache", err)
+			}
+			return nil, NewClearCacheGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "clearCache", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListCatalogRequest instantiates a HTTP request object with method and
 // path set to call the "mcpRegistries" service "listCatalog" endpoint
 func (c *Client) BuildListCatalogRequest(ctx context.Context, v any) (*http.Request, error) {

@@ -26,6 +26,7 @@ type Cache interface {
 	// List operations for atomic append/read
 	ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error
 	ListRange(ctx context.Context, key string, start, stop int64, value any) error
+	DeleteByPrefix(ctx context.Context, prefix string) error
 }
 
 type TypedCacheObject[T CacheableObject[T]] struct {
@@ -82,6 +83,19 @@ func (d *TypedCacheObject[T]) DeleteByKey(ctx context.Context, key string) error
 		return fmt.Errorf("delete by key: %s: %w", cacheKey, err)
 	}
 
+	return nil
+}
+
+func (d *TypedCacheObject[T]) DeleteByPrefix(ctx context.Context, prefix string) error {
+	if d.cache == nil {
+		return nil
+	}
+
+	fullPrefix := prefix + ":" + d.keySuffix
+	d.logger.DebugContext(ctx, "invalidating cache by prefix", attr.SlogCacheKey(fullPrefix))
+	if err := d.cache.DeleteByPrefix(ctx, fullPrefix); err != nil {
+		return fmt.Errorf("delete by prefix: %s: %w", fullPrefix, err)
+	}
 	return nil
 }
 

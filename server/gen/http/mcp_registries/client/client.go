@@ -17,6 +17,10 @@ import (
 
 // Client lists the mcpRegistries service endpoint HTTP clients.
 type Client struct {
+	// ClearCache Doer is the HTTP client used to make requests to the clearCache
+	// endpoint.
+	ClearCacheDoer goahttp.Doer
+
 	// ListCatalog Doer is the HTTP client used to make requests to the listCatalog
 	// endpoint.
 	ListCatalogDoer goahttp.Doer
@@ -46,6 +50,7 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ClearCacheDoer:       doer,
 		ListCatalogDoer:      doer,
 		GetServerDetailsDoer: doer,
 		RestoreResponseBody:  restoreBody,
@@ -53,6 +58,30 @@ func NewClient(
 		host:                 host,
 		decoder:              dec,
 		encoder:              enc,
+	}
+}
+
+// ClearCache returns an endpoint that makes HTTP requests to the mcpRegistries
+// service clearCache server.
+func (c *Client) ClearCache() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeClearCacheRequest(c.encoder)
+		decodeResponse = DecodeClearCacheResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildClearCacheRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ClearCacheDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "clearCache", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

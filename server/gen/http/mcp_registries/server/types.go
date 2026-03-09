@@ -46,6 +46,190 @@ type GetServerDetailsResponseBody struct {
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 }
 
+// ClearCacheUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "clearCache" endpoint HTTP response body for the "unauthorized"
+// error.
+type ClearCacheUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheForbiddenResponseBody is the type of the "mcpRegistries" service
+// "clearCache" endpoint HTTP response body for the "forbidden" error.
+type ClearCacheForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheBadRequestResponseBody is the type of the "mcpRegistries" service
+// "clearCache" endpoint HTTP response body for the "bad_request" error.
+type ClearCacheBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheNotFoundResponseBody is the type of the "mcpRegistries" service
+// "clearCache" endpoint HTTP response body for the "not_found" error.
+type ClearCacheNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheConflictResponseBody is the type of the "mcpRegistries" service
+// "clearCache" endpoint HTTP response body for the "conflict" error.
+type ClearCacheConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheUnsupportedMediaResponseBody is the type of the "mcpRegistries"
+// service "clearCache" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ClearCacheUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheInvalidResponseBody is the type of the "mcpRegistries" service
+// "clearCache" endpoint HTTP response body for the "invalid" error.
+type ClearCacheInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheInvariantViolationResponseBody is the type of the "mcpRegistries"
+// service "clearCache" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ClearCacheInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheUnexpectedResponseBody is the type of the "mcpRegistries" service
+// "clearCache" endpoint HTTP response body for the "unexpected" error.
+type ClearCacheUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClearCacheGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "clearCache" endpoint HTTP response body for the "gateway_error"
+// error.
+type ClearCacheGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListCatalogUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "listCatalog" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -521,6 +705,146 @@ func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDet
 	return body
 }
 
+// NewClearCacheUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheUnauthorizedResponseBody(res *goa.ServiceError) *ClearCacheUnauthorizedResponseBody {
+	body := &ClearCacheUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheForbiddenResponseBody builds the HTTP response body from the
+// result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheForbiddenResponseBody(res *goa.ServiceError) *ClearCacheForbiddenResponseBody {
+	body := &ClearCacheForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheBadRequestResponseBody builds the HTTP response body from the
+// result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheBadRequestResponseBody(res *goa.ServiceError) *ClearCacheBadRequestResponseBody {
+	body := &ClearCacheBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheNotFoundResponseBody builds the HTTP response body from the
+// result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheNotFoundResponseBody(res *goa.ServiceError) *ClearCacheNotFoundResponseBody {
+	body := &ClearCacheNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheConflictResponseBody builds the HTTP response body from the
+// result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheConflictResponseBody(res *goa.ServiceError) *ClearCacheConflictResponseBody {
+	body := &ClearCacheConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheUnsupportedMediaResponseBody(res *goa.ServiceError) *ClearCacheUnsupportedMediaResponseBody {
+	body := &ClearCacheUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheInvalidResponseBody builds the HTTP response body from the
+// result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheInvalidResponseBody(res *goa.ServiceError) *ClearCacheInvalidResponseBody {
+	body := &ClearCacheInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheInvariantViolationResponseBody(res *goa.ServiceError) *ClearCacheInvariantViolationResponseBody {
+	body := &ClearCacheInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheUnexpectedResponseBody builds the HTTP response body from the
+// result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheUnexpectedResponseBody(res *goa.ServiceError) *ClearCacheUnexpectedResponseBody {
+	body := &ClearCacheUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClearCacheGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "clearCache" endpoint of the "mcpRegistries" service.
+func NewClearCacheGatewayErrorResponseBody(res *goa.ServiceError) *ClearCacheGatewayErrorResponseBody {
+	body := &ClearCacheGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListCatalogUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "listCatalog" endpoint of the "mcpRegistries" service.
 func NewListCatalogUnauthorizedResponseBody(res *goa.ServiceError) *ListCatalogUnauthorizedResponseBody {
@@ -803,6 +1127,18 @@ func NewGetServerDetailsGatewayErrorResponseBody(res *goa.ServiceError) *GetServ
 		Fault:     res.Fault,
 	}
 	return body
+}
+
+// NewClearCachePayload builds a mcpRegistries service clearCache endpoint
+// payload.
+func NewClearCachePayload(registryID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ClearCachePayload {
+	v := &mcpregistries.ClearCachePayload{}
+	v.RegistryID = registryID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
 }
 
 // NewListCatalogPayload builds a mcpRegistries service listCatalog endpoint

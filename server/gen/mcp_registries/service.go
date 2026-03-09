@@ -17,6 +17,8 @@ import (
 
 // External MCP registry operations
 type Service interface {
+	// Clear the registry cache for a specific registry (admin only)
+	ClearCache(context.Context, *ClearCachePayload) (err error)
 	// List available MCP servers from configured registries
 	ListCatalog(context.Context, *ListCatalogPayload) (res *ListCatalogResult, err error)
 	// Get detailed information about an MCP server including remotes
@@ -43,7 +45,17 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"listCatalog", "getServerDetails"}
+var MethodNames = [3]string{"clearCache", "listCatalog", "getServerDetails"}
+
+// ClearCachePayload is the payload type of the mcpRegistries service
+// clearCache method.
+type ClearCachePayload struct {
+	// The registry to clear cache for
+	RegistryID       string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
 
 // GetServerDetailsPayload is the payload type of the mcpRegistries service
 // getServerDetails method.

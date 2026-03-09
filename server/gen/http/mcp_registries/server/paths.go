@@ -7,6 +7,11 @@
 
 package server
 
+// ClearCacheMcpRegistriesPath returns the URL path to the mcpRegistries service clearCache HTTP endpoint.
+func ClearCacheMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.clearCache"
+}
+
 // ListCatalogMcpRegistriesPath returns the URL path to the mcpRegistries service listCatalog HTTP endpoint.
 func ListCatalogMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.listCatalog"

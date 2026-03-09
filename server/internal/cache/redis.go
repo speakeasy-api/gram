@@ -113,7 +113,7 @@ func (r *RedisCacheAdapter) ListRange(ctx context.Context, key string, start, st
 	var jsonItems []json.RawMessage
 	for _, item := range result {
 		// Unmarshal the compressed msgpack item into a generic interface
-		var elem interface{}
+		var elem any
 		if err := r.cache.Unmarshal([]byte(item), &elem); err != nil {
 			return fmt.Errorf("unmarshal element: %w", err)
 		}
@@ -137,5 +137,25 @@ func (r *RedisCacheAdapter) ListRange(ctx context.Context, key string, start, st
 		return fmt.Errorf("unmarshal to target: %w", err)
 	}
 
+	return nil
+}
+
+func (r *RedisCacheAdapter) DeleteByPrefix(ctx context.Context, prefix string) error {
+	var cursor uint64
+	for {
+		keys, next, err := r.client.Scan(ctx, cursor, prefix+"*", 100).Result()
+		if err != nil {
+			return fmt.Errorf("scan keys with prefix %q: %w", prefix, err)
+		}
+		if len(keys) > 0 {
+			if err := r.client.Del(ctx, keys...).Err(); err != nil {
+				return fmt.Errorf("delete keys with prefix %q: %w", prefix, err)
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
 	return nil
 }
