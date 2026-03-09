@@ -17,10 +17,6 @@ import {
  */
 export type GetHooksSummaryResult = {
   /**
-   * Whether telemetry is enabled for the organization
-   */
-  enabled: boolean;
-  /**
    * Aggregated metrics grouped by server
    */
   servers: Array<HooksServerSummary>;
@@ -40,7 +36,6 @@ export const GetHooksSummaryResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    enabled: z.boolean(),
     servers: z.array(HooksServerSummary$inboundSchema),
     total_events: z.int(),
     total_sessions: z.int(),

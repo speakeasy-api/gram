@@ -360,9 +360,11 @@ function LogsContent() {
 
   // Fetch attribute keys for filter bar
   const { data: attributeKeysData, isLoading: isLoadingAttributeKeys } =
-    useListAttributeKeys({
-      getProjectMetricsSummaryPayload: { from, to },
-    });
+    useListAttributeKeys(
+      { getProjectMetricsSummaryPayload: { from, to } },
+      undefined,
+      { throwOnError: false },
+    );
   const attributeKeys = attributeKeysData?.keys ?? [];
 
   // Standard tool calls query (used when no attribute filters active)

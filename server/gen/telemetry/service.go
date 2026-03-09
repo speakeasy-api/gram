@@ -161,8 +161,6 @@ type GetHooksSummaryResult struct {
 	TotalEvents int64
 	// Total number of unique sessions
 	TotalSessions int64
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -170,8 +168,6 @@ type GetHooksSummaryResult struct {
 type GetMetricsSummaryResult struct {
 	// Aggregated metrics
 	Metrics *ProjectSummary
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetObservabilityOverviewPayload is the payload type of the telemetry service
@@ -209,8 +205,6 @@ type GetObservabilityOverviewResult struct {
 	TopToolsByFailureRate []*ToolMetric
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetProjectMetricsSummaryPayload is the payload type of the telemetry service
@@ -246,8 +240,6 @@ type GetUserMetricsSummaryPayload struct {
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummary
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Aggregated hooks metrics for a single server
@@ -304,8 +296,6 @@ type ListFilterOptionsPayload struct {
 type ListFilterOptionsResult struct {
 	// List of filter options
 	Options []*FilterOption
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Model usage statistics
@@ -427,8 +417,6 @@ type SearchChatsResult struct {
 	Chats []*ChatSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
 }
 
 // Filter criteria for searching logs
@@ -492,8 +480,6 @@ type SearchLogsResult struct {
 	Logs []*TelemetryLogRecord
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
 }
 
 // Filter criteria for searching tool calls
@@ -535,10 +521,6 @@ type SearchToolCallsResult struct {
 	ToolCalls []*ToolCallSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
-	// Whether tool input/output logging is enabled for the organization
-	ToolIoLogsEnabled bool
 }
 
 // Filter criteria for searching user usage summaries
@@ -576,8 +558,6 @@ type SearchUsersResult struct {
 	Users []*UserSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Service information

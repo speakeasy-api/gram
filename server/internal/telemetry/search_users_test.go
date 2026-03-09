@@ -56,7 +56,6 @@ func TestSearchUsers_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.Empty(t, result.Users)
 	require.Nil(t, result.NextCursor)
 }
@@ -102,7 +101,6 @@ func TestSearchUsers_GroupByInternalUser(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.Len(t, result.Users, 2)
 
 	// Index by user ID

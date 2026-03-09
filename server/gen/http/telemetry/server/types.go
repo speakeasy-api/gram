@@ -155,8 +155,6 @@ type SearchLogsResponseBody struct {
 	Logs []*TelemetryLogRecordResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether tool metrics are enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchToolCallsResponseBody is the type of the "telemetry" service
@@ -166,10 +164,6 @@ type SearchToolCallsResponseBody struct {
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether tool metrics are enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Whether tool input/output logging is enabled for the organization
-	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
 }
 
 // SearchChatsResponseBody is the type of the "telemetry" service "searchChats"
@@ -179,8 +173,6 @@ type SearchChatsResponseBody struct {
 	Chats []*ChatSummaryResponseBody `form:"chats" json:"chats" xml:"chats"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether tool metrics are enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchUsersResponseBody is the type of the "telemetry" service "searchUsers"
@@ -190,8 +182,6 @@ type SearchUsersResponseBody struct {
 	Users []*UserSummaryResponseBody `form:"users" json:"users" xml:"users"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // CaptureEventResponseBody is the type of the "telemetry" service
@@ -206,8 +196,6 @@ type CaptureEventResponseBody struct {
 type GetProjectMetricsSummaryResponseBody struct {
 	// Aggregated metrics
 	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // GetUserMetricsSummaryResponseBody is the type of the "telemetry" service
@@ -215,8 +203,6 @@ type GetProjectMetricsSummaryResponseBody struct {
 type GetUserMetricsSummaryResponseBody struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // GetObservabilityOverviewResponseBody is the type of the "telemetry" service
@@ -234,8 +220,6 @@ type GetObservabilityOverviewResponseBody struct {
 	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -243,8 +227,6 @@ type GetObservabilityOverviewResponseBody struct {
 type ListFilterOptionsResponseBody struct {
 	// List of filter options
 	Options []*FilterOptionResponseBody `form:"options" json:"options" xml:"options"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // ListAttributeKeysResponseBody is the type of the "telemetry" service
@@ -263,8 +245,6 @@ type GetHooksSummaryResponseBody struct {
 	TotalEvents int64 `form:"total_events" json:"total_events" xml:"total_events"`
 	// Total number of unique sessions
 	TotalSessions int64 `form:"total_sessions" json:"total_sessions" xml:"total_sessions"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -2678,7 +2658,6 @@ type SearchUsersFilterRequestBody struct {
 func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsResponseBody {
 	body := &SearchLogsResponseBody{
 		NextCursor: res.NextCursor,
-		Enabled:    res.Enabled,
 	}
 	if res.Logs != nil {
 		body.Logs = make([]*TelemetryLogRecordResponseBody, len(res.Logs))
@@ -2699,9 +2678,7 @@ func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsRespo
 // of the "searchToolCalls" endpoint of the "telemetry" service.
 func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *SearchToolCallsResponseBody {
 	body := &SearchToolCallsResponseBody{
-		NextCursor:        res.NextCursor,
-		Enabled:           res.Enabled,
-		ToolIoLogsEnabled: res.ToolIoLogsEnabled,
+		NextCursor: res.NextCursor,
 	}
 	if res.ToolCalls != nil {
 		body.ToolCalls = make([]*ToolCallSummaryResponseBody, len(res.ToolCalls))
@@ -2723,7 +2700,6 @@ func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *Searc
 func NewSearchChatsResponseBody(res *telemetry.SearchChatsResult) *SearchChatsResponseBody {
 	body := &SearchChatsResponseBody{
 		NextCursor: res.NextCursor,
-		Enabled:    res.Enabled,
 	}
 	if res.Chats != nil {
 		body.Chats = make([]*ChatSummaryResponseBody, len(res.Chats))
@@ -2745,7 +2721,6 @@ func NewSearchChatsResponseBody(res *telemetry.SearchChatsResult) *SearchChatsRe
 func NewSearchUsersResponseBody(res *telemetry.SearchUsersResult) *SearchUsersResponseBody {
 	body := &SearchUsersResponseBody{
 		NextCursor: res.NextCursor,
-		Enabled:    res.Enabled,
 	}
 	if res.Users != nil {
 		body.Users = make([]*UserSummaryResponseBody, len(res.Users))
@@ -2775,9 +2750,7 @@ func NewCaptureEventResponseBody(res *telemetry.CaptureEventResult) *CaptureEven
 // the result of the "getProjectMetricsSummary" endpoint of the "telemetry"
 // service.
 func NewGetProjectMetricsSummaryResponseBody(res *telemetry.GetMetricsSummaryResult) *GetProjectMetricsSummaryResponseBody {
-	body := &GetProjectMetricsSummaryResponseBody{
-		Enabled: res.Enabled,
-	}
+	body := &GetProjectMetricsSummaryResponseBody{}
 	if res.Metrics != nil {
 		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
 	}
@@ -2787,9 +2760,7 @@ func NewGetProjectMetricsSummaryResponseBody(res *telemetry.GetMetricsSummaryRes
 // NewGetUserMetricsSummaryResponseBody builds the HTTP response body from the
 // result of the "getUserMetricsSummary" endpoint of the "telemetry" service.
 func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryResult) *GetUserMetricsSummaryResponseBody {
-	body := &GetUserMetricsSummaryResponseBody{
-		Enabled: res.Enabled,
-	}
+	body := &GetUserMetricsSummaryResponseBody{}
 	if res.Metrics != nil {
 		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
 	}
@@ -2802,7 +2773,6 @@ func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryRe
 func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetObservabilityOverviewResponseBody {
 	body := &GetObservabilityOverviewResponseBody{
 		IntervalSeconds: res.IntervalSeconds,
-		Enabled:         res.Enabled,
 	}
 	if res.Summary != nil {
 		body.Summary = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Summary)
@@ -2852,9 +2822,7 @@ func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOver
 // NewListFilterOptionsResponseBody builds the HTTP response body from the
 // result of the "listFilterOptions" endpoint of the "telemetry" service.
 func NewListFilterOptionsResponseBody(res *telemetry.ListFilterOptionsResult) *ListFilterOptionsResponseBody {
-	body := &ListFilterOptionsResponseBody{
-		Enabled: res.Enabled,
-	}
+	body := &ListFilterOptionsResponseBody{}
 	if res.Options != nil {
 		body.Options = make([]*FilterOptionResponseBody, len(res.Options))
 		for i, val := range res.Options {
@@ -2891,7 +2859,6 @@ func NewGetHooksSummaryResponseBody(res *telemetry.GetHooksSummaryResult) *GetHo
 	body := &GetHooksSummaryResponseBody{
 		TotalEvents:   res.TotalEvents,
 		TotalSessions: res.TotalSessions,
-		Enabled:       res.Enabled,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*HooksServerSummaryResponseBody, len(res.Servers))

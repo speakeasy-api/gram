@@ -26,10 +26,6 @@ export type GetObservabilityOverviewResult = {
    */
   comparison: ObservabilitySummary;
   /**
-   * Whether telemetry is enabled for the organization
-   */
-  enabled: boolean;
-  /**
    * The time bucket interval in seconds used for the time series data
    */
   intervalSeconds: number;
@@ -58,7 +54,6 @@ export const GetObservabilityOverviewResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     comparison: ObservabilitySummary$inboundSchema,
-    enabled: z.boolean(),
     interval_seconds: z.int(),
     summary: ObservabilitySummary$inboundSchema,
     time_series: z.array(TimeSeriesBucket$inboundSchema),
