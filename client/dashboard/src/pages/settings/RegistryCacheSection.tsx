@@ -75,7 +75,6 @@ export function RegistryCacheSection() {
                   onClick={() => {
                     setClearingId(registry.id);
                     clearCacheMutation.mutate({
-                      security: { sessionHeaderGramSession: "" },
                       request: { registryId: registry.id },
                     });
                   }}
