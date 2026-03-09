@@ -18,10 +18,21 @@ import (
 
 // Server lists the mcpRegistries service endpoint HTTP handlers.
 type Server struct {
+<<<<<<< HEAD
 	Mounts           []*MountPoint
 	ClearCache       http.Handler
 	ListCatalog      http.Handler
 	GetServerDetails http.Handler
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+	Mounts      []*MountPoint
+	ClearCache  http.Handler
+	ListCatalog http.Handler
+=======
+	Mounts         []*MountPoint
+	ClearCache     http.Handler
+	ListRegistries http.Handler
+	ListCatalog    http.Handler
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,12 +63,22 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"ClearCache", "DELETE", "/rpc/mcpRegistries.clearCache"},
+			{"ListRegistries", "GET", "/rpc/mcpRegistries.listRegistries"},
 			{"ListCatalog", "GET", "/rpc/mcpRegistries.listCatalog"},
 			{"GetServerDetails", "GET", "/rpc/mcpRegistries.getServerDetails"},
 		},
+<<<<<<< HEAD
 		ClearCache:       NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
 		ListCatalog:      NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
 		GetServerDetails: NewGetServerDetailsHandler(e.GetServerDetails, mux, decoder, encoder, errhandler, formatter),
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+		ClearCache:  NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
+		ListCatalog: NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
+=======
+		ClearCache:     NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
+		ListRegistries: NewListRegistriesHandler(e.ListRegistries, mux, decoder, encoder, errhandler, formatter),
+		ListCatalog:    NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 	}
 }
 
@@ -67,6 +88,7 @@ func (s *Server) Service() string { return "mcpRegistries" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ClearCache = m(s.ClearCache)
+	s.ListRegistries = m(s.ListRegistries)
 	s.ListCatalog = m(s.ListCatalog)
 	s.GetServerDetails = m(s.GetServerDetails)
 }
@@ -77,6 +99,7 @@ func (s *Server) MethodNames() []string { return mcpregistries.MethodNames[:] }
 // Mount configures the mux to serve the mcpRegistries endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountClearCacheHandler(mux, h.ClearCache)
+	MountListRegistriesHandler(mux, h.ListRegistries)
 	MountListCatalogHandler(mux, h.ListCatalog)
 	MountGetServerDetailsHandler(mux, h.GetServerDetails)
 }
@@ -116,6 +139,59 @@ func NewClearCacheHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "clearCache")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRegistriesHandler configures the mux to serve the "mcpRegistries"
+// service "listRegistries" endpoint.
+func MountListRegistriesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/mcpRegistries.listRegistries", f)
+}
+
+// NewListRegistriesHandler creates a HTTP handler which loads the HTTP request
+// and calls the "mcpRegistries" service "listRegistries" endpoint.
+func NewListRegistriesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRegistriesRequest(mux, decoder)
+		encodeResponse = EncodeListRegistriesResponse(encoder)
+		encodeError    = EncodeListRegistriesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRegistries")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
 		payload, err := decodeRequest(r)
 		if err != nil {

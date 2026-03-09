@@ -12,6 +12,11 @@ func ClearCacheMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.clearCache"
 }
 
+// ListRegistriesMcpRegistriesPath returns the URL path to the mcpRegistries service listRegistries HTTP endpoint.
+func ListRegistriesMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.listRegistries"
+}
+
 // ListCatalogMcpRegistriesPath returns the URL path to the mcpRegistries service listCatalog HTTP endpoint.
 func ListCatalogMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.listCatalog"

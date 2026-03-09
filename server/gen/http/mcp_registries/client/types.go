@@ -13,6 +13,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// ListRegistriesResponseBody is the type of the "mcpRegistries" service
+// "listRegistries" endpoint HTTP response body.
+type ListRegistriesResponseBody struct {
+	// List of MCP registries
+	Registries []*MCPRegistryResponseBody `form:"registries,omitempty" json:"registries,omitempty" xml:"registries,omitempty"`
+}
+
 // ListCatalogResponseBody is the type of the "mcpRegistries" service
 // "listCatalog" endpoint HTTP response body.
 type ListCatalogResponseBody struct {
@@ -230,6 +237,195 @@ type ClearCacheGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListRegistriesUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListRegistriesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesForbiddenResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "forbidden"
+// error.
+type ListRegistriesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesBadRequestResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "bad_request"
+// error.
+type ListRegistriesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesNotFoundResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "not_found"
+// error.
+type ListRegistriesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesConflictResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "conflict"
+// error.
+type ListRegistriesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesUnsupportedMediaResponseBody is the type of the
+// "mcpRegistries" service "listRegistries" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListRegistriesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesInvalidResponseBody is the type of the "mcpRegistries" service
+// "listRegistries" endpoint HTTP response body for the "invalid" error.
+type ListRegistriesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesInvariantViolationResponseBody is the type of the
+// "mcpRegistries" service "listRegistries" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListRegistriesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesUnexpectedResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "unexpected"
+// error.
+type ListRegistriesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistriesGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListRegistriesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListCatalogUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "listCatalog" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -414,6 +610,7 @@ type ListCatalogGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+<<<<<<< HEAD
 // GetServerDetailsUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "getServerDetails" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -602,6 +799,17 @@ type GetServerDetailsGatewayErrorResponseBody struct {
 	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
 	// Is the error a server-side fault?
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+=======
+// MCPRegistryResponseBody is used to define fields on response body types.
+type MCPRegistryResponseBody struct {
+	// Registry ID
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Display name for the registry
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL of the registry
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // ExternalMCPServerResponseBody is used to define fields on response body
@@ -799,6 +1007,172 @@ func NewClearCacheGatewayError(body *ClearCacheGatewayErrorResponseBody) *goa.Se
 	return v
 }
 
+// NewListRegistriesResultOK builds a "mcpRegistries" service "listRegistries"
+// endpoint result from a HTTP "OK" response.
+func NewListRegistriesResultOK(body *ListRegistriesResponseBody) *mcpregistries.ListRegistriesResult {
+	v := &mcpregistries.ListRegistriesResult{}
+	v.Registries = make([]*types.MCPRegistry, len(body.Registries))
+	for i, val := range body.Registries {
+		if val == nil {
+			v.Registries[i] = nil
+			continue
+		}
+		v.Registries[i] = unmarshalMCPRegistryResponseBodyToTypesMCPRegistry(val)
+	}
+
+	return v
+}
+
+// NewListRegistriesUnauthorized builds a mcpRegistries service listRegistries
+// endpoint unauthorized error.
+func NewListRegistriesUnauthorized(body *ListRegistriesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesForbidden builds a mcpRegistries service listRegistries
+// endpoint forbidden error.
+func NewListRegistriesForbidden(body *ListRegistriesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesBadRequest builds a mcpRegistries service listRegistries
+// endpoint bad_request error.
+func NewListRegistriesBadRequest(body *ListRegistriesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesNotFound builds a mcpRegistries service listRegistries
+// endpoint not_found error.
+func NewListRegistriesNotFound(body *ListRegistriesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesConflict builds a mcpRegistries service listRegistries
+// endpoint conflict error.
+func NewListRegistriesConflict(body *ListRegistriesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesUnsupportedMedia builds a mcpRegistries service
+// listRegistries endpoint unsupported_media error.
+func NewListRegistriesUnsupportedMedia(body *ListRegistriesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesInvalid builds a mcpRegistries service listRegistries
+// endpoint invalid error.
+func NewListRegistriesInvalid(body *ListRegistriesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesInvariantViolation builds a mcpRegistries service
+// listRegistries endpoint invariant_violation error.
+func NewListRegistriesInvariantViolation(body *ListRegistriesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesUnexpected builds a mcpRegistries service listRegistries
+// endpoint unexpected error.
+func NewListRegistriesUnexpected(body *ListRegistriesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistriesGatewayError builds a mcpRegistries service listRegistries
+// endpoint gateway_error error.
+func NewListRegistriesGatewayError(body *ListRegistriesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListCatalogResultOK builds a "mcpRegistries" service "listCatalog"
 // endpoint result from a HTTP "OK" response.
 func NewListCatalogResultOK(body *ListCatalogResponseBody) *mcpregistries.ListCatalogResult {
@@ -967,6 +1341,7 @@ func NewListCatalogGatewayError(body *ListCatalogGatewayErrorResponseBody) *goa.
 	return v
 }
 
+<<<<<<< HEAD
 // NewGetServerDetailsExternalMCPServerOK builds a "mcpRegistries" service
 // "getServerDetails" endpoint result from a HTTP "OK" response.
 func NewGetServerDetailsExternalMCPServerOK(body *GetServerDetailsResponseBody) *types.ExternalMCPServer {
@@ -1151,6 +1526,23 @@ func NewGetServerDetailsGatewayError(body *GetServerDetailsGatewayErrorResponseB
 	}
 
 	return v
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+=======
+// ValidateListRegistriesResponseBody runs the validations defined on
+// ListRegistriesResponseBody
+func ValidateListRegistriesResponseBody(body *ListRegistriesResponseBody) (err error) {
+	if body.Registries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registries", "body"))
+	}
+	for _, e := range body.Registries {
+		if e != nil {
+			if err2 := ValidateMCPRegistryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // ValidateListCatalogResponseBody runs the validations defined on
@@ -1440,6 +1832,246 @@ func ValidateClearCacheGatewayErrorResponseBody(body *ClearCacheGatewayErrorResp
 	return
 }
 
+// ValidateListRegistriesUnauthorizedResponseBody runs the validations defined
+// on listRegistries_unauthorized_response_body
+func ValidateListRegistriesUnauthorizedResponseBody(body *ListRegistriesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesForbiddenResponseBody runs the validations defined on
+// listRegistries_forbidden_response_body
+func ValidateListRegistriesForbiddenResponseBody(body *ListRegistriesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesBadRequestResponseBody runs the validations defined on
+// listRegistries_bad_request_response_body
+func ValidateListRegistriesBadRequestResponseBody(body *ListRegistriesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesNotFoundResponseBody runs the validations defined on
+// listRegistries_not_found_response_body
+func ValidateListRegistriesNotFoundResponseBody(body *ListRegistriesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesConflictResponseBody runs the validations defined on
+// listRegistries_conflict_response_body
+func ValidateListRegistriesConflictResponseBody(body *ListRegistriesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesUnsupportedMediaResponseBody runs the validations
+// defined on listRegistries_unsupported_media_response_body
+func ValidateListRegistriesUnsupportedMediaResponseBody(body *ListRegistriesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesInvalidResponseBody runs the validations defined on
+// listRegistries_invalid_response_body
+func ValidateListRegistriesInvalidResponseBody(body *ListRegistriesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesInvariantViolationResponseBody runs the validations
+// defined on listRegistries_invariant_violation_response_body
+func ValidateListRegistriesInvariantViolationResponseBody(body *ListRegistriesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesUnexpectedResponseBody runs the validations defined on
+// listRegistries_unexpected_response_body
+func ValidateListRegistriesUnexpectedResponseBody(body *ListRegistriesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistriesGatewayErrorResponseBody runs the validations defined
+// on listRegistries_gateway_error_response_body
+func ValidateListRegistriesGatewayErrorResponseBody(body *ListRegistriesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListCatalogUnauthorizedResponseBody runs the validations defined on
 // listCatalog_unauthorized_response_body
 func ValidateListCatalogUnauthorizedResponseBody(body *ListCatalogUnauthorizedResponseBody) (err error) {
@@ -1680,6 +2312,7 @@ func ValidateListCatalogGatewayErrorResponseBody(body *ListCatalogGatewayErrorRe
 	return
 }
 
+<<<<<<< HEAD
 // ValidateGetServerDetailsUnauthorizedResponseBody runs the validations
 // defined on getServerDetails_unauthorized_response_body
 func ValidateGetServerDetailsUnauthorizedResponseBody(body *GetServerDetailsUnauthorizedResponseBody) (err error) {
@@ -1916,6 +2549,23 @@ func ValidateGetServerDetailsGatewayErrorResponseBody(body *GetServerDetailsGate
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+=======
+// ValidateMCPRegistryResponseBody runs the validations defined on
+// MCPRegistryResponseBody
+func ValidateMCPRegistryResponseBody(body *MCPRegistryResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 	}
 	return
 }

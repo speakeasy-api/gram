@@ -16,17 +16,41 @@ import (
 
 // Client is the "mcpRegistries" service client.
 type Client struct {
+<<<<<<< HEAD
 	ClearCacheEndpoint       goa.Endpoint
 	ListCatalogEndpoint      goa.Endpoint
 	GetServerDetailsEndpoint goa.Endpoint
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+	ClearCacheEndpoint  goa.Endpoint
+	ListCatalogEndpoint goa.Endpoint
+=======
+	ClearCacheEndpoint     goa.Endpoint
+	ListRegistriesEndpoint goa.Endpoint
+	ListCatalogEndpoint    goa.Endpoint
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // NewClient initializes a "mcpRegistries" service client given the endpoints.
+<<<<<<< HEAD
 func NewClient(clearCache, listCatalog, getServerDetails goa.Endpoint) *Client {
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+func NewClient(clearCache, listCatalog goa.Endpoint) *Client {
+=======
+func NewClient(clearCache, listRegistries, listCatalog goa.Endpoint) *Client {
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 	return &Client{
+<<<<<<< HEAD
 		ClearCacheEndpoint:       clearCache,
 		ListCatalogEndpoint:      listCatalog,
 		GetServerDetailsEndpoint: getServerDetails,
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+		ClearCacheEndpoint:  clearCache,
+		ListCatalogEndpoint: listCatalog,
+=======
+		ClearCacheEndpoint:     clearCache,
+		ListRegistriesEndpoint: listRegistries,
+		ListCatalogEndpoint:    listCatalog,
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 	}
 }
 
@@ -46,6 +70,29 @@ func NewClient(clearCache, listCatalog, getServerDetails goa.Endpoint) *Client {
 func (c *Client) ClearCache(ctx context.Context, p *ClearCachePayload) (err error) {
 	_, err = c.ClearCacheEndpoint(ctx, p)
 	return
+}
+
+// ListRegistries calls the "listRegistries" endpoint of the "mcpRegistries"
+// service.
+// ListRegistries may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRegistries(ctx context.Context, p *ListRegistriesPayload) (res *ListRegistriesResult, err error) {
+	var ires any
+	ires, err = c.ListRegistriesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListRegistriesResult), nil
 }
 
 // ListCatalog calls the "listCatalog" endpoint of the "mcpRegistries" service.

@@ -42,6 +42,33 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "clearCache")
 	})
 
+	Method("listRegistries", func() {
+		Description("List all MCP registries (admin only)")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("registries", ArrayOf(MCPRegistry), "List of MCP registries")
+			Required("registries")
+		})
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.listRegistries")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMCPRegistries")
+		Meta("openapi:extension:x-speakeasy-name-override", "listRegistries")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPRegistries"}`)
+	})
+
 	Method("listCatalog", func() {
 		Description("List available MCP servers from configured registries")
 
@@ -136,6 +163,20 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 
 	Required("registry_specifier", "version", "description", "registry_id")
+})
+
+var MCPRegistry = Type("MCPRegistry", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An MCP registry")
+
+	Attribute("id", String, "Registry ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name for the registry")
+	Attribute("url", String, "URL of the registry")
+
+	Required("id", "name", "url")
 })
 
 var ExternalMCPTool = Type("ExternalMCPTool", func() {

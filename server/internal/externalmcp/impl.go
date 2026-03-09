@@ -109,6 +109,39 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 	return nil
 }
 
+func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistriesPayload) (*gen.ListRegistriesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	registries, err := s.repo.ListMCPRegistries(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list registries").Log(ctx, s.logger)
+	}
+
+	result := make([]*types.MCPRegistry, 0, len(registries))
+	for _, r := range registries {
+		result = append(result, &types.MCPRegistry{
+			ID:   r.ID.String(),
+			Name: r.Name,
+			URL:  r.Url,
+		})
+	}
+
+	return &gen.ListRegistriesResult{
+		Registries: result,
+	}, nil
+}
+
 func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPayload) (*gen.ListCatalogResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

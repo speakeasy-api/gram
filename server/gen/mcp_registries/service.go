@@ -19,6 +19,8 @@ import (
 type Service interface {
 	// Clear the registry cache for a specific registry (admin only)
 	ClearCache(context.Context, *ClearCachePayload) (err error)
+	// List all MCP registries (admin only)
+	ListRegistries(context.Context, *ListRegistriesPayload) (res *ListRegistriesResult, err error)
 	// List available MCP servers from configured registries
 	ListCatalog(context.Context, *ListCatalogPayload) (res *ListCatalogResult, err error)
 	// Get detailed information about an MCP server including remotes
@@ -45,7 +47,13 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
+<<<<<<< HEAD
 var MethodNames = [3]string{"clearCache", "listCatalog", "getServerDetails"}
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+var MethodNames = [2]string{"clearCache", "listCatalog"}
+=======
+var MethodNames = [3]string{"clearCache", "listRegistries", "listCatalog"}
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 
 // ClearCachePayload is the payload type of the mcpRegistries service
 // clearCache method.
@@ -90,6 +98,21 @@ type ListCatalogResult struct {
 	Servers []*types.ExternalMCPServer
 	// Pagination cursor for the next page
 	NextCursor *string
+}
+
+// ListRegistriesPayload is the payload type of the mcpRegistries service
+// listRegistries method.
+type ListRegistriesPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListRegistriesResult is the result type of the mcpRegistries service
+// listRegistries method.
+type ListRegistriesResult struct {
+	// List of MCP registries
+	Registries []*types.MCPRegistry
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -247,6 +247,244 @@ func DecodeClearCacheResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildListRegistriesRequest instantiates a HTTP request object with method
+// and path set to call the "mcpRegistries" service "listRegistries" endpoint
+func (c *Client) BuildListRegistriesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRegistriesMcpRegistriesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "listRegistries", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRegistriesRequest returns an encoder for requests sent to the
+// mcpRegistries listRegistries server.
+func EncodeListRegistriesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.ListRegistriesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "listRegistries", "*mcpregistries.ListRegistriesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListRegistriesResponse returns a decoder for responses returned by the
+// mcpRegistries listRegistries endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListRegistriesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRegistriesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRegistriesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			res := NewListRegistriesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRegistriesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			return nil, NewListRegistriesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRegistriesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			return nil, NewListRegistriesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRegistriesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			return nil, NewListRegistriesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRegistriesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			return nil, NewListRegistriesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRegistriesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			return nil, NewListRegistriesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRegistriesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			return nil, NewListRegistriesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRegistriesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			return nil, NewListRegistriesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRegistriesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+				}
+				err = ValidateListRegistriesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+				}
+				return nil, NewListRegistriesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRegistriesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+				}
+				err = ValidateListRegistriesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+				}
+				return nil, NewListRegistriesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "listRegistries", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRegistriesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listRegistries", err)
+			}
+			err = ValidateListRegistriesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listRegistries", err)
+			}
+			return nil, NewListRegistriesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "listRegistries", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListCatalogRequest instantiates a HTTP request object with method and
 // path set to call the "mcpRegistries" service "listCatalog" endpoint
 func (c *Client) BuildListCatalogRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -496,6 +734,7 @@ func DecodeListCatalogResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+<<<<<<< HEAD
 // BuildGetServerDetailsRequest instantiates a HTTP request object with method
 // and path set to call the "mcpRegistries" service "getServerDetails" endpoint
 func (c *Client) BuildGetServerDetailsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -736,6 +975,19 @@ func DecodeGetServerDetailsResponse(decoder func(*http.Response) goahttp.Decoder
 			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "getServerDetails", resp.StatusCode, string(body))
 		}
 	}
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+=======
+// unmarshalMCPRegistryResponseBodyToTypesMCPRegistry builds a value of type
+// *types.MCPRegistry from a value of type *MCPRegistryResponseBody.
+func unmarshalMCPRegistryResponseBodyToTypesMCPRegistry(v *MCPRegistryResponseBody) *types.MCPRegistry {
+	res := &types.MCPRegistry{
+		ID:   *v.ID,
+		Name: *v.Name,
+		URL:  *v.URL,
+	}
+
+	return res
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer builds a

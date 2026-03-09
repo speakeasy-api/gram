@@ -13,6 +13,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// ListRegistriesResponseBody is the type of the "mcpRegistries" service
+// "listRegistries" endpoint HTTP response body.
+type ListRegistriesResponseBody struct {
+	// List of MCP registries
+	Registries []*MCPRegistryResponseBody `form:"registries" json:"registries" xml:"registries"`
+}
+
 // ListCatalogResponseBody is the type of the "mcpRegistries" service
 // "listCatalog" endpoint HTTP response body.
 type ListCatalogResponseBody struct {
@@ -230,6 +237,195 @@ type ClearCacheGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListRegistriesUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListRegistriesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesForbiddenResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "forbidden"
+// error.
+type ListRegistriesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesBadRequestResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "bad_request"
+// error.
+type ListRegistriesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesNotFoundResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "not_found"
+// error.
+type ListRegistriesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesConflictResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "conflict"
+// error.
+type ListRegistriesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesUnsupportedMediaResponseBody is the type of the
+// "mcpRegistries" service "listRegistries" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListRegistriesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesInvalidResponseBody is the type of the "mcpRegistries" service
+// "listRegistries" endpoint HTTP response body for the "invalid" error.
+type ListRegistriesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesInvariantViolationResponseBody is the type of the
+// "mcpRegistries" service "listRegistries" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListRegistriesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesUnexpectedResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "unexpected"
+// error.
+type ListRegistriesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistriesGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "listRegistries" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListRegistriesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListCatalogUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "listCatalog" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -414,6 +610,7 @@ type ListCatalogGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+<<<<<<< HEAD
 // GetServerDetailsUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "getServerDetails" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -602,6 +799,17 @@ type GetServerDetailsGatewayErrorResponseBody struct {
 	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
 	// Is the error a server-side fault?
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+=======
+// MCPRegistryResponseBody is used to define fields on response body types.
+type MCPRegistryResponseBody struct {
+	// Registry ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name for the registry
+	Name string `form:"name" json:"name" xml:"name"`
+	// URL of the registry
+	URL string `form:"url" json:"url" xml:"url"`
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // ExternalMCPServerResponseBody is used to define fields on response body
@@ -640,6 +848,7 @@ type ExternalMCPToolResponseBody struct {
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
+<<<<<<< HEAD
 // ExternalMCPRemoteResponseBody is used to define fields on response body
 // types.
 type ExternalMCPRemoteResponseBody struct {
@@ -647,6 +856,26 @@ type ExternalMCPRemoteResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// Transport type (sse or streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+||||||| parent of c23cc52a2 (Add button to the admin UI)
+=======
+// NewListRegistriesResponseBody builds the HTTP response body from the result
+// of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesResponseBody(res *mcpregistries.ListRegistriesResult) *ListRegistriesResponseBody {
+	body := &ListRegistriesResponseBody{}
+	if res.Registries != nil {
+		body.Registries = make([]*MCPRegistryResponseBody, len(res.Registries))
+		for i, val := range res.Registries {
+			if val == nil {
+				body.Registries[i] = nil
+				continue
+			}
+			body.Registries[i] = marshalTypesMCPRegistryToMCPRegistryResponseBody(val)
+		}
+	} else {
+		body.Registries = []*MCPRegistryResponseBody{}
+	}
+	return body
+>>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // NewListCatalogResponseBody builds the HTTP response body from the result of
@@ -835,6 +1064,148 @@ func NewClearCacheUnexpectedResponseBody(res *goa.ServiceError) *ClearCacheUnexp
 // result of the "clearCache" endpoint of the "mcpRegistries" service.
 func NewClearCacheGatewayErrorResponseBody(res *goa.ServiceError) *ClearCacheGatewayErrorResponseBody {
 	body := &ClearCacheGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesUnauthorizedResponseBody(res *goa.ServiceError) *ListRegistriesUnauthorizedResponseBody {
+	body := &ListRegistriesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesForbiddenResponseBody builds the HTTP response body from
+// the result of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesForbiddenResponseBody(res *goa.ServiceError) *ListRegistriesForbiddenResponseBody {
+	body := &ListRegistriesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesBadRequestResponseBody(res *goa.ServiceError) *ListRegistriesBadRequestResponseBody {
+	body := &ListRegistriesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesNotFoundResponseBody(res *goa.ServiceError) *ListRegistriesNotFoundResponseBody {
+	body := &ListRegistriesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesConflictResponseBody builds the HTTP response body from the
+// result of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesConflictResponseBody(res *goa.ServiceError) *ListRegistriesConflictResponseBody {
+	body := &ListRegistriesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listRegistries" endpoint of the "mcpRegistries"
+// service.
+func NewListRegistriesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListRegistriesUnsupportedMediaResponseBody {
+	body := &ListRegistriesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesInvalidResponseBody builds the HTTP response body from the
+// result of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesInvalidResponseBody(res *goa.ServiceError) *ListRegistriesInvalidResponseBody {
+	body := &ListRegistriesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listRegistries" endpoint of the "mcpRegistries"
+// service.
+func NewListRegistriesInvariantViolationResponseBody(res *goa.ServiceError) *ListRegistriesInvariantViolationResponseBody {
+	body := &ListRegistriesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesUnexpectedResponseBody(res *goa.ServiceError) *ListRegistriesUnexpectedResponseBody {
+	body := &ListRegistriesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistriesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listRegistries" endpoint of the "mcpRegistries" service.
+func NewListRegistriesGatewayErrorResponseBody(res *goa.ServiceError) *ListRegistriesGatewayErrorResponseBody {
+	body := &ListRegistriesGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1134,6 +1505,17 @@ func NewGetServerDetailsGatewayErrorResponseBody(res *goa.ServiceError) *GetServ
 func NewClearCachePayload(registryID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ClearCachePayload {
 	v := &mcpregistries.ClearCachePayload{}
 	v.RegistryID = registryID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListRegistriesPayload builds a mcpRegistries service listRegistries
+// endpoint payload.
+func NewListRegistriesPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ListRegistriesPayload {
+	v := &mcpregistries.ListRegistriesPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
