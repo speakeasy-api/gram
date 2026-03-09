@@ -1,5 +1,12 @@
 # @gram/client
 
+## 0.27.20
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- e616da7: Add admin-only cache purging functionality
+
 ## 0.27.24
 
 ### Patch Changes

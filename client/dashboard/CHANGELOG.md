@@ -1,5 +1,16 @@
 # dashboard
 
+## 0.32.1
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- 1500853: Surface correct http status attribute references in MCP logs search
+- e616da7: Add admin-only cache purging functionality
+- Updated dependencies [1765931]
+- Updated dependencies [e616da7]
+  - @gram/client@0.27.20
+
 ## 0.32.0
 
 ### Minor Changes
