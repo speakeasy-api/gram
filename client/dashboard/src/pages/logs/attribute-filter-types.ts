@@ -33,7 +33,7 @@ export function parseOperatorSymbol(input: string): Op | null {
 }
 
 /**
- * Try to parse a freeform filter expression like `http.status != 200`.
+ * Try to parse a freeform filter expression like `http.response.status_code != 200`.
  * Returns an `{ key, op, value }` triple on success, or `null` when the input
  * doesn't look like a filter expression (so the caller can fall through to
  * plain-text search).
