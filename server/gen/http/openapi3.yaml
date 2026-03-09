@@ -14452,9 +14452,15 @@ components:
                     type: integer
                     description: Total number of unique sessions
                     format: int64
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HooksUserSummary'
+                    description: Aggregated metrics grouped by user
             description: Result of hooks summary query
             required:
                 - servers
+                - users
                 - total_events
                 - total_sessions
         GetInstanceForm:
@@ -14854,6 +14860,40 @@ components:
             description: Aggregated hooks metrics for a single server
             required:
                 - server_name
+                - event_count
+                - unique_tools
+                - success_count
+                - failure_count
+                - failure_rate
+        HooksUserSummary:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Total number of hook events for this user
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool completions (PostToolUseFailure events)
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Failure rate as a decimal (0.0 to 1.0)
+                    format: double
+                success_count:
+                    type: integer
+                    description: Number of successful tool completions (PostToolUse events)
+                    format: int64
+                unique_tools:
+                    type: integer
+                    description: Number of unique tools used by this user
+                    format: int64
+                user_email:
+                    type: string
+                    description: User email address
+            description: Aggregated hooks metrics for a single user
+            required:
+                - user_email
                 - event_count
                 - unique_tools
                 - success_count

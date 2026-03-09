@@ -138,6 +138,8 @@ TEMPORAL_WEB_PORT = "8233"
 ## an example of the format.
 ## For a list of feature flags, check `server/internal/feature/flags.go`.
 # GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/flags.csv"
+## Set to 1 to disable air hot reload and run server/worker directly
+GRAM_DISABLE_AIR = 0
 
 ####################################
 ## Gram Functions runner settings ##

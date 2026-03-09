@@ -87,6 +87,7 @@ export * from "./getusermetricssummarypayload.js";
 export * from "./getusermetricssummaryresult.js";
 export * from "./gramproductfeatures.js";
 export * from "./hooksserversummary.js";
+export * from "./hooksusersummary.js";
 export * from "./httptooldefinition.js";
 export * from "./inforesponsebody.js";
 export * from "./instancemcpserver.js";

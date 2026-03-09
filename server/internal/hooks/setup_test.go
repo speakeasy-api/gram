@@ -71,7 +71,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
 	// Pass nil for telemetry service in tests - we'll add nil checks in the code
-	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter)
+	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, "")
 
 	return ctx, &testInstance{
 		service:        svc,

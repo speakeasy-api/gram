@@ -11,6 +11,10 @@ import {
   HooksServerSummary,
   HooksServerSummary$inboundSchema,
 } from "./hooksserversummary.js";
+import {
+  HooksUserSummary,
+  HooksUserSummary$inboundSchema,
+} from "./hooksusersummary.js";
 
 /**
  * Result of hooks summary query
@@ -28,6 +32,10 @@ export type GetHooksSummaryResult = {
    * Total number of unique sessions
    */
   totalSessions: number;
+  /**
+   * Aggregated metrics grouped by user
+   */
+  users: Array<HooksUserSummary>;
 };
 
 /** @internal */
@@ -39,6 +47,7 @@ export const GetHooksSummaryResult$inboundSchema: z.ZodMiniType<
     servers: z.array(HooksServerSummary$inboundSchema),
     total_events: z.int(),
     total_sessions: z.int(),
+    users: z.array(HooksUserSummary$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

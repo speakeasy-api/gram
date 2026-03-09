@@ -27,10 +27,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	srv "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
 )
+
+type NameMapper interface {
+	GetMappedName(attrs map[attr.Key]any) (*string, error)
+}
 
 type Service struct {
 	tracer           trace.Tracer
@@ -39,6 +44,8 @@ type Service struct {
 	telemetryService *telemetry.Service
 	auth             *auth.Auth
 	cache            cache.Cache
+	nameMapper       NameMapper
+	localEnvData     sessions.LocalEnvFile
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -61,14 +68,37 @@ type HookSpecificOutput struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, tracerProvider trace.TracerProvider, telemetryService *telemetry.Service, sessions *sessions.Manager, cacheAdapter cache.Cache) *Service {
+func NewService(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	tracerProvider trace.TracerProvider,
+	telemetryService *telemetry.Service,
+	sessionsMgr *sessions.Manager,
+	cacheAdapter cache.Cache,
+	completionsClient openrouter.CompletionClient,
+	localEnvPath string,
+) *Service {
+	nameMapper := NewNameMapper(cacheAdapter, completionsClient, logger)
+
+	var localEnvData sessions.LocalEnvFile
+	if localEnvPath != "" {
+		data, err := sessions.LoadLocalEnvFile(context.Background(), logger, localEnvPath, db)
+		if err != nil {
+			logger.WarnContext(context.Background(), "failed to load local env file for hooks service", attr.SlogError(err))
+		} else {
+			localEnvData = data
+		}
+	}
+
 	return &Service{
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:           logger.With(attr.SlogComponent("hooks")),
 		db:               db,
 		telemetryService: telemetryService,
-		auth:             auth.New(logger, db, sessions),
+		auth:             auth.New(logger, db, sessionsMgr),
 		cache:            cacheAdapter,
+		nameMapper:       nameMapper,
+		localEnvData:     localEnvData,
 	}
 }
 
@@ -231,7 +261,7 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 }
 
 // Claude is the unified endpoint for all Claude Code hook events
-func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
 		attr.SlogEvent("claude_hook"),
 		attr.SlogValueAny(map[string]any{
@@ -262,7 +292,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	}
 }
 
-func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow sessions to start
 	continueVal := true
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -274,16 +304,14 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePay
 }
 
 // recordToolEvent records a tool event, either directly to ClickHouse if session is validated, or buffers it
-func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudePayload) {
+func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudeHookPayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
 		s.logger.WarnContext(ctx, "Tool event called without session ID")
 		return
 	}
 
 	sessionID := *payload.SessionID
-	var metadata SessionMetadata
-	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
-
+	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
 		s.writeHookToClickHouseWithMetadata(ctx, payload, &metadata)
 	} else {
@@ -294,7 +322,34 @@ func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudePayloa
 	}
 }
 
-func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (SessionMetadata, error) {
+	// In unsafe local mode, automatically authenticate using data from local env file
+	if len(s.localEnvData) > 0 {
+		// Get the first user from the local env data
+		for _, userInfo := range s.localEnvData {
+			if len(userInfo.Organizations) > 0 {
+				org := userInfo.Organizations[0]
+				return SessionMetadata{
+					SessionID:   sessionID,
+					UserEmail:   userInfo.UserEmail,
+					ServiceName: "claude-code",
+					ClaudeOrgID: "test-claude-org-id",
+					GramOrgID:   org.OrganizationID,
+					ProjectID:   org.DefaultProjectID,
+				}, nil
+			}
+		}
+	}
+
+	var metadata SessionMetadata
+	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
+	if err != nil {
+		return SessionMetadata{}, err
+	}
+	return metadata, nil
+}
+
+func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow tools
 	allow := "allow"
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -305,7 +360,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	}, nil
 }
 
-func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,
@@ -313,7 +368,7 @@ func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayl
 	}, nil
 }
 
-func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,

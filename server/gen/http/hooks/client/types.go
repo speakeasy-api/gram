@@ -490,7 +490,7 @@ type OTELAttributeRequestBody struct {
 
 // NewClaudeRequestBody builds the HTTP request body from the payload of the
 // "claude" endpoint of the "hooks" service.
-func NewClaudeRequestBody(p *hooks.ClaudePayload) *ClaudeRequestBody {
+func NewClaudeRequestBody(p *hooks.ClaudeHookPayload) *ClaudeRequestBody {
 	body := &ClaudeRequestBody{
 		HookEventName: p.HookEventName,
 		ToolName:      p.ToolName,

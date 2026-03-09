@@ -1410,3 +1410,68 @@ func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionC
 
 	return int64(count), nil
 }
+
+// HooksUserSummaryRow contains aggregated hooks metrics for a single user.
+type HooksUserSummaryRow struct {
+	UserEmail    string  `ch:"user_email"`
+	EventCount   uint64  `ch:"event_count"`
+	UniqueTools  uint64  `ch:"unique_tools"`
+	SuccessCount uint64  `ch:"success_count"`
+	FailureCount uint64  `ch:"failure_count"`
+	FailureRate  float64 `ch:"failure_rate"`
+}
+
+// GetHooksUserSummaryParams defines the parameters for getting hooks user summary.
+type GetHooksUserSummaryParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+// GetHooksUserSummary retrieves aggregated hooks metrics grouped by user.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSummaryParams) ([]HooksUserSummaryRow, error) {
+	sb := sq.Select(
+		"ifNull(toString(attributes.`user.email`), 'Unknown') as user_email",
+		"count(*) as event_count",
+		"uniqExact(tool_name) as unique_tools",
+		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
+		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUseFailure') as failure_count",
+		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		GroupBy("user_email").
+		OrderBy("event_count DESC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building hooks user summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []HooksUserSummaryRow
+	for rows.Next() {
+		var summary HooksUserSummaryRow
+		if err = rows.ScanStruct(&summary); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		summaries = append(summaries, summary)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return summaries, nil
+}

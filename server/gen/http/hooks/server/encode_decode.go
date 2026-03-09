@@ -33,9 +33,9 @@ func EncodeClaudeResponse(encoder func(context.Context, http.ResponseWriter) goa
 
 // DecodeClaudeRequest returns a decoder for requests sent to the hooks claude
 // endpoint.
-func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.ClaudePayload, error) {
-	return func(r *http.Request) (*hooks.ClaudePayload, error) {
-		var payload *hooks.ClaudePayload
+func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.ClaudeHookPayload, error) {
+	return func(r *http.Request) (*hooks.ClaudeHookPayload, error) {
+		var payload *hooks.ClaudeHookPayload
 		var (
 			body ClaudeRequestBody
 			err  error
@@ -55,7 +55,7 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewClaudePayload(&body)
+		payload = NewClaudeHookPayload(&body)
 
 		return payload, nil
 	}

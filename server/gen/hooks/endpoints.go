@@ -40,7 +40,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 // "claude" of service "hooks".
 func NewClaudeEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ClaudePayload)
+		p := req.(*ClaudeHookPayload)
 		return s.Claude(ctx, p)
 	}
 }
@@ -53,8 +53,8 @@ func NewLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
-			RequiredScopes: []string{"producer"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"hooks"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
@@ -65,7 +65,7 @@ func NewLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"producer"},
+				RequiredScopes: []string{"hooks"},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {

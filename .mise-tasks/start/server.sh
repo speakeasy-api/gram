@@ -8,5 +8,11 @@ if [ -f "../config.local.toml" ]; then
     CONFIG_ARGS=(--config-file ../config.local.toml)
 fi
 
-# Use air for hot reload - args after -- are passed to the binary
-air -- start "${CONFIG_ARGS[@]}" "$@"
+# Check if air should be disabled
+if [ "${GRAM_DISABLE_AIR:-0}" = "1" ]; then
+    # Run directly without air
+    mise run -q build:server && ./bin/gram start "${CONFIG_ARGS[@]}" "$@"
+else
+    # Use air for hot reload - args after -- are passed to the binary
+    air -- start "${CONFIG_ARGS[@]}" "$@"
+fi

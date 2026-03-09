@@ -1049,10 +1049,11 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 	Description("Result of hooks summary query")
 
 	Attribute("servers", ArrayOf(HooksServerSummaryType), "Aggregated metrics grouped by server")
+	Attribute("users", ArrayOf(HooksUserSummaryType), "Aggregated metrics grouped by user")
 	Attribute("total_events", Int64, "Total number of hook events")
 	Attribute("total_sessions", Int64, "Total number of unique sessions")
 
-	Required("servers", "total_events", "total_sessions")
+	Required("servers", "users", "total_events", "total_sessions")
 })
 
 var HooksServerSummaryType = Type("HooksServerSummary", func() {
@@ -1066,4 +1067,17 @@ var HooksServerSummaryType = Type("HooksServerSummary", func() {
 	Attribute("failure_rate", Float64, "Failure rate as a decimal (0.0 to 1.0)")
 
 	Required("server_name", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
+})
+
+var HooksUserSummaryType = Type("HooksUserSummary", func() {
+	Description("Aggregated hooks metrics for a single user")
+
+	Attribute("user_email", String, "User email address")
+	Attribute("event_count", Int64, "Total number of hook events for this user")
+	Attribute("unique_tools", Int64, "Number of unique tools used by this user")
+	Attribute("success_count", Int64, "Number of successful tool completions (PostToolUse events)")
+	Attribute("failure_count", Int64, "Number of failed tool completions (PostToolUseFailure events)")
+	Attribute("failure_rate", Float64, "Failure rate as a decimal (0.0 to 1.0)")
+
+	Required("user_email", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
 })

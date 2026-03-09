@@ -1086,7 +1086,8 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, err
 	}
 
-	rows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
+	// Get server summary
+	serverRows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
 		GramProjectID: authCtx.ProjectID.String(),
 		TimeStart:     timeStart,
 		TimeEnd:       timeEnd,
@@ -1095,10 +1096,20 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks summary: %v", err)
 	}
 
-	// Transform rows into response
-	servers := make([]*telem_gen.HooksServerSummary, 0, len(rows))
+	// Get user summary
+	userRows, err := s.chRepo.GetHooksUserSummary(ctx, repo.GetHooksUserSummaryParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks user summary: %v", err)
+	}
+
+	// Transform server rows into response
+	servers := make([]*telem_gen.HooksServerSummary, 0, len(serverRows))
 	var totalEvents, totalSessions int64
-	for _, row := range rows {
+	for _, row := range serverRows {
 		servers = append(servers, &telem_gen.HooksServerSummary{
 			ServerName:   row.ServerName,
 			EventCount:   int64(row.EventCount),   //nolint:gosec // Bounded count
@@ -1108,6 +1119,19 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 			FailureRate:  row.FailureRate,
 		})
 		totalEvents += int64(row.EventCount) //nolint:gosec // Bounded count
+	}
+
+	// Transform user rows into response
+	users := make([]*telem_gen.HooksUserSummary, 0, len(userRows))
+	for _, row := range userRows {
+		users = append(users, &telem_gen.HooksUserSummary{
+			UserEmail:    row.UserEmail,
+			EventCount:   int64(row.EventCount),   //nolint:gosec // Bounded count
+			UniqueTools:  int64(row.UniqueTools),  //nolint:gosec // Bounded count
+			SuccessCount: int64(row.SuccessCount), //nolint:gosec // Bounded count
+			FailureCount: int64(row.FailureCount), //nolint:gosec // Bounded count
+			FailureRate:  row.FailureRate,
+		})
 	}
 
 	// Get unique session count
@@ -1123,6 +1147,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 
 	return &telem_gen.GetHooksSummaryResult{
 		Servers:       servers,
+		Users:         users,
 		TotalEvents:   totalEvents,
 		TotalSessions: totalSessions,
 	}, nil
