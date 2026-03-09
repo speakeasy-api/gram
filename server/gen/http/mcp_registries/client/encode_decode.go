@@ -734,7 +734,6 @@ func DecodeListCatalogResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
-<<<<<<< HEAD
 // BuildGetServerDetailsRequest instantiates a HTTP request object with method
 // and path set to call the "mcpRegistries" service "getServerDetails" endpoint
 func (c *Client) BuildGetServerDetailsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -975,8 +974,8 @@ func DecodeGetServerDetailsResponse(decoder func(*http.Response) goahttp.Decoder
 			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "getServerDetails", resp.StatusCode, string(body))
 		}
 	}
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-=======
+}
+
 // unmarshalMCPRegistryResponseBodyToTypesMCPRegistry builds a value of type
 // *types.MCPRegistry from a value of type *MCPRegistryResponseBody.
 func unmarshalMCPRegistryResponseBodyToTypesMCPRegistry(v *MCPRegistryResponseBody) *types.MCPRegistry {
@@ -987,7 +986,6 @@ func unmarshalMCPRegistryResponseBodyToTypesMCPRegistry(v *MCPRegistryResponseBo
 	}
 
 	return res
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer builds a

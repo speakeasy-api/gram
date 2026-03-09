@@ -58,13 +58,7 @@ func UsageCommands() []string {
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
-<<<<<<< HEAD
-		"mcp-registries (clear-cache|list-catalog|get-server-details)",
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-		"mcp-registries (clear-cache|list-catalog)",
-=======
-		"mcp-registries (clear-cache|list-registries|list-catalog)",
->>>>>>> c23cc52a2 (Add button to the admin UI)
+		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"functions get-signed-asset-url",
 		"hooks (claude|logs)",
 		"instances get-instance",

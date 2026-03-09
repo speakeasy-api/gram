@@ -54,8 +54,8 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-<<<<<<< HEAD
 		ClearCacheDoer:       doer,
+		ListRegistriesDoer:   doer,
 		ListCatalogDoer:      doer,
 		GetServerDetailsDoer: doer,
 		RestoreResponseBody:  restoreBody,
@@ -63,24 +63,6 @@ func NewClient(
 		host:                 host,
 		decoder:              dec,
 		encoder:              enc,
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-		ClearCacheDoer:      doer,
-		ListCatalogDoer:     doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
-=======
-		ClearCacheDoer:      doer,
-		ListRegistriesDoer:  doer,
-		ListCatalogDoer:     doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
->>>>>>> c23cc52a2 (Add button to the admin UI)
 	}
 }
 

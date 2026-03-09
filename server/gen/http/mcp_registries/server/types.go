@@ -610,7 +610,6 @@ type ListCatalogGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-<<<<<<< HEAD
 // GetServerDetailsUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "getServerDetails" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -799,8 +798,8 @@ type GetServerDetailsGatewayErrorResponseBody struct {
 	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
 	// Is the error a server-side fault?
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-=======
+}
+
 // MCPRegistryResponseBody is used to define fields on response body types.
 type MCPRegistryResponseBody struct {
 	// Registry ID
@@ -809,7 +808,6 @@ type MCPRegistryResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// URL of the registry
 	URL string `form:"url" json:"url" xml:"url"`
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // ExternalMCPServerResponseBody is used to define fields on response body
@@ -848,7 +846,6 @@ type ExternalMCPToolResponseBody struct {
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
-<<<<<<< HEAD
 // ExternalMCPRemoteResponseBody is used to define fields on response body
 // types.
 type ExternalMCPRemoteResponseBody struct {
@@ -856,8 +853,8 @@ type ExternalMCPRemoteResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// Transport type (sse or streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-=======
+}
+
 // NewListRegistriesResponseBody builds the HTTP response body from the result
 // of the "listRegistries" endpoint of the "mcpRegistries" service.
 func NewListRegistriesResponseBody(res *mcpregistries.ListRegistriesResult) *ListRegistriesResponseBody {
@@ -875,7 +872,6 @@ func NewListRegistriesResponseBody(res *mcpregistries.ListRegistriesResult) *Lis
 		body.Registries = []*MCPRegistryResponseBody{}
 	}
 	return body
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // NewListCatalogResponseBody builds the HTTP response body from the result of

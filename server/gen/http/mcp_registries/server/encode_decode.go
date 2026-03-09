@@ -700,7 +700,6 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
-<<<<<<< HEAD
 // EncodeGetServerDetailsResponse returns an encoder for responses returned by
 // the mcpRegistries getServerDetails endpoint.
 func EncodeGetServerDetailsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -932,8 +931,8 @@ func EncodeGetServerDetailsError(encoder func(context.Context, http.ResponseWrit
 			return encodeError(ctx, w, v)
 		}
 	}
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-=======
+}
+
 // marshalTypesMCPRegistryToMCPRegistryResponseBody builds a value of type
 // *MCPRegistryResponseBody from a value of type *types.MCPRegistry.
 func marshalTypesMCPRegistryToMCPRegistryResponseBody(v *types.MCPRegistry) *MCPRegistryResponseBody {
@@ -944,7 +943,6 @@ func marshalTypesMCPRegistryToMCPRegistryResponseBody(v *types.MCPRegistry) *MCP
 	}
 
 	return res
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // marshalTypesExternalMCPServerToExternalMCPServerResponseBody builds a value

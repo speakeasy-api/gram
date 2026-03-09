@@ -91,7 +91,10 @@ func (d *TypedCacheObject[T]) DeleteByPrefix(ctx context.Context, prefix string)
 		return nil
 	}
 
-	fullPrefix := prefix + ":" + d.keySuffix
+	fullPrefix := prefix
+	if d.keySuffix != "" {
+		fullPrefix += ":" + d.keySuffix
+	}
 	d.logger.DebugContext(ctx, "invalidating cache by prefix", attr.SlogCacheKey(fullPrefix))
 	if err := d.cache.DeleteByPrefix(ctx, fullPrefix); err != nil {
 		return fmt.Errorf("delete by prefix: %s: %w", fullPrefix, err)

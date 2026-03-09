@@ -610,7 +610,6 @@ type ListCatalogGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-<<<<<<< HEAD
 // GetServerDetailsUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "getServerDetails" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -799,8 +798,8 @@ type GetServerDetailsGatewayErrorResponseBody struct {
 	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
 	// Is the error a server-side fault?
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-=======
+}
+
 // MCPRegistryResponseBody is used to define fields on response body types.
 type MCPRegistryResponseBody struct {
 	// Registry ID
@@ -809,7 +808,6 @@ type MCPRegistryResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// URL of the registry
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // ExternalMCPServerResponseBody is used to define fields on response body
@@ -1341,7 +1339,6 @@ func NewListCatalogGatewayError(body *ListCatalogGatewayErrorResponseBody) *goa.
 	return v
 }
 
-<<<<<<< HEAD
 // NewGetServerDetailsExternalMCPServerOK builds a "mcpRegistries" service
 // "getServerDetails" endpoint result from a HTTP "OK" response.
 func NewGetServerDetailsExternalMCPServerOK(body *GetServerDetailsResponseBody) *types.ExternalMCPServer {
@@ -1526,8 +1523,8 @@ func NewGetServerDetailsGatewayError(body *GetServerDetailsGatewayErrorResponseB
 	}
 
 	return v
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-=======
+}
+
 // ValidateListRegistriesResponseBody runs the validations defined on
 // ListRegistriesResponseBody
 func ValidateListRegistriesResponseBody(body *ListRegistriesResponseBody) (err error) {
@@ -1542,7 +1539,6 @@ func ValidateListRegistriesResponseBody(body *ListRegistriesResponseBody) (err e
 		}
 	}
 	return
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // ValidateListCatalogResponseBody runs the validations defined on
@@ -2312,7 +2308,6 @@ func ValidateListCatalogGatewayErrorResponseBody(body *ListCatalogGatewayErrorRe
 	return
 }
 
-<<<<<<< HEAD
 // ValidateGetServerDetailsUnauthorizedResponseBody runs the validations
 // defined on getServerDetails_unauthorized_response_body
 func ValidateGetServerDetailsUnauthorizedResponseBody(body *GetServerDetailsUnauthorizedResponseBody) (err error) {
@@ -2549,8 +2544,10 @@ func ValidateGetServerDetailsGatewayErrorResponseBody(body *GetServerDetailsGate
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-=======
+	}
+	return
+}
+
 // ValidateMCPRegistryResponseBody runs the validations defined on
 // MCPRegistryResponseBody
 func ValidateMCPRegistryResponseBody(body *MCPRegistryResponseBody) (err error) {
@@ -2565,7 +2562,6 @@ func ValidateMCPRegistryResponseBody(body *MCPRegistryResponseBody) (err error) 
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
->>>>>>> c23cc52a2 (Add button to the admin UI)
 	}
 	return
 }

@@ -16,18 +16,10 @@ import (
 
 // Endpoints wraps the "mcpRegistries" service endpoints.
 type Endpoints struct {
-<<<<<<< HEAD
 	ClearCache       goa.Endpoint
+	ListRegistries   goa.Endpoint
 	ListCatalog      goa.Endpoint
 	GetServerDetails goa.Endpoint
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-	ClearCache  goa.Endpoint
-	ListCatalog goa.Endpoint
-=======
-	ClearCache     goa.Endpoint
-	ListRegistries goa.Endpoint
-	ListCatalog    goa.Endpoint
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // NewEndpoints wraps the methods of the "mcpRegistries" service with endpoints.
@@ -35,18 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-<<<<<<< HEAD
 		ClearCache:       NewClearCacheEndpoint(s, a.APIKeyAuth),
+		ListRegistries:   NewListRegistriesEndpoint(s, a.APIKeyAuth),
 		ListCatalog:      NewListCatalogEndpoint(s, a.APIKeyAuth),
 		GetServerDetails: NewGetServerDetailsEndpoint(s, a.APIKeyAuth),
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-		ClearCache:  NewClearCacheEndpoint(s, a.APIKeyAuth),
-		ListCatalog: NewListCatalogEndpoint(s, a.APIKeyAuth),
-=======
-		ClearCache:     NewClearCacheEndpoint(s, a.APIKeyAuth),
-		ListRegistries: NewListRegistriesEndpoint(s, a.APIKeyAuth),
-		ListCatalog:    NewListCatalogEndpoint(s, a.APIKeyAuth),
->>>>>>> c23cc52a2 (Add button to the admin UI)
 	}
 }
 

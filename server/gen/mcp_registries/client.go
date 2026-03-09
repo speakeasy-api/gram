@@ -16,41 +16,19 @@ import (
 
 // Client is the "mcpRegistries" service client.
 type Client struct {
-<<<<<<< HEAD
 	ClearCacheEndpoint       goa.Endpoint
+	ListRegistriesEndpoint   goa.Endpoint
 	ListCatalogEndpoint      goa.Endpoint
 	GetServerDetailsEndpoint goa.Endpoint
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-	ClearCacheEndpoint  goa.Endpoint
-	ListCatalogEndpoint goa.Endpoint
-=======
-	ClearCacheEndpoint     goa.Endpoint
-	ListRegistriesEndpoint goa.Endpoint
-	ListCatalogEndpoint    goa.Endpoint
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // NewClient initializes a "mcpRegistries" service client given the endpoints.
-<<<<<<< HEAD
-func NewClient(clearCache, listCatalog, getServerDetails goa.Endpoint) *Client {
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-func NewClient(clearCache, listCatalog goa.Endpoint) *Client {
-=======
-func NewClient(clearCache, listRegistries, listCatalog goa.Endpoint) *Client {
->>>>>>> c23cc52a2 (Add button to the admin UI)
+func NewClient(clearCache, listRegistries, listCatalog, getServerDetails goa.Endpoint) *Client {
 	return &Client{
-<<<<<<< HEAD
 		ClearCacheEndpoint:       clearCache,
+		ListRegistriesEndpoint:   listRegistries,
 		ListCatalogEndpoint:      listCatalog,
 		GetServerDetailsEndpoint: getServerDetails,
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-		ClearCacheEndpoint:  clearCache,
-		ListCatalogEndpoint: listCatalog,
-=======
-		ClearCacheEndpoint:     clearCache,
-		ListRegistriesEndpoint: listRegistries,
-		ListCatalogEndpoint:    listCatalog,
->>>>>>> c23cc52a2 (Add button to the admin UI)
 	}
 }
 

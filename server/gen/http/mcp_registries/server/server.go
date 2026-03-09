@@ -18,21 +18,11 @@ import (
 
 // Server lists the mcpRegistries service endpoint HTTP handlers.
 type Server struct {
-<<<<<<< HEAD
 	Mounts           []*MountPoint
 	ClearCache       http.Handler
+	ListRegistries   http.Handler
 	ListCatalog      http.Handler
 	GetServerDetails http.Handler
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-	Mounts      []*MountPoint
-	ClearCache  http.Handler
-	ListCatalog http.Handler
-=======
-	Mounts         []*MountPoint
-	ClearCache     http.Handler
-	ListRegistries http.Handler
-	ListCatalog    http.Handler
->>>>>>> c23cc52a2 (Add button to the admin UI)
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -67,18 +57,10 @@ func New(
 			{"ListCatalog", "GET", "/rpc/mcpRegistries.listCatalog"},
 			{"GetServerDetails", "GET", "/rpc/mcpRegistries.getServerDetails"},
 		},
-<<<<<<< HEAD
 		ClearCache:       NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
+		ListRegistries:   NewListRegistriesHandler(e.ListRegistries, mux, decoder, encoder, errhandler, formatter),
 		ListCatalog:      NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
 		GetServerDetails: NewGetServerDetailsHandler(e.GetServerDetails, mux, decoder, encoder, errhandler, formatter),
-||||||| parent of c23cc52a2 (Add button to the admin UI)
-		ClearCache:  NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
-		ListCatalog: NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
-=======
-		ClearCache:     NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
-		ListRegistries: NewListRegistriesHandler(e.ListRegistries, mux, decoder, encoder, errhandler, formatter),
-		ListCatalog:    NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
->>>>>>> c23cc52a2 (Add button to the admin UI)
 	}
 }
 
