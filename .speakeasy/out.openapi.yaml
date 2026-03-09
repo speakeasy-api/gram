@@ -5869,6 +5869,108 @@ paths:
       tags:
         - mcpMetadata
       x-speakeasy-name-override: set
+  /rpc/mcpRegistries.clearCache:
+    delete:
+      description: Clear the registry cache for a specific registry (admin only)
+      operationId: clearMCPRegistryCache
+      parameters:
+        - allowEmptyValue: true
+          description: The registry to clear cache for
+          in: query
+          name: registry_id
+          required: true
+          schema:
+            description: The registry to clear cache for
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: clearCache mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: clearCache
   /rpc/mcpRegistries.getServerDetails:
     get:
       description: Get detailed information about an MCP server including remotes
@@ -6104,6 +6206,105 @@ paths:
       x-speakeasy-name-override: listCatalog
       x-speakeasy-react-hook:
         name: ListMCPCatalog
+  /rpc/mcpRegistries.listRegistries:
+    get:
+      description: List all MCP registries (admin only)
+      operationId: listMCPRegistries
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRegistriesResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listRegistries mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: listRegistries
+      x-speakeasy-react-hook:
+        name: ListMCPRegistries
   /rpc/packages.create:
     post:
       description: Create a new package for a project.
@@ -15433,6 +15634,16 @@ components:
           description: The created prompt template
       required:
         - templates
+    ListRegistriesResponseBody:
+      type: object
+      properties:
+        registries:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPRegistry'
+          description: List of MCP registries
+      required:
+        - registries
     ListResourcesResult:
       type: object
       properties:
@@ -15508,6 +15719,24 @@ components:
       required:
         - package
         - versions
+    MCPRegistry:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Registry ID
+          format: uuid
+        name:
+          type: string
+          description: Display name for the registry
+        url:
+          type: string
+          description: URL of the registry
+      description: An MCP registry
+      required:
+        - id
+        - name
+        - url
     McpEnvironmentConfig:
       type: object
       properties:
