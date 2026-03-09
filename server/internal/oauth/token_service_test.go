@@ -2,6 +2,7 @@ package oauth_test
 
 import (
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -140,33 +141,32 @@ func TestExchangeRefreshToken_InvalidRefreshToken(t *testing.T) {
 
 func TestExchangeRefreshToken_ExpiredDownstreamToken(t *testing.T) {
 	t.Parallel()
-	ctx := t.Context()
-	env := newTokenTestEnv(t)
-	toolsetID := uuid.New()
-	upstreamExpiry := time.Now().Add(24 * time.Hour)
 
-	// Set a very short downstream token expiration
-	env.tokenService.SetTokenExpiration(500 * time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		env := newTokenTestEnv(t) // Redis client created inside the bubble
+		toolsetID := uuid.New()
+		upstreamExpiry := time.Now().Add(365 * 24 * time.Hour)
 
-	token, clientID, clientSecret := env.issueToken(t, ctx, toolsetID,
-		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
+		token, clientID, clientSecret := env.issueToken(t, ctx, toolsetID,
+			"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
-	// Wait for the downstream access token to expire
-	time.Sleep(1 * time.Second)
+		// Sleep past the 30-day default token expiration
+		time.Sleep(31 * 24 * time.Hour)
 
-	// Access token should be expired
-	_, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
-	require.ErrorIs(t, err, oauth.ErrExpiredAccessToken)
+		_, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+		require.ErrorIs(t, err, oauth.ErrExpiredAccessToken)
 
-	// Refresh token should still work (24h grace period on cache TTL)
-	newToken, err := env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
-		GrantType:    "refresh_token",
-		RefreshToken: token.RefreshToken,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}, testMCPURL, toolsetID)
-	require.NoError(t, err)
-	require.NotEqual(t, token.AccessToken, newToken.AccessToken)
+		// Refresh token should still work (24h grace period on cache TTL)
+		newToken, err := env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+			GrantType:    "refresh_token",
+			RefreshToken: token.RefreshToken,
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+		}, testMCPURL, toolsetID)
+		require.NoError(t, err)
+		require.NotEqual(t, token.AccessToken, newToken.AccessToken)
+	})
 }
 
 func TestExchangeRefreshToken_ExpiredUpstreamSecrets(t *testing.T) {

@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"testing"
 	"time"
@@ -37,8 +38,16 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			return nil, fmt.Errorf("failed to parse redis connection string: %w", err)
 		}
 
+		// Resolve hostname to IP up front so that Redis connections inside a
+		// synctest bubble never trigger DNS lookups (Go's net.DefaultResolver
+		// uses a global singleflight whose goroutines live outside any bubble).
+		host, port, _ := net.SplitHostPort(uri.Host)
+		if ips, err := net.LookupHost(host); err == nil && len(ips) > 0 {
+			host = ips[0]
+		}
+
 		client := redis.NewClient(&redis.Options{
-			Addr:         uri.Host,
+			Addr:         net.JoinHostPort(host, port),
 			DB:           db,
 			DialTimeout:  1 * time.Second,
 			ReadTimeout:  300 * time.Millisecond,

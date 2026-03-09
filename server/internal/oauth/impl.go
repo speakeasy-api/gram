@@ -673,9 +673,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	s.logger.InfoContext(ctx, "authorization grant created after external provider callback",
-		attr.SlogOAuthClientID(authReq.ClientID),
-		attr.SlogOAuthCode(grant.Code),
-		attr.SlogOAuthExternalCode(externalCode))
+		attr.SlogOAuthClientID(authReq.ClientID))
 
 	// Build authorization response and redirect back to client
 	responseURL, err := s.grantManager.BuildAuthorizationResponse(ctx, grant, authReq.RedirectURI)

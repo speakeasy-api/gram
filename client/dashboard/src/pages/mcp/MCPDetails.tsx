@@ -2115,29 +2115,32 @@ function OAuthTabModal({
 }) {
   // Extract discovered OAuth metadata from external MCP tools.
   // Uses rawTools because proxy-type tools are filtered out of toolset.tools.
+  // Builds metadata matching the format the old server-side fallback produced:
+  // issuer = Gram's MCP URL, upstream endpoints passed through, plus standard
+  // response_types_supported, grant_types_supported, code_challenge_methods_supported.
   const discoveredOAuth = useMemo(() => {
+    const baseURL = getServerURL();
+    const mcpSlug = toolset.mcpSlug;
     for (const tool of toolset.rawTools) {
       const def = tool.externalMcpToolDefinition;
       if (!def?.requiresOauth) continue;
 
-      const metadata: Record<string, unknown> = {};
-      if (def.oauthAuthorizationEndpoint) {
+      if (!def.oauthAuthorizationEndpoint && !def.oauthTokenEndpoint) continue;
+
+      const metadata: Record<string, unknown> = {
+        issuer: `${baseURL}/mcp/${mcpSlug}`,
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code", "refresh_token"],
+        code_challenge_methods_supported: ["S256"],
+      };
+      if (def.oauthAuthorizationEndpoint)
         metadata.authorization_endpoint = def.oauthAuthorizationEndpoint;
-        try {
-          const url = new URL(def.oauthAuthorizationEndpoint);
-          metadata.issuer = url.origin;
-        } catch {
-          // skip issuer derivation
-        }
-      }
       if (def.oauthTokenEndpoint)
         metadata.token_endpoint = def.oauthTokenEndpoint;
       if (def.oauthRegistrationEndpoint)
         metadata.registration_endpoint = def.oauthRegistrationEndpoint;
       if (def.oauthScopesSupported?.length)
         metadata.scopes_supported = def.oauthScopesSupported;
-
-      if (Object.keys(metadata).length === 0) continue;
 
       return {
         slug: def.slug,
@@ -2147,7 +2150,7 @@ function OAuthTabModal({
       };
     }
     return null;
-  }, [toolset.rawTools]);
+  }, [toolset.rawTools, toolset.mcpSlug]);
 
   const [activeTab, setActiveTab] = useState("external");
   const [externalSlug, setExternalSlug] = useState("");

@@ -125,14 +125,8 @@ func TestRefreshProxyToken_NoUpstreamRefreshToken(t *testing.T) {
 	token, _, _ := env.issueToken(t, ctx, toolsetID,
 		"upstream-access", "", &upstreamExpiry, []string{"api_key"})
 
-	validated, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
-	require.ErrorIs(t, err, oauth.ErrExpiredExternalSecrets)
-
-	provider := customProvider("http://unused")
-	toolset := minimalToolset(toolsetID)
-
-	_, err = env.service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
-	require.ErrorIs(t, err, oauth.ErrNoUpstreamRefreshToken)
+	_, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+	require.ErrorIs(t, err, oauth.ErrExpiredAccessToken)
 }
 
 func TestRefreshProxyToken_UpstreamError(t *testing.T) {

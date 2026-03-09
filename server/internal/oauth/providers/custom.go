@@ -19,12 +19,6 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// CustomProvider implements OAuth provider for custom OAuth providers
-type CustomProvider struct {
-	logger       *slog.Logger
-	environments *environments.EnvironmentEntries
-}
-
 // oauthTokenResponseSnake is the spec-compliant (RFC 6749) token response format.
 type oauthTokenResponseSnake struct {
 	AccessToken  string  `json:"access_token"`
@@ -43,6 +37,20 @@ type oauthTokenResponseCamel struct {
 	AccessToken  string  `json:"accessToken"`
 	RefreshToken string  `json:"refreshToken"`
 	ExpiresIn    float64 `json:"expiresIn"`
+}
+
+// CustomProvider implements OAuth provider for custom OAuth providers
+type CustomProvider struct {
+	logger       *slog.Logger
+	environments *environments.EnvironmentEntries
+}
+
+// NewCustomProvider creates a new custom OAuth provider
+func NewCustomProvider(logger *slog.Logger, environments *environments.EnvironmentEntries) *CustomProvider {
+	return &CustomProvider{
+		logger:       logger,
+		environments: environments,
+	}
 }
 
 // parseTokenResponse deserializes a raw OAuth token response body into a TokenExchangeResult.
@@ -92,14 +100,6 @@ func (p *CustomProvider) parseTokenResponse(ctx context.Context, body []byte, pr
 		RefreshToken: camel.RefreshToken,
 		ExpiresAt:    expiresAt,
 	}, nil
-}
-
-// NewCustomProvider creates a new custom OAuth provider
-func NewCustomProvider(logger *slog.Logger, environments *environments.EnvironmentEntries) *CustomProvider {
-	return &CustomProvider{
-		logger:       logger,
-		environments: environments,
-	}
 }
 
 // resolveClientCredentials extracts client_id and client_secret from provider secrets,
