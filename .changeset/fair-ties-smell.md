@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Surface orrect http status attribute references in MCP logs search
+Surface correct http status attribute references in MCP logs search
