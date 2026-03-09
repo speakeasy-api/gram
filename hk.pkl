@@ -4,7 +4,11 @@ import "package://github.com/jdx/hk/releases/download/v1.36.0/hk@1.36.0#/Builtin
 local linters = new Mapping<String, Step> {
   ["pkleval"] = Builtins.pkl
   ["pklfmt"] = Builtins.pkl_format
-  ["gomodtidy"] = Builtins.gomod_tidy
+  ["gomodtidy"] {
+    glob = List("**/go.mod", "**/go.sum", "**/*.go")
+    check_diff = "go mod tidy -diff"
+    fix = "go mod tidy"
+  }
   ["gofmt"] {
     glob = "**/*.go"
     check_list_files =
