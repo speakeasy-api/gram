@@ -14439,9 +14439,6 @@ components:
         GetHooksSummaryResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 servers:
                     type: array
                     items:
@@ -14460,7 +14457,6 @@ components:
                 - servers
                 - total_events
                 - total_sessions
-                - enabled
         GetInstanceForm:
             type: object
             properties:
@@ -14555,15 +14551,11 @@ components:
         GetMetricsSummaryResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 metrics:
                     $ref: '#/components/schemas/ProjectSummary'
             description: Result of metrics summary query
             required:
                 - metrics
-                - enabled
         GetObservabilityOverviewPayload:
             type: object
             properties:
@@ -14599,9 +14591,6 @@ components:
             properties:
                 comparison:
                     $ref: '#/components/schemas/ObservabilitySummary'
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 interval_seconds:
                     type: integer
                     description: The time bucket interval in seconds used for the time series data
@@ -14631,7 +14620,6 @@ components:
                 - top_tools_by_count
                 - top_tools_by_failure_rate
                 - interval_seconds
-                - enabled
         GetProjectForm:
             type: object
             properties:
@@ -14715,15 +14703,11 @@ components:
         GetUserMetricsSummaryResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 metrics:
                     $ref: '#/components/schemas/ProjectSummary'
             description: Result of user metrics summary query
             required:
                 - metrics
-                - enabled
         GramProductFeatures:
             type: object
             properties:
@@ -15197,9 +15181,6 @@ components:
         ListFilterOptionsResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 options:
                     type: array
                     items:
@@ -15208,7 +15189,6 @@ components:
             description: Result of listing filter options
             required:
                 - options
-                - enabled
         ListIntegrationsForm:
             type: object
             properties:
@@ -16548,16 +16528,12 @@ components:
                     items:
                         $ref: '#/components/schemas/ChatSummary'
                     description: List of chat session summaries
-                enabled:
-                    type: boolean
-                    description: Whether tool metrics are enabled for the organization
                 next_cursor:
                     type: string
                     description: Cursor for next page
             description: Result of searching chat session summaries
             required:
                 - chats
-                - enabled
         SearchLogsFilter:
             type: object
             properties:
@@ -16665,9 +16641,6 @@ components:
         SearchLogsResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether tool metrics are enabled for the organization
                 logs:
                     type: array
                     items:
@@ -16679,7 +16652,6 @@ components:
             description: Result of searching telemetry logs
             required:
                 - logs
-                - enabled
         SearchToolCallsFilter:
             type: object
             properties:
@@ -16734,9 +16706,6 @@ components:
         SearchToolCallsResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether tool metrics are enabled for the organization
                 next_cursor:
                     type: string
                     description: Cursor for next page
@@ -16745,14 +16714,9 @@ components:
                     items:
                         $ref: '#/components/schemas/ToolCallSummary'
                     description: List of tool call summaries
-                tool_io_logs_enabled:
-                    type: boolean
-                    description: Whether tool input/output logging is enabled for the organization
             description: Result of searching tool call summaries
             required:
                 - tool_calls
-                - enabled
-                - tool_io_logs_enabled
         SearchUsersFilter:
             type: object
             properties:
@@ -16809,9 +16773,6 @@ components:
         SearchUsersResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 next_cursor:
                     type: string
                     description: Cursor for next page
@@ -16823,7 +16784,6 @@ components:
             description: Result of searching user usage summaries
             required:
                 - users
-                - enabled
         SecurityVariable:
             type: object
             properties:

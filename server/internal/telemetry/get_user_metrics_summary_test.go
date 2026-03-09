@@ -94,7 +94,6 @@ func TestGetUserMetricsSummary_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.NotNil(t, result.Metrics)
 	require.Equal(t, int64(0), result.Metrics.TotalChatRequests)
 	require.Equal(t, int64(0), result.Metrics.TotalToolCalls)
@@ -143,7 +142,6 @@ func TestGetUserMetricsSummary_WithUserID(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 
 	m := result.Metrics
 	require.NotNil(t, m)
@@ -227,7 +225,6 @@ func TestGetUserMetricsSummary_WithExternalUserID(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 
 	m := result.Metrics
 	require.NotNil(t, m)

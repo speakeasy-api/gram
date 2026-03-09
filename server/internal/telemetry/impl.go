@@ -133,10 +133,6 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		return nil, err
 	}
 
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
-	}
-
 	// Extract SearchLogs-specific filter fields
 	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID, eventSource string
 	var httpStatusCode int32
@@ -206,7 +202,6 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	return &telem_gen.SearchLogsResult{
 		Logs:       telemetryLogs,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -233,10 +228,6 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
-	}
-
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	// Extract SearchToolCalls-specific filter fields
@@ -289,10 +280,8 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	return &telem_gen.SearchToolCallsResult{
-		ToolCalls:         toolCalls,
-		Enabled:           true,
-		ToolIoLogsEnabled: s.CheckToolIOLogsEnabled(ctx, params.organizationID),
-		NextCursor:        nextCursor,
+		ToolCalls:  toolCalls,
+		NextCursor: nextCursor,
 	}, nil
 }
 
@@ -306,10 +295,6 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
-	}
-
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	var deploymentID, gramURN, userID, externalUserID string
@@ -363,7 +348,6 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 
 	return &telem_gen.SearchChatsResult{
 		Chats:      chats,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -373,10 +357,6 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
 	if err != nil {
 		return nil, err
-	}
-
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
@@ -439,7 +419,6 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 
 	return &telem_gen.SearchUsersResult{
 		Users:      users,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -527,7 +506,6 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 			ChatResolutionAbandoned: int64(metrics.ChatResolutionAbandoned),
 			AvgChatResolutionScore:  sanitizeFloat64(metrics.AvgChatResolutionScore),
 		},
-		Enabled: true,
 	}
 }
 
@@ -577,7 +555,6 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 	projectResult := buildMetricsSummaryResult(*metrics)
 	return &telem_gen.GetUserMetricsSummaryResult{
 		Metrics: projectResult.Metrics,
-		Enabled: true,
 	}, nil
 }
 
@@ -585,7 +562,6 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 type searchParams struct {
 	projectID      string
 	organizationID string
-	enabled        bool
 	limit          int
 	sortOrder      string
 	cursor         string
@@ -603,6 +579,9 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "checking if logs enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	if limit < 1 || limit > 1000 {
@@ -630,7 +609,6 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 	return &searchParams{
 		projectID:      authCtx.ProjectID.String(),
 		organizationID: authCtx.ActiveOrganizationID,
-		enabled:        logsEnabled,
 		limit:          limit,
 		sortOrder:      sortOrder,
 		cursor:         cursorVal,
@@ -897,7 +875,6 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TopToolsByCount:       toToolMetrics(toolsByCount),
 		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
 		IntervalSeconds:       intervalSeconds,
-		Enabled:               true,
 	}, nil
 }
 
@@ -1037,7 +1014,6 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 
 	return &telem_gen.ListFilterOptionsResult{
 		Options: result,
-		Enabled: true,
 	}, nil
 }
 
@@ -1149,6 +1125,5 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		Servers:       servers,
 		TotalEvents:   totalEvents,
 		TotalSessions: totalSessions,
-		Enabled:       logsEnabled,
 	}, nil
 }

@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 7af64608092034fbb6d3c2d8df496a28
+  docChecksum: d3bece9d9b338efb976fecd0f55d8830
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.23
-  configChecksum: 7df4aa723bdef3855527c2cd72d73eba
+  releaseVersion: 0.27.24
+  configChecksum: 2c5e706a827fa9dc435149d7624b7ab1
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -227,7 +227,7 @@ trackedFiles:
   docs/models/components/getdeploymentresult.md:
     last_write_checksum: sha1:d071a02508f3cfd7908fdd374fa5fc6d6ee8376f
   docs/models/components/gethookssummaryresult.md:
-    last_write_checksum: sha1:7639863c827de9602fdeecb3094024aceaf9e811
+    last_write_checksum: sha1:41fea740e6c6b596cc75be34dbdd901c14ba42dc
   docs/models/components/getinstanceresult.md:
     last_write_checksum: sha1:bb61b209573a535441fd5265f48ee2ebeb156a0f
   docs/models/components/getintegrationresult.md:
@@ -237,11 +237,11 @@ trackedFiles:
   docs/models/components/getmcpmetadataresponsebody.md:
     last_write_checksum: sha1:9b86c4be9501099f26c719416628dff6b1b969dc
   docs/models/components/getmetricssummaryresult.md:
-    last_write_checksum: sha1:a89018c9c21d442a8139d8d6698029b4e749ea2f
+    last_write_checksum: sha1:6bfda4882ff8e13207b6ddc0fb2901795472cf8a
   docs/models/components/getobservabilityoverviewpayload.md:
     last_write_checksum: sha1:5911afc485814a6931d06d851a139b3bccd99c58
   docs/models/components/getobservabilityoverviewresult.md:
-    last_write_checksum: sha1:b4f319b1c022c2adc260045ed25016f132b0b2b2
+    last_write_checksum: sha1:61055d93b9018c980155bcad14da0479e4d7d918
   docs/models/components/getprojectmetricssummarypayload.md:
     last_write_checksum: sha1:bab9f23a9d3f2b4b52743618c911a5e5d0a55c19
   docs/models/components/getprojectresult.md:
@@ -253,7 +253,7 @@ trackedFiles:
   docs/models/components/getusermetricssummarypayload.md:
     last_write_checksum: sha1:366cd9772a0ab886fc4aeb9e8750c0cf4cac1532
   docs/models/components/getusermetricssummaryresult.md:
-    last_write_checksum: sha1:f891f8c2c84e85c95630bb9924fa0f7ffe978900
+    last_write_checksum: sha1:ac240bdca58bda277c914ab6c834110171a5050f
   docs/models/components/gramproductfeatures.md:
     last_write_checksum: sha1:e13a3260b468b705a4d29c806220a5dc2fce7677
   docs/models/components/hooksserversummary.md:
@@ -295,7 +295,7 @@ trackedFiles:
   docs/models/components/listfilteroptionspayload.md:
     last_write_checksum: sha1:81e0dba6133977aca5e2da03b27392c6943eed3b
   docs/models/components/listfilteroptionsresult.md:
-    last_write_checksum: sha1:b6fd61050db1feb43f032cc942913081e98d612c
+    last_write_checksum: sha1:0a7293c0f5068a8f829b94023ecce6c5449ff4c3
   docs/models/components/listintegrationsresult.md:
     last_write_checksum: sha1:dbd19d7f8194a90e03634ec4a636f07d426409a1
   docs/models/components/listkeysresult.md:
@@ -365,7 +365,7 @@ trackedFiles:
   docs/models/components/projectentry.md:
     last_write_checksum: sha1:da161baebd2aba92835558137dcb6e601b36451e
   docs/models/components/projectsummary.md:
-    last_write_checksum: sha1:fbde9001c2b9e7d6af4c69e6b747210a174adaac
+    last_write_checksum: sha1:017b4fd43ce83064ef992faf8e41935e98b40632
   docs/models/components/prompttemplate.md:
     last_write_checksum: sha1:87faf16a61d68dbc09869f3952373aa91b939cc2
   docs/models/components/prompttemplateentry.md:
@@ -405,7 +405,7 @@ trackedFiles:
   docs/models/components/searchchatspayload.md:
     last_write_checksum: sha1:9fda8003b2f5fd89950dd014e9f14f641a10323e
   docs/models/components/searchchatsresult.md:
-    last_write_checksum: sha1:b4c16b9ed7a20fc38ec10e53ebaec255534d5e5d
+    last_write_checksum: sha1:5a706f6ec430feb1a8b451ca86f7bdebddbfbf09
   docs/models/components/searchlogsfilter.md:
     last_write_checksum: sha1:56ea41ad04c0b6e945c0170d03e213db77b61e9b
   docs/models/components/searchlogspayload.md:
@@ -413,7 +413,7 @@ trackedFiles:
   docs/models/components/searchlogspayloadsort.md:
     last_write_checksum: sha1:21fb1ea54a064d30b7373841b04b3cbf6d50d815
   docs/models/components/searchlogsresult.md:
-    last_write_checksum: sha1:521316c52715f85a47cb9d527060e1648d85a91b
+    last_write_checksum: sha1:5ecf92f1f9cf292a987ed04789bf33f6b13f06b3
   docs/models/components/searchtoolcallsfilter.md:
     last_write_checksum: sha1:67b24473d05bc7f69a12b8d70fa36871b56f67d7
   docs/models/components/searchtoolcallspayload.md:
@@ -421,7 +421,7 @@ trackedFiles:
   docs/models/components/searchtoolcallspayloadsort.md:
     last_write_checksum: sha1:0dba6f981ac972a7a2bde0abf61f97e9d0487506
   docs/models/components/searchtoolcallsresult.md:
-    last_write_checksum: sha1:af50956053889b31c678b6ba0f376d262cc333b8
+    last_write_checksum: sha1:d095df548440690a2d7b5bbbf3aa2ceca2a0cdf9
   docs/models/components/searchusersfilter.md:
     last_write_checksum: sha1:751452e60901c08a9f407e3ee32a57fabac6f0e6
   docs/models/components/searchuserspayload.md:
@@ -429,7 +429,7 @@ trackedFiles:
   docs/models/components/searchuserspayloadsort.md:
     last_write_checksum: sha1:d4c931b9e88434c955bd2e326f5828bc5e50fb3f
   docs/models/components/searchusersresult.md:
-    last_write_checksum: sha1:3cdf0eae34a80bd1d64974a6ff0c4ff5141066f5
+    last_write_checksum: sha1:56ee4b00c88b7a2f716e60637afbc398ddd3266b
   docs/models/components/securityvariable.md:
     last_write_checksum: sha1:c9440e44db862ae2ab790d1f490d7a145a23cd9d
   docs/models/components/serveimageform.md:
@@ -1412,11 +1412,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:fd662514e1088bc84b7856e2d27b9b9fcd8f0044
+    last_write_checksum: sha1:12ace9d94e941190170b718294ff05ac1ae107c8
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:17794304257dcedda4bbff44ed635b0537cfb70e
+    last_write_checksum: sha1:0717e364885a47e6780c19107b8aab406f5b728e
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1876,7 +1876,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:41b6a99323bd819b6bbdae584c3a637c57e0e8c7
+    last_write_checksum: sha1:3fce850bf23687a7fb6510a4fa952ea691b34ec2
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2187,7 +2187,7 @@ trackedFiles:
     last_write_checksum: sha1:984fe80d9be6dc99ae420ce5d2d3d0f13709d98b
     pristine_git_object: d1c8cfa0335d49d507da3c1b229a42e0012091c0
   src/models/components/gethookssummaryresult.ts:
-    last_write_checksum: sha1:2a101316ed64640724aba2f57d3da85566c3102c
+    last_write_checksum: sha1:027448576cb22aefd0711c64b1528911141f6be3
   src/models/components/getinstanceresult.ts:
     id: 1d161207cec2
     last_write_checksum: sha1:79261e8e88a9dd0f49e915c808b6c17ebd3e9c1d
@@ -2205,11 +2205,11 @@ trackedFiles:
     last_write_checksum: sha1:58b6f6c269fbded1e45dd701fde779dcbb36ab52
     pristine_git_object: 3274c3c10bda15a73208f36279ce2c5ee390a4e5
   src/models/components/getmetricssummaryresult.ts:
-    last_write_checksum: sha1:21c936bef407c27e34bdc1ab24d0d93d6f2ab91e
+    last_write_checksum: sha1:5a47b03d97c320d6c11cd80f0401d5c42da3f011
   src/models/components/getobservabilityoverviewpayload.ts:
     last_write_checksum: sha1:d8521ea3c54bcbe27ab03c784ec51c4b32275aed
   src/models/components/getobservabilityoverviewresult.ts:
-    last_write_checksum: sha1:683027fce3ea04be1ab55485db07f17857d8f781
+    last_write_checksum: sha1:0dbfa9a9afa50661ca0f7406e2ddc5e59aab954e
   src/models/components/getprojectmetricssummarypayload.ts:
     last_write_checksum: sha1:e37e5370768df11ea61585493bffcc2c0f2ac198
   src/models/components/getprojectresult.ts:
@@ -2227,7 +2227,7 @@ trackedFiles:
   src/models/components/getusermetricssummarypayload.ts:
     last_write_checksum: sha1:3d2735207d9678a4e21e385405f9203948d7ecbd
   src/models/components/getusermetricssummaryresult.ts:
-    last_write_checksum: sha1:22740b86163c0a11e4cadec8319dfaefed099500
+    last_write_checksum: sha1:c45ae48235990ba664b1fa62cc0a9df2406ea25d
   src/models/components/gramproductfeatures.ts:
     last_write_checksum: sha1:53db3d8c6f6f23596dd8c8bf47b345bde94af207
   src/models/components/hooksserversummary.ts:
@@ -2295,7 +2295,7 @@ trackedFiles:
   src/models/components/listfilteroptionspayload.ts:
     last_write_checksum: sha1:35e2073c8c426ed48e6a413191af3bed1ef5c25f
   src/models/components/listfilteroptionsresult.ts:
-    last_write_checksum: sha1:61d5e5d17ba4fd3efafef4e0afd506dbffb363a1
+    last_write_checksum: sha1:9f85492fd003b62241e3b882703bca3bf7f5fafe
   src/models/components/listintegrationsresult.ts:
     id: ebf76f602049
     last_write_checksum: sha1:6ebe0905ba888340ee36a5e0043288692d1cdcc1
@@ -2465,7 +2465,7 @@ trackedFiles:
   src/models/components/searchchatspayload.ts:
     last_write_checksum: sha1:72e92478e0ffa0e6a3a911e7ca5db71d79e70dc9
   src/models/components/searchchatsresult.ts:
-    last_write_checksum: sha1:065360378ddff88ad340d927d982f6f07e15e9e4
+    last_write_checksum: sha1:b15b08beb941073899e99e451812525f1a4ece3b
   src/models/components/searchlogsfilter.ts:
     id: 3d7575d47948
     last_write_checksum: sha1:432e93a61279000e8159406bb8da12950222450c
@@ -2476,7 +2476,7 @@ trackedFiles:
     pristine_git_object: 672d8ab4862afdda05ec1dd577735cd1d913b709
   src/models/components/searchlogsresult.ts:
     id: fc21bf201dda
-    last_write_checksum: sha1:137566c38d6edb5b321b009f064035ea92f9f578
+    last_write_checksum: sha1:838184185cb2a4a0913184f733bc48c39126eb6a
     pristine_git_object: 0e21bb5d70258563d77b7978cb1f80d59db62280
   src/models/components/searchtoolcallsfilter.ts:
     id: 6c521cadb589
@@ -2488,14 +2488,14 @@ trackedFiles:
     pristine_git_object: f27ebaf81c350c77df71785a86829d70ccbf93c4
   src/models/components/searchtoolcallsresult.ts:
     id: f05310ed0be9
-    last_write_checksum: sha1:2ecd55d35b6619c9e6e23755da47bcec169c49e0
+    last_write_checksum: sha1:3033b5130d45ec3a5d044dbc012675b9d83069f0
     pristine_git_object: a711d8412fa0852849357c4504ef676de99e6ade
   src/models/components/searchusersfilter.ts:
     last_write_checksum: sha1:12257db127e74a59186e1763ef5a76d18a47e3c2
   src/models/components/searchuserspayload.ts:
     last_write_checksum: sha1:019e0f34c3c805a574734ddc115b283d913aad9c
   src/models/components/searchusersresult.ts:
-    last_write_checksum: sha1:f72c62c9c36d296c33107f5af23148d378b3f5ef
+    last_write_checksum: sha1:69fb6a06af407e8817fb5a3d55f3a5a2e053d226
   src/models/components/securityvariable.ts:
     id: 4aa96a84a4f9
     last_write_checksum: sha1:b6435b1d385bc4ce89a1a172f494119f689414cb
@@ -5015,7 +5015,7 @@ examples:
         application/json: {"filter": {"attribute_filters": [{"op": "eq", "path": "@user.region", "value": "us-east-1"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "limit": 50, "sort": "desc"}
       responses:
         "200":
-          application/json: {"enabled": true, "logs": []}
+          application/json: {"logs": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5026,7 +5026,7 @@ examples:
         application/json: {"filter": {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "limit": 50, "sort": "desc"}
       responses:
         "200":
-          application/json: {"enabled": true, "tool_calls": [], "tool_io_logs_enabled": true}
+          application/json: {"tool_calls": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5140,7 +5140,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"enabled": true, "metrics": {"avg_chat_duration_ms": 3341.18, "avg_chat_resolution_score": 3310.46, "avg_tokens_per_request": 587.65, "avg_tool_duration_ms": 1165.55, "chat_resolution_abandoned": 334118, "chat_resolution_failure": 58765, "chat_resolution_partial": 116555, "chat_resolution_success": 768743, "distinct_models": 768743, "distinct_providers": 313601, "finish_reason_stop": 929616, "finish_reason_tool_calls": 398086, "first_seen_unix_nano": "331046", "last_seen_unix_nano": "334118", "models": [], "tool_call_failure": 19163, "tool_call_success": 208955, "tools": [], "total_chat_requests": 618442, "total_chats": 302313, "total_input_tokens": 630857, "total_output_tokens": 804335, "total_tokens": 929964, "total_tool_calls": 536628}}
+          application/json: {"metrics": {"avg_chat_duration_ms": 3341.18, "avg_chat_resolution_score": 3310.46, "avg_tokens_per_request": 587.65, "avg_tool_duration_ms": 1165.55, "chat_resolution_abandoned": 334118, "chat_resolution_failure": 58765, "chat_resolution_partial": 116555, "chat_resolution_success": 768743, "distinct_models": 768743, "distinct_providers": 313601, "finish_reason_stop": 929616, "finish_reason_tool_calls": 398086, "first_seen_unix_nano": "331046", "last_seen_unix_nano": "334118", "models": [], "tool_call_failure": 19163, "tool_call_success": 208955, "tools": [], "total_chat_requests": 618442, "total_chats": 302313, "total_input_tokens": 630857, "total_output_tokens": 804335, "total_tokens": 929964, "total_tool_calls": 536628}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5162,7 +5162,7 @@ examples:
         application/json: {"filter": {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "limit": 50, "sort": "desc"}
       responses:
         "200":
-          application/json: {"chats": [], "enabled": false}
+          application/json: {"chats": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5173,7 +5173,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"enabled": true, "metrics": {"avg_chat_duration_ms": 719.48, "avg_chat_resolution_score": 313.41, "avg_tokens_per_request": 2261.2, "avg_tool_duration_ms": 7422.06, "chat_resolution_abandoned": 71948, "chat_resolution_failure": 226120, "chat_resolution_partial": 742206, "chat_resolution_success": 12857, "distinct_models": 12857, "distinct_providers": 512991, "finish_reason_stop": 485562, "finish_reason_tool_calls": 528228, "first_seen_unix_nano": "50574", "last_seen_unix_nano": "883619", "models": [{"count": 444554, "name": "<value>"}], "tool_call_failure": 740752, "tool_call_success": 495299, "tools": [{"count": 22149, "failure_count": 937327, "success_count": 364001, "urn": "<value>"}], "total_chat_requests": 605771, "total_chats": 156800, "total_input_tokens": 133513, "total_output_tokens": 204831, "total_tokens": 63502, "total_tool_calls": 158236}}
+          application/json: {"metrics": {"avg_chat_duration_ms": 719.48, "avg_chat_resolution_score": 313.41, "avg_tokens_per_request": 2261.2, "avg_tool_duration_ms": 7422.06, "chat_resolution_abandoned": 71948, "chat_resolution_failure": 226120, "chat_resolution_partial": 742206, "chat_resolution_success": 12857, "distinct_models": 12857, "distinct_providers": 512991, "finish_reason_stop": 485562, "finish_reason_tool_calls": 528228, "first_seen_unix_nano": "50574", "last_seen_unix_nano": "883619", "models": [{"count": 444554, "name": "<value>"}], "tool_call_failure": 740752, "tool_call_success": 495299, "tools": [{"count": 22149, "failure_count": 937327, "success_count": 364001, "urn": "<value>"}], "total_chat_requests": 605771, "total_chats": 156800, "total_input_tokens": 133513, "total_output_tokens": 204831, "total_tokens": 63502, "total_tool_calls": 158236}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5199,7 +5199,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "include_time_series": true, "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"comparison": {"avg_latency_ms": 5127.98, "avg_resolution_time_ms": 6526.16, "avg_session_duration_ms": 2329.54, "failed_chats": 692955, "failed_tool_calls": 84255, "resolved_chats": 887520, "total_chats": 365738, "total_tool_calls": 399299}, "enabled": false, "interval_seconds": 512798, "summary": {"avg_latency_ms": 4077.03, "avg_resolution_time_ms": 9091.91, "avg_session_duration_ms": 5917.33, "failed_chats": 918591, "failed_tool_calls": 617784, "resolved_chats": 341256, "total_chats": 385720, "total_tool_calls": 563209}, "time_series": [{"abandoned_chats": 844170, "avg_session_duration_ms": 8758.5, "avg_tool_latency_ms": 4114.93, "bucket_time_unix_nano": "<value>", "failed_chats": 369654, "failed_tool_calls": 601657, "partial_chats": 778118, "resolved_chats": 448834, "total_chats": 516564, "total_tool_calls": 396368}], "top_tools_by_count": [], "top_tools_by_failure_rate": []}
+          application/json: {"comparison": {"avg_latency_ms": 5127.98, "avg_resolution_time_ms": 6526.16, "avg_session_duration_ms": 2329.54, "failed_chats": 692955, "failed_tool_calls": 84255, "resolved_chats": 887520, "total_chats": 365738, "total_tool_calls": 399299}, "interval_seconds": 512798, "summary": {"avg_latency_ms": 4077.03, "avg_resolution_time_ms": 9091.91, "avg_session_duration_ms": 5917.33, "failed_chats": 918591, "failed_tool_calls": 617784, "resolved_chats": 341256, "total_chats": 385720, "total_tool_calls": 563209}, "time_series": [{"abandoned_chats": 844170, "avg_session_duration_ms": 8758.5, "avg_tool_latency_ms": 4114.93, "bucket_time_unix_nano": "<value>", "failed_chats": 369654, "failed_tool_calls": 601657, "partial_chats": 778118, "resolved_chats": 448834, "total_chats": 516564, "total_tool_calls": 396368}], "top_tools_by_count": [], "top_tools_by_failure_rate": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5210,7 +5210,7 @@ examples:
         application/json: {"filter_type": "api_key", "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"enabled": false, "options": [{"count": 469722, "id": "<id>", "label": "<value>"}]}
+          application/json: {"options": [{"count": 469722, "id": "<id>", "label": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5221,7 +5221,7 @@ examples:
         application/json: {"filter": {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "limit": 50, "sort": "desc", "user_type": "external"}
       responses:
         "200":
-          application/json: {"enabled": false, "users": []}
+          application/json: {"users": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5360,7 +5360,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"enabled": true, "servers": [], "total_events": 748850, "total_sessions": 583521}
+          application/json: {"servers": [], "total_events": 748850, "total_sessions": 583521}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

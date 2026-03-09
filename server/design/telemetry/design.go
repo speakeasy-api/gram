@@ -425,9 +425,8 @@ var SearchLogsResult = Type("SearchLogsResult", func() {
 
 	Attribute("logs", ArrayOf(TelemetryLogRecord), "List of telemetry log records")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("logs", "enabled")
+	Required("logs")
 })
 
 var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
@@ -495,10 +494,8 @@ var SearchToolCallsResult = Type("SearchToolCallsResult", func() {
 
 	Attribute("tool_calls", ArrayOf(ToolCallSummary), "List of tool call summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
-	Attribute("tool_io_logs_enabled", Boolean, "Whether tool input/output logging is enabled for the organization")
 
-	Required("tool_calls", "enabled", "tool_io_logs_enabled")
+	Required("tool_calls")
 })
 
 var ToolCallSummary = Type("ToolCallSummary", func() {
@@ -563,9 +560,8 @@ var SearchChatsResult = Type("SearchChatsResult", func() {
 
 	Attribute("chats", ArrayOf(ChatSummaryType), "List of chat session summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("chats", "enabled")
+	Required("chats")
 })
 
 var ChatSummaryType = Type("ChatSummary", func() {
@@ -646,9 +642,8 @@ var SearchUsersResult = Type("SearchUsersResult", func() {
 
 	Attribute("users", ArrayOf(UserSummaryType), "List of user usage summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("users", "enabled")
+	Required("users")
 })
 
 var UserSummaryType = Type("UserSummary", func() {
@@ -835,9 +830,8 @@ var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
 	Description("Result of metrics summary query")
 
 	Attribute("metrics", ProjectSummaryType, "Aggregated metrics")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("metrics", "enabled")
+	Required("metrics")
 })
 
 // User metrics types
@@ -863,9 +857,8 @@ var GetUserMetricsSummaryResult = Type("GetUserMetricsSummaryResult", func() {
 	Description("Result of user metrics summary query")
 
 	Attribute("metrics", ProjectSummaryType, "Aggregated metrics for the user")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("metrics", "enabled")
+	Required("metrics")
 })
 
 // Observability Overview types
@@ -900,9 +893,8 @@ var GetObservabilityOverviewResult = Type("GetObservabilityOverviewResult", func
 	Attribute("top_tools_by_count", ArrayOf(ToolMetricType), "Top tools by call count")
 	Attribute("top_tools_by_failure_rate", ArrayOf(ToolMetricType), "Top tools by failure rate")
 	Attribute("interval_seconds", Int64, "The time bucket interval in seconds used for the time series data")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds", "enabled")
+	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds")
 })
 
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
@@ -997,9 +989,8 @@ var ListFilterOptionsResult = Type("ListFilterOptionsResult", func() {
 	Description("Result of listing filter options")
 
 	Attribute("options", ArrayOf(FilterOptionType), "List of filter options")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("options", "enabled")
+	Required("options")
 })
 
 var FilterOptionType = Type("FilterOption", func() {
@@ -1060,9 +1051,8 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 	Attribute("servers", ArrayOf(HooksServerSummaryType), "Aggregated metrics grouped by server")
 	Attribute("total_events", Int64, "Total number of hook events")
 	Attribute("total_sessions", Int64, "Total number of unique sessions")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("servers", "total_events", "total_sessions", "enabled")
+	Required("servers", "total_events", "total_sessions")
 })
 
 var HooksServerSummaryType = Type("HooksServerSummary", func() {

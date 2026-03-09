@@ -14575,9 +14575,6 @@ components:
     GetHooksSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         servers:
           type: array
           items:
@@ -14596,7 +14593,6 @@ components:
         - servers
         - total_events
         - total_sessions
-        - enabled
     GetInstanceForm:
       type: object
       properties:
@@ -14691,15 +14687,11 @@ components:
     GetMetricsSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         metrics:
           $ref: '#/components/schemas/ProjectSummary'
       description: Result of metrics summary query
       required:
         - metrics
-        - enabled
     GetObservabilityOverviewPayload:
       type: object
       properties:
@@ -14735,9 +14727,6 @@ components:
       properties:
         comparison:
           $ref: '#/components/schemas/ObservabilitySummary'
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         interval_seconds:
           type: integer
           description: The time bucket interval in seconds used for the time series data
@@ -14767,7 +14756,6 @@ components:
         - top_tools_by_count
         - top_tools_by_failure_rate
         - interval_seconds
-        - enabled
     GetProjectForm:
       type: object
       properties:
@@ -14851,15 +14839,11 @@ components:
     GetUserMetricsSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         metrics:
           $ref: '#/components/schemas/ProjectSummary'
       description: Result of user metrics summary query
       required:
         - metrics
-        - enabled
     GramProductFeatures:
       type: object
       properties:
@@ -15333,9 +15317,6 @@ components:
     ListFilterOptionsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         options:
           type: array
           items:
@@ -15344,7 +15325,6 @@ components:
       description: Result of listing filter options
       required:
         - options
-        - enabled
     ListIntegrationsForm:
       type: object
       properties:
@@ -15833,6 +15813,134 @@ components:
       required:
         - slug
         - provider_type
+    OTELAttribute:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Attribute key
+        value:
+          $ref: '#/components/schemas/OTELAttributeValue'
+      description: OTEL log attribute with key and typed value
+      required:
+        - key
+        - value
+    OTELAttributeValue:
+      type: object
+      properties:
+        intValue:
+          type: integer
+          description: Integer value
+          format: int64
+        stringValue:
+          type: string
+          description: String value
+      description: OTEL attribute value - supports stringValue or intValue
+    OTELLogBody:
+      type: object
+      properties:
+        stringValue:
+          type: string
+          description: String body value
+      description: OTEL log body
+    OTELLogRecord:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELAttribute'
+          description: Log attributes
+        body:
+          $ref: '#/components/schemas/OTELLogBody'
+        droppedAttributesCount:
+          type: integer
+          description: Number of dropped attributes
+          format: int64
+        observedTimeUnixNano:
+          type: string
+          description: Observed timestamp in nanoseconds
+        timeUnixNano:
+          type: string
+          description: Timestamp in nanoseconds since Unix epoch
+      description: Individual OTEL log record
+      required:
+        - timeUnixNano
+        - observedTimeUnixNano
+        - body
+        - attributes
+    OTELLogsPayload:
+      type: object
+      properties:
+        resourceLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELResourceLog'
+          description: Array of resource logs
+      description: OTEL logs export payload
+      required:
+        - resourceLogs
+    OTELResource:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELResourceAttribute'
+          description: Resource attributes
+        droppedAttributesCount:
+          type: integer
+          description: Number of dropped attributes
+          format: int64
+      description: OTEL resource information
+    OTELResourceAttribute:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Resource attribute key
+        value:
+          $ref: '#/components/schemas/OTELAttributeValue'
+      description: OTEL resource attribute
+      required:
+        - key
+        - value
+    OTELResourceLog:
+      type: object
+      properties:
+        resource:
+          $ref: '#/components/schemas/OTELResource'
+        scopeLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELScopeLog'
+          description: Array of scope logs
+      description: OTEL resource logs container
+      required:
+        - scopeLogs
+    OTELScope:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Scope name
+        version:
+          type: string
+          description: Scope version
+      description: OTEL instrumentation scope
+    OTELScopeLog:
+      type: object
+      properties:
+        logRecords:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELLogRecord'
+          description: Array of log records
+        scope:
+          $ref: '#/components/schemas/OTELScope'
+      description: OTEL scope logs container
+      required:
+        - logRecords
     ObservabilitySummary:
       type: object
       properties:
@@ -16556,16 +16664,12 @@ components:
           items:
             $ref: '#/components/schemas/ChatSummary'
           description: List of chat session summaries
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
       description: Result of searching chat session summaries
       required:
         - chats
-        - enabled
     SearchLogsFilter:
       type: object
       properties:
@@ -16673,9 +16777,6 @@ components:
     SearchLogsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         logs:
           type: array
           items:
@@ -16687,7 +16788,6 @@ components:
       description: Result of searching telemetry logs
       required:
         - logs
-        - enabled
     SearchToolCallsFilter:
       type: object
       properties:
@@ -16742,9 +16842,6 @@ components:
     SearchToolCallsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
@@ -16753,14 +16850,9 @@ components:
           items:
             $ref: '#/components/schemas/ToolCallSummary'
           description: List of tool call summaries
-        tool_io_logs_enabled:
-          type: boolean
-          description: Whether tool input/output logging is enabled for the organization
       description: Result of searching tool call summaries
       required:
         - tool_calls
-        - enabled
-        - tool_io_logs_enabled
     SearchUsersFilter:
       type: object
       properties:
@@ -16817,9 +16909,6 @@ components:
     SearchUsersResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
@@ -16831,7 +16920,6 @@ components:
       description: Result of searching user usage summaries
       required:
         - users
-        - enabled
     SecurityVariable:
       type: object
       properties:

@@ -99,7 +99,6 @@ func TestSearchChats_AggregatesByChatID(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.Len(t, result.Chats, 2)
 
 	// Find both chats

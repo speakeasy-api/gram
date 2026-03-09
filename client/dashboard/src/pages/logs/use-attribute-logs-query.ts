@@ -136,8 +136,6 @@ export function useAttributeLogsQuery({
 
       return {
         toolCalls: logsToTraceSummaries(result.logs),
-        enabled: result.enabled,
-        toolIoLogsEnabled: false, // not available from searchLogs
         nextCursor: result.nextCursor,
       };
     },
