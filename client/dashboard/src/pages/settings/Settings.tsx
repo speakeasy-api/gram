@@ -52,6 +52,7 @@ import {
   PageTabsTrigger,
 } from "@/components/ui/tabs";
 import { SettingsDangerZone } from "./SettingsDangerZone";
+import { RegistryCacheSection } from "./RegistryCacheSection";
 
 // Map URL segments to tab values
 const tabFromPath: Record<string, string> = {
@@ -1042,6 +1043,8 @@ export default function Settings() {
                     Clear override
                   </Button>
                 </form>
+
+                <RegistryCacheSection />
               </div>
             )}
           </TabsContent>
