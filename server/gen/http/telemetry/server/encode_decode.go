@@ -2645,14 +2645,19 @@ func unmarshalLogFilterRequestBodyToTelemetryLogFilter(v *LogFilterRequestBody) 
 		return nil
 	}
 	res := &telemetry.LogFilter{
-		Path:  *v.Path,
-		Value: v.Value,
+		Path: *v.Path,
 	}
 	if v.Op != nil {
 		res.Op = *v.Op
 	}
 	if v.Op == nil {
 		res.Op = "eq"
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
 	}
 
 	return res

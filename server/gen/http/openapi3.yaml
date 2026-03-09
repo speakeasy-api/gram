@@ -15317,6 +15317,7 @@ components:
                         - contains
                         - exists
                         - not_exists
+                        - in
                 path:
                     type: string
                     description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
@@ -15324,11 +15325,12 @@ components:
                     pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
                     minLength: 1
                     maxLength: 256
-                value:
-                    type: string
-                    description: Value to compare against (ignored for 'exists' and 'not_exists' operators)
-                    example: us-east-1
-                    maxLength: 1024
+                values:
+                    type: array
+                    items:
+                        type: string
+                    description: Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'.
+                    maxItems: 256
             description: A single filter condition for a log search query.
             required:
                 - path

@@ -909,21 +909,21 @@ func TestSearchLogs_LogFilters(t *testing.T) {
 		{
 			name: "@ prefix equality matches user attribute",
 			filters: []*gen.LogFilter{
-				{Path: "@user.region", Op: eq, Value: &[]string{"us-east-1"}[0]},
+				{Path: "@user.region", Op: eq, Values: []string{"us-east-1"}},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "@ prefix not-equal excludes matching user attribute",
 			filters: []*gen.LogFilter{
-				{Path: "@user.region", Op: notEq, Value: &[]string{"us-east-1"}[0]},
+				{Path: "@user.region", Op: notEq, Values: []string{"us-east-1"}},
 			},
 			expectedCount: 2, // eu-west-1 + log with no attribute (toString returns '' which != 'us-east-1')
 		},
 		{
 			name: "@ prefix contains searches within value",
 			filters: []*gen.LogFilter{
-				{Path: "@user.region", Op: contains, Value: &[]string{"east"}[0]},
+				{Path: "@user.region", Op: contains, Values: []string{"east"}},
 			},
 			expectedCount: 2,
 		},
@@ -944,29 +944,29 @@ func TestSearchLogs_LogFilters(t *testing.T) {
 		{
 			name: "bare path matches system attribute directly",
 			filters: []*gen.LogFilter{
-				{Path: "http.route", Op: eq, Value: &[]string{"/api/health"}[0]},
+				{Path: "http.route", Op: eq, Values: []string{"/api/health"}},
 			},
 			expectedCount: 1,
 		},
 		{
 			name: "combine @ filter with existing filter field",
 			filters: []*gen.LogFilter{
-				{Path: "@env", Op: eq, Value: &[]string{"production"}[0]},
+				{Path: "@env", Op: eq, Values: []string{"production"}},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "multiple attribute filters are ANDed",
 			filters: []*gen.LogFilter{
-				{Path: "@user.region", Op: eq, Value: &[]string{"us-east-1"}[0]},
-				{Path: "@user.tier", Op: eq, Value: &[]string{"premium"}[0]},
+				{Path: "@user.region", Op: eq, Values: []string{"us-east-1"}},
+				{Path: "@user.tier", Op: eq, Values: []string{"premium"}},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "invalid path is silently skipped",
 			filters: []*gen.LogFilter{
-				{Path: "1invalid", Op: eq, Value: &[]string{"test"}[0]},
+				{Path: "1invalid", Op: eq, Values: []string{"test"}},
 			},
 			expectedCount: 4, // no filter applied, all logs returned
 		},

@@ -86,7 +86,7 @@ function toSdkFilters(filters: ActiveAttributeFilter[]): LogFilter[] {
   return filters.map((f) => ({
     path: f.path,
     op: f.op,
-    ...(f.value !== undefined ? { value: f.value } : {}),
+    ...(f.value !== undefined ? { values: [f.value] } : {}),
   }));
 }
 

@@ -14,6 +14,7 @@ export const Op = {
   Contains: "contains",
   Exists: "exists",
   NotExists: "not_exists",
+  In: "in",
 } as const;
 /**
  * Comparison operator
@@ -33,9 +34,9 @@ export type LogFilter = {
    */
   path: string;
   /**
-   * Value to compare against (ignored for 'exists' and 'not_exists' operators)
+   * Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'.
    */
-  value?: string | undefined;
+  values?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -45,7 +46,7 @@ export const Op$outboundSchema: z.ZodMiniEnum<typeof Op> = z.enum(Op);
 export type LogFilter$Outbound = {
   op: string;
   path: string;
-  value?: string | undefined;
+  values?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -55,7 +56,7 @@ export const LogFilter$outboundSchema: z.ZodMiniType<
 > = z.object({
   op: z._default(Op$outboundSchema, "eq"),
   path: z.string(),
-  value: z.optional(z.string()),
+  values: z.optional(z.array(z.string())),
 });
 
 export function logFilterToJSON(logFilter: LogFilter): string {

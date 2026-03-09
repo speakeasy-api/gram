@@ -294,8 +294,10 @@ type LogFilter struct {
 	Path string
 	// Comparison operator
 	Op string
-	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
-	Value *string
+	// Values to compare against. Pass one value for single-value operators (eq,
+	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
+	// 'not_exists'.
+	Values []string
 }
 
 // Model usage statistics

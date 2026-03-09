@@ -393,12 +393,11 @@ var LogFilter = Type("LogFilter", func() {
 		Example("@user.region")
 	})
 	Attribute("op", String, "Comparison operator", func() {
-		Enum("eq", "not_eq", "contains", "exists", "not_exists")
+		Enum("eq", "not_eq", "contains", "exists", "not_exists", "in")
 		Default("eq")
 	})
-	Attribute("value", String, "Value to compare against (ignored for 'exists' and 'not_exists' operators)", func() {
-		MaxLength(1024)
-		Example("us-east-1")
+	Attribute("values", ArrayOf(String), "Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'.", func() {
+		MaxLength(256)
 	})
 	Required("path")
 })

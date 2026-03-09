@@ -2574,8 +2574,10 @@ type LogFilterRequestBody struct {
 	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
 	// Comparison operator
 	Op *string `form:"op,omitempty" json:"op,omitempty" xml:"op,omitempty"`
-	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Values to compare against. Pass one value for single-value operators (eq,
+	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
+	// 'not_exists'.
+	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
 }
 
 // SearchLogsFilterRequestBody is used to define fields on request body types.
@@ -4987,14 +4989,12 @@ func ValidateLogFilterRequestBody(body *LogFilterRequestBody) (err error) {
 		}
 	}
 	if body.Op != nil {
-		if !(*body.Op == "eq" || *body.Op == "not_eq" || *body.Op == "contains" || *body.Op == "exists" || *body.Op == "not_exists") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"eq", "not_eq", "contains", "exists", "not_exists"}))
+		if !(*body.Op == "eq" || *body.Op == "not_eq" || *body.Op == "contains" || *body.Op == "exists" || *body.Op == "not_exists" || *body.Op == "in") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"eq", "not_eq", "contains", "exists", "not_exists", "in"}))
 		}
 	}
-	if body.Value != nil {
-		if utf8.RuneCountInString(*body.Value) > 1024 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.value", *body.Value, utf8.RuneCountInString(*body.Value), 1024, false))
-		}
+	if len(body.Values) > 256 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 256, false))
 	}
 	return
 }

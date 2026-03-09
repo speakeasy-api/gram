@@ -2694,14 +2694,19 @@ func marshalTelemetryLogFilterToLogFilterRequestBody(v *telemetry.LogFilter) *Lo
 		return nil
 	}
 	res := &LogFilterRequestBody{
-		Path:  v.Path,
-		Op:    v.Op,
-		Value: v.Value,
+		Path: v.Path,
+		Op:   v.Op,
 	}
 	{
 		var zero string
 		if res.Op == zero {
 			res.Op = "eq"
+		}
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
 		}
 	}
 
@@ -2749,14 +2754,19 @@ func marshalLogFilterRequestBodyToTelemetryLogFilter(v *LogFilterRequestBody) *t
 		return nil
 	}
 	res := &telemetry.LogFilter{
-		Path:  v.Path,
-		Op:    v.Op,
-		Value: v.Value,
+		Path: v.Path,
+		Op:   v.Op,
 	}
 	{
 		var zero string
 		if res.Op == zero {
 			res.Op = "eq"
+		}
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
 		}
 	}
 
