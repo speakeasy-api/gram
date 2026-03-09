@@ -14,12 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
-	"github.com/speakeasy-api/gram/cli/internal/mcp"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/urfave/cli/v2"
-	"golang.org/x/term"
 )
 
 type PushOptions struct {
@@ -279,12 +277,10 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			case "completed":
 				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", logsURL))
 				fmt.Printf("\nView deployment: %s\n", logsURL)
-				openDeploymentURL(logger, ctx, logsURL)
 				return nil
 			case "failed":
 				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", logsURL))
 				fmt.Printf("\nView deployment logs: %s\n", logsURL)
-				openDeploymentURL(logger, ctx, logsURL)
 				return fmt.Errorf("deployment failed")
 			default:
 				logger.InfoContext(
@@ -298,23 +294,6 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			return nil
 		},
-	}
-}
-
-// isTerminalFunc and openURLFunc are package-level variables for testing.
-var (
-	isTerminalFunc = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
-	openURLFunc    = mcp.OpenURL
-)
-
-// openDeploymentURL opens the deployment URL in the browser if running in a TTY.
-func openDeploymentURL(logger *slog.Logger, ctx context.Context, url string) {
-	if !isTerminalFunc() {
-		return
-	}
-
-	if err := openURLFunc(url); err != nil {
-		logger.DebugContext(ctx, "failed to open browser", slog.String("error", err.Error()))
 	}
 }
 
