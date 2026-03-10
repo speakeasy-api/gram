@@ -33,6 +33,42 @@ type AttributeFilter struct {
 	Values []string // Values to compare against. One value for single-value ops, multiple for "in".
 }
 
+// Predicate returns the squirrel condition for this filter, or nil if the filter
+// should be skipped (e.g. an operator that requires values but none were provided).
+func (f AttributeFilter) Predicate(col string) squirrel.Sqlizer {
+	switch f.Op {
+	case "eq":
+		if len(f.Values) == 0 {
+			return nil
+		}
+		return squirrel.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
+	case "not_eq":
+		if len(f.Values) == 0 {
+			return nil
+		}
+		return squirrel.Expr(fmt.Sprintf("%s != ?", col), f.Values[0])
+	case "contains":
+		if len(f.Values) == 0 {
+			return nil
+		}
+		return squirrel.Expr(fmt.Sprintf("position(%s, ?) > 0", col), f.Values[0])
+	case "in":
+		if len(f.Values) == 0 {
+			return nil
+		}
+		return squirrel.Eq{col: f.Values}
+	case "exists":
+		return squirrel.Expr(fmt.Sprintf("%s != ''", col))
+	case "not_exists":
+		return squirrel.Expr(fmt.Sprintf("%s = ''", col))
+	default:
+		if len(f.Values) == 0 {
+			return nil
+		}
+		return squirrel.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
+	}
+}
+
 // resolveAttributeColumn maps an AttributeFilter.Path to the ClickHouse column
 // expression used in WHERE clauses.
 //
@@ -229,35 +265,11 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		if !validJSONPath.MatchString(f.Path) {
 			continue // skip invalid paths to prevent injection
 		}
-
-		col := resolveAttributeColumn(f.Path)
-
-		switch f.Op {
-		case "eq":
-			if len(f.Values) > 0 {
-				sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Values[0])
-			}
-		case "not_eq":
-			if len(f.Values) > 0 {
-				sb = sb.Where(fmt.Sprintf("%s != ?", col), f.Values[0])
-			}
-		case "contains":
-			if len(f.Values) > 0 {
-				sb = sb.Where(fmt.Sprintf("position(%s, ?) > 0", col), f.Values[0])
-			}
-		case "in":
-			if len(f.Values) > 0 {
-				sb = sb.Where(squirrel.Eq{col: f.Values})
-			}
-		case "exists":
-			sb = sb.Where(fmt.Sprintf("%s != ''", col))
-		case "not_exists":
-			sb = sb.Where(fmt.Sprintf("%s = ''", col))
-		default:
-			if len(f.Values) > 0 {
-				sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Values[0])
-			}
+		pred := f.Predicate(resolveAttributeColumn(f.Path))
+		if pred == nil {
+			continue
 		}
+		sb = sb.Where(pred)
 	}
 
 	sb = withPagination(sb, arg.Cursor, arg.SortOrder)
