@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -49,12 +50,19 @@ func NewSlackChatCompletionActivity(logger *slog.Logger, client *client.SlackCli
 
 func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionInput) (string, error) {
 	slackChatCompletionTimeout := 60 * time.Second
-	authInfo, err := s.slackClient.GetAppAuthInfo(ctx, input.Event.TeamID)
+	gramAppID, err := uuid.Parse(input.Event.GramAppID)
+	if err != nil {
+		return "", oops.E(oops.CodeBadRequest, err, "invalid gram app ID on event").Log(ctx, s.logger)
+	}
+	authInfo, err := s.slackClient.GetAppAuthInfoByID(ctx, gramAppID)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error getting app auth info").Log(ctx, s.logger)
 	}
 
 	systemPrompt := slackSystemPrompt
+	if authInfo.SystemPrompt != "" {
+		systemPrompt = authInfo.SystemPrompt + "\n\n" + systemPrompt
+	}
 
 	var previousConversationContext strings.Builder
 	if input.Event.Event.ThreadTs != "" {
@@ -109,7 +117,6 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		Model:           "",
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))
 		return "", fmt.Errorf("error getting chat response: %w", err)
 	}
 

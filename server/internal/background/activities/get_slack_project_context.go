@@ -50,7 +50,11 @@ func NewSlackProjectContextActivity(logger *slog.Logger, db *pgxpool.Pool, clien
 }
 
 func (s *GetSlackProjectContext) Do(ctx context.Context, event types.SlackEvent) (*SlackProjectContextResponse, error) {
-	authInfo, err := s.slackClient.GetAppAuthInfo(ctx, event.TeamID)
+	gramAppID, err := uuid.Parse(event.GramAppID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid gram app ID on event").Log(ctx, s.logger)
+	}
+	authInfo, err := s.slackClient.GetAppAuthInfoByID(ctx, gramAppID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting app auth info").Log(ctx, s.logger)
 	}

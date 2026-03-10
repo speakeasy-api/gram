@@ -150,6 +150,9 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 		return postSlackErrorMessage(ctx, a, params.Event, err)
 	}
 
+	if strings.TrimSpace(chatResponse) == "" {
+		return postSlackErrorMessage(ctx, a, params.Event, fmt.Errorf("chat completion returned empty response"))
+	}
 	if err := workflow.ExecuteActivity(
 		ctx,
 		a.PostSlackMessage,

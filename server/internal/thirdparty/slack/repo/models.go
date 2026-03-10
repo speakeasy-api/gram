@@ -36,3 +36,12 @@ type SlackAppToolset struct {
 	ToolsetID  uuid.UUID
 	CreatedAt  pgtype.Timestamptz
 }
+
+type SlackRegistration struct {
+	ID             uuid.UUID
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+	UserID         uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
