@@ -1000,6 +1000,8 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 		Title:             v.Title,
 		IconURL:           v.IconURL,
 		Meta:              v.Meta,
+		IsSelfHosted:      v.IsSelfHosted,
+		RequiresAuth:      v.RequiresAuth,
 	}
 	if v.Tools != nil {
 		res.Tools = make([]*types.ExternalMCPTool, len(v.Tools))

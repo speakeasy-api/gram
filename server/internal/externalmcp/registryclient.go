@@ -152,8 +152,10 @@ type RemoteHeader struct {
 }
 
 type serverRemoteMeta struct {
-	Auth  any          `json:"auth"`
-	Tools []serverTool `json:"tools"`
+	Auth         any          `json:"auth"`
+	Tools        []serverTool `json:"tools"`
+	IsSelfHosted bool         `json:"isSelfHosted"`
+	AuthOptions  []any        `json:"authOptions"`
 }
 
 // serverDetailsEntry represents the response from the server details endpoint
@@ -261,6 +263,11 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			})
 		}
 
+		// Determine if server is self-hosted or requires auth
+		firstRemote := s.Meta.Version.FirstRemote
+		isSelfHosted := firstRemote.IsSelfHosted
+		requiresAuth := len(firstRemote.AuthOptions) > 0
+
 		server := &types.ExternalMCPServer{
 			RegistrySpecifier: s.Server.Name,
 			Version:           s.Server.Version,
@@ -271,6 +278,8 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			Meta:              s.Meta,
 			Tools:             tools,
 			Remotes:           remotes,
+			IsSelfHosted:      &isSelfHosted,
+			RequiresAuth:      &requiresAuth,
 		}
 
 		servers = append(servers, server)

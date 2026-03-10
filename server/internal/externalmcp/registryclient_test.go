@@ -97,6 +97,106 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	require.Equal(t, "another-active", result[1].RegistrySpecifier)
 }
 
+func TestListServers_SetsIsSelfHostedAndRequiresAuth(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := listResponse{
+			Servers: []serverEntry{
+				{
+					Server: serverJSON{
+						Name:        "self-hosted-server",
+						Description: "A self-hosted server",
+						Version:     "1.0.0",
+					},
+					Meta: serverMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+							FirstRemote: serverRemoteMeta{
+								IsSelfHosted: true,
+							},
+						},
+					},
+				},
+				{
+					Server: serverJSON{
+						Name:        "oauth-server",
+						Description: "A server requiring OAuth",
+						Version:     "1.0.0",
+					},
+					Meta: serverMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+							FirstRemote: serverRemoteMeta{
+								AuthOptions: []any{map[string]any{"type": "oauth"}},
+							},
+						},
+					},
+				},
+				{
+					Server: serverJSON{
+						Name:        "normal-server",
+						Description: "A normal server with tools",
+						Version:     "1.0.0",
+					},
+					Meta: serverMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+							FirstRemote: serverRemoteMeta{
+								Tools: []serverTool{
+									{Name: "tool1", Description: "A tool"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(response)
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client.httpClient = server.Client()
+	registry := Registry{
+		ID:  uuid.New(),
+		URL: server.URL,
+	}
+
+	result, err := client.ListServers(ctx, registry, ListServersParams{})
+
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+
+	// Self-hosted server
+	require.Equal(t, "self-hosted-server", result[0].RegistrySpecifier)
+	require.NotNil(t, result[0].IsSelfHosted)
+	require.True(t, *result[0].IsSelfHosted)
+	require.NotNil(t, result[0].RequiresAuth)
+	require.False(t, *result[0].RequiresAuth)
+
+	// OAuth server
+	require.Equal(t, "oauth-server", result[1].RegistrySpecifier)
+	require.NotNil(t, result[1].IsSelfHosted)
+	require.False(t, *result[1].IsSelfHosted)
+	require.NotNil(t, result[1].RequiresAuth)
+	require.True(t, *result[1].RequiresAuth)
+
+	// Normal server
+	require.Equal(t, "normal-server", result[2].RegistrySpecifier)
+	require.NotNil(t, result[2].IsSelfHosted)
+	require.False(t, *result[2].IsSelfHosted)
+	require.NotNil(t, result[2].RequiresAuth)
+	require.False(t, *result[2].RequiresAuth)
+	require.Len(t, result[2].Tools, 1)
+}
+
 func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

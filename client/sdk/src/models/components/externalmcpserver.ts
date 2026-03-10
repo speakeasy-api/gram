@@ -29,6 +29,10 @@ export type ExternalMCPServer = {
    */
   iconUrl?: string | undefined;
   /**
+   * Whether this server requires self-hosting (user provides their own URL)
+   */
+  isSelfHosted?: boolean | undefined;
+  /**
    * Opaque metadata from the registry
    */
   meta?: any | undefined;
@@ -44,6 +48,10 @@ export type ExternalMCPServer = {
    * Available remote endpoints for the server
    */
   remotes?: Array<ExternalMCPRemote> | undefined;
+  /**
+   * Whether this server requires authentication before tools can be discovered
+   */
+  requiresAuth?: boolean | undefined;
   /**
    * Display name for the server
    */
@@ -66,10 +74,12 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
   z.object({
     description: z.string(),
     icon_url: z.optional(z.string()),
+    is_self_hosted: z.optional(z.boolean()),
     meta: z.optional(z.any()),
     registry_id: z.string(),
     registry_specifier: z.string(),
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
+    requires_auth: z.optional(z.boolean()),
     title: z.optional(z.string()),
     tools: z.optional(z.array(ExternalMCPTool$inboundSchema)),
     version: z.string(),
@@ -77,8 +87,10 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "icon_url": "iconUrl",
+      "is_self_hosted": "isSelfHosted",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
+      "requires_auth": "requiresAuth",
     });
   }),
 );

@@ -1,14 +1,12 @@
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
-import { parseServerMetadata } from "./hooks/serverMetadata";
 
 interface ServerCardProps {
   server: Server;
@@ -34,7 +32,6 @@ export function ServerCard({
   isSelected,
   onToggleSelect,
 }: ServerCardProps) {
-  const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
 
   const existingMcp = externalMcps.find(
@@ -45,9 +42,13 @@ export function ServerCard({
   // Get tool names for the badge tooltip
   const toolNames = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tools = (server.tools ?? []) as any[];
-    return tools.map((t) => t.name || "Unknown tool");
+    const serverTools = (server.tools ?? []) as any[];
+    return serverTools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
+
+  // Check server hosting/auth status
+  const isSelfHosted = server.isSelfHosted ?? false;
+  const requiresAuth = server.requiresAuth ?? false;
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation(); // Prevent click-outside-to-deselect from firing
@@ -94,17 +95,6 @@ export function ServerCard({
             </div>
           </div>
         )}
-        {/* Added indicator overlay */}
-        {isAdded && (
-          <div className="absolute top-3.5 left-3.5 z-10">
-            <Badge
-              variant="outline"
-              className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
-            >
-              Added
-            </Badge>
-          </div>
-        )}
       </div>
 
       {/* Content area */}
@@ -112,26 +102,27 @@ export function ServerCard({
         {/* Header row with name and tool badge */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <Type
-                variant="subheading"
-                as="div"
-                className="truncate text-md group-hover:text-primary transition-colors"
-                title={displayName}
-              >
-                {displayName}
-              </Type>
-              {metadata.visitorsMonth === 0 && (
-                <Badge variant="outline" className="shrink-0">
-                  New
-                </Badge>
-              )}
-            </div>
+            <Type
+              variant="subheading"
+              as="div"
+              className="truncate text-md group-hover:text-primary transition-colors"
+              title={displayName}
+            >
+              {displayName}
+            </Type>
             <Type small muted className="truncate">
               v{server.version}
             </Type>
           </div>
-          <ToolCollectionBadge toolNames={toolNames} />
+          {/* Tool badge: hide for self-hosted, show "Needs auth" for OAuth servers */}
+          {toolNames.length === 0 && isSelfHosted ? null : toolNames.length ===
+              0 && requiresAuth ? (
+            <Badge variant="warning">
+              <Badge.Text>Needs OAuth</Badge.Text>
+            </Badge>
+          ) : (
+            <ToolCollectionBadge toolNames={toolNames} />
+          )}
         </div>
 
         {/* Description */}

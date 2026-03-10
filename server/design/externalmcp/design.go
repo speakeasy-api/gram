@@ -161,6 +161,8 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	Attribute("meta", Any, "Opaque metadata from the registry")
 	Attribute("tools", ArrayOf(ExternalMCPTool), "Tools available on the server")
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
+	Attribute("is_self_hosted", Boolean, "Whether this server requires self-hosting (user provides their own URL)")
+	Attribute("requires_auth", Boolean, "Whether this server requires authentication before tools can be discovered")
 
 	Required("registry_specifier", "version", "description", "registry_id")
 })

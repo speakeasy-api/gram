@@ -51,6 +51,10 @@ type GetServerDetailsResponseBody struct {
 	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
+	// Whether this server requires self-hosting (user provides their own URL)
+	IsSelfHosted *bool `form:"is_self_hosted,omitempty" json:"is_self_hosted,omitempty" xml:"is_self_hosted,omitempty"`
+	// Whether this server requires authentication before tools can be discovered
+	RequiresAuth *bool `form:"requires_auth,omitempty" json:"requires_auth,omitempty" xml:"requires_auth,omitempty"`
 }
 
 // ClearCacheUnauthorizedResponseBody is the type of the "mcpRegistries"
@@ -832,6 +836,10 @@ type ExternalMCPServerResponseBody struct {
 	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
+	// Whether this server requires self-hosting (user provides their own URL)
+	IsSelfHosted *bool `form:"is_self_hosted,omitempty" json:"is_self_hosted,omitempty" xml:"is_self_hosted,omitempty"`
+	// Whether this server requires authentication before tools can be discovered
+	RequiresAuth *bool `form:"requires_auth,omitempty" json:"requires_auth,omitempty" xml:"requires_auth,omitempty"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.
@@ -906,6 +914,8 @@ func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDet
 		Title:             res.Title,
 		IconURL:           res.IconURL,
 		Meta:              res.Meta,
+		IsSelfHosted:      res.IsSelfHosted,
+		RequiresAuth:      res.RequiresAuth,
 	}
 	if res.Tools != nil {
 		body.Tools = make([]*ExternalMCPToolResponseBody, len(res.Tools))

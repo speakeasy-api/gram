@@ -957,6 +957,8 @@ func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.Exter
 		Title:             v.Title,
 		IconURL:           v.IconURL,
 		Meta:              v.Meta,
+		IsSelfHosted:      v.IsSelfHosted,
+		RequiresAuth:      v.RequiresAuth,
 	}
 	if v.Tools != nil {
 		res.Tools = make([]*ExternalMCPToolResponseBody, len(v.Tools))

@@ -14064,6 +14064,9 @@ components:
                     type: string
                     description: URL to the server's icon
                     format: uri
+                is_self_hosted:
+                    type: boolean
+                    description: Whether this server requires self-hosting (user provides their own URL)
                 meta:
                     description: Opaque metadata from the registry
                 registry_id:
@@ -14079,6 +14082,9 @@ components:
                     items:
                         $ref: '#/components/schemas/ExternalMCPRemote'
                     description: Available remote endpoints for the server
+                requires_auth:
+                    type: boolean
+                    description: Whether this server requires authentication before tools can be discovered
                 title:
                     type: string
                     description: Display name for the server

@@ -29,4 +29,8 @@ type ExternalMCPServer struct {
 	Tools []*ExternalMCPTool
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemote
+	// Whether this server requires self-hosting (user provides their own URL)
+	IsSelfHosted *bool
+	// Whether this server requires authentication before tools can be discovered
+	RequiresAuth *bool
 }
