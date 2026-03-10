@@ -36,35 +36,23 @@ type AttributeFilter struct {
 // Predicate returns the squirrel condition for this filter, or nil if the filter
 // should be skipped (e.g. an operator that requires values but none were provided).
 func (f AttributeFilter) Predicate(col string) squirrel.Sqlizer {
+	if len(f.Values) == 0 && f.Op != "exists" && f.Op != "not_exists" {
+		return nil
+	}
 	switch f.Op {
-	case "eq":
-		if len(f.Values) == 0 {
-			return nil
-		}
+	case "eq", "":
 		return squirrel.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
 	case "not_eq":
-		if len(f.Values) == 0 {
-			return nil
-		}
 		return squirrel.Expr(fmt.Sprintf("%s != ?", col), f.Values[0])
 	case "contains":
-		if len(f.Values) == 0 {
-			return nil
-		}
 		return squirrel.Expr(fmt.Sprintf("position(%s, ?) > 0", col), f.Values[0])
 	case "in":
-		if len(f.Values) == 0 {
-			return nil
-		}
 		return squirrel.Eq{col: f.Values}
 	case "exists":
 		return squirrel.Expr(fmt.Sprintf("%s != ''", col))
 	case "not_exists":
 		return squirrel.Expr(fmt.Sprintf("%s = ''", col))
 	default:
-		if len(f.Values) == 0 {
-			return nil
-		}
 		return squirrel.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
 	}
 }
