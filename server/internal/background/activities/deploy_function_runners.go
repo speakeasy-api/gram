@@ -56,6 +56,11 @@ func NewDeployFunctionRunners(
 func (d *DeployFunctionRunners) Do(ctx context.Context, args DeployFunctionRunnersRequest) error {
 	err := d.do(ctx, args)
 	if err != nil {
+		var serr *oops.ShareableError
+		if errors.As(err, &serr) && serr.IsTemporary() {
+			// Temporary errors (e.g. Fly machine startup timeout) are retryable via the Temporal retry policy.
+			return err
+		}
 		return temporal.NewNonRetryableApplicationError("failed to deploy function runners", "deployment_error", err)
 	}
 	return nil

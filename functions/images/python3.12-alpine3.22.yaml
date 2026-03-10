@@ -1,6 +1,6 @@
 contents:
   repositories:
-    - './packages'
+    - "./packages"
     - https://dl-cdn.alpinelinux.org/alpine/v3.22/main
   packages:
     - alpine-baselayout-data

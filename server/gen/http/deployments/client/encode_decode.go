@@ -2143,6 +2143,12 @@ func marshalDeploymentsAddExternalMCPFormToAddExternalMCPFormRequestBody(v *depl
 		Slug:                    string(v.Slug),
 		RegistryServerSpecifier: v.RegistryServerSpecifier,
 	}
+	if v.SelectedRemotes != nil {
+		res.SelectedRemotes = make([]string, len(v.SelectedRemotes))
+		for i, val := range v.SelectedRemotes {
+			res.SelectedRemotes[i] = val
+		}
+	}
 
 	return res
 }
@@ -2207,6 +2213,12 @@ func marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(v *AddE
 		Name:                    v.Name,
 		Slug:                    types.Slug(v.Slug),
 		RegistryServerSpecifier: v.RegistryServerSpecifier,
+	}
+	if v.SelectedRemotes != nil {
+		res.SelectedRemotes = make([]string, len(v.SelectedRemotes))
+		for i, val := range v.SelectedRemotes {
+			res.SelectedRemotes[i] = val
+		}
 	}
 
 	return res

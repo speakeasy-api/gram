@@ -33,6 +33,23 @@ type AttributeFilter struct {
 	Value string // Value to compare against (ignored for "exists"/"not_exists")
 }
 
+// resolveAttributeColumn maps an AttributeFilter.Path to the ClickHouse column
+// expression used in WHERE clauses.
+//
+//   - @-prefixed paths → toString(attributes.app.<path>) (user attributes)
+//   - Materialized column hit → bare column name (bloom-filter indexed)
+//   - Fallback → toString(attributes.<path>) (JSON accessor)
+func resolveAttributeColumn(path string) string {
+	switch {
+	case strings.HasPrefix(path, "@"):
+		return fmt.Sprintf("toString(attributes.app.%s)", path[1:])
+	case materializedColumns[path] != "":
+		return materializedColumns[path]
+	default:
+		return fmt.Sprintf("toString(attributes.%s)", path)
+	}
+}
+
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
@@ -127,6 +144,7 @@ type ListTelemetryLogsParams struct {
 	GramChatID             string
 	UserID                 string
 	ExternalUserID         string
+	EventSource            string
 	AttributeFilters       []AttributeFilter
 	SortOrder              string
 	Cursor                 string
@@ -202,18 +220,18 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
+	if arg.EventSource != "" {
+		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
+	}
 
 	// Arbitrary attribute filters
 	for _, f := range arg.AttributeFilters {
 		if !validJSONPath.MatchString(f.Path) {
 			continue // skip invalid paths to prevent injection
 		}
-		// @prefix → user attribute (app.<path>), bare → system attribute (as-is)
-		path := f.Path
-		if strings.HasPrefix(path, "@") {
-			path = "app." + path[1:]
-		}
-		col := fmt.Sprintf("toString(attributes.%s)", path)
+
+		col := resolveAttributeColumn(f.Path)
+
 		switch f.Op {
 		case "eq":
 			sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Value)
@@ -263,20 +281,21 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	return items, nil
 }
 
-// ListTracesParams contains the parameters for listing traces.
-type ListTracesParams struct {
+// ListToolTracesParams contains the parameters for listing tool call traces.
+type ListToolTracesParams struct {
 	GramProjectID    string
 	TimeStart        int64
 	TimeEnd          int64
 	GramDeploymentID string
 	GramFunctionID   string
 	GramURN          string // Single URN filter (supports substring matching)
+	EventSource      string
 	SortOrder        string
 	Cursor           string // trace_id to paginate from
 	Limit            int
 }
 
-// ListTraces retrieves aggregated trace summaries grouped by trace_id.
+// ListToolTraces retrieves aggregated trace summaries for tool calls (filtered to only include traces with tool_name set).
 //
 // Original SQL reference:
 // SELECT trace_id, min(time_unix_nano), count(*), ... FROM telemetry_logs
@@ -284,13 +303,16 @@ type ListTracesParams struct {
 // [+ optional filters] GROUP BY trace_id ORDER BY start_time_unix_nano LIMIT ?
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]TraceSummary, error) {
+func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) ([]TraceSummary, error) {
 	sb := sq.Select(
 		"trace_id",
 		"min(start_time_unix_nano) as start_time_unix_nano",
 		"sum(log_count) as log_count",
 		"anyIfMerge(http_status_code) as http_status_code",
 		"any(gram_urn) as gram_urn",
+		"any(tool_name) as tool_name",
+		"any(tool_source) as tool_source",
+		"any(event_source) as event_source",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -305,10 +327,33 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
 	}
 
-	// URN filter must use HAVING because gram_urn in SELECT is aliased to any(gram_urn),
-	// and ClickHouse resolves aliases in WHERE, which would create an invalid aggregate-in-WHERE.
+	// Build HAVING clause for tool filtering.
+	// IMPORTANT: We must construct a single HAVING clause with explicit AND logic to ensure
+	// correct boolean precedence. Multiple .Having() calls would create separate conditions
+	// that interact incorrectly with the OR in the tool_name check, causing the gram_urn
+	// filter to be bypassed when startsWith(gram_urn, 'tools:') is true.
+	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:'))"}
+	havingArgs := []any{}
+
+	// URN filter must use HAVING because it's an aggregate function in SELECT
 	if arg.GramURN != "" {
-		sb = sb.Having("position(gram_urn, ?) > 0", arg.GramURN)
+		havingParts = append(havingParts, "position(gram_urn, ?) > 0")
+		havingArgs = append(havingArgs, arg.GramURN)
+	}
+
+	// EventSource filter must use HAVING because it's an aggregate function in SELECT
+	if arg.EventSource != "" {
+		havingParts = append(havingParts, "event_source = ?")
+		havingArgs = append(havingArgs, arg.EventSource)
+	} else {
+		// Exclude hooks logs by default when no event_source filter is specified
+		havingParts = append(havingParts, "event_source != ?")
+		havingArgs = append(havingArgs, "hook")
+	}
+
+	// Combine all HAVING conditions with explicit AND to ensure proper filtering
+	if len(havingParts) > 0 {
+		sb = sb.Having(strings.Join(havingParts, " AND "), havingArgs...)
 	}
 
 	// Exclude chat completion logs (urn:uuid:...) which are not tool calls.
@@ -337,7 +382,7 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 
 	query, args, err := sb.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("building list traces query: %w", err)
+		return nil, fmt.Errorf("building list tool traces query: %w", err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
@@ -1210,4 +1255,158 @@ func (q *Queries) ListFilterOptions(ctx context.Context, arg ListFilterOptionsPa
 	}
 
 	return options, nil
+}
+
+// ListAttributeKeysParams defines the parameters for listing distinct attribute keys.
+type ListAttributeKeysParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+// ListAttributeKeys retrieves distinct attribute paths from telemetry logs for a project and time range.
+// Raw paths are returned as-is; the caller is responsible for any display transformation.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListAttributeKeys(ctx context.Context, arg ListAttributeKeysParams) ([]string, error) {
+	sb := sq.Select("DISTINCT arrayJoin(JSONAllPaths(attributes)) AS path").
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		OrderBy("path")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list attribute keys query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err = rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("scanning attribute key: %w", err)
+		}
+		keys = append(keys, key)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return keys, nil
+}
+
+// HooksServerSummaryRow contains aggregated hooks metrics for a single server.
+type HooksServerSummaryRow struct {
+	ServerName   string  `ch:"server_name"`
+	EventCount   uint64  `ch:"event_count"`
+	UniqueTools  uint64  `ch:"unique_tools"`
+	SuccessCount uint64  `ch:"success_count"`
+	FailureCount uint64  `ch:"failure_count"`
+	FailureRate  float64 `ch:"failure_rate"`
+}
+
+// GetHooksSummaryParams defines the parameters for getting hooks summary.
+type GetHooksSummaryParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+// GetHooksSummary retrieves aggregated hooks metrics grouped by server.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams) ([]HooksServerSummaryRow, error) {
+	sb := sq.Select(
+		"ifNull(toString(attributes.`gram.tool_call.source`), 'local') as server_name",
+		"count(*) as event_count",
+		"uniqExact(tool_name) as unique_tools",
+		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
+		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUseFailure') as failure_count",
+		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		GroupBy("server_name").
+		OrderBy("event_count DESC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building hooks summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []HooksServerSummaryRow
+	for rows.Next() {
+		var summary HooksServerSummaryRow
+		if err = rows.ScanStruct(&summary); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		summaries = append(summaries, summary)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return summaries, nil
+}
+
+// GetHooksSessionCountParams defines the parameters for getting unique session count.
+type GetHooksSessionCountParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+// GetHooksSessionCount retrieves the count of unique sessions for hooks.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionCountParams) (int64, error) {
+	sb := sq.Select("uniqExact(toString(attributes.`genai.conversation.id`)) as session_count").
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building hooks session count query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var count uint64
+	if rows.Next() {
+		if err = rows.Scan(&count); err != nil {
+			return 0, fmt.Errorf("error scanning session count: %w", err)
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+
+	return int64(count), nil
 }

@@ -16,14 +16,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
+
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
@@ -48,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -68,6 +70,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -354,6 +357,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_EXTERNAL_MCP_OAUTH_REDIRECT_DOMAINS"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "workos-api-key",
+			Usage:    "WorkOS API key for user identity lookups",
+			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, clickHouseFlags...)
@@ -444,6 +453,8 @@ func newStartCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
+			workosClient := workos.New(logger, c.String("workos-api-key"))
+
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
@@ -452,7 +463,18 @@ func newStartCommand() *cli.Command {
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo)
+				sessionManager = sessions.NewManager(
+					logger,
+					db,
+					redisClient,
+					cache.SuffixNone,
+					c.String("speakeasy-server-address"),
+					c.String("speakeasy-secret-key"),
+					pylonClient,
+					posthogClient,
+					billingRepo,
+					workosClient,
+				)
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
 				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath, billingRepo)
@@ -594,7 +616,7 @@ func newStartCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
-			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
+			slackClient := slack_client.NewSlackClient("", "", db, encryptionClient)
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -670,13 +692,19 @@ func newStartCommand() *cli.Command {
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient)))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
-			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
-				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
-				GramServerURL:          c.String("server-url"),
-				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
-				Environment:            c.String("environment"),
-			}))
+			auth.Attach(mux, auth.NewService(
+				logger,
+				db,
+				sessionManager,
+				auth.AuthConfigurations{
+					SpeakeasyServerAddress: c.String("speakeasy-server-address"),
+					GramServerURL:          c.String("server-url"),
+					SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
+					Environment:            c.String("environment"),
+				},
+			))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient))
@@ -704,16 +732,11 @@ func newStartCommand() *cli.Command {
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
-			if slackClient.Enabled() {
-				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
-					GramServerURL:      c.String("server-url"),
-					SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
-					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
-					SlackSigningSecret: c.String("slack-signing-secret"),
-				}))
-			} else {
-				logger.WarnContext(ctx, "slack client is not enabled")
-			}
+			slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
+				GramServerURL:     c.String("server-url"),
+				GramSiteURL:       c.String("site-url"),
+				SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
+			}))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

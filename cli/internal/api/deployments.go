@@ -209,3 +209,24 @@ func (c *DeploymentsClient) Evolve(
 
 	return result, nil
 }
+
+// Redeploy triggers a redeployment of an existing deployment.
+func (c *DeploymentsClient) Redeploy(
+	ctx context.Context,
+	apiKey secret.Secret,
+	projectSlug string,
+	deploymentID string,
+) (*types.Deployment, error) {
+	key := apiKey.Reveal()
+	result, err := c.client.Redeploy(ctx, &deployments.RedeployPayload{
+		ApikeyToken:      &key,
+		ProjectSlugInput: &projectSlug,
+		DeploymentID:     deploymentID,
+		SessionToken:     nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("api error: %w", err)
+	}
+
+	return result.Deployment, nil
+}

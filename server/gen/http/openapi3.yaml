@@ -4,105 +4,8 @@ info:
     description: Gram is the tools platform for AI agents
     version: 0.0.1
 servers:
-    - url: http://localhost:80
-      description: Default server for gram
+    - url: https://app.getgram.ai
 paths:
-    /rpc/{project_slug}/slack.login:
-        get:
-            description: Proxies to auth login through speakeasy oidc.
-            operationId: slackLogin
-            parameters:
-                - in: path
-                  name: project_slug
-                  required: true
-                  schema:
-                    type: string
-                - allowEmptyValue: true
-                  description: The dashboard location to return too
-                  in: query
-                  name: return_url
-                  schema:
-                    description: The dashboard location to return too
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "307":
-                    description: Temporary Redirect response.
-                    headers:
-                        Location:
-                            description: The URL to redirect to after authentication
-                            schema:
-                                description: The URL to redirect to after authentication
-                                type: string
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_query_project_slug: []
-                  session_header_Gram-Session: []
-            summary: login slack
-            tags:
-                - slack
-            x-speakeasy-name-override: slackLogin
-            x-speakeasy-react-hook:
-                disabled: true
     /rpc/assets.createSignedChatAttachmentURL:
         post:
             description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -5892,6 +5795,220 @@ paths:
             tags:
                 - mcpMetadata
             x-speakeasy-name-override: set
+    /rpc/mcpRegistries.clearCache:
+        delete:
+            description: Clear the registry cache for a specific registry (admin only)
+            operationId: clearMCPRegistryCache
+            parameters:
+                - allowEmptyValue: true
+                  description: The registry to clear cache for
+                  in: query
+                  name: registry_id
+                  required: true
+                  schema:
+                    description: The registry to clear cache for
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: clearCache mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: clearCache
+    /rpc/mcpRegistries.getServerDetails:
+        get:
+            description: Get detailed information about an MCP server including remotes
+            operationId: getMCPServerDetails
+            parameters:
+                - allowEmptyValue: true
+                  description: ID of the registry
+                  in: query
+                  name: registry_id
+                  required: true
+                  schema:
+                    description: ID of the registry
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Server specifier (e.g., 'io.github.user/server')
+                  in: query
+                  name: server_specifier
+                  required: true
+                  schema:
+                    description: Server specifier (e.g., 'io.github.user/server')
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExternalMCPServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServerDetails mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: getServerDetails
     /rpc/mcpRegistries.listCatalog:
         get:
             description: List available MCP servers from configured registries
@@ -6012,6 +6129,104 @@ paths:
             x-speakeasy-name-override: listCatalog
             x-speakeasy-react-hook:
                 name: ListMCPCatalog
+    /rpc/mcpRegistries.listRegistries:
+        get:
+            description: List all MCP registries (admin only)
+            operationId: listMCPRegistries
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRegistriesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listRegistries mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: listRegistries
+            x-speakeasy-react-hook:
+                name: ListMCPRegistries
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -6534,6 +6749,93 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdatePackage
+    /rpc/productFeatures.get:
+        get:
+            description: Get the current state of all product feature flags.
+            operationId: getProductFeatures
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GramProductFeatures'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getProductFeatures features
+            tags:
+                - features
+            x-speakeasy-name-override: get
     /rpc/productFeatures.set:
         post:
             description: Enable or disable an organization feature flag.
@@ -7425,36 +7727,38 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListResources
-    /rpc/slack.callback:
-        get:
-            description: Handles the authentication callback.
-            operationId: slackCallback
+    /rpc/slack-apps.configure:
+        post:
+            description: Store Slack credentials (client ID, client secret, signing secret) for an app.
+            operationId: configureSlackApp
             parameters:
                 - allowEmptyValue: true
-                  description: The state parameter from the callback
-                  in: query
-                  name: state
-                  required: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
                   schema:
-                    description: The state parameter from the callback
+                    description: Session header
                     type: string
                 - allowEmptyValue: true
-                  description: The code parameter from the callback
-                  in: query
-                  name: code
-                  required: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
                   schema:
-                    description: The code parameter from the callback
+                    description: project header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ConfigureSlackAppRequestBody'
+                required: true
             responses:
-                "307":
-                    description: Temporary Redirect response.
-                    headers:
-                        Location:
-                            description: The URL to redirect to after authentication
+                "200":
+                    content:
+                        application/json:
                             schema:
-                                description: The URL to redirect to after authentication
-                                type: string
+                                $ref: '#/components/schemas/SlackAppResult'
+                    description: OK response.
                 "400":
                     content:
                         application/json:
@@ -7509,17 +7813,124 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            summary: callback slack
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: configureSlackApp slack
             tags:
                 - slack
-            x-speakeasy-name-override: slackCallback
+            x-speakeasy-name-override: configureSlackApp
             x-speakeasy-react-hook:
-                disabled: true
-    /rpc/slack.deleteConnection:
-        delete:
-            description: delete slack connection for an organization and project.
-            operationId: deleteSlackConnection
+                name: configureSlackApp
+    /rpc/slack-apps.create:
+        post:
+            description: Create a new Slack app and generate its manifest.
+            operationId: createSlackApp
             parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSlackAppRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateSlackAppResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createSlackApp slack
+            tags:
+                - slack
+            x-speakeasy-name-override: createSlackApp
+            x-speakeasy-react-hook:
+                name: createSlackApp
+    /rpc/slack-apps.delete:
+        delete:
+            description: Soft-delete a Slack app.
+            operationId: deleteSlackApp
+            parameters:
+                - allowEmptyValue: true
+                  description: The Slack app ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The Slack app ID
+                    format: uuid
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -7594,17 +8005,26 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: deleteSlackConnection slack
+            summary: deleteSlackApp slack
             tags:
                 - slack
-            x-speakeasy-name-override: deleteSlackConnection
+            x-speakeasy-name-override: deleteSlackApp
             x-speakeasy-react-hook:
-                name: deleteSlackConnection
-    /rpc/slack.getConnection:
+                name: deleteSlackApp
+    /rpc/slack-apps.get:
         get:
-            description: get slack connection for an organization and project.
-            operationId: getSlackConnection
+            description: Get details of a specific Slack app.
+            operationId: getSlackApp
             parameters:
+                - allowEmptyValue: true
+                  description: The Slack app ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The Slack app ID
+                    format: uuid
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -7624,7 +8044,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/GetSlackConnectionResult'
+                                $ref: '#/components/schemas/SlackAppResult'
                     description: OK response.
                 "400":
                     content:
@@ -7683,16 +8103,105 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: getSlackConnection slack
+            summary: getSlackApp slack
             tags:
                 - slack
-            x-speakeasy-name-override: getSlackConnection
+            x-speakeasy-name-override: getSlackApp
             x-speakeasy-react-hook:
-                name: getSlackConnection
-    /rpc/slack.updateConnection:
-        post:
-            description: update slack connection for an organization and project.
-            operationId: updateSlackConnection
+                name: getSlackApp
+    /rpc/slack-apps.list:
+        get:
+            description: List Slack apps for a project.
+            operationId: listSlackApps
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSlackAppsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listSlackApps slack
+            tags:
+                - slack
+            x-speakeasy-name-override: listSlackApps
+            x-speakeasy-react-hook:
+                name: listSlackApps
+    /rpc/slack-apps.update:
+        put:
+            description: Update a Slack app's settings.
+            operationId: updateSlackApp
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -7712,14 +8221,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateSlackConnectionRequestBody'
+                            $ref: '#/components/schemas/UpdateSlackAppRequestBody'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/GetSlackConnectionResult'
+                                $ref: '#/components/schemas/SlackAppResult'
                     description: OK response.
                 "400":
                     content:
@@ -7778,12 +8287,12 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: updateSlackConnection slack
+            summary: updateSlackApp slack
             tags:
                 - slack
-            x-speakeasy-name-override: updateSlackConnection
+            x-speakeasy-name-override: updateSlackApp
             x-speakeasy-react-hook:
-                name: updateSlackConnection
+                name: updateSlackApp
     /rpc/telemetry.captureEvent:
         post:
             description: Capture a telemetry event and forward it to PostHog
@@ -7894,6 +8403,111 @@ paths:
             tags:
                 - telemetry
             x-speakeasy-name-override: captureEvent
+    /rpc/telemetry.getHooksSummary:
+        post:
+            description: Get aggregated hooks metrics grouped by server
+            operationId: getHooksSummary
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetHooksSummaryResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getHooksSummary telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getHooksSummary
+            x-speakeasy-react-hook:
+                name: GetHooksSummary
+                type: query
     /rpc/telemetry.getObservabilityOverview:
         post:
             description: Get observability overview metrics including time series, tool breakdowns, and summary stats
@@ -8208,6 +8822,111 @@ paths:
             x-speakeasy-name-override: getUserMetricsSummary
             x-speakeasy-react-hook:
                 name: GetUserMetricsSummary
+                type: query
+    /rpc/telemetry.listAttributeKeys:
+        post:
+            description: List distinct attribute keys available for filtering
+            operationId: listAttributeKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAttributeKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listAttributeKeys telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: listAttributeKeys
+            x-speakeasy-react-hook:
+                name: ListAttributeKeys
                 type: query
     /rpc/telemetry.listFilterOptions:
         post:
@@ -11623,6 +12342,13 @@ components:
                     type: string
                     description: The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
                     example: slack
+                selected_remotes:
+                    type: array
+                    items:
+                        type: string
+                    description: URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.
+                    example:
+                        - https://mcp.example.com/sse
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -12217,9 +12943,8 @@ components:
                     description: Chat session duration in seconds
                     format: double
                 end_time_unix_nano:
-                    type: integer
-                    description: Latest log timestamp in Unix nanoseconds
-                    format: int64
+                    type: string
+                    description: Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
                 gram_chat_id:
                     type: string
                     description: Chat session ID
@@ -12235,9 +12960,8 @@ components:
                     type: string
                     description: LLM model used in this chat session
                 start_time_unix_nano:
-                    type: integer
-                    description: Earliest log timestamp in Unix nanoseconds
-                    format: int64
+                    type: string
+                    description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
                 status:
                     type: string
                     description: Chat session status
@@ -12276,6 +13000,72 @@ components:
                 - total_input_tokens
                 - total_output_tokens
                 - total_tokens
+        ClaudeHookPayload:
+            type: object
+            properties:
+                additional_data:
+                    type: object
+                    description: Additional hook-specific data
+                    additionalProperties: true
+                hook_event_name:
+                    type: string
+                    description: The type of hook event
+                    enum:
+                        - SessionStart
+                        - PreToolUse
+                        - PostToolUse
+                        - PostToolUseFailure
+                session_id:
+                    type: string
+                    description: The Claude Code session ID
+                tool_error:
+                    description: The error from the tool (PostToolUseFailure only)
+                tool_input:
+                    description: The input to the tool
+                tool_name:
+                    type: string
+                    description: The name of the tool (for tool-related events)
+                tool_response:
+                    description: The response from the tool (PostToolUse only)
+                tool_use_id:
+                    type: string
+                    description: The unique ID for this tool use
+            description: Unified payload for all Claude Code hook events
+            required:
+                - hook_event_name
+        ClaudeHookResult:
+            type: object
+            properties:
+                continue:
+                    type: boolean
+                    description: Whether to continue (SessionStart only)
+                hookSpecificOutput:
+                    description: Hook-specific output as JSON object
+                stopReason:
+                    type: string
+                    description: Reason if blocked (SessionStart only)
+            description: Unified result for all Claude Code hook events with proper response structure
+        ConfigureSlackAppRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The Slack app ID
+                    format: uuid
+                slack_client_id:
+                    type: string
+                    description: Slack app Client ID
+                slack_client_secret:
+                    type: string
+                    description: Slack app Client Secret
+                slack_signing_secret:
+                    type: string
+                    description: Slack app Signing Secret
+            required:
+                - id
+                - slack_client_id
+                - slack_client_secret
+                - slack_signing_secret
         CreateDeploymentForm:
             type: object
             properties:
@@ -12646,6 +13436,36 @@ components:
             required:
                 - url
                 - expires_at
+        CreateSlackAppRequestBody:
+            type: object
+            properties:
+                icon_asset_id:
+                    type: string
+                    description: Asset ID for the app icon
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name for the Slack app
+                    minLength: 1
+                    maxLength: 36
+                system_prompt:
+                    type: string
+                    description: System prompt for the Slack app
+                toolset_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Toolset IDs to attach to this app
+            required:
+                - name
+                - toolset_ids
+        CreateSlackAppResult:
+            type: object
+            properties:
+                app:
+                    $ref: '#/components/schemas/SlackAppResult'
+            required:
+                - app
         CreateToolsetForm:
             type: object
             properties:
@@ -13217,6 +14037,23 @@ components:
                 - header_name
                 - required
                 - secret
+        ExternalMCPRemote:
+            type: object
+            properties:
+                transport_type:
+                    type: string
+                    description: Transport type (sse or streamable-http)
+                    enum:
+                        - sse
+                        - streamable-http
+                url:
+                    type: string
+                    description: URL of the remote endpoint
+                    format: uri
+            description: A remote endpoint for an MCP server
+            required:
+                - url
+                - transport_type
         ExternalMCPServer:
             type: object
             properties:
@@ -13237,6 +14074,11 @@ components:
                     type: string
                     description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
                     example: io.modelcontextprotocol.anonymous/exa
+                remotes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPRemote'
+                    description: Available remote endpoints for the server
                 title:
                     type: string
                     description: Display name for the server
@@ -13776,6 +14618,44 @@ components:
                 - openapiv3_tool_count
                 - functions_tool_count
                 - external_mcp_tool_count
+        GetHooksSummaryPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Payload for getting aggregated hooks metrics
+            required:
+                - from
+                - to
+        GetHooksSummaryResult:
+            type: object
+            properties:
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HooksServerSummary'
+                    description: Aggregated metrics grouped by server
+                total_events:
+                    type: integer
+                    description: Total number of hook events
+                    format: int64
+                total_sessions:
+                    type: integer
+                    description: Total number of unique sessions
+                    format: int64
+            description: Result of hooks summary query
+            required:
+                - servers
+                - total_events
+                - total_sessions
         GetInstanceForm:
             type: object
             properties:
@@ -13870,15 +14750,11 @@ components:
         GetMetricsSummaryResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 metrics:
                     $ref: '#/components/schemas/ProjectSummary'
             description: Result of metrics summary query
             required:
                 - metrics
-                - enabled
         GetObservabilityOverviewPayload:
             type: object
             properties:
@@ -13914,9 +14790,6 @@ components:
             properties:
                 comparison:
                     $ref: '#/components/schemas/ObservabilitySummary'
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 interval_seconds:
                     type: integer
                     description: The time bucket interval in seconds used for the time series data
@@ -13946,7 +14819,6 @@ components:
                 - top_tools_by_count
                 - top_tools_by_failure_rate
                 - interval_seconds
-                - enabled
         GetProjectForm:
             type: object
             properties:
@@ -14004,32 +14876,6 @@ components:
                     description: The signed URL to access the asset
             required:
                 - url
-        GetSlackConnectionResult:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: When the toolset was created.
-                    format: date-time
-                default_toolset_slug:
-                    type: string
-                    description: The default toolset slug for this Slack connection
-                slack_team_id:
-                    type: string
-                    description: The ID of the connected Slack team
-                slack_team_name:
-                    type: string
-                    description: The name of the connected Slack team
-                updated_at:
-                    type: string
-                    description: When the toolset was last updated.
-                    format: date-time
-            required:
-                - slack_team_name
-                - slack_team_id
-                - default_toolset_slug
-                - created_at
-                - updated_at
         GetUserMetricsSummaryPayload:
             type: object
             properties:
@@ -14056,15 +14902,24 @@ components:
         GetUserMetricsSummaryResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 metrics:
                     $ref: '#/components/schemas/ProjectSummary'
             description: Result of user metrics summary query
             required:
                 - metrics
-                - enabled
+        GramProductFeatures:
+            type: object
+            properties:
+                logs_enabled:
+                    type: boolean
+                    description: Whether logging is enabled
+                tool_io_logs_enabled:
+                    type: boolean
+                    description: Whether tool I/O logging is enabled
+            description: Current state of product feature flags
+            required:
+                - logs_enabled
+                - tool_io_logs_enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -14169,6 +15024,40 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        HooksServerSummary:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Total number of hook events for this server
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool completions (PostToolUseFailure events)
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Failure rate as a decimal (0.0 to 1.0)
+                    format: double
+                server_name:
+                    type: string
+                    description: Server name (extracted from tool name, or 'local' for non-MCP tools)
+                success_count:
+                    type: integer
+                    description: Number of successful tool completions (PostToolUse events)
+                    format: int64
+                unique_tools:
+                    type: integer
+                    description: Number of unique tools used for this server
+                    format: int64
+            description: Aggregated hooks metrics for a single server
+            required:
+                - server_name
+                - event_count
+                - unique_tools
+                - success_count
+                - failure_count
+                - failure_rate
         InfoResponseBody:
             type: object
             properties:
@@ -14367,6 +15256,34 @@ components:
                     description: The list of assets
             required:
                 - assets
+        ListAttributeKeysPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Payload for listing distinct attribute keys available for filtering
+            required:
+                - from
+                - to
+        ListAttributeKeysResult:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        type: string
+                    description: Distinct attribute keys. User attributes are prefixed with @
+            description: Result of listing distinct attribute keys
+            required:
+                - keys
         ListCatalogResponseBody:
             type: object
             properties:
@@ -14463,9 +15380,6 @@ components:
         ListFilterOptionsResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 options:
                     type: array
                     items:
@@ -14474,7 +15388,6 @@ components:
             description: Result of listing filter options
             required:
                 - options
-                - enabled
         ListIntegrationsForm:
             type: object
             properties:
@@ -14543,6 +15456,16 @@ components:
                     description: The created prompt template
             required:
                 - templates
+        ListRegistriesResponseBody:
+            type: object
+            properties:
+                registries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPRegistry'
+                    description: List of MCP registries
+            required:
+                - registries
         ListResourcesResult:
             type: object
             properties:
@@ -14556,6 +15479,16 @@ components:
                     description: The list of resources
             required:
                 - resources
+        ListSlackAppsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SlackAppResult'
+                    description: List of Slack apps
+            required:
+                - items
         ListToolsResult:
             type: object
             properties:
@@ -14608,6 +15541,24 @@ components:
             required:
                 - package
                 - versions
+        MCPRegistry:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Registry ID
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name for the registry
+                url:
+                    type: string
+                    description: URL of the registry
+            description: An MCP registry
+            required:
+                - id
+                - name
+                - url
         McpEnvironmentConfig:
             type: object
             properties:
@@ -14953,6 +15904,134 @@ components:
             required:
                 - slug
                 - provider_type
+        OTELAttribute:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Attribute key
+                value:
+                    $ref: '#/components/schemas/OTELAttributeValue'
+            description: OTEL log attribute with key and typed value
+            required:
+                - key
+                - value
+        OTELAttributeValue:
+            type: object
+            properties:
+                intValue:
+                    type: integer
+                    description: Integer value
+                    format: int64
+                stringValue:
+                    type: string
+                    description: String value
+            description: OTEL attribute value - supports stringValue or intValue
+        OTELLogBody:
+            type: object
+            properties:
+                stringValue:
+                    type: string
+                    description: String body value
+            description: OTEL log body
+        OTELLogRecord:
+            type: object
+            properties:
+                attributes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELAttribute'
+                    description: Log attributes
+                body:
+                    $ref: '#/components/schemas/OTELLogBody'
+                droppedAttributesCount:
+                    type: integer
+                    description: Number of dropped attributes
+                    format: int64
+                observedTimeUnixNano:
+                    type: string
+                    description: Observed timestamp in nanoseconds
+                timeUnixNano:
+                    type: string
+                    description: Timestamp in nanoseconds since Unix epoch
+            description: Individual OTEL log record
+            required:
+                - timeUnixNano
+                - observedTimeUnixNano
+                - body
+                - attributes
+        OTELLogsPayload:
+            type: object
+            properties:
+                resourceLogs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELResourceLog'
+                    description: Array of resource logs
+            description: OTEL logs export payload
+            required:
+                - resourceLogs
+        OTELResource:
+            type: object
+            properties:
+                attributes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELResourceAttribute'
+                    description: Resource attributes
+                droppedAttributesCount:
+                    type: integer
+                    description: Number of dropped attributes
+                    format: int64
+            description: OTEL resource information
+        OTELResourceAttribute:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Resource attribute key
+                value:
+                    $ref: '#/components/schemas/OTELAttributeValue'
+            description: OTEL resource attribute
+            required:
+                - key
+                - value
+        OTELResourceLog:
+            type: object
+            properties:
+                resource:
+                    $ref: '#/components/schemas/OTELResource'
+                scopeLogs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELScopeLog'
+                    description: Array of scope logs
+            description: OTEL resource logs container
+            required:
+                - scopeLogs
+        OTELScope:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Scope name
+                version:
+                    type: string
+                    description: Scope version
+            description: OTEL instrumentation scope
+        OTELScopeLog:
+            type: object
+            properties:
+                logRecords:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELLogRecord'
+                    description: Array of log records
+                scope:
+                    $ref: '#/components/schemas/OTELScope'
+            description: OTEL scope logs container
+            required:
+                - logRecords
         ObservabilitySummary:
             type: object
             properties:
@@ -15676,16 +16755,12 @@ components:
                     items:
                         $ref: '#/components/schemas/ChatSummary'
                     description: List of chat session summaries
-                enabled:
-                    type: boolean
-                    description: Whether tool metrics are enabled for the organization
                 next_cursor:
                     type: string
                     description: Cursor for next page
             description: Result of searching chat session summaries
             required:
                 - chats
-                - enabled
         SearchLogsFilter:
             type: object
             properties:
@@ -15698,6 +16773,9 @@ components:
                     type: string
                     description: Deployment ID filter
                     format: uuid
+                event_source:
+                    type: string
+                    description: Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
                 external_user_id:
                     type: string
                     description: External user ID filter
@@ -15790,9 +16868,6 @@ components:
         SearchLogsResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether tool metrics are enabled for the organization
                 logs:
                     type: array
                     items:
@@ -15804,7 +16879,6 @@ components:
             description: Result of searching telemetry logs
             required:
                 - logs
-                - enabled
         SearchToolCallsFilter:
             type: object
             properties:
@@ -15812,6 +16886,9 @@ components:
                     type: string
                     description: Deployment ID filter
                     format: uuid
+                event_source:
+                    type: string
+                    description: Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
                 from:
                     type: string
                     description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -15856,9 +16933,6 @@ components:
         SearchToolCallsResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether tool metrics are enabled for the organization
                 next_cursor:
                     type: string
                     description: Cursor for next page
@@ -15867,14 +16941,9 @@ components:
                     items:
                         $ref: '#/components/schemas/ToolCallSummary'
                     description: List of tool call summaries
-                tool_io_logs_enabled:
-                    type: boolean
-                    description: Whether tool input/output logging is enabled for the organization
             description: Result of searching tool call summaries
             required:
                 - tool_calls
-                - enabled
-                - tool_io_logs_enabled
         SearchUsersFilter:
             type: object
             properties:
@@ -15931,9 +17000,6 @@ components:
         SearchUsersResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether telemetry is enabled for the organization
                 next_cursor:
                     type: string
                     description: Cursor for next page
@@ -15945,7 +17011,6 @@ components:
             description: Result of searching user usage summaries
             required:
                 - users
-                - enabled
         SecurityVariable:
             type: object
             properties:
@@ -16256,6 +17321,58 @@ components:
             required:
                 - toolset_id
                 - environment_id
+        SlackAppResult:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                icon_asset_id:
+                    type: string
+                    description: Asset ID for the app icon
+                id:
+                    type: string
+                    description: The Slack app ID
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name of the Slack app
+                redirect_url:
+                    type: string
+                    description: OAuth callback URL for this app
+                request_url:
+                    type: string
+                    description: Event subscription URL for this app
+                slack_client_id:
+                    type: string
+                    description: The Slack app Client ID
+                slack_team_id:
+                    type: string
+                    description: The connected Slack workspace ID
+                slack_team_name:
+                    type: string
+                    description: The connected Slack workspace name
+                status:
+                    type: string
+                    description: 'Current status: unconfigured, active'
+                system_prompt:
+                    type: string
+                    description: System prompt for the Slack app
+                toolset_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Attached toolset IDs
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - name
+                - status
+                - toolset_ids
+                - created_at
+                - updated_at
         SourceEnvironmentLink:
             type: object
             properties:
@@ -16335,9 +17452,8 @@ components:
                     description: Log record ID
                     format: uuid
                 observed_time_unix_nano:
-                    type: integer
-                    description: Unix time in nanoseconds when event was observed
-                    format: int64
+                    type: string
+                    description: Unix time in nanoseconds when event was observed (string for JS int64 precision)
                 resource_attributes:
                     description: Resource attributes as JSON object
                 service:
@@ -16349,9 +17465,8 @@ components:
                     type: string
                     description: W3C span ID (16 hex characters)
                 time_unix_nano:
-                    type: integer
-                    description: Unix time in nanoseconds when event occurred
-                    format: int64
+                    type: string
+                    description: Unix time in nanoseconds when event occurred (string for JS int64 precision)
                 trace_id:
                     type: string
                     description: W3C trace ID (32 hex characters)
@@ -16503,6 +17618,9 @@ components:
         ToolCallSummary:
             type: object
             properties:
+                event_source:
+                    type: string
+                    description: Event source (from attributes.gram.event.source)
                 gram_urn:
                     type: string
                     description: Gram URN associated with this tool call
@@ -16515,9 +17633,14 @@ components:
                     description: Total number of logs in this tool call
                     format: int64
                 start_time_unix_nano:
-                    type: integer
-                    description: Earliest log timestamp in Unix nanoseconds
-                    format: int64
+                    type: string
+                    description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+                tool_name:
+                    type: string
+                    description: Tool name (from attributes.gram.tool.name)
+                tool_source:
+                    type: string
+                    description: Tool call source (from attributes.gram.tool_call.source)
                 trace_id:
                     type: string
                     description: Trace ID (32 hex characters)
@@ -17094,14 +18217,27 @@ components:
                 - toolset_slug
                 - security_key
                 - display_name
-        UpdateSlackConnectionRequestBody:
+        UpdateSlackAppRequestBody:
             type: object
             properties:
-                default_toolset_slug:
+                icon_asset_id:
                     type: string
-                    description: The default toolset slug for this Slack connection
+                    description: Asset ID for the app icon
+                    format: uuid
+                id:
+                    type: string
+                    description: The Slack app ID
+                    format: uuid
+                name:
+                    type: string
+                    description: New display name for the Slack app
+                    minLength: 1
+                    maxLength: 36
+                system_prompt:
+                    type: string
+                    description: System prompt for the Slack app
             required:
-                - default_toolset_slug
+                - id
         UpdateToolsetForm:
             type: object
             properties:
@@ -17699,11 +18835,6 @@ components:
             description: project slug header auth.
             name: Gram-Project
             in: header
-        project_slug_query_project_slug:
-            type: apiKey
-            description: project slug header auth.
-            name: project_slug
-            in: query
         session_header_Gram-Session:
             type: apiKey
             description: Session based auth. By cookie or header.

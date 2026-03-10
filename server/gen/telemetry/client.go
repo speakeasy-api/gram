@@ -24,10 +24,12 @@ type Client struct {
 	GetUserMetricsSummaryEndpoint    goa.Endpoint
 	GetObservabilityOverviewEndpoint goa.Endpoint
 	ListFilterOptionsEndpoint        goa.Endpoint
+	ListAttributeKeysEndpoint        goa.Endpoint
+	GetHooksSummaryEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getObservabilityOverview, listFilterOptions goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getObservabilityOverview, listFilterOptions, listAttributeKeys, getHooksSummary goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:               searchLogs,
 		SearchToolCallsEndpoint:          searchToolCalls,
@@ -38,6 +40,8 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		GetUserMetricsSummaryEndpoint:    getUserMetricsSummary,
 		GetObservabilityOverviewEndpoint: getObservabilityOverview,
 		ListFilterOptionsEndpoint:        listFilterOptions,
+		ListAttributeKeysEndpoint:        listAttributeKeys,
+		GetHooksSummaryEndpoint:          getHooksSummary,
 	}
 }
 
@@ -242,4 +246,50 @@ func (c *Client) ListFilterOptions(ctx context.Context, p *ListFilterOptionsPayl
 		return
 	}
 	return ires.(*ListFilterOptionsResult), nil
+}
+
+// ListAttributeKeys calls the "listAttributeKeys" endpoint of the "telemetry"
+// service.
+// ListAttributeKeys may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAttributeKeys(ctx context.Context, p *ListAttributeKeysPayload) (res *ListAttributeKeysResult, err error) {
+	var ires any
+	ires, err = c.ListAttributeKeysEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAttributeKeysResult), nil
+}
+
+// GetHooksSummary calls the "getHooksSummary" endpoint of the "telemetry"
+// service.
+// GetHooksSummary may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetHooksSummary(ctx context.Context, p *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error) {
+	var ires any
+	ires, err = c.GetHooksSummaryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetHooksSummaryResult), nil
 }

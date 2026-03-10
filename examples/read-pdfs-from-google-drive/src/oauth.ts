@@ -18,7 +18,7 @@ class GoogleOAuthManager {
     this.oauth2Client = new auth.OAuth2(
       clientId,
       clientSecret,
-      this.REDIRECT_URI
+      this.REDIRECT_URI,
     );
   }
 
@@ -45,7 +45,7 @@ class GoogleOAuthManager {
         if (url.pathname === "/oauth/callback" && url.query["code"]) {
           try {
             const { tokens } = await this.oauth2Client.getToken(
-              url.query["code"] as string
+              url.query["code"] as string,
             );
             this.tokens = tokens;
 
@@ -87,10 +87,13 @@ class GoogleOAuthManager {
       });
 
       // Timeout after 5 minutes
-      setTimeout(() => {
-        server.close();
-        reject(new Error("Authentication timeout"));
-      }, 5 * 60 * 1000);
+      setTimeout(
+        () => {
+          server.close();
+          reject(new Error("Authentication timeout"));
+        },
+        5 * 60 * 1000,
+      );
     });
   }
 }

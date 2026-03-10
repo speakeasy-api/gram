@@ -47,6 +47,7 @@ const (
 	URLFullKey                        = semconv.URLFullKey
 	URLOriginalKey                    = semconv.URLOriginalKey
 	UserIDKey                         = semconv.UserIDKey
+	UserEmailKey                      = semconv.UserEmailKey
 
 	ActualKey   = attribute.Key("actual")
 	EventKey    = attribute.Key("event")
@@ -132,8 +133,6 @@ const (
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
-	OAuthCodeKey                   = attribute.Key("gram.oauth.code")
-	OAuthExternalCodeKey           = attribute.Key("gram.oauth.external_code")
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey                 = attribute.Key("gram.oauth.issuer")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
@@ -146,6 +145,8 @@ const (
 	OAuthStatusKey                 = attribute.Key("gram.oauth.status")
 	OAuthConnectedKey              = attribute.Key("gram.oauth.connected")
 	OAuthExpiredKey                = attribute.Key("gram.oauth.expired")
+	OAuthProxyServerIDKey          = attribute.Key("gram.oauth.proxy_server_id")
+	OAuthProviderCountKey          = attribute.Key("gram.oauth.provider_count")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                 = attribute.Key("gram.openapi.path")
@@ -184,6 +185,11 @@ const (
 	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
 	VisibilityKey                  = attribute.Key("gram.visibility")
+
+	// Hooks
+	HookEventKey  = attribute.Key("gram.hook.event")
+	HookErrorKey  = attribute.Key("gram.hook.error")
+	HookSourceKey = attribute.Key("gram.hook.source")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
@@ -595,12 +601,6 @@ func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }
 
-func OAuthCode(v string) attribute.KeyValue { return OAuthCodeKey.String(v) }
-func SlogOAuthCode(v string) slog.Attr      { return slog.String(string(OAuthCodeKey), v) }
-
-func OAuthExternalCode(v string) attribute.KeyValue { return OAuthExternalCodeKey.String(v) }
-func SlogOAuthExternalCode(v string) slog.Attr      { return slog.String(string(OAuthExternalCodeKey), v) }
-
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
 
@@ -644,6 +644,14 @@ func SlogOAuthConnected(v bool) slog.Attr      { return slog.Bool(string(OAuthCo
 
 func OAuthExpired(v bool) attribute.KeyValue { return OAuthExpiredKey.Bool(v) }
 func SlogOAuthExpired(v bool) slog.Attr      { return slog.Bool(string(OAuthExpiredKey), v) }
+
+func OAuthProxyServerID(v string) attribute.KeyValue { return OAuthProxyServerIDKey.String(v) }
+func SlogOAuthProxyServerID(v string) slog.Attr {
+	return slog.String(string(OAuthProxyServerIDKey), v)
+}
+
+func OAuthProviderCount(v int) attribute.KeyValue { return OAuthProviderCountKey.Int(v) }
+func SlogOAuthProviderCount(v int) slog.Attr      { return slog.Int(string(OAuthProviderCountKey), v) }
 
 func OpenAPIMethod(v string) attribute.KeyValue { return OpenAPIMethodKey.String(v) }
 func SlogOpenAPIMethod(v string) slog.Attr      { return slog.String(string(OpenAPIMethodKey), v) }

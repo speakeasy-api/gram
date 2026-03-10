@@ -17,9 +17,21 @@ import (
 
 // Client lists the mcpRegistries service endpoint HTTP clients.
 type Client struct {
+	// ClearCache Doer is the HTTP client used to make requests to the clearCache
+	// endpoint.
+	ClearCacheDoer goahttp.Doer
+
+	// ListRegistries Doer is the HTTP client used to make requests to the
+	// listRegistries endpoint.
+	ListRegistriesDoer goahttp.Doer
+
 	// ListCatalog Doer is the HTTP client used to make requests to the listCatalog
 	// endpoint.
 	ListCatalogDoer goahttp.Doer
+
+	// GetServerDetails Doer is the HTTP client used to make requests to the
+	// getServerDetails endpoint.
+	GetServerDetailsDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -42,12 +54,63 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListCatalogDoer:     doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ClearCacheDoer:       doer,
+		ListRegistriesDoer:   doer,
+		ListCatalogDoer:      doer,
+		GetServerDetailsDoer: doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
+	}
+}
+
+// ClearCache returns an endpoint that makes HTTP requests to the mcpRegistries
+// service clearCache server.
+func (c *Client) ClearCache() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeClearCacheRequest(c.encoder)
+		decodeResponse = DecodeClearCacheResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildClearCacheRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ClearCacheDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "clearCache", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistries returns an endpoint that makes HTTP requests to the
+// mcpRegistries service listRegistries server.
+func (c *Client) ListRegistries() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistriesRequest(c.encoder)
+		decodeResponse = DecodeListRegistriesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistriesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistriesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "listRegistries", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -70,6 +133,30 @@ func (c *Client) ListCatalog() goa.Endpoint {
 		resp, err := c.ListCatalogDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpRegistries", "listCatalog", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetServerDetails returns an endpoint that makes HTTP requests to the
+// mcpRegistries service getServerDetails server.
+func (c *Client) GetServerDetails() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetServerDetailsRequest(c.encoder)
+		decodeResponse = DecodeGetServerDetailsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetServerDetailsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetServerDetailsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "getServerDetails", err)
 		}
 		return decodeResponse(resp)
 	}

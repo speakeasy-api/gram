@@ -1,8 +1,8 @@
 import {
   CodeHeaderProps,
   SyntaxHighlighterProps,
-} from '@assistant-ui/react-markdown'
-import { ComponentType } from 'react'
+} from "@assistant-ui/react-markdown";
+import { ComponentType } from "react";
 
 /**
  * A plugin enables addition of custom rendering capabilities to the Elements library.
@@ -29,7 +29,7 @@ export interface Plugin {
    * \`\`\` block.
    * ```
    */
-  prompt: string
+  prompt: string;
 
   /**
    * The language identifier for the syntax highlighter
@@ -43,23 +43,23 @@ export interface Plugin {
    * d3
    * ```
    */
-  language: string
+  language: string;
 
   /**
    * The component to use for the syntax highlighter.
    */
-  Component: ComponentType<SyntaxHighlighterProps>
+  Component: ComponentType<SyntaxHighlighterProps>;
 
   /**
    * The component to use for the code header.
    * Will be rendered above the code block.
    * @default () => null
    */
-  Header?: ComponentType<CodeHeaderProps> | undefined
+  Header?: ComponentType<CodeHeaderProps> | undefined;
 
   /**
    * Whether to override existing plugins with the same language.
    * @default false
    */
-  overrideExisting?: boolean
+  overrideExisting?: boolean;
 }

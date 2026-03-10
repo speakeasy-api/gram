@@ -85,6 +85,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 			HTTPClient:           httpClient,
 			MaxRetries:           3,
 			DisableStandaloneSSE: true,
+			OAuthHandler:         nil,
 		}
 	case types.TransportTypeSSE:
 		transport = &mcp.SSEClientTransport{

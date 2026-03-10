@@ -1,92 +1,97 @@
-'use client'
+"use client";
 
-import { useMemo, useState, type FC } from 'react'
+import { useMemo, useState, type FC } from "react";
 import {
   Loader,
   Maximize,
   MessageCircleIcon,
   Minimize,
   XIcon,
-} from 'lucide-react'
-import { LazyMotion, domMax, AnimatePresence, MotionConfig } from 'motion/react'
-import * as m from 'motion/react-m'
+} from "lucide-react";
+import {
+  LazyMotion,
+  domMax,
+  AnimatePresence,
+  MotionConfig,
+} from "motion/react";
+import * as m from "motion/react-m";
 
-import { ErrorBoundary } from '@/components/assistant-ui/error-boundary'
-import { Thread } from '@/components/assistant-ui/thread'
-import { ThreadList } from '@/components/assistant-ui/thread-list'
-import { useThemeProps } from '@/hooks/useThemeProps'
-import { useRadius } from '@/hooks/useRadius'
-import { useDensity } from '@/hooks/useDensity'
-import { assertNever, cn } from '@/lib/utils'
-import { useElements } from '@/hooks/useElements'
-import { useExpanded } from '@/hooks/useExpanded'
-import { EASE_OUT_QUINT } from '@/lib/easing'
-import { useAssistantState } from '@assistant-ui/react'
+import { ErrorBoundary } from "@/components/assistant-ui/error-boundary";
+import { Thread } from "@/components/assistant-ui/thread";
+import { ThreadList } from "@/components/assistant-ui/thread-list";
+import { useThemeProps } from "@/hooks/useThemeProps";
+import { useRadius } from "@/hooks/useRadius";
+import { useDensity } from "@/hooks/useDensity";
+import { assertNever, cn } from "@/lib/utils";
+import { useElements } from "@/hooks/useElements";
+import { useExpanded } from "@/hooks/useExpanded";
+import { EASE_OUT_QUINT } from "@/lib/easing";
+import { useAssistantState } from "@assistant-ui/react";
 
 const LAYOUT_TRANSITION = {
   layout: {
     duration: 0.25,
     ease: EASE_OUT_QUINT,
   },
-} as const
+} as const;
 
 type Dimensions = {
-  width?: string | number | `${number}%`
-  height?: string | number | `${number}%`
-  maxHeight?: string | number | `${number}%`
-}
+  width?: string | number | `${number}%`;
+  height?: string | number | `${number}%`;
+  maxHeight?: string | number | `${number}%`;
+};
 
 interface AssistantModalProps {
-  className?: string
+  className?: string;
 }
 
 export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
-  const { config } = useElements()
-  const themeProps = useThemeProps()
-  const r = useRadius()
-  const d = useDensity()
-  const [isOpen, setIsOpen] = useState(config.modal?.defaultOpen ?? false)
-  const { expandable, isExpanded, setIsExpanded } = useExpanded()
-  const title = config.modal?.title
-  const customIcon = config.modal?.icon
+  const { config } = useElements();
+  const themeProps = useThemeProps();
+  const r = useRadius();
+  const d = useDensity();
+  const [isOpen, setIsOpen] = useState(config.modal?.defaultOpen ?? false);
+  const { expandable, isExpanded, setIsExpanded } = useExpanded();
+  const title = config.modal?.title;
+  const customIcon = config.modal?.icon;
 
   // Check if thread list should be shown
   const showThreadList =
-    config.history?.enabled && config.history?.showThreadList !== false
+    config.history?.enabled && config.history?.showThreadList !== false;
 
-  const position = config.modal?.position ?? 'bottom-right'
-  const anchorPositionClass = positionClassname(position)
+  const position = config.modal?.position ?? "bottom-right";
+  const anchorPositionClass = positionClassname(position);
 
   const defaultDimensions: Dimensions = useMemo(
     () =>
       config.modal?.dimensions?.default ?? {
-        width: '500px',
-        height: '600px',
-        maxHeight: '95vh',
+        width: "500px",
+        height: "600px",
+        maxHeight: "95vh",
       },
-    [config.modal?.dimensions?.default]
-  )
+    [config.modal?.dimensions?.default],
+  );
 
   const expandedDimensions: Dimensions = useMemo(
     () =>
       config.modal?.dimensions?.expanded ?? {
-        width: '70vw',
-        height: '90vh',
+        width: "70vw",
+        height: "90vh",
       },
-    [config.modal?.dimensions?.expanded]
-  )
-  const thread = useAssistantState(({ thread }) => thread)
+    [config.modal?.dimensions?.expanded],
+  );
+  const thread = useAssistantState(({ thread }) => thread);
   const isGenerating =
-    thread?.messages?.some((message) => message.status?.type === 'running') ??
-    false
+    thread?.messages?.some((message) => message.status?.type === "running") ??
+    false;
 
   const effectiveWidth = isExpanded
     ? expandedDimensions.width
-    : defaultDimensions.width
+    : defaultDimensions.width;
   const effectiveHeight = isExpanded
     ? expandedDimensions.height
-    : defaultDimensions.height
-  const effectiveMaxHeight = defaultDimensions.maxHeight
+    : defaultDimensions.height;
+  const effectiveMaxHeight = defaultDimensions.maxHeight;
 
   return (
     <LazyMotion features={domMax}>
@@ -94,12 +99,12 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
       <MotionConfig reducedMotion="user" transition={LAYOUT_TRANSITION}>
         <div
           className={cn(
-            'aui-root aui-modal-anchor fixed z-10',
+            "aui-root aui-modal-anchor fixed z-10",
             anchorPositionClass,
             themeProps.className,
-            r('lg'),
-            isOpen && 'shadow-xl',
-            className
+            r("lg"),
+            isOpen && "shadow-xl",
+            className,
           )}
         >
           <AnimatePresence mode="wait">
@@ -110,8 +115,8 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                 layoutId="chat-container"
                 onClick={() => setIsOpen(true)}
                 className={cn(
-                  'aui-modal-button bg-primary text-primary-foreground flex size-12 cursor-pointer items-center justify-center border shadow-lg transition-shadow hover:shadow-xl',
-                  r('full')
+                  "aui-modal-button flex size-12 cursor-pointer items-center justify-center border bg-primary text-primary-foreground shadow-lg transition-shadow hover:shadow-xl",
+                  r("full"),
                 )}
                 initial={false}
                 aria-label={`Open ${title}`}
@@ -125,7 +130,7 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                   className="flex size-full items-center justify-center"
                 >
                   {customIcon ? (
-                    customIcon('closed')
+                    customIcon("closed")
                   ) : (
                     <MessageCircleIcon className="size-6" />
                   )}
@@ -137,13 +142,13 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                 layout
                 layoutId="chat-container"
                 className={cn(
-                  'aui-modal-content bg-popover text-popover-foreground flex flex-col overflow-hidden border [&>.aui-thread-root]:bg-inherit',
-                  r('lg')
+                  "aui-modal-content flex flex-col overflow-hidden border bg-popover text-popover-foreground [&>.aui-thread-root]:bg-inherit",
+                  r("lg"),
                 )}
                 initial={false}
                 style={{
-                  originX: position.includes('left') ? 0 : 1,
-                  originY: position.includes('top') ? 0 : 1,
+                  originX: position.includes("left") ? 0 : 1,
+                  originY: position.includes("top") ? 0 : 1,
                   width: effectiveWidth,
                   height: effectiveHeight,
                   maxHeight: effectiveMaxHeight,
@@ -151,9 +156,9 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
               >
                 <m.div
                   className={cn(
-                    'aui-modal-header flex shrink-0 items-center justify-between border-b',
-                    d('h-header'),
-                    d('px-lg')
+                    "aui-modal-header flex shrink-0 items-center justify-between border-b",
+                    d("h-header"),
+                    d("px-lg"),
                   )}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -163,18 +168,18 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                     ease: EASE_OUT_QUINT,
                   }}
                 >
-                  <div className={cn('flex min-w-0 items-center')}>
+                  <div className={cn("flex min-w-0 items-center")}>
                     <span
                       className={cn(
-                        'text-foreground text-md flex items-center gap-2 truncate font-medium',
-                        isGenerating && 'title-shimmer'
+                        "text-md flex items-center gap-2 truncate font-medium text-foreground",
+                        isGenerating && "title-shimmer",
                       )}
                     >
                       <span className="truncate">{title}</span>
 
                       {isGenerating && (
                         <Loader
-                          className="text-muted-foreground size-4.5 animate-spin"
+                          className="size-4.5 animate-spin text-muted-foreground"
                           strokeWidth={1.25}
                         />
                       )}
@@ -187,11 +192,11 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                         type="button"
                         onClick={() => setIsExpanded((v) => !v)}
                         className={cn(
-                          'text-muted-foreground hover:text-foreground hover:bg-accent flex h-8 cursor-pointer items-center rounded-md px-2 text-xs transition-colors'
+                          "flex h-8 cursor-pointer items-center rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
                         )}
                         aria-pressed={isExpanded}
                         aria-label={
-                          isExpanded ? 'Collapse assistant' : 'Expand assistant'
+                          isExpanded ? "Collapse assistant" : "Expand assistant"
                         }
                       >
                         {isExpanded ? (
@@ -209,11 +214,11 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                     ) : null}
                     <button
                       onClick={() => {
-                        setIsOpen(false)
+                        setIsOpen(false);
                         // Optional: reset expansion when closing
-                        setIsExpanded(false)
+                        setIsExpanded(false);
                       }}
-                      className="text-muted-foreground hover:text-foreground hover:bg-accent -mr-1 flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+                      className="-mr-1 flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       aria-label={`Close ${title}`}
                     >
                       <XIcon className="size-4.5" />
@@ -252,27 +257,27 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
         </div>
       </MotionConfig>
     </LazyMotion>
-  )
-}
+  );
+};
 
 function positionClassname(
   position:
-    | 'bottom-right'
-    | 'bottom-left'
-    | 'top-right'
-    | 'top-left'
-    | undefined
+    | "bottom-right"
+    | "bottom-left"
+    | "top-right"
+    | "top-left"
+    | undefined,
 ): string {
   switch (position) {
-    case 'bottom-left':
-      return 'left-4 bottom-4'
-    case 'top-right':
-      return 'right-4 top-4'
-    case 'top-left':
-      return 'left-4 top-4'
-    case 'bottom-right':
-      return 'right-4 bottom-4'
+    case "bottom-left":
+      return "left-4 bottom-4";
+    case "top-right":
+      return "right-4 top-4";
+    case "top-left":
+      return "left-4 top-4";
+    case "bottom-right":
+      return "right-4 bottom-4";
     default:
-      assertNever(position)
+      assertNever(position);
   }
 }

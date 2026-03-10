@@ -1,11 +1,11 @@
-import { Plugin } from '@/types/plugins'
-import { ChartRenderer } from './component'
+import { Plugin } from "@/types/plugins";
+import { ChartRenderer } from "./component";
 
 /**
  * This plugin renders charts using json-render format.
  */
 export const chart: Plugin = {
-  language: 'chart',
+  language: "chart",
   prompt: `WHEN TO USE CHARTS:
 Create charts to visualize numerical data when it helps users understand patterns, trends, or comparisons. Use the 'chart' code block format.
 
@@ -158,4 +158,4 @@ CONTENT GUIDELINES:
 - Focus on what the data means, not how it's displayed`,
   Component: ChartRenderer,
   Header: undefined,
-}
+};

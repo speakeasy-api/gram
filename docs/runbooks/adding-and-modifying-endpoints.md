@@ -32,54 +32,54 @@ Add a new `Method` to the appropriate service. Here's the basic structure:
 ```go
 var _ = Service("resource", func() {
     Description("Manages resources in Gram.")
-	
+
     // these are shared between all endpoints in this service
     Security(security.ByKey, func() {
         Scope("producer")
     })
-	
+
     // these are shared between all endpoints in this service
     Security(security.Session)
     shared.DeclareErrorResponses()
-	
+
     Method("methodName", func() {
         Description("Brief description of what this endpoint does")
 
         // These are specific to this endpoint
         Security(security.Session, security.ProjectSlug)
-		
+
         Payload(UploadLogoForm)
         Result(UploadLogoResult)
-    
+
         Result(ReturnType) // Define what the endpoint returns
-    
+
         HTTP(func() {
             POST("/rpc/service.methodName") // or GET, PUT, DELETE
             // Add security headers as necessary
             security.SessionHeader()
             security.ProjectHeader()
         })
-    
+
         // OpenAPI metadata for SDK generation
         Meta("openapi:operationId", "methodResourceName") // this is global to the OpenAPI spec
         Meta("openapi:extension:x-speakeasy-name-override", "methodName") // this is local to the resource
         Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "methodResourceName"}`)
     })
-    
+
     var UpdateResourceForm = Type("UpdateResourceForm", func() {
         Required("resource_id")
         // Add security payloads as necessary
         security.SessionPayload()
         security.ProjectPayload()
-        
+
         Attribute("resource_id", String, "The ID of the resource to update")
         Attribute("name", String, "The new name of the resource")
         Attribute("description", String, "The new description of the resource")
     })
-    
+
     var UpdateResourceResult = Type("UpdateResourceResult", func() {
         Required("resource")
-        
+
         // shared.Resource is a defined type in `server/design/shared/`
         Attribute("resource", shared.Resource, "The updated project with the new logo")
     })
@@ -98,7 +98,7 @@ Security(security.Session, security.ProjectSlug)
 
 ```go
 Security(security.ByKey, func() {
-    Scope("producer") // or other scopes; we'll go over scopes later 
+    Scope("producer") // or other scopes; we'll go over scopes later
 }, security.ProjectSlug)
 ```
 
@@ -123,9 +123,10 @@ Payload(func() {
 > [!TIP]
 >
 > All APIs should take one of:
+>
 > - The api key header (Gram-Key) + project slug header (Gram-Project)
 > - The session cookie (Cookie) + project slug header (Gram-Project)
-> When designing new APIs, consider whether the API should be public or private, and use the appropriate security scheme in the design. This can done in the `Service` or `Method` dsl context:
+>   When designing new APIs, consider whether the API should be public or private, and use the appropriate security scheme in the design. This can done in the `Service` or `Method` dsl context:
 
 ## Step 3. Define types
 
@@ -137,7 +138,7 @@ var UpdateResourceForm = Type("UpdateResourceForm", func() {
     // Add security payloads as necessary
     security.SessionPayload()
     security.ProjectPayload()
-    
+
     Attribute("resource_id", String, "The ID of the resource to update")
     Attribute("name", String, "The new name of the resource")
     Attribute("description", String, "The new description of the resource")
@@ -145,7 +146,7 @@ var UpdateResourceForm = Type("UpdateResourceForm", func() {
 
 var UpdateResourceResult = Type("UpdateResourceResult", func() {
     Required("resource")
-    
+
     // shared.Resource is a defined type in `server/design/shared/`
     Attribute("resource", shared.Resource, "The updated project with the new logo")
 })
@@ -230,7 +231,9 @@ Once you're happy with your changes, create a pull request. Make sure to:
 - **Validation**: Add validation rules like `MinLength()`, `MaxLength()`, etc. to your attributes.
 
 ## Security Scopes
+
 #### Consumer Scope
+
 - Purpose: Read-only and limited modification access
 - Capabilities:
   - Can query/modify toolsets
@@ -239,10 +242,11 @@ Once you're happy with your changes, create a pull request. Make sure to:
   - Get instances and templates
 
 ### Producer Scope
+
 - Purpose: Full administrative access
 - Capabilities: Everything a consumer can do, plus:
-  - Upload OpenAPI documents 
-  - Trigger deployments 
-  - Create/update/delete projects, packages, templates 
-  - Publish package versions 
+  - Upload OpenAPI documents
+  - Trigger deployments
+  - Create/update/delete projects, packages, templates
+  - Publish package versions
   - Manage project assets

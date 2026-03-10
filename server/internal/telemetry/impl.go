@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -131,12 +133,8 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		return nil, err
 	}
 
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
-	}
-
 	// Extract SearchLogs-specific filter fields
-	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID string
+	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID, eventSource string
 	var httpStatusCode int32
 	var gramURNs []string
 	var attributeFilters []repo.AttributeFilter
@@ -154,6 +152,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		gramChatID = conv.PtrValOr(payload.Filter.GramChatID, "")
 		userID = conv.PtrValOr(payload.Filter.UserID, "")
 		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
+		eventSource = conv.PtrValOr(payload.Filter.EventSource, "")
 		attributeFilters = toRepoAttributeFilters(payload.Filter.AttributeFilters)
 	}
 
@@ -174,6 +173,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		GramChatID:             gramChatID,
 		UserID:                 userID,
 		ExternalUserID:         externalUserID,
+		EventSource:            eventSource,
 		AttributeFilters:       attributeFilters,
 		SortOrder:              params.sortOrder,
 		Cursor:                 params.cursor,
@@ -202,7 +202,6 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	return &telem_gen.SearchLogsResult{
 		Logs:       telemetryLogs,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -231,31 +230,30 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		return nil, err
 	}
 
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
-	}
-
 	// Extract SearchToolCalls-specific filter fields
-	var deploymentID, functionID, gramURN string
+	var deploymentID, functionID, gramURN, eventSource string
 	if payload.Filter != nil {
 		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
 		functionID = conv.PtrValOr(payload.Filter.FunctionID, "")
 		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
+		eventSource = conv.PtrValOr(payload.Filter.EventSource, "")
 	}
 
 	// Query with limit+1 to detect if there are more results
-	items, err := s.chRepo.ListTraces(ctx, repo.ListTracesParams{
+	items, err := s.chRepo.ListToolTraces(ctx, repo.ListToolTracesParams{
 		GramProjectID:    params.projectID,
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
 		GramDeploymentID: deploymentID,
 		GramFunctionID:   functionID,
 		GramURN:          gramURN,
+		EventSource:      eventSource,
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
 	})
 	if err != nil {
+		s.logger.ErrorContext(ctx, "error listing tool traces", attr.SlogError(err))
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing traces")
 	}
 
@@ -271,18 +269,19 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	for i, item := range items {
 		toolCalls[i] = &telem_gen.ToolCallSummary{
 			TraceID:           item.TraceID,
-			StartTimeUnixNano: item.StartTimeUnixNano,
+			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
 			LogCount:          item.LogCount,
 			HTTPStatusCode:    item.HTTPStatusCode,
 			GramUrn:           item.GramURN,
+			ToolName:          item.ToolName,
+			ToolSource:        item.ToolSource,
+			EventSource:       item.EventSource,
 		}
 	}
 
 	return &telem_gen.SearchToolCallsResult{
-		ToolCalls:         toolCalls,
-		Enabled:           true,
-		ToolIoLogsEnabled: s.CheckToolIOLogsEnabled(ctx, params.organizationID),
-		NextCursor:        nextCursor,
+		ToolCalls:  toolCalls,
+		NextCursor: nextCursor,
 	}, nil
 }
 
@@ -296,10 +295,6 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
-	}
-
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	var deploymentID, gramURN, userID, externalUserID string
@@ -336,8 +331,8 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 	for i, item := range items {
 		chats[i] = &telem_gen.ChatSummary{
 			GramChatID:        item.GramChatID,
-			StartTimeUnixNano: item.StartTimeUnixNano,
-			EndTimeUnixNano:   item.EndTimeUnixNano,
+			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
+			EndTimeUnixNano:   strconv.FormatInt(item.EndTimeUnixNano, 10),
 			LogCount:          item.LogCount,
 			ToolCallCount:     item.ToolCallCount,
 			MessageCount:      item.MessageCount,
@@ -353,7 +348,6 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 
 	return &telem_gen.SearchChatsResult{
 		Chats:      chats,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -363,10 +357,6 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
 	if err != nil {
 		return nil, err
-	}
-
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
@@ -429,7 +419,6 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 
 	return &telem_gen.SearchUsersResult{
 		Users:      users,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -517,7 +506,6 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 			ChatResolutionAbandoned: int64(metrics.ChatResolutionAbandoned),
 			AvgChatResolutionScore:  sanitizeFloat64(metrics.AvgChatResolutionScore),
 		},
-		Enabled: true,
 	}
 }
 
@@ -567,7 +555,6 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 	projectResult := buildMetricsSummaryResult(*metrics)
 	return &telem_gen.GetUserMetricsSummaryResult{
 		Metrics: projectResult.Metrics,
-		Enabled: true,
 	}, nil
 }
 
@@ -575,7 +562,6 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 type searchParams struct {
 	projectID      string
 	organizationID string
-	enabled        bool
 	limit          int
 	sortOrder      string
 	cursor         string
@@ -593,6 +579,9 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "checking if logs enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	if limit < 1 || limit > 1000 {
@@ -620,7 +609,6 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 	return &searchParams{
 		projectID:      authCtx.ProjectID.String(),
 		organizationID: authCtx.ActiveOrganizationID,
-		enabled:        logsEnabled,
 		limit:          limit,
 		sortOrder:      sortOrder,
 		cursor:         cursorVal,
@@ -688,8 +676,8 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*telem_gen.TelemetryLogRecord
 
 	return &telem_gen.TelemetryLogRecord{
 		ID:                   log.ID,
-		TimeUnixNano:         log.TimeUnixNano,
-		ObservedTimeUnixNano: log.ObservedTimeUnixNano,
+		TimeUnixNano:         strconv.FormatInt(log.TimeUnixNano, 10),
+		ObservedTimeUnixNano: strconv.FormatInt(log.ObservedTimeUnixNano, 10),
 		SeverityText:         log.SeverityText,
 		Body:                 log.Body,
 		TraceID:              log.TraceID,
@@ -887,7 +875,6 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TopToolsByCount:       toToolMetrics(toolsByCount),
 		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
 		IntervalSeconds:       intervalSeconds,
-		Enabled:               true,
 	}, nil
 }
 
@@ -1027,6 +1014,116 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 
 	return &telem_gen.ListFilterOptionsResult{
 		Options: result,
-		Enabled: true,
+	}, nil
+}
+
+// ListAttributeKeys retrieves distinct attribute keys from telemetry logs for the current project.
+func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.ListAttributeKeysPayload) (res *telem_gen.ListAttributeKeysResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	rawKeys, err := s.chRepo.ListAttributeKeys(ctx, repo.ListAttributeKeysParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing attribute keys")
+	}
+
+	// Translate raw attribute paths to display keys:
+	// "app.region" → "@region", everything else stays as-is.
+	keys := make([]string, 0, len(rawKeys))
+	for _, k := range rawKeys {
+		if after, ok := strings.CutPrefix(k, "app."); ok {
+			keys = append(keys, "@"+after)
+			continue
+		}
+
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	return &telem_gen.ListAttributeKeysResult{
+		Keys: keys,
+	}, nil
+}
+
+// GetHooksSummary returns aggregated hooks metrics grouped by server
+func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHooksSummaryPayload) (res *telem_gen.GetHooksSummaryResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks summary: %v", err)
+	}
+
+	// Transform rows into response
+	servers := make([]*telem_gen.HooksServerSummary, 0, len(rows))
+	var totalEvents, totalSessions int64
+	for _, row := range rows {
+		servers = append(servers, &telem_gen.HooksServerSummary{
+			ServerName:   row.ServerName,
+			EventCount:   int64(row.EventCount),   //nolint:gosec // Bounded count
+			UniqueTools:  int64(row.UniqueTools),  //nolint:gosec // Bounded count
+			SuccessCount: int64(row.SuccessCount), //nolint:gosec // Bounded count
+			FailureCount: int64(row.FailureCount), //nolint:gosec // Bounded count
+			FailureRate:  row.FailureRate,
+		})
+		totalEvents += int64(row.EventCount) //nolint:gosec // Bounded count
+	}
+
+	// Get unique session count
+	sessionCount, err := s.chRepo.GetHooksSessionCount(ctx, repo.GetHooksSessionCountParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks session count: %v", err)
+	}
+	totalSessions = sessionCount
+
+	return &telem_gen.GetHooksSummaryResult{
+		Servers:       servers,
+		TotalEvents:   totalEvents,
+		TotalSessions: totalSessions,
 	}, nil
 }

@@ -22,6 +22,7 @@ import { AppRoute, useRoutes } from "./routes";
 import { usePageTitle } from "./hooks/use-page-title";
 import { Toaster } from "@/components/ui/sonner";
 import CliCallback from "./pages/cli/CliCallback";
+import HooksLogin from "./pages/hooks/HooksLogin";
 import {
   CommandPaletteProvider,
   useCommandPalette,
@@ -102,17 +103,18 @@ export default function App() {
 
 function AppContent() {
   /**
-   * NOTE(cjea): Do not wrap CliCallback in an AuthProvider.
+   * NOTE(cjea): Do not wrap CliCallback or HooksLogin in an AuthProvider.
    *
-   * CLI requests don't include a redirect URL, so AuthProvider wouldn't know
-   * where to send authenticated users. Instead, CliCallback handles the flow:
+   * CLI and Hooks requests don't include a redirect URL, so AuthProvider wouldn't know
+   * where to send authenticated users. Instead, these components handle the flow:
    *
-   * 1. CliCallback receives an unauthenticated request.
+   * 1. Component receives an unauthenticated request.
    * 2. Sets the redirect query param to its current URL.
    * 3. Sends the user through the standard login flow via AuthHandler.
-   * 4. Authenticated user is redirected back to CliCallback.
+   * 4. Authenticated user is redirected back to the component.
    */
   const cliFlow = useCliAuthFlow();
+  const hooksFlow = useHooksAuthFlow();
   const location = useLocation();
 
   // Only render WebGL canvas during onboarding
@@ -120,6 +122,10 @@ function AppContent() {
 
   if (cliFlow) {
     return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
+  }
+
+  if (hooksFlow) {
+    return <HooksLogin callbackUrl={hooksFlow.callbackUrl} />;
   }
 
   return (
@@ -155,16 +161,16 @@ const RouteProvider = () => {
         group: "Navigation",
       },
       {
-        id: "go-deployments",
-        label: "Go to Deployments",
-        icon: "package",
-        onSelect: () => routes.deployments.goTo(),
+        id: "go-sources",
+        label: "Go to Sources",
+        icon: "file-code",
+        onSelect: () => routes.sources.goTo(),
         group: "Navigation",
       },
       {
-        id: "go-toolsets",
-        label: "Go to Toolsets",
-        icon: "blocks",
+        id: "go-mcp-servers",
+        label: "Go to MCP Servers",
+        icon: "network",
         onSelect: () => routes.mcp.goTo(),
         group: "Navigation",
       },
@@ -173,6 +179,13 @@ const RouteProvider = () => {
         label: "Go to Playground",
         icon: "message-square",
         onSelect: () => routes.playground.goTo(),
+        group: "Navigation",
+      },
+      {
+        id: "go-insights",
+        label: "Go to Insights",
+        icon: "layout-dashboard",
+        onSelect: () => routes.observability.goTo(),
         group: "Navigation",
       },
     ];
@@ -253,6 +266,19 @@ function useCliAuthFlow() {
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
     return { cliCallbackUrl };
+  }
+
+  return null;
+}
+
+function useHooksAuthFlow() {
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+
+  const callbackUrl = searchParams.get("callback");
+
+  if (location.pathname === "/hooks-login" && callbackUrl) {
+    return { callbackUrl };
   }
 
   return null;

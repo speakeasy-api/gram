@@ -10,7 +10,9 @@ export type ProductTier =
 
 export const useProductTier = () => {
   const session = useSession();
-  const { data: periodUsage } = useGetPeriodUsage();
+  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+    throwOnError: false,
+  });
 
   const productTier = useMemo(() => {
     if (session.rawGramAccountType === "enterprise") {

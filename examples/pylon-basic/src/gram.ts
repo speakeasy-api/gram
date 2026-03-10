@@ -38,12 +38,17 @@ const gram = new Gram({
       if (input["body_html"]) params.append("body_html", input["body_html"]);
       if (input["status"]) params.append("status", input["status"]);
       if (input["customer_portal_visible"] !== undefined)
-        params.append("customer_portal_visible", String(input["customer_portal_visible"]));
+        params.append(
+          "customer_portal_visible",
+          String(input["customer_portal_visible"]),
+        );
       if (input["due_date"]) params.append("due_date", input["due_date"]);
-      if (input["assignee_id"]) params.append("assignee_id", input["assignee_id"]);
+      if (input["assignee_id"])
+        params.append("assignee_id", input["assignee_id"]);
       if (input["account_id"]) params.append("account_id", input["account_id"]);
       if (input["project_id"]) params.append("project_id", input["project_id"]);
-      if (input["milestone_id"]) params.append("milestone_id", input["milestone_id"]);
+      if (input["milestone_id"])
+        params.append("milestone_id", input["milestone_id"]);
 
       const url = `https://api.usepylon.com/tasks?${params.toString()}`;
 

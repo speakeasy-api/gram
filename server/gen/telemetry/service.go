@@ -36,6 +36,10 @@ type Service interface {
 	// List available filter options (API keys or users) for the observability
 	// overview
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
+	// List distinct attribute keys available for filtering
+	ListAttributeKeys(context.Context, *ListAttributeKeysPayload) (res *ListAttributeKeysResult, err error)
+	// Get aggregated hooks metrics grouped by server
+	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -60,7 +64,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions"}
+var MethodNames = [11]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary"}
 
 // Filter on a log attribute by path.
 type AttributeFilter struct {
@@ -100,10 +104,10 @@ type CaptureEventResult struct {
 type ChatSummary struct {
 	// Chat session ID
 	GramChatID string
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano int64
-	// Latest log timestamp in Unix nanoseconds
-	EndTimeUnixNano int64
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
+	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	EndTimeUnixNano string
 	// Total number of logs in this chat session
 	LogCount uint64
 	// Number of tool calls in this chat session
@@ -136,13 +140,34 @@ type FilterOption struct {
 	Count int64
 }
 
+// GetHooksSummaryPayload is the payload type of the telemetry service
+// getHooksSummary method.
+type GetHooksSummaryPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// GetHooksSummaryResult is the result type of the telemetry service
+// getHooksSummary method.
+type GetHooksSummaryResult struct {
+	// Aggregated metrics grouped by server
+	Servers []*HooksServerSummary
+	// Total number of hook events
+	TotalEvents int64
+	// Total number of unique sessions
+	TotalSessions int64
+}
+
 // GetMetricsSummaryResult is the result type of the telemetry service
 // getProjectMetricsSummary method.
 type GetMetricsSummaryResult struct {
 	// Aggregated metrics
 	Metrics *ProjectSummary
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetObservabilityOverviewPayload is the payload type of the telemetry service
@@ -180,8 +205,6 @@ type GetObservabilityOverviewResult struct {
 	TopToolsByFailureRate []*ToolMetric
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetProjectMetricsSummaryPayload is the payload type of the telemetry service
@@ -217,8 +240,41 @@ type GetUserMetricsSummaryPayload struct {
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummary
-	// Whether telemetry is enabled for the organization
-	Enabled bool
+}
+
+// Aggregated hooks metrics for a single server
+type HooksServerSummary struct {
+	// Server name (extracted from tool name, or 'local' for non-MCP tools)
+	ServerName string
+	// Total number of hook events for this server
+	EventCount int64
+	// Number of unique tools used for this server
+	UniqueTools int64
+	// Number of successful tool completions (PostToolUse events)
+	SuccessCount int64
+	// Number of failed tool completions (PostToolUseFailure events)
+	FailureCount int64
+	// Failure rate as a decimal (0.0 to 1.0)
+	FailureRate float64
+}
+
+// ListAttributeKeysPayload is the payload type of the telemetry service
+// listAttributeKeys method.
+type ListAttributeKeysPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// ListAttributeKeysResult is the result type of the telemetry service
+// listAttributeKeys method.
+type ListAttributeKeysResult struct {
+	// Distinct attribute keys. User attributes are prefixed with @
+	Keys []string
 }
 
 // ListFilterOptionsPayload is the payload type of the telemetry service
@@ -240,8 +296,6 @@ type ListFilterOptionsPayload struct {
 type ListFilterOptionsResult struct {
 	// List of filter options
 	Options []*FilterOption
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Model usage statistics
@@ -363,8 +417,6 @@ type SearchChatsResult struct {
 	Chats []*ChatSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
 }
 
 // Filter criteria for searching logs
@@ -389,6 +441,8 @@ type SearchLogsFilter struct {
 	UserID *string
 	// External user ID filter
 	ExternalUserID *string
+	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
+	EventSource *string
 	// Filters on custom log attributes
 	AttributeFilters []*AttributeFilter
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -426,12 +480,12 @@ type SearchLogsResult struct {
 	Logs []*TelemetryLogRecord
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
 }
 
 // Filter criteria for searching tool calls
 type SearchToolCallsFilter struct {
+	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
+	EventSource *string
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -467,10 +521,6 @@ type SearchToolCallsResult struct {
 	ToolCalls []*ToolCallSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
-	// Whether tool input/output logging is enabled for the organization
-	ToolIoLogsEnabled bool
 }
 
 // Filter criteria for searching user usage summaries
@@ -508,8 +558,6 @@ type SearchUsersResult struct {
 	Users []*UserSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Service information
@@ -524,10 +572,11 @@ type ServiceInfo struct {
 type TelemetryLogRecord struct {
 	// Log record ID
 	ID string
-	// Unix time in nanoseconds when event occurred
-	TimeUnixNano int64
-	// Unix time in nanoseconds when event was observed
-	ObservedTimeUnixNano int64
+	// Unix time in nanoseconds when event occurred (string for JS int64 precision)
+	TimeUnixNano string
+	// Unix time in nanoseconds when event was observed (string for JS int64
+	// precision)
+	ObservedTimeUnixNano string
 	// Text representation of severity
 	SeverityText *string
 	// The primary log message
@@ -572,14 +621,20 @@ type TimeSeriesBucket struct {
 type ToolCallSummary struct {
 	// Trace ID (32 hex characters)
 	TraceID string
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano int64
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
 	// Total number of logs in this tool call
 	LogCount uint64
 	// HTTP status code (if applicable)
 	HTTPStatusCode *int32
 	// Gram URN associated with this tool call
 	GramUrn string
+	// Tool name (from attributes.gram.tool.name)
+	ToolName *string
+	// Tool call source (from attributes.gram.tool_call.source)
+	ToolSource *string
+	// Event source (from attributes.gram.event.source)
+	EventSource *string
 }
 
 // Aggregated metrics for a single tool

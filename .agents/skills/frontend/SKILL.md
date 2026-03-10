@@ -25,11 +25,12 @@ metadata:
 
 Before writing any JSX for a UI element, check `client/dashboard/src/components/` for an existing component. This includes layout wrappers, table headers, empty states, filter pill groups, search inputs, badges, cards — anything. Reuse what exists. Never create a one-off `<div className="...">` when a named component already exists for that purpose.
 
-If no component exists and you expect the pattern to appear in more than a few places across the app, **create one** in `client/dashboard/src/components/` before using it. Name it for what it *is*, not where it happens to appear first (e.g., `PageTabsTrigger`, not `SourceDetailTabTrigger`).
+If no component exists and you expect the pattern to appear in more than a few places across the app, **create one** in `client/dashboard/src/components/` before using it. Name it for what it _is_, not where it happens to appear first (e.g., `PageTabsTrigger`, not `SourceDetailTabTrigger`).
 
 #### No duplicated className strings
 
 If the same Tailwind className string (or any meaningful substring of one) appears on 3+ elements anywhere in the codebase, extract it to:
+
 - A component's built-in styling
 - A `cva` variant
 - A named `const` used in `cn()`

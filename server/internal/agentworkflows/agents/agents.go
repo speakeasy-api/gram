@@ -551,6 +551,7 @@ func (s *Service) ExecuteTool(
 		SystemEnv:  toolconfig.CIEnvFrom(systemConfig),
 		UserConfig: ciEnv,
 		OAuthToken: "", // Agents do not support OAuth tokens for external MCP
+		GramEmail:  "",
 	}, plan, tm.HTTPLogAttributes{})
 	if err != nil {
 		return "", fmt.Errorf("tool proxy error: %w", err)

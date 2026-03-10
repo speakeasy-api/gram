@@ -8,7 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
 function buildInputs() {
   const files = fg.sync("src/**/index.{tsx,jsx}", { dot: false });
   return Object.fromEntries(
-    files.map((f) => [path.basename(path.dirname(f)), path.resolve(f)])
+    files.map((f) => [path.basename(path.dirname(f)), path.resolve(f)]),
   );
 }
 
@@ -61,7 +61,7 @@ function multiEntryDevEndpoints(options: {
       .toSorted()
       .map(
         (name) =>
-          `<li><a href="/${name}.html">${name}</a><code>/${name}.html</code></li>`
+          `<li><a href="/${name}.html">${name}</a><code>/${name}.html</code></li>`,
       )
       .join("\n    ")}
   </ul>

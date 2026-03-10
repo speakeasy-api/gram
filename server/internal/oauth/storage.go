@@ -12,6 +12,7 @@ var _ cache.CacheableObject[Grant] = (*Grant)(nil)
 type ExternalSecret struct {
 	SecurityKeys []string   `json:"-"`
 	Token        string     `json:"-"`
+	RefreshToken string     `json:"-"`
 	ExpiresAt    *time.Time `json:"-"`
 }
 
@@ -53,6 +54,7 @@ var _ cache.CacheableObject[Token] = (*Token)(nil)
 type Token struct {
 	ToolsetID       uuid.UUID        `json:"-"`
 	AccessToken     string           `json:"access_token"`
+	RefreshToken    string           `json:"-"`
 	TokenType       string           `json:"token_type"`
 	Scope           string           `json:"scope,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
@@ -64,16 +66,26 @@ func TokenCacheKey(toolsetID uuid.UUID, token string) string {
 	return "oauthToken:" + toolsetID.String() + ":" + token
 }
 
+func RefreshTokenCacheKey(toolsetID uuid.UUID, refreshTokenHash string) string {
+	return "oauthRefreshToken:" + toolsetID.String() + ":" + refreshTokenHash
+}
+
 func (t Token) CacheKey() string {
 	return TokenCacheKey(t.ToolsetID, t.AccessToken)
 }
 
 func (t Token) AdditionalCacheKeys() []string {
+	if t.RefreshToken != "" {
+		return []string{RefreshTokenCacheKey(t.ToolsetID, t.RefreshToken)}
+	}
 	return []string{}
 }
 
 func (t Token) TTL() time.Duration {
-	return time.Until(t.ExpiresAt)
+	// Add grace period so refresh token cache entry outlives the access token.
+	// Without this, the cache evicts the entry at the same time the access token
+	// expires, making the refresh token unusable.
+	return time.Until(t.ExpiresAt) + 24*time.Hour
 }
 
 var _ cache.CacheableObject[OauthProxyClientInfo] = (*OauthProxyClientInfo)(nil)
@@ -109,4 +121,25 @@ func (o OauthProxyClientInfo) AdditionalCacheKeys() []string {
 func (o OauthProxyClientInfo) TTL() time.Duration {
 	// we double the client expiration time we send to MCP clients for safety
 	return time.Until(o.ClientSecretExpiresAt) * 2
+}
+
+var _ cache.CacheableObject[UpstreamPKCEVerifier] = (*UpstreamPKCEVerifier)(nil)
+
+// UpstreamPKCEVerifier stores an upstream PKCE code verifier server-side so it
+// never traverses the front-channel (OAuth state parameter).
+type UpstreamPKCEVerifier struct {
+	Nonce    string `json:"nonce"`
+	Verifier string `json:"verifier"`
+}
+
+func (v UpstreamPKCEVerifier) CacheKey() string {
+	return "upstreamPKCE:" + v.Nonce
+}
+
+func (v UpstreamPKCEVerifier) AdditionalCacheKeys() []string {
+	return []string{}
+}
+
+func (v UpstreamPKCEVerifier) TTL() time.Duration {
+	return 10 * time.Minute
 }

@@ -49,7 +49,7 @@ export function SettingsDangerZone() {
 
   return (
     <>
-      <div className="border border-destructive/30 rounded-lg p-6 mt-8">
+      <div className="border border-destructive/30 rounded-lg p-6">
         <Type variant="subheading" className="text-destructive mb-1">
           Danger Zone
         </Type>

@@ -1,35 +1,35 @@
-import React from 'react'
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
+import React from "react";
+import { Chat } from "..";
+import type { Meta, StoryFn } from "@storybook/react-vite";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/Composer',
+  title: "Chat/Composer",
   component: Chat,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
-type Story = StoryFn<typeof Chat>
+type Story = StoryFn<typeof Chat>;
 
-export const CustomPlaceholder: Story = () => <Chat />
+export const CustomPlaceholder: Story = () => <Chat />;
 CustomPlaceholder.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
-      composer: { placeholder: 'What would you like to know?' },
+      variant: "standalone",
+      composer: { placeholder: "What would you like to know?" },
     },
   },
-}
+};
 
-export const AttachmentsDisabled: Story = () => <Chat />
+export const AttachmentsDisabled: Story = () => <Chat />;
 AttachmentsDisabled.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
+      variant: "standalone",
       composer: { attachments: false },
     },
   },
-}
+};

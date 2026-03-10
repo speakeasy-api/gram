@@ -382,12 +382,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
-	fullToolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, s.logger)
-	}
-	hasExternalMCPOAuth := externalmcp.ResolveOAuthConfig(fullToolset) != nil
-
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
@@ -431,7 +425,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		// External OAuth server flow - only accept Authorization header
 		if authToken == "" {
 			s.logger.WarnContext(ctx, "No authorization token provided")
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 		}
 
@@ -442,11 +436,18 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
 		// Custom OAuth provider flow - only accept Authorization header
 		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
+		if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
+			s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+			oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+			if err != nil {
+				s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+			}
+		}
 		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
+		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
 
 		for _, externalSecret := range oauthToken.ExternalSecrets {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
@@ -454,40 +455,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				Token:        externalSecret.Token,
 			})
 		}
-	case toolset.McpIsPublic && hasExternalMCPOAuth:
-		wwwAuth := fmt.Sprintf(`Bearer resource_metadata=%s`,
-			baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug)
-
-		// Prioritize literal tokens sent by the client. Pass through directly
-		// to underlying server.
-		if authToken != "" {
-			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: []string{},
-				Token:        authToken,
-			})
-
-			break
-		}
-
-		// Attempt to look for a stored OAuth credential if the requests comes
-		// from a Gram app (eg: Dashboard/Playground)
-		if gramSession, _ := r.Cookie(constants.SessionCookie); gramSession != nil {
-			resolvedToken, err := s.resolveExternalMcpOAuthToken(ctx, fullToolset)
-			if err != nil {
-				w.Header().Set("WWW-Authenticate", wwwAuth)
-				return oops.E(oops.CodeUnauthorized, err, "unauthorized")
-			}
-
-			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: []string{},
-				Token:        resolvedToken,
-			})
-
-			break
-		}
-
-		w.Header().Set("WWW-Authenticate", wwwAuth)
-		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	case !toolset.McpIsPublic:
 		// Private MCP - always allow chatSessionJwt fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
@@ -504,7 +471,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		if isOAuthCapable {
 			w.Header().Set(
 				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
 			)
 		}
 
@@ -983,6 +950,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize").Log(ctx, s.logger)
 }
 
+//nolint:unused // kept for follow-up: restore stored-credential resolution for session-authenticated users
 func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *types.Toolset) (string, error) {
 	sessionCtx, err := s.sessions.AuthenticateWithCookie(ctx)
 	if err != nil {

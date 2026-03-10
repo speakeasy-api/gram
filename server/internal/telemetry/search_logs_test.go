@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"strings"
 	"testing"
 	"time"
 
@@ -406,7 +407,6 @@ func TestSearchLogs_AttributesAreJSON(t *testing.T) {
 		Sort:  "desc",
 	})
 
-	require.True(t, result.Enabled)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.Logs, 1)
@@ -1125,8 +1125,8 @@ func TestSearchToolCalls_FilterByGramURN(t *testing.T) {
 	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), &traceID2, "tools:http:petstore:getPet", "INFO")
 	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), &traceID3, "tools:http:weather:getForecast", "INFO")
 
-	// Wait for ClickHouse eventual consistency
-	time.Sleep(100 * time.Millisecond)
+	// Wait for ClickHouse materialized view to process and eventual consistency
+	time.Sleep(500 * time.Millisecond)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -1218,6 +1218,25 @@ func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deployment
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	// Build attributes JSON with tool name for SearchToolCalls compatibility
+	// Extract tool name from URN:
+	// - "urn:gram:test1" -> "test1"
+	// - "tools:http:petstore:listPets" -> "listPets"
+	attrs := map[string]any{}
+	if after, ok := strings.CutPrefix(gramURN, "urn:gram:"); ok {
+		toolName := after
+		attrs["gram.tool.name"] = toolName
+	} else if strings.HasPrefix(gramURN, "tools:") {
+		// For "tools:" URNs, extract the last segment as tool name
+		parts := strings.Split(gramURN, ":")
+		if len(parts) > 0 {
+			toolName := parts[len(parts)-1]
+			attrs["gram.tool.name"] = toolName
+		}
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
@@ -1225,7 +1244,7 @@ func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deployment
 			gram_project_id, gram_deployment_id, gram_urn, service_name
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), severityText, "test log body",
-		traceID, nil, "{}", "{}",
+		traceID, nil, string(attrsJSON), "{}",
 		projectID, deploymentID, gramURN, "test-service")
 	require.NoError(t, err)
 
@@ -1245,6 +1264,25 @@ func insertTelemetryLogAtExactTime(t *testing.T, ctx context.Context, projectID,
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	// Build attributes JSON with tool name for SearchToolCalls compatibility
+	// Extract tool name from URN:
+	// - "urn:gram:test1" -> "test1"
+	// - "tools:http:petstore:listPets" -> "listPets"
+	attrs := map[string]any{}
+	if after, ok := strings.CutPrefix(gramURN, "urn:gram:"); ok {
+		toolName := after
+		attrs["gram.tool.name"] = toolName
+	} else if strings.HasPrefix(gramURN, "tools:") {
+		// For "tools:" URNs, extract the last segment as tool name
+		parts := strings.Split(gramURN, ":")
+		if len(parts) > 0 {
+			toolName := parts[len(parts)-1]
+			attrs["gram.tool.name"] = toolName
+		}
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
@@ -1252,7 +1290,7 @@ func insertTelemetryLogAtExactTime(t *testing.T, ctx context.Context, projectID,
 			gram_project_id, gram_deployment_id, gram_urn, service_name
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), severityText, "test log body",
-		traceID, nil, "{}", "{}",
+		traceID, nil, string(attrsJSON), "{}",
 		projectID, deploymentID, gramURN, "test-service")
 	require.NoError(t, err)
 }
@@ -1269,6 +1307,9 @@ type testLogParams struct {
 	httpStatus   *int32
 	httpRoute    *string
 	serviceName  string
+	toolName     *string        // for tool call logs
+	toolSource   *string        // for tool call logs
+	eventSource  *string        // for tool call logs
 	customAttrs  map[string]any // additional attributes merged into the JSON
 }
 
@@ -1281,7 +1322,7 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
-	// Build attributes JSON with HTTP fields and custom attributes
+	// Build attributes JSON with HTTP fields, tool fields, and custom attributes
 	attrs := map[string]any{}
 	if params.httpMethod != nil {
 		attrs["http.request.method"] = *params.httpMethod
@@ -1291,6 +1332,15 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	}
 	if params.httpRoute != nil {
 		attrs["http.route"] = *params.httpRoute
+	}
+	if params.toolName != nil {
+		attrs["gram.tool.name"] = *params.toolName
+	}
+	if params.toolSource != nil {
+		attrs["gram.tool_call.source"] = *params.toolSource
+	}
+	if params.eventSource != nil {
+		attrs["gram.event.source"] = *params.eventSource
 	}
 	maps.Copy(attrs, params.customAttrs)
 

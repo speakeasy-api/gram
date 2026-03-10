@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -16,6 +17,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -44,9 +46,21 @@ type Manager struct {
 	pylon                  *pylon.Pylon
 	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	billingRepo            billing.Repository
+	workos                 *workos.WorkOS
 }
 
-func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string, pylon *pylon.Pylon, posthog *posthog.Posthog, billingRepo billing.Repository) *Manager {
+func NewManager(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	redisClient *redis.Client,
+	suffix cache.Suffix,
+	speakeasyServerAddress string,
+	speakeasySecretKey string,
+	pylon *pylon.Pylon,
+	posthog *posthog.Posthog,
+	billingRepo billing.Repository,
+	workos *workos.WorkOS,
+) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
 
 	return &Manager{
@@ -62,6 +76,7 @@ func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client
 		pylon:                  pylon,
 		posthog:                posthog,
 		billingRepo:            billingRepo,
+		workos:                 workos,
 	}
 }
 

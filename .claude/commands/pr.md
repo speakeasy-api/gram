@@ -28,7 +28,8 @@ Follow conventional commit standards and keep PR descriptions concise but inform
 ## Fork Requirements
 
 All pull requests must be submitted from a personal fork of the repository. The command should:
+
 - Check if a fork exists using `gh repo view --json parent` to determine if current repo is a fork
-- If not a fork, create one with `gh repo fork --clone=false` 
+- If not a fork, create one with `gh repo fork --clone=false`
 - Set up remotes properly: `origin` should point to the user's fork, `upstream` to the original repository
 - Push changes to the fork and create the PR targeting the upstream repository

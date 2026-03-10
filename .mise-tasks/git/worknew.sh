@@ -3,7 +3,7 @@
 #MISE dir="{{ config_root }}"
 #MISE description="Create a git worktree"
 #MISE alias="gwn"
-#USAGE flag "--dir <dir>" default=".." help="The directory to create the worktree in"
+#USAGE flag "--dir <dir>" help="The directory to create the worktree in"
 #USAGE flag "--branch <branch>" default="origin/main" help="The branch to check out in the worktree"
 #USAGE arg "<name>" help="The name of the worktree to create"
 
@@ -14,9 +14,13 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
+dir=${usage_dir:-$GRAM_WORKTREE_DIR}
+dir="${dir:-..}"
+dir="${dir/#\~/$HOME}"
+
 suffix=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 4)
 new_branch="${usage_name:?}-${suffix}"
-dest="${usage_dir:?}/_gram_${usage_name:?}"
+dest="${dir}/_gram_${usage_name:?}"
 git fetch
 git worktree add "${dest}" "${usage_branch:?}"
 

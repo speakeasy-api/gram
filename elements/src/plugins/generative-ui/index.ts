@@ -1,12 +1,12 @@
-import { Plugin } from '@/types/plugins'
-import { GenerativeUIRenderer } from './component'
+import { Plugin } from "@/types/plugins";
+import { GenerativeUIRenderer } from "./component";
 
 /**
  * This plugin renders json-render UI trees as dynamic widgets.
  * Use the language identifier 'ui' or 'json-render' in code blocks.
  */
 export const generativeUI: Plugin = {
-  language: 'ui',
+  language: "ui",
   prompt: `Render structured data as visual UI using \`\`\`ui code blocks with valid JSON.
 
 Components:
@@ -29,4 +29,4 @@ Example: {"type":"Card","props":{"title":"Stats"},"children":[{"type":"Metric","
 Use for dashboards, tables, metrics from tool results. Skip for simple text or errors.`,
   Component: GenerativeUIRenderer,
   Header: undefined,
-}
+};

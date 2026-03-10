@@ -35,13 +35,13 @@ export MCP_TOOL_APPROVAL='approved'
 
 ```typescript
 // Step 1: Check approval status
-check_approval_status()
+check_approval_status();
 
 // Step 2: Execute protected tool via proxy
 protected_tool_proxy(
-  tool_name='protected_tool_create_resource',
-  tool_arguments={name: 'example', type: 'database'}
-)
+  (tool_name = "protected_tool_create_resource"),
+  (tool_arguments = { name: "example", type: "database" }),
+);
 
 // Step 3: If approved, execute the actual tool call
 ```
@@ -53,6 +53,7 @@ protected_tool_proxy(
 **Purpose**: Intercept and validate protected tool calls
 
 **Usage**:
+
 ```typescript
 protected_tool_proxy(
   tool_name: string,
@@ -61,10 +62,12 @@ protected_tool_proxy(
 ```
 
 **Returns**:
+
 - `approved: true` → Tool call authorized, proceed with execution
 - `approved: false` → Tool call blocked, approval required
 
 **Example**:
+
 ```json
 {
   "tool_name": "protected_tool_create_resource",
@@ -80,13 +83,15 @@ protected_tool_proxy(
 **Purpose**: Check current approval configuration
 
 **Usage**:
+
 ```typescript
-check_approval_status()
+check_approval_status();
 ```
 
 **Returns**: Approval status, environment variable state, and configuration
 
 **Example Response**:
+
 ```json
 {
   "approved": true,
@@ -104,6 +109,7 @@ check_approval_status()
 **Purpose**: Discover which tools require approval
 
 **Usage**:
+
 ```typescript
 list_protected_tools(filter?: string)
 ```
@@ -111,8 +117,9 @@ list_protected_tools(filter?: string)
 **Returns**: List of protected tool names
 
 **Example**:
+
 ```typescript
-list_protected_tools(filter='create')
+list_protected_tools((filter = "create"));
 // Returns tools matching 'create' pattern
 ```
 
@@ -121,8 +128,9 @@ list_protected_tools(filter='create')
 **Purpose**: Get comprehensive documentation
 
 **Usage**:
+
 ```typescript
-help_approval_system()
+help_approval_system();
 ```
 
 **Returns**: Complete documentation, examples, and troubleshooting guide
@@ -131,17 +139,18 @@ help_approval_system()
 
 ### Environment Variables
 
-| Variable | Required | Description | Example |
-|----------|----------|-------------|---------|
-| `MCP_TOOL_APPROVAL` | Yes | Approval token for protected tools | `export MCP_TOOL_APPROVAL='approved'` |
+| Variable            | Required | Description                        | Example                               |
+| ------------------- | -------- | ---------------------------------- | ------------------------------------- |
+| `MCP_TOOL_APPROVAL` | Yes      | Approval token for protected tools | `export MCP_TOOL_APPROVAL='approved'` |
 
 ### Customization Points
 
 Edit `gram_approve_demo.ts` to customize:
 
 1. **Tool Protection Pattern** (`CONFIG.PROTECTED_TOOL_PREFIX`)
+
    ```typescript
-   PROTECTED_TOOL_PREFIX: "protected_tool_"
+   PROTECTED_TOOL_PREFIX: "protected_tool_";
    ```
 
 2. **Approval Validation** (`hasAdminApproval()`)
@@ -224,8 +233,8 @@ const result = await protected_tool_proxy({
   tool_name: "protected_tool_create_resource",
   tool_arguments: {
     name: "my_resource",
-    type: "database"
-  }
+    type: "database",
+  },
 });
 
 // 3. If approved, execute actual tool
@@ -240,9 +249,9 @@ if (result.approved) {
 try {
   const result = await protected_tool_proxy({
     tool_name: "protected_tool_delete_resource",
-    tool_arguments: { id: "123" }
+    tool_arguments: { id: "123" },
   });
-  
+
   if (result.blocked) {
     console.error("Tool call blocked:", result.error);
     console.log("Instructions:", result.instructions);
@@ -267,6 +276,7 @@ console.log(`Found ${tools.total_tools} protected tools`);
 ## 🔒 Security Best Practices
 
 1. **Never commit approval tokens to version control**
+
    ```bash
    # Add to .gitignore
    echo "*.env" >> .gitignore
@@ -281,21 +291,23 @@ console.log(`Found ${tools.total_tools} protected tools`);
    - Implement token rotation policies
 
 4. **Implement audit logging**
+
    ```typescript
    // Log all approval checks
    console.log({
      timestamp: new Date().toISOString(),
      tool: toolName,
      approved: approvalStatus.approved,
-     user: getCurrentUser()
+     user: getCurrentUser(),
    });
    ```
 
 5. **Use different tokens for different environments**
+
    ```bash
    # Development
    export MCP_TOOL_APPROVAL='dev_approved'
-   
+
    # Production
    export MCP_TOOL_APPROVAL='prod_approved'
    ```
@@ -307,12 +319,15 @@ console.log(`Found ${tools.total_tools} protected tools`);
 **Problem**: `check_approval_status()` returns `approved: false`
 
 **Solutions**:
+
 1. Verify environment variable is set:
+
    ```bash
    echo $MCP_TOOL_APPROVAL
    ```
 
 2. Ensure value is non-empty:
+
    ```bash
    export MCP_TOOL_APPROVAL='approved'
    ```
@@ -326,7 +341,9 @@ console.log(`Found ${tools.total_tools} protected tools`);
 **Problem**: Tool call bypasses approval check
 
 **Solutions**:
+
 1. Verify tool name matches protection pattern:
+
    ```typescript
    // Tool must start with "protected_tool_"
    protected_tool_create_resource ✅
@@ -342,6 +359,7 @@ console.log(`Found ${tools.total_tools} protected tools`);
 **Problem**: Variable set but not detected
 
 **Solutions**:
+
 1. Verify `envSchema` includes approval variable
 
 2. Check variable name matches `CONFIG.APPROVAL_ENV_VAR`
@@ -365,9 +383,11 @@ const CONFIG = {
 ```typescript
 function requiresApproval(toolName: string): boolean {
   // Your custom logic here
-  return toolName.startsWith("admin_") || 
-         toolName.includes("_delete") ||
-         adminToolsList.includes(toolName);
+  return (
+    toolName.startsWith("admin_") ||
+    toolName.includes("_delete") ||
+    adminToolsList.includes(toolName)
+  );
 }
 ```
 
@@ -378,7 +398,7 @@ function hasAdminApproval(): boolean {
   // Example: API-based validation
   const response = await fetch("https://your-approval-service.com/check");
   return response.ok;
-  
+
   // Example: Database validation
   // const approval = await db.query("SELECT * FROM approvals WHERE ...");
   // return approval.exists;
@@ -390,7 +410,7 @@ function hasAdminApproval(): boolean {
 Replace generic descriptions with your specific use case:
 
 ```typescript
-description: "Proxy for YOUR_SERVICE admin tool calls..."
+description: "Proxy for YOUR_SERVICE admin tool calls...";
 ```
 
 ## 📚 Additional Resources
@@ -415,4 +435,3 @@ This is an educational example. Adapt freely for your use case.
 ---
 
 **Questions?** Check `help_approval_system()` tool for comprehensive documentation.
-

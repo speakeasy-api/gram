@@ -277,6 +277,64 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listFilterOptions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListFilterOptions", "type": "query"}`)
 	})
+
+	Method("listAttributeKeys", func() {
+		Description("List distinct attribute keys available for filtering")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListAttributeKeysPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAttributeKeysResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listAttributeKeys")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAttributeKeys")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAttributeKeys")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAttributeKeys", "type": "query"}`)
+	})
+
+	Method("getHooksSummary", func() {
+		Description("Get aggregated hooks metrics grouped by server")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetHooksSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetHooksSummaryResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getHooksSummary")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getHooksSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getHooksSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetHooksSummary", "type": "query"}`)
+	})
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
@@ -320,6 +378,7 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 	Attribute("gram_chat_id", String, "Chat ID filter")
 	Attribute("user_id", String, "User ID filter")
 	Attribute("external_user_id", String, "External user ID filter")
+	Attribute("event_source", String, "Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')")
 	Attribute("attribute_filters", ArrayOf(AttributeFilter), "Filters on custom log attributes")
 })
 
@@ -366,9 +425,8 @@ var SearchLogsResult = Type("SearchLogsResult", func() {
 
 	Attribute("logs", ArrayOf(TelemetryLogRecord), "List of telemetry log records")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("logs", "enabled")
+	Required("logs")
 })
 
 var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
@@ -377,8 +435,8 @@ var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
 	Attribute("id", String, "Log record ID", func() {
 		Format(FormatUUID)
 	})
-	Attribute("time_unix_nano", Int64, "Unix time in nanoseconds when event occurred")
-	Attribute("observed_time_unix_nano", Int64, "Unix time in nanoseconds when event was observed")
+	Attribute("time_unix_nano", String, "Unix time in nanoseconds when event occurred (string for JS int64 precision)")
+	Attribute("observed_time_unix_nano", String, "Unix time in nanoseconds when event was observed (string for JS int64 precision)")
 	Attribute("severity_text", String, "Text representation of severity")
 	Attribute("body", String, "The primary log message")
 	Attribute("trace_id", String, "W3C trace ID (32 hex characters)")
@@ -411,6 +469,8 @@ var SearchToolCallsFilter = Type("SearchToolCallsFilter", func() {
 	Description("Filter criteria for searching tool calls")
 
 	Extend(TelemetryFilter)
+
+	Attribute("event_source", String, "Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')")
 })
 
 var SearchToolCallsPayload = Type("SearchToolCallsPayload", func() {
@@ -434,10 +494,8 @@ var SearchToolCallsResult = Type("SearchToolCallsResult", func() {
 
 	Attribute("tool_calls", ArrayOf(ToolCallSummary), "List of tool call summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
-	Attribute("tool_io_logs_enabled", Boolean, "Whether tool input/output logging is enabled for the organization")
 
-	Required("tool_calls", "enabled", "tool_io_logs_enabled")
+	Required("tool_calls")
 })
 
 var ToolCallSummary = Type("ToolCallSummary", func() {
@@ -446,10 +504,13 @@ var ToolCallSummary = Type("ToolCallSummary", func() {
 	Attribute("trace_id", String, "Trace ID (32 hex characters)", func() {
 		Pattern("^[a-f0-9]{32}$")
 	})
-	Attribute("start_time_unix_nano", Int64, "Earliest log timestamp in Unix nanoseconds")
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("log_count", UInt64, "Total number of logs in this tool call")
 	Attribute("http_status_code", Int32, "HTTP status code (if applicable)")
 	Attribute("gram_urn", String, "Gram URN associated with this tool call")
+	Attribute("tool_name", String, "Tool name (from attributes.gram.tool.name)")
+	Attribute("tool_source", String, "Tool call source (from attributes.gram.tool_call.source)")
+	Attribute("event_source", String, "Event source (from attributes.gram.event.source)")
 
 	Required(
 		"trace_id",
@@ -499,17 +560,16 @@ var SearchChatsResult = Type("SearchChatsResult", func() {
 
 	Attribute("chats", ArrayOf(ChatSummaryType), "List of chat session summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("chats", "enabled")
+	Required("chats")
 })
 
 var ChatSummaryType = Type("ChatSummary", func() {
 	Description("Summary information for a chat session")
 
 	Attribute("gram_chat_id", String, "Chat session ID")
-	Attribute("start_time_unix_nano", Int64, "Earliest log timestamp in Unix nanoseconds")
-	Attribute("end_time_unix_nano", Int64, "Latest log timestamp in Unix nanoseconds")
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("end_time_unix_nano", String, "Latest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("log_count", UInt64, "Total number of logs in this chat session")
 	Attribute("tool_call_count", UInt64, "Number of tool calls in this chat session")
 	Attribute("message_count", UInt64, "Number of LLM completion messages in this chat session")
@@ -582,9 +642,8 @@ var SearchUsersResult = Type("SearchUsersResult", func() {
 
 	Attribute("users", ArrayOf(UserSummaryType), "List of user usage summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("users", "enabled")
+	Required("users")
 })
 
 var UserSummaryType = Type("UserSummary", func() {
@@ -771,9 +830,8 @@ var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
 	Description("Result of metrics summary query")
 
 	Attribute("metrics", ProjectSummaryType, "Aggregated metrics")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("metrics", "enabled")
+	Required("metrics")
 })
 
 // User metrics types
@@ -799,9 +857,8 @@ var GetUserMetricsSummaryResult = Type("GetUserMetricsSummaryResult", func() {
 	Description("Result of user metrics summary query")
 
 	Attribute("metrics", ProjectSummaryType, "Aggregated metrics for the user")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("metrics", "enabled")
+	Required("metrics")
 })
 
 // Observability Overview types
@@ -836,9 +893,8 @@ var GetObservabilityOverviewResult = Type("GetObservabilityOverviewResult", func
 	Attribute("top_tools_by_count", ArrayOf(ToolMetricType), "Top tools by call count")
 	Attribute("top_tools_by_failure_rate", ArrayOf(ToolMetricType), "Top tools by failure rate")
 	Attribute("interval_seconds", Int64, "The time bucket interval in seconds used for the time series data")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds", "enabled")
+	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds")
 })
 
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
@@ -933,9 +989,8 @@ var ListFilterOptionsResult = Type("ListFilterOptionsResult", func() {
 	Description("Result of listing filter options")
 
 	Attribute("options", ArrayOf(FilterOptionType), "List of filter options")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("options", "enabled")
+	Required("options")
 })
 
 var FilterOptionType = Type("FilterOption", func() {
@@ -946,4 +1001,69 @@ var FilterOptionType = Type("FilterOption", func() {
 	Attribute("count", Int64, "Number of events for this option")
 
 	Required("id", "label", "count")
+})
+
+// Attribute keys types
+
+var ListAttributeKeysPayload = Type("ListAttributeKeysPayload", func() {
+	Description("Payload for listing distinct attribute keys available for filtering")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+
+	Required("from", "to")
+})
+
+var ListAttributeKeysResult = Type("ListAttributeKeysResult", func() {
+	Description("Result of listing distinct attribute keys")
+
+	Attribute("keys", ArrayOf(String), "Distinct attribute keys. User attributes are prefixed with @")
+
+	Required("keys")
+})
+
+// Hooks summary types
+
+var GetHooksSummaryPayload = Type("GetHooksSummaryPayload", func() {
+	Description("Payload for getting aggregated hooks metrics")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+
+	Required("from", "to")
+})
+
+var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
+	Description("Result of hooks summary query")
+
+	Attribute("servers", ArrayOf(HooksServerSummaryType), "Aggregated metrics grouped by server")
+	Attribute("total_events", Int64, "Total number of hook events")
+	Attribute("total_sessions", Int64, "Total number of unique sessions")
+
+	Required("servers", "total_events", "total_sessions")
+})
+
+var HooksServerSummaryType = Type("HooksServerSummary", func() {
+	Description("Aggregated hooks metrics for a single server")
+
+	Attribute("server_name", String, "Server name (extracted from tool name, or 'local' for non-MCP tools)")
+	Attribute("event_count", Int64, "Total number of hook events for this server")
+	Attribute("unique_tools", Int64, "Number of unique tools used for this server")
+	Attribute("success_count", Int64, "Number of successful tool completions (PostToolUse events)")
+	Attribute("failure_count", Int64, "Number of failed tool completions (PostToolUseFailure events)")
+	Attribute("failure_rate", Float64, "Failure rate as a decimal (0.0 to 1.0)")
+
+	Required("server_name", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
 })

@@ -33,7 +33,7 @@ generation:
     skipResponseBodyAssertions: false
   versioningStrategy: automatic
 typescript:
-  version: 0.27.7
+  version: 0.27.19
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
@@ -94,4 +94,4 @@ typescript:
   unionStrategy: left-to-right
   usageSDKInitImports: []
   useIndexModules: true
-  zodVersion: v3
+  zodVersion: v4-mini

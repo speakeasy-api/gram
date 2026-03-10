@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import * as React from 'react'
+import * as React from "react";
 import {
   Tabs as TabsPrimitive,
   TabsList,
   TabsTrigger,
   TabsContent as TabsContentPrimitive,
-} from './tabs'
+} from "./tabs";
 
 export interface TabsWrapperProps {
-  defaultValue?: string
-  tabs: Array<{ value: string; label: string }>
-  children?: React.ReactNode
+  defaultValue?: string;
+  tabs: Array<{ value: string; label: string }>;
+  children?: React.ReactNode;
 }
 
 /**
@@ -22,7 +22,7 @@ export function TabsWrapper({
   tabs,
   children,
 }: TabsWrapperProps) {
-  const defaultTab = defaultValue ?? tabs[0]?.value
+  const defaultTab = defaultValue ?? tabs[0]?.value;
 
   return (
     <TabsPrimitive defaultValue={defaultTab}>
@@ -35,17 +35,17 @@ export function TabsWrapper({
       </TabsList>
       {children}
     </TabsPrimitive>
-  )
+  );
 }
 
 export interface TabContentWrapperProps {
-  value: string
-  children?: React.ReactNode
+  value: string;
+  children?: React.ReactNode;
 }
 
 /**
  * TabContent wrapper - passes through to TabsContent.
  */
 export function TabContentWrapper({ value, children }: TabContentWrapperProps) {
-  return <TabsContentPrimitive value={value}>{children}</TabsContentPrimitive>
+  return <TabsContentPrimitive value={value}>{children}</TabsContentPrimitive>;
 }

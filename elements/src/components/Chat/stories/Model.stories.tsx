@@ -1,25 +1,25 @@
-import React from 'react'
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
+import React from "react";
+import { Chat } from "..";
+import type { Meta, StoryFn } from "@storybook/react-vite";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/Model',
+  title: "Chat/Model",
   component: Chat,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
-type Story = StoryFn<typeof Chat>
+type Story = StoryFn<typeof Chat>;
 
-export const ModelPicker: Story = () => <Chat />
+export const ModelPicker: Story = () => <Chat />;
 ModelPicker.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
+      variant: "standalone",
       model: { showModelPicker: true },
     },
   },
-}
+};

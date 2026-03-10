@@ -1,17 +1,17 @@
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
+import { Chat } from "..";
+import type { Meta, StoryFn } from "@storybook/react-vite";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/Style Isolation',
+  title: "Chat/Style Isolation",
   component: Chat,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
-type Story = StoryFn<typeof Chat>
+type Story = StoryFn<typeof Chat>;
 
 export const Default: Story = () => (
   <div>
@@ -28,14 +28,14 @@ export const Default: Story = () => (
     </style>
     <Chat />
   </div>
-)
+);
 Default.parameters = {
   elements: {
     config: {
       welcome: {
-        title: 'Style isolation via Shadow DOM',
-        subtitle: 'Demo of style isolation via Shadow DOM',
+        title: "Style isolation via Shadow DOM",
+        subtitle: "Demo of style isolation via Shadow DOM",
       },
     },
   },
-}
+};

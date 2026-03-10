@@ -1,8 +1,8 @@
-import * as React from 'react'
-import { cn } from '@/lib/utils'
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
-export interface CardWrapperProps extends React.ComponentProps<'div'> {
-  title?: string
+export interface CardWrapperProps extends React.ComponentProps<"div"> {
+  title?: string;
 }
 
 /**
@@ -20,17 +20,17 @@ export function CardWrapper({
     <div
       data-slot="card-wrapper"
       className={cn(
-        'bg-card text-card-foreground flex flex-col gap-6 p-6',
-        className
+        "flex flex-col gap-6 bg-card p-6 text-card-foreground",
+        className,
       )}
       {...props}
     >
       {title && (
-        <div className="text-foreground text-lg leading-none font-semibold">
+        <div className="text-lg leading-none font-semibold text-foreground">
           {title}
         </div>
       )}
       <div className="flex flex-col gap-6">{children}</div>
     </div>
-  )
+  );
 }

@@ -2,7 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.27.3",
+  "version": "1.27.4",
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -219,8 +219,6 @@
     "@vitejs/plugin-react": "^5.0.3",
     "chromatic": "^13.3.5",
     "eslint": "^9.39.1",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.4",
     "eslint-plugin-react-refresh": "^0.4.24",
     "eslint-plugin-storybook": "^10.1.4",
     "eslint-plugin-unused-imports": "^4.3.0",
@@ -230,8 +228,6 @@
     "motion": "^12.23.14",
     "msw": "^2.12.3",
     "msw-storybook-addon": "^2.0.6",
-    "prettier": "^3.7.4",
-    "prettier-plugin-tailwindcss": "^0.7.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-is": "19.2.3",

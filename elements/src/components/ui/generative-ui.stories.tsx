@@ -1,25 +1,25 @@
-import type { Meta, StoryObj } from '@storybook/react-vite'
-import { GenerativeUI } from './generative-ui'
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { GenerativeUI } from "./generative-ui";
 
 const meta: Meta<typeof GenerativeUI> = {
-  title: 'Components/Generative UI',
+  title: "Components/Generative UI",
   component: GenerativeUI,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
   decorators: [
     (Story) => (
-      <div className="bg-background text-foreground min-h-screen p-6">
+      <div className="min-h-screen bg-background p-6 text-foreground">
         <div className="max-w-2xl">
           <Story />
         </div>
       </div>
     ),
   ],
-}
+};
 
-export default meta
-type Story = StoryObj<typeof GenerativeUI>
+export default meta;
+type Story = StoryObj<typeof GenerativeUI>;
 
 /**
  * Basic layout with Stack and Text components.
@@ -27,22 +27,22 @@ type Story = StoryObj<typeof GenerativeUI>
 export const BasicLayout: Story = {
   args: {
     content: {
-      type: 'Stack',
-      props: { direction: 'vertical', gap: 'md' },
+      type: "Stack",
+      props: { direction: "vertical", gap: "md" },
       children: [
-        { type: 'Text', props: { content: 'Hello World', variant: 'heading' } },
+        { type: "Text", props: { content: "Hello World", variant: "heading" } },
         {
-          type: 'Text',
-          props: { content: 'This is a body text example.', variant: 'body' },
+          type: "Text",
+          props: { content: "This is a body text example.", variant: "body" },
         },
         {
-          type: 'Text',
-          props: { content: 'Caption text for extra info', variant: 'caption' },
+          type: "Text",
+          props: { content: "Caption text for extra info", variant: "caption" },
         },
       ],
     },
   },
-}
+};
 
 /**
  * Card with metrics displaying key statistics.
@@ -50,31 +50,31 @@ export const BasicLayout: Story = {
 export const MetricsCard: Story = {
   args: {
     content: {
-      type: 'Card',
-      props: { title: 'Monthly Overview' },
+      type: "Card",
+      props: { title: "Monthly Overview" },
       children: [
         {
-          type: 'Grid',
-          props: { columns: 3, gap: 'md' },
+          type: "Grid",
+          props: { columns: 3, gap: "md" },
           children: [
             {
-              type: 'Metric',
-              props: { label: 'Revenue', value: 12500, format: 'currency' },
+              type: "Metric",
+              props: { label: "Revenue", value: 12500, format: "currency" },
             },
             {
-              type: 'Metric',
-              props: { label: 'Orders', value: 156, format: 'number' },
+              type: "Metric",
+              props: { label: "Orders", value: 156, format: "number" },
             },
             {
-              type: 'Metric',
-              props: { label: 'Conversion', value: 0.032, format: 'percent' },
+              type: "Metric",
+              props: { label: "Conversion", value: 0.032, format: "percent" },
             },
           ],
         },
       ],
     },
   },
-}
+};
 
 /**
  * Data table with headers and rows.
@@ -82,25 +82,25 @@ export const MetricsCard: Story = {
 export const DataTable: Story = {
   args: {
     content: {
-      type: 'Card',
-      props: { title: 'Recent Orders' },
+      type: "Card",
+      props: { title: "Recent Orders" },
       children: [
         {
-          type: 'Table',
+          type: "Table",
           props: {
-            headers: ['Order ID', 'Customer', 'Amount', 'Status'],
+            headers: ["Order ID", "Customer", "Amount", "Status"],
             rows: [
-              ['#1001', 'Alice Johnson', '$125.00', 'Shipped'],
-              ['#1002', 'Bob Smith', '$89.50', 'Processing'],
-              ['#1003', 'Carol White', '$234.00', 'Delivered'],
-              ['#1004', 'David Brown', '$56.75', 'Pending'],
+              ["#1001", "Alice Johnson", "$125.00", "Shipped"],
+              ["#1002", "Bob Smith", "$89.50", "Processing"],
+              ["#1003", "Carol White", "$234.00", "Delivered"],
+              ["#1004", "David Brown", "$56.75", "Pending"],
             ],
           },
         },
       ],
     },
   },
-}
+};
 
 /**
  * Badges showing different status variants.
@@ -108,25 +108,25 @@ export const DataTable: Story = {
 export const BadgeVariants: Story = {
   args: {
     content: {
-      type: 'Stack',
-      props: { direction: 'horizontal', gap: 'sm' },
+      type: "Stack",
+      props: { direction: "horizontal", gap: "sm" },
       children: [
-        { type: 'Badge', props: { content: 'Default' } },
+        { type: "Badge", props: { content: "Default" } },
         {
-          type: 'Badge',
-          props: { content: 'Secondary', variant: 'secondary' },
+          type: "Badge",
+          props: { content: "Secondary", variant: "secondary" },
         },
-        { type: 'Badge', props: { content: 'Success', variant: 'success' } },
-        { type: 'Badge', props: { content: 'Warning', variant: 'warning' } },
+        { type: "Badge", props: { content: "Success", variant: "success" } },
+        { type: "Badge", props: { content: "Warning", variant: "warning" } },
         {
-          type: 'Badge',
-          props: { content: 'Destructive', variant: 'destructive' },
+          type: "Badge",
+          props: { content: "Destructive", variant: "destructive" },
         },
-        { type: 'Badge', props: { content: 'Outline', variant: 'outline' } },
+        { type: "Badge", props: { content: "Outline", variant: "outline" } },
       ],
     },
   },
-}
+};
 
 /**
  * Alert messages for different contexts.
@@ -134,28 +134,28 @@ export const BadgeVariants: Story = {
 export const Alerts: Story = {
   args: {
     content: {
-      type: 'Stack',
-      props: { direction: 'vertical', gap: 'md' },
+      type: "Stack",
+      props: { direction: "vertical", gap: "md" },
       children: [
         {
-          type: 'Alert',
+          type: "Alert",
           props: {
-            title: 'Information',
-            description: 'This is a default informational alert.',
+            title: "Information",
+            description: "This is a default informational alert.",
           },
         },
         {
-          type: 'Alert',
+          type: "Alert",
           props: {
-            title: 'Error',
-            description: 'Something went wrong. Please try again.',
-            variant: 'destructive',
+            title: "Error",
+            description: "Something went wrong. Please try again.",
+            variant: "destructive",
           },
         },
       ],
     },
   },
-}
+};
 
 /**
  * Progress bars showing completion.
@@ -163,35 +163,35 @@ export const Alerts: Story = {
 export const ProgressBars: Story = {
   args: {
     content: {
-      type: 'Stack',
-      props: { direction: 'vertical', gap: 'md' },
+      type: "Stack",
+      props: { direction: "vertical", gap: "md" },
       children: [
         {
-          type: 'Stack',
-          props: { direction: 'vertical', gap: 'sm' },
+          type: "Stack",
+          props: { direction: "vertical", gap: "sm" },
           children: [
             {
-              type: 'Text',
-              props: { content: 'Upload Progress', variant: 'body' },
+              type: "Text",
+              props: { content: "Upload Progress", variant: "body" },
             },
-            { type: 'Progress', props: { value: 75 } },
+            { type: "Progress", props: { value: 75 } },
           ],
         },
         {
-          type: 'Stack',
-          props: { direction: 'vertical', gap: 'sm' },
+          type: "Stack",
+          props: { direction: "vertical", gap: "sm" },
           children: [
             {
-              type: 'Text',
-              props: { content: 'Task Completion', variant: 'body' },
+              type: "Text",
+              props: { content: "Task Completion", variant: "body" },
             },
-            { type: 'Progress', props: { value: 45 } },
+            { type: "Progress", props: { value: 45 } },
           ],
         },
       ],
     },
   },
-}
+};
 
 /**
  * Lists - ordered and unordered.
@@ -199,34 +199,34 @@ export const ProgressBars: Story = {
 export const Lists: Story = {
   args: {
     content: {
-      type: 'Grid',
-      props: { columns: 2, gap: 'lg' },
+      type: "Grid",
+      props: { columns: 2, gap: "lg" },
       children: [
         {
-          type: 'Card',
-          props: { title: 'Unordered List' },
+          type: "Card",
+          props: { title: "Unordered List" },
           children: [
             {
-              type: 'List',
+              type: "List",
               props: {
                 items: [
-                  'First item',
-                  'Second item',
-                  'Third item',
-                  'Fourth item',
+                  "First item",
+                  "Second item",
+                  "Third item",
+                  "Fourth item",
                 ],
               },
             },
           ],
         },
         {
-          type: 'Card',
-          props: { title: 'Ordered List' },
+          type: "Card",
+          props: { title: "Ordered List" },
           children: [
             {
-              type: 'List',
+              type: "List",
               props: {
-                items: ['Step one', 'Step two', 'Step three', 'Step four'],
+                items: ["Step one", "Step two", "Step three", "Step four"],
                 ordered: true,
               },
             },
@@ -235,7 +235,7 @@ export const Lists: Story = {
       ],
     },
   },
-}
+};
 
 /**
  * Accordion with collapsible sections.
@@ -243,51 +243,51 @@ export const Lists: Story = {
 export const AccordionExample: Story = {
   args: {
     content: {
-      type: 'Card',
-      props: { title: 'FAQ' },
+      type: "Card",
+      props: { title: "FAQ" },
       children: [
         {
-          type: 'Accordion',
-          props: { type: 'single' },
+          type: "Accordion",
+          props: { type: "single" },
           children: [
             {
-              type: 'AccordionItem',
-              props: { value: 'q1', title: 'What is your return policy?' },
+              type: "AccordionItem",
+              props: { value: "q1", title: "What is your return policy?" },
               children: [
                 {
-                  type: 'Text',
+                  type: "Text",
                   props: {
                     content:
-                      'We offer a 30-day return policy for all unused items in original packaging.',
-                    variant: 'body',
+                      "We offer a 30-day return policy for all unused items in original packaging.",
+                    variant: "body",
                   },
                 },
               ],
             },
             {
-              type: 'AccordionItem',
-              props: { value: 'q2', title: 'How long does shipping take?' },
+              type: "AccordionItem",
+              props: { value: "q2", title: "How long does shipping take?" },
               children: [
                 {
-                  type: 'Text',
+                  type: "Text",
                   props: {
                     content:
-                      'Standard shipping takes 5-7 business days. Express shipping is available for 2-3 day delivery.',
-                    variant: 'body',
+                      "Standard shipping takes 5-7 business days. Express shipping is available for 2-3 day delivery.",
+                    variant: "body",
                   },
                 },
               ],
             },
             {
-              type: 'AccordionItem',
-              props: { value: 'q3', title: 'Do you ship internationally?' },
+              type: "AccordionItem",
+              props: { value: "q3", title: "Do you ship internationally?" },
               children: [
                 {
-                  type: 'Text',
+                  type: "Text",
                   props: {
                     content:
-                      'Yes! We ship to over 50 countries worldwide. Shipping costs vary by destination.',
-                    variant: 'body',
+                      "Yes! We ship to over 50 countries worldwide. Shipping costs vary by destination.",
+                    variant: "body",
                   },
                 },
               ],
@@ -297,7 +297,7 @@ export const AccordionExample: Story = {
       ],
     },
   },
-}
+};
 
 /**
  * Tabs with multiple content panels.
@@ -305,60 +305,60 @@ export const AccordionExample: Story = {
 export const TabsExample: Story = {
   args: {
     content: {
-      type: 'Card',
-      props: { title: 'Product Details' },
+      type: "Card",
+      props: { title: "Product Details" },
       children: [
         {
-          type: 'Tabs',
+          type: "Tabs",
           props: {
-            defaultValue: 'overview',
+            defaultValue: "overview",
             tabs: [
-              { value: 'overview', label: 'Overview' },
-              { value: 'specs', label: 'Specifications' },
-              { value: 'reviews', label: 'Reviews' },
+              { value: "overview", label: "Overview" },
+              { value: "specs", label: "Specifications" },
+              { value: "reviews", label: "Reviews" },
             ],
           },
           children: [
             {
-              type: 'TabContent',
-              props: { value: 'overview' },
+              type: "TabContent",
+              props: { value: "overview" },
               children: [
                 {
-                  type: 'Text',
+                  type: "Text",
                   props: {
                     content:
-                      'This premium product features cutting-edge technology and elegant design.',
-                    variant: 'body',
+                      "This premium product features cutting-edge technology and elegant design.",
+                    variant: "body",
                   },
                 },
               ],
             },
             {
-              type: 'TabContent',
-              props: { value: 'specs' },
+              type: "TabContent",
+              props: { value: "specs" },
               children: [
                 {
-                  type: 'List',
+                  type: "List",
                   props: {
                     items: [
-                      'Weight: 1.2 kg',
-                      'Dimensions: 30x20x10 cm',
-                      'Material: Aluminum',
-                      'Battery: 10 hours',
+                      "Weight: 1.2 kg",
+                      "Dimensions: 30x20x10 cm",
+                      "Material: Aluminum",
+                      "Battery: 10 hours",
                     ],
                   },
                 },
               ],
             },
             {
-              type: 'TabContent',
-              props: { value: 'reviews' },
+              type: "TabContent",
+              props: { value: "reviews" },
               children: [
                 {
-                  type: 'Text',
+                  type: "Text",
                   props: {
-                    content: '4.8 out of 5 stars based on 256 reviews',
-                    variant: 'body',
+                    content: "4.8 out of 5 stars based on 256 reviews",
+                    variant: "body",
                   },
                 },
               ],
@@ -368,7 +368,7 @@ export const TabsExample: Story = {
       ],
     },
   },
-}
+};
 
 /**
  * Form elements - inputs, checkboxes, and selects.
@@ -376,60 +376,60 @@ export const TabsExample: Story = {
 export const FormElements: Story = {
   args: {
     content: {
-      type: 'Card',
-      props: { title: 'Contact Form' },
+      type: "Card",
+      props: { title: "Contact Form" },
       children: [
         {
-          type: 'Stack',
-          props: { direction: 'vertical', gap: 'md' },
+          type: "Stack",
+          props: { direction: "vertical", gap: "md" },
           children: [
             {
-              type: 'Input',
+              type: "Input",
               props: {
-                label: 'Full Name',
-                placeholder: 'Enter your name',
-                valuePath: 'name',
+                label: "Full Name",
+                placeholder: "Enter your name",
+                valuePath: "name",
               },
             },
             {
-              type: 'Input',
+              type: "Input",
               props: {
-                label: 'Email',
-                placeholder: 'Enter your email',
-                type: 'email',
-                valuePath: 'email',
+                label: "Email",
+                placeholder: "Enter your email",
+                type: "email",
+                valuePath: "email",
               },
             },
             {
-              type: 'Select',
+              type: "Select",
               props: {
-                placeholder: 'Select a topic',
-                valuePath: 'topic',
+                placeholder: "Select a topic",
+                valuePath: "topic",
                 options: [
-                  { value: 'general', label: 'General Inquiry' },
-                  { value: 'support', label: 'Technical Support' },
-                  { value: 'sales', label: 'Sales Question' },
-                  { value: 'feedback', label: 'Feedback' },
+                  { value: "general", label: "General Inquiry" },
+                  { value: "support", label: "Technical Support" },
+                  { value: "sales", label: "Sales Question" },
+                  { value: "feedback", label: "Feedback" },
                 ],
               },
             },
             {
-              type: 'Checkbox',
+              type: "Checkbox",
               props: {
-                label: 'Subscribe to newsletter',
-                valuePath: 'subscribe',
+                label: "Subscribe to newsletter",
+                valuePath: "subscribe",
               },
             },
             {
-              type: 'Button',
-              props: { label: 'Submit', variant: 'default' },
+              type: "Button",
+              props: { label: "Submit", variant: "default" },
             },
           ],
         },
       ],
     },
   },
-}
+};
 
 /**
  * Avatar and skeleton loading states.
@@ -437,29 +437,29 @@ export const FormElements: Story = {
 export const AvatarsAndSkeletons: Story = {
   args: {
     content: {
-      type: 'Stack',
-      props: { direction: 'vertical', gap: 'lg' },
+      type: "Stack",
+      props: { direction: "vertical", gap: "lg" },
       children: [
         {
-          type: 'Stack',
-          props: { direction: 'horizontal', gap: 'md', align: 'center' },
+          type: "Stack",
+          props: { direction: "horizontal", gap: "md", align: "center" },
           children: [
-            { type: 'Avatar', props: { fallback: 'JD' } },
-            { type: 'Avatar', props: { fallback: 'AS' } },
-            { type: 'Avatar', props: { fallback: 'MK' } },
+            { type: "Avatar", props: { fallback: "JD" } },
+            { type: "Avatar", props: { fallback: "AS" } },
+            { type: "Avatar", props: { fallback: "MK" } },
           ],
         },
         {
-          type: 'Card',
-          props: { title: 'Loading State' },
+          type: "Card",
+          props: { title: "Loading State" },
           children: [
             {
-              type: 'Stack',
-              props: { direction: 'vertical', gap: 'sm' },
+              type: "Stack",
+              props: { direction: "vertical", gap: "sm" },
               children: [
-                { type: 'Skeleton', props: { height: '1.5rem', width: '60%' } },
-                { type: 'Skeleton', props: { height: '1rem', width: '100%' } },
-                { type: 'Skeleton', props: { height: '1rem', width: '80%' } },
+                { type: "Skeleton", props: { height: "1.5rem", width: "60%" } },
+                { type: "Skeleton", props: { height: "1rem", width: "100%" } },
+                { type: "Skeleton", props: { height: "1rem", width: "80%" } },
               ],
             },
           ],
@@ -467,7 +467,7 @@ export const AvatarsAndSkeletons: Story = {
       ],
     },
   },
-}
+};
 
 /**
  * Complete dashboard example combining multiple components.
@@ -475,77 +475,77 @@ export const AvatarsAndSkeletons: Story = {
 export const Dashboard: Story = {
   args: {
     content: {
-      type: 'Stack',
-      props: { direction: 'vertical', gap: 'lg' },
+      type: "Stack",
+      props: { direction: "vertical", gap: "lg" },
       children: [
         {
-          type: 'Text',
-          props: { content: 'Store Dashboard', variant: 'heading' },
+          type: "Text",
+          props: { content: "Store Dashboard", variant: "heading" },
         },
         {
-          type: 'Grid',
-          props: { columns: 4, gap: 'md' },
+          type: "Grid",
+          props: { columns: 4, gap: "md" },
           children: [
             {
-              type: 'Card',
+              type: "Card",
               children: [
                 {
-                  type: 'Metric',
+                  type: "Metric",
                   props: {
-                    label: 'Total Revenue',
+                    label: "Total Revenue",
                     value: 45231,
-                    format: 'currency',
+                    format: "currency",
                   },
                 },
               ],
             },
             {
-              type: 'Card',
+              type: "Card",
               children: [
                 {
-                  type: 'Metric',
-                  props: { label: 'Orders', value: 1234, format: 'number' },
+                  type: "Metric",
+                  props: { label: "Orders", value: 1234, format: "number" },
                 },
               ],
             },
             {
-              type: 'Card',
+              type: "Card",
               children: [
                 {
-                  type: 'Metric',
-                  props: { label: 'Customers', value: 567, format: 'number' },
+                  type: "Metric",
+                  props: { label: "Customers", value: 567, format: "number" },
                 },
               ],
             },
             {
-              type: 'Card',
+              type: "Card",
               children: [
                 {
-                  type: 'Metric',
+                  type: "Metric",
                   props: {
-                    label: 'Conversion',
+                    label: "Conversion",
                     value: 0.0312,
-                    format: 'percent',
+                    format: "percent",
                   },
                 },
               ],
             },
           ],
         },
-        { type: 'Separator' },
+        { type: "Separator" },
         {
-          type: 'Card',
-          props: { title: 'Recent Orders' },
+          type: "Card",
+          props: { title: "Recent Orders" },
           children: [
             {
-              type: 'Table',
+              type: "Table",
               props: {
-                headers: ['Order', 'Customer', 'Status', 'Amount'],
+                headers: ["Order", "Customer", "Status", "Amount"],
                 rows: [
-                  ['#3210', 'Olivia Martin', 'Shipped', '$42.25'],
-                  ['#3209', 'Ava Johnson', 'Processing', '$74.99'],
-                  ['#3208', 'Michael Chen', 'Delivered', '$124.00'],
-                  ['#3207', 'Lisa Wang', 'Pending', '$64.75'],
+                  ["#3210", "Olivia Martin", "Shipped", "$42.25"],
+                  ["#3209", "Ava Johnson", "Processing", "$74.99"],
+                  ["#3208", "Michael Chen", "Delivered", "$124.00"],
+                  ["#3207", "Lisa Wang", "Pending", "$64.75"],
                 ],
               },
             },
@@ -554,4 +554,4 @@ export const Dashboard: Story = {
       ],
     },
   },
-}
+};

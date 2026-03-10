@@ -32,6 +32,7 @@ import (
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -187,7 +188,7 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
-	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	// Extract general OAuth token (no security-key binding)
 	var oauthToken string
 	for _, t := range payload.oauthTokenInputs {
 		if len(t.securityKeys) == 0 && t.Token != "" {
@@ -196,10 +197,18 @@ func handleToolsCall(
 		}
 	}
 
+	var gramEmail string
+	if payload.authenticated {
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx.Email != nil {
+			gramEmail = *authCtx.Email
+		}
+	}
+
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
 		OAuthToken: oauthToken,
+		GramEmail:  gramEmail,
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
@@ -267,8 +276,13 @@ func handleToolsCall(
 		if payload.userID != "" {
 			logAttrs[attr.UserIDKey] = payload.userID
 		}
-		if payload.externalUserID != "" {
+		switch {
+		case payload.externalUserID != "":
 			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
+		case oauthToken != "":
+			if sub := jwtclaims.UnsafeExtractSubject(oauthToken); sub != "" {
+				logAttrs[attr.ExternalUserIDKey] = sub
+			}
 		}
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID

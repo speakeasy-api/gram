@@ -5,8 +5,11 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.slack.slackLogin({
-    projectSlug: "<value>",
+  const result = await gram.assets.createSignedChatAttachmentURL({
+    createSignedChatAttachmentURLForm2: {
+      id: "<id>",
+      projectId: "<id>",
+    },
   });
 
   console.log(result);

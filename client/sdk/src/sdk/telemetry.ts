@@ -3,9 +3,11 @@
  */
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
+import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
+import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
@@ -29,6 +31,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getHooksSummary telemetry
+   *
+   * @remarks
+   * Get aggregated hooks metrics grouped by server
+   */
+  async getHooksSummary(
+    request: operations.GetHooksSummaryRequest,
+    security?: operations.GetHooksSummarySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetHooksSummaryResult> {
+    return unwrapAsync(telemetryGetHooksSummary(
       this,
       request,
       security,
@@ -86,6 +107,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.GetUserMetricsSummaryResult> {
     return unwrapAsync(telemetryGetUserMetricsSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAttributeKeys telemetry
+   *
+   * @remarks
+   * List distinct attribute keys available for filtering
+   */
+  async listAttributeKeys(
+    request: operations.ListAttributeKeysRequest,
+    security?: operations.ListAttributeKeysSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListAttributeKeysResult> {
+    return unwrapAsync(telemetryListAttributeKeys(
       this,
       request,
       security,

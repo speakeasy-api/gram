@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.27.3**](../README.md)
+[**@gram-ai/elements v1.27.4**](../README.md)
 
 ***
 
@@ -151,3 +151,11 @@ API URL for AI parsing (defaults to window.location.origin)
 > `optional` **projectSlug**: `string`
 
 Project slug for API authentication
+
+***
+
+### className?
+
+> `optional` **className**: `string`
+
+Additional class name for the trigger

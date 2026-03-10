@@ -10,14 +10,14 @@
     "dev:docs": "pnpm --filter ./client/docs dev",
     "lint": "tsc --noEmit && pnpm -r lint",
     "build": "pnpm -r build",
-    "type-check": "pnpm -r type-check"
+    "type-check": "pnpm -r type-check",
+    "format": "oxfmt -c .oxfmtrc.json"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.30.2",
   "devDependencies": {
-    "react-is": "19.2.3",
     "@changesets/cli": "^2.29.7",
     "@clack/prompts": "1.0.0-alpha.6",
     "@datadog/datadog-ci": "^4.2.2",
@@ -26,8 +26,8 @@
     "@types/node": "^24.10.1",
     "confbox": "^0.2.2",
     "get-port-please": "^3.2.0",
-    "prettier": "^3.6.2",
-    "prettier-plugin-tailwindcss": "^0.7.2",
+    "oxfmt": "^0.36.0",
+    "react-is": "19.2.3",
     "typescript": "catalog:",
     "zx": "^8.8.5"
   },
@@ -35,9 +35,6 @@
     "overrides": {
       "react-is": "$react-is",
       "recharts": "2.15.4"
-    },
-    "patchedDependencies": {
-      "zod@3.25.76": "patches/zod@3.25.76.patch"
     }
   }
 }

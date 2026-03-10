@@ -51,3 +51,13 @@ func GetObservabilityOverviewTelemetryPath() string {
 func ListFilterOptionsTelemetryPath() string {
 	return "/rpc/telemetry.listFilterOptions"
 }
+
+// ListAttributeKeysTelemetryPath returns the URL path to the telemetry service listAttributeKeys HTTP endpoint.
+func ListAttributeKeysTelemetryPath() string {
+	return "/rpc/telemetry.listAttributeKeys"
+}
+
+// GetHooksSummaryTelemetryPath returns the URL path to the telemetry service getHooksSummary HTTP endpoint.
+func GetHooksSummaryTelemetryPath() string {
+	return "/rpc/telemetry.getHooksSummary"
+}

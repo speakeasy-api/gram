@@ -1,20 +1,22 @@
-import {
-  ToolCallSummary,
-  TelemetryLogRecord,
-} from "@gram/client/models/components";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
+  TelemetryLogRecord,
+  ToolCallSummary,
+} from "@gram/client/models/components";
+import {
   FileCode,
+  SquareTerminal as HookIcon,
+  LucideIcon,
   PencilRuler,
   SquareFunction,
-  LucideIcon,
+  Hammer as ToolIcon,
 } from "lucide-react";
 
 /**
  * Format Unix nanoseconds to a readable timestamp
  */
-export function formatNanoTimestamp(nanos: number): string {
-  const ms = nanos / 1_000_000;
+export function formatNanoTimestamp(nanos: string): string {
+  const ms = Number(BigInt(nanos) / 1_000_000n);
   return dateTimeFormatters.logTimestamp.format(new Date(ms)).replace(",", "");
 }
 
@@ -98,16 +100,24 @@ export function getToolNameFromUrn(urn: string): string {
 /**
  * Get the appropriate icon for a tool based on its URN
  */
-export function getToolIcon(urn: string): LucideIcon {
-  const { kind } = parseGramUrn(urn);
-  if (kind === "http") {
-    return FileCode;
+export function getToolIcon(trace: ToolCallSummary): LucideIcon {
+  if (trace.gramUrn) {
+    const { kind } = parseGramUrn(trace.gramUrn);
+    if (kind === "http") {
+      return FileCode;
+    }
+    if (kind === "prompt") {
+      return PencilRuler;
+    }
+    // Otherwise it's a function tool
+    return SquareFunction;
   }
-  if (kind === "prompt") {
-    return PencilRuler;
+
+  if (trace.eventSource === "hook") {
+    return HookIcon;
   }
-  // Otherwise it's a function tool
-  return SquareFunction;
+
+  return ToolIcon;
 }
 
 /**

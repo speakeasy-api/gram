@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   gram_account_type TEXT NOT NULL DEFAULT 'free',
-  sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO
+  sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO. Will be replaced by workos_org_id.
+  workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -213,7 +214,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   project_id uuid,
   created_by_user_id TEXT NOT NULL,
 
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 255),
   key_prefix TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -885,6 +886,47 @@ CREATE TABLE IF NOT EXISTS slack_app_connections (
   CONSTRAINT slack_auth_connections_organization_id_project_id_key UNIQUE (organization_id, project_id)
 );
 
+CREATE TABLE IF NOT EXISTS slack_apps (
+  -- Column order optimized for alignment (PG110)
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  slack_team_name TEXT,
+  slack_bot_user_id TEXT,
+  slack_client_secret TEXT,
+  slack_signing_secret TEXT,
+  slack_team_id TEXT,
+  organization_id TEXT NOT NULL,
+  slack_bot_token TEXT,
+  slack_client_id TEXT,
+  system_prompt TEXT,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unconfigured',
+  icon_asset_id uuid,
+  project_id uuid NOT NULL,
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT slack_apps_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_project_name_key
+  ON slack_apps (project_id, name) WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_slack_team_id_key
+  ON slack_apps (slack_team_id) WHERE deleted IS FALSE AND slack_team_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS slack_app_toolsets (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  slack_app_id uuid NOT NULL,
+  toolset_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_app_toolsets_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
+  CONSTRAINT slack_app_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT slack_app_toolsets_slack_app_id_toolset_id_key UNIQUE (slack_app_id, toolset_id)
+);
+
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -1053,6 +1095,7 @@ CREATE TABLE IF NOT EXISTS users (
   photo_url TEXT,
   admin BOOLEAN NOT NULL DEFAULT FALSE,
   last_login timestamptz,
+  workos_id TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1063,10 +1106,47 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
 
+CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
+ON users (workos_id);
+
+CREATE TABLE IF NOT EXISTS deployment_tags (
+  -- Column order optimized for alignment (PG110)
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  deployment_id uuid,
+
+  CONSTRAINT deployment_tags_pkey PRIMARY KEY (id),
+  CONSTRAINT deployment_tags_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT deployment_tags_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS deployment_tags_project_id_name_key
+ON deployment_tags (project_id, name);
+
+CREATE TABLE IF NOT EXISTS deployment_tag_history (
+  -- Column order optimized for alignment (PG110)
+  changed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  changed_by TEXT,
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  tag_id uuid NOT NULL,
+  previous_deployment_id uuid,
+  new_deployment_id uuid,
+
+  CONSTRAINT deployment_tag_history_pkey PRIMARY KEY (id),
+  CONSTRAINT deployment_tag_history_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES deployment_tags (id) ON DELETE CASCADE,
+  CONSTRAINT deployment_tag_history_previous_deployment_id_fkey FOREIGN KEY (previous_deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
+  CONSTRAINT deployment_tag_history_new_deployment_id_fkey FOREIGN KEY (new_deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
+  CONSTRAINT deployment_tag_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES users (id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS organization_user_relationships (
   id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
   organization_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
+  workos_membership_id TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1078,6 +1158,10 @@ CREATE TABLE IF NOT EXISTS organization_user_relationships (
   CONSTRAINT organization_user_relationships_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
   CONSTRAINT organization_user_relationships_organization_id_user_id_key UNIQUE (organization_id, user_id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_user_relationships_workos_membership_id_key
+ON organization_user_relationships (workos_membership_id)
+WHERE deleted IS FALSE;
 
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
@@ -1201,6 +1285,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
   registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
+  selected_remotes TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

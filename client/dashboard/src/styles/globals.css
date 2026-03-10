@@ -217,3 +217,24 @@
 .stroke-red-500 path {
   stroke: #ef4444 !important;
 }
+
+/* Override TimeRangePicker trigger background to be transparent */
+[data-slot="popover-trigger"] > div.inline-flex.rounded-md.border {
+  background: transparent !important;
+}
+
+/* Dotted background scroll animation for catalog cards */
+@layer utilities {
+  @keyframes scroll-dots {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 64px 64px;
+    }
+  }
+
+  .server-card:hover .scroll-dots-target {
+    animation: scroll-dots 3s linear infinite;
+  }
+}

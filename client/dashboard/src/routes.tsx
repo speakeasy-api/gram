@@ -22,6 +22,7 @@ import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
 import Logs from "./pages/logs/Logs";
+import Hooks from "./pages/hooks/Hooks";
 import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
@@ -35,6 +36,8 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Settings from "./pages/settings/Settings";
+import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
+import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SourceDetails from "./pages/sources/SourceDetails";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
@@ -228,6 +231,20 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  slackApps: {
+    title: "Slack",
+    url: "slack",
+    icon: "slack",
+    component: SlackAppsRoot,
+    indexComponent: SlackAppsIndex,
+    subPages: {
+      detail: {
+        title: "Slack App",
+        url: ":slackAppId",
+        component: SlackAppDetailPage,
+      },
+    },
+  },
   mcp: {
     title: "MCP",
     url: "mcp",
@@ -273,6 +290,12 @@ const ROUTE_STRUCTURE = {
     customIcon: McpIcon,
     component: Logs,
   },
+  hooks: {
+    title: "Hooks",
+    url: "hooks",
+    icon: "webhook",
+    component: Hooks,
+  },
   observability: {
     title: "Insights",
     url: "observability",
@@ -304,6 +327,28 @@ const ROUTE_STRUCTURE = {
     url: "settings",
     icon: "settings",
     component: Settings,
+    subPages: {
+      general: {
+        title: "General",
+        url: "general",
+        component: Settings,
+      },
+      apiKeys: {
+        title: "API Keys",
+        url: "api-keys",
+        component: Settings,
+      },
+      logs: {
+        title: "Logging & Telemetry",
+        url: "logs",
+        component: Settings,
+      },
+      domains: {
+        title: "Custom Domain",
+        url: "domains",
+        component: Settings,
+      },
+    },
   },
   billing: {
     title: "Billing",

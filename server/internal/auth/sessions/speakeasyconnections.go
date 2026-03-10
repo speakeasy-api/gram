@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -181,6 +182,9 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 			s.logger.ErrorContext(ctx, "failed to capture is_first_time_user_signup event", attr.SlogError(err))
 		}
 	}
+
+	// Update user and user-org relationships with WorkOS IDs, if applicable
+	s.syncWorkOSIDs(ctx, user, validateResp)
 
 	var adminOverride string
 	if override, _ := contextvalues.GetAdminOverrideFromContext(ctx); override != "" && validateResp.User.Admin {
@@ -375,4 +379,54 @@ func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	}
 
 	return authURL, nil
+}
+
+func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow, validateResp validateTokenResponse) {
+	// skip if workos client is not configured
+	if s.workos == nil {
+		return
+	}
+
+	workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
+		return
+	}
+	if workosUser == nil {
+		return
+	}
+
+	if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+		ID:       user.ID,
+		WorkosID: conv.ToPGText(workosUser.ID),
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
+	}
+
+	for _, org := range validateResp.Organizations {
+		if org.SSOConnectionID == nil {
+			continue
+		}
+
+		orgMembership, err := s.workos.GetOrgMembership(ctx, workosUser.ID, org.ID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to get workos org membership", attr.SlogError(err))
+			continue
+		}
+		if orgMembership == nil {
+			continue
+		}
+
+		if err := s.orgRepo.AttachWorkOSUserToOrg(
+			ctx,
+			orgRepo.AttachWorkOSUserToOrgParams{
+				OrganizationID:     org.ID,
+				UserID:             validateResp.User.ID,
+				WorkosMembershipID: conv.ToPGText(orgMembership.ID),
+			},
+		); err != nil {
+			s.logger.ErrorContext(ctx, "failed to attach workos user to org", attr.SlogError(err))
+			continue
+		}
+	}
 }

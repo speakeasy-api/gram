@@ -1,33 +1,33 @@
-import { GetSessionFn } from '@/types'
-import { google } from '@ai-sdk/google'
-import type { Meta, StoryFn } from '@storybook/react-vite'
-import { Chat } from '..'
+import { GetSessionFn } from "@/types";
+import { google } from "@ai-sdk/google";
+import type { Meta, StoryFn } from "@storybook/react-vite";
+import { Chat } from "..";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/Connection Configuration',
+  title: "Chat/Connection Configuration",
   component: Chat,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
-type Story = StoryFn<typeof Chat>
+type Story = StoryFn<typeof Chat>;
 
-export const SystemPrompt: Story = () => <Chat />
-SystemPrompt.storyName = 'Custom System Prompt'
+export const SystemPrompt: Story = () => <Chat />;
+SystemPrompt.storyName = "Custom System Prompt";
 SystemPrompt.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
-      systemPrompt: 'Please speak like a pirate',
+      variant: "standalone",
+      systemPrompt: "Please speak like a pirate",
     },
   },
-}
+};
 
-export const WithImplicitSessionAuth: Story = () => <Chat />
-WithImplicitSessionAuth.storyName = 'With Implicit Session Auth'
+export const WithImplicitSessionAuth: Story = () => <Chat />;
+WithImplicitSessionAuth.storyName = "With Implicit Session Auth";
 WithImplicitSessionAuth.parameters = {
   elements: {
     config: {
@@ -35,64 +35,64 @@ WithImplicitSessionAuth.parameters = {
       api: undefined,
     },
   },
-}
+};
 
 const session: GetSessionFn = async () => {
-  const response = await fetch('/chat/session', {
-    method: 'POST',
+  const response = await fetch("/chat/session", {
+    method: "POST",
     headers: {
-      'Gram-Project':
-        import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? '',
+      "Gram-Project":
+        import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? "",
     },
-  })
-  const data = await response.json()
-  return data.client_token
-}
+  });
+  const data = await response.json();
+  return data.client_token;
+};
 
-export const WithExplicitSessionAuth: Story = () => <Chat />
-WithExplicitSessionAuth.storyName = 'With Explicit Session Auth'
+export const WithExplicitSessionAuth: Story = () => <Chat />;
+WithExplicitSessionAuth.storyName = "With Explicit Session Auth";
 WithExplicitSessionAuth.parameters = {
   elements: {
     config: {
       api: { session },
     },
   },
-}
+};
 
-export const WithDangerousApiKey: Story = () => <Chat />
-WithDangerousApiKey.storyName = 'With Dangerous API Key Warning'
+export const WithDangerousApiKey: Story = () => <Chat />;
+WithDangerousApiKey.storyName = "With Dangerous API Key Warning";
 WithDangerousApiKey.parameters = {
   elements: {
     config: {
-      api: { dangerousApiKey: 'test' },
+      api: { dangerousApiKey: "test" },
     },
   },
-}
+};
 
 // NOTE: add Gemini API key to .env.local with the key VITE_GOOGLE_GENERATIVE_AI_API_KEY
-export const LanguageModel: Story = () => <Chat />
-LanguageModel.storyName = 'Custom Language Model (Gemini)'
+export const LanguageModel: Story = () => <Chat />;
+LanguageModel.storyName = "Custom Language Model (Gemini)";
 LanguageModel.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
+      variant: "standalone",
       welcome: {
-        title: 'Using Google Gemini',
-        subtitle: 'Using Google Gemini 3 Flash Preview',
+        title: "Using Google Gemini",
+        subtitle: "Using Google Gemini 3 Flash Preview",
         suggestions: [
           {
-            title: 'Browse Products',
+            title: "Browse Products",
             label: "See what's available",
-            prompt: 'What products do you have?',
+            prompt: "What products do you have?",
           },
           {
-            title: 'Sales Chart',
-            label: 'Visualize data',
-            prompt: 'Show me a chart of product prices',
+            title: "Sales Chart",
+            label: "Visualize data",
+            prompt: "Show me a chart of product prices",
           },
         ],
       },
-      languageModel: google('gemini-3-flash-preview'),
+      languageModel: google("gemini-3-flash-preview"),
     },
   },
-}
+};

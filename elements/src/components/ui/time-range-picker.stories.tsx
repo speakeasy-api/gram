@@ -1,40 +1,40 @@
-import type { Meta, StoryObj } from '@storybook/react-vite'
-import { useState } from 'react'
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useState } from "react";
 import {
   TimeRangePicker,
   type TimeRange,
   type DateRangePreset,
-} from './time-range-picker'
+} from "./time-range-picker";
 
 const meta: Meta<typeof TimeRangePicker> = {
-  title: 'UI/TimeRangePicker',
+  title: "UI/TimeRangePicker",
   component: TimeRangePicker,
-  tags: ['autodocs'],
+  tags: ["autodocs"],
   parameters: {
-    layout: 'centered',
+    layout: "centered",
   },
   decorators: [
     (Story) => (
-      <div className="gram-elements bg-background text-foreground min-w-[400px] p-8">
+      <div className="gram-elements min-w-[400px] bg-background p-8 text-foreground">
         <Story />
       </div>
     ),
   ],
   argTypes: {
     showLive: {
-      control: 'boolean',
+      control: "boolean",
     },
     disabled: {
-      control: 'boolean',
+      control: "boolean",
     },
     timezone: {
-      control: 'text',
+      control: "text",
     },
   },
-}
+};
 
-export default meta
-type Story = StoryObj<typeof TimeRangePicker>
+export default meta;
+type Story = StoryObj<typeof TimeRangePicker>;
 
 /**
  * Default time range picker with preset badges and calendar.
@@ -42,103 +42,103 @@ type Story = StoryObj<typeof TimeRangePicker>
  */
 export const Default: Story = {
   render: () => {
-    const [preset, setPreset] = useState<DateRangePreset | null>('7d')
-    const [customRange, setCustomRange] = useState<TimeRange | null>(null)
+    const [preset, setPreset] = useState<DateRangePreset | null>("7d");
+    const [customRange, setCustomRange] = useState<TimeRange | null>(null);
 
     return (
       <TimeRangePicker
         preset={customRange ? null : preset}
         customRange={customRange}
         onPresetChange={(p) => {
-          setPreset(p)
-          setCustomRange(null)
+          setPreset(p);
+          setCustomRange(null);
         }}
         onCustomRangeChange={(from, to, label) => {
-          setCustomRange({ from, to })
-          setPreset(null)
-          console.log('Custom range:', { from, to, label })
+          setCustomRange({ from, to });
+          setPreset(null);
+          console.log("Custom range:", { from, to, label });
         }}
         onClearCustomRange={() => {
-          setCustomRange(null)
-          setPreset('7d')
+          setCustomRange(null);
+          setPreset("7d");
         }}
       />
-    )
+    );
   },
-}
+};
 
 /**
  * Time range picker with timezone indicator.
  */
 export const WithTimezone: Story = {
   render: () => {
-    const [preset, setPreset] = useState<DateRangePreset | null>('30d')
-    const [customRange, setCustomRange] = useState<TimeRange | null>(null)
+    const [preset, setPreset] = useState<DateRangePreset | null>("30d");
+    const [customRange, setCustomRange] = useState<TimeRange | null>(null);
 
     return (
       <TimeRangePicker
         preset={customRange ? null : preset}
         customRange={customRange}
         onPresetChange={(p) => {
-          setPreset(p)
-          setCustomRange(null)
+          setPreset(p);
+          setCustomRange(null);
         }}
         onCustomRangeChange={(from, to) => {
-          setCustomRange({ from, to })
-          setPreset(null)
+          setCustomRange({ from, to });
+          setPreset(null);
         }}
         onClearCustomRange={() => {
-          setCustomRange(null)
-          setPreset('30d')
+          setCustomRange(null);
+          setPreset("30d");
         }}
         timezone="UTC-08:00"
       />
-    )
+    );
   },
-}
+};
 
 /**
  * With LIVE mode toggle enabled.
  */
 export const WithLiveMode: Story = {
   render: () => {
-    const [preset, setPreset] = useState<DateRangePreset | null>('15m')
-    const [customRange, setCustomRange] = useState<TimeRange | null>(null)
-    const [isLive, setIsLive] = useState(true)
+    const [preset, setPreset] = useState<DateRangePreset | null>("15m");
+    const [customRange, setCustomRange] = useState<TimeRange | null>(null);
+    const [isLive, setIsLive] = useState(true);
 
     return (
       <TimeRangePicker
         preset={customRange ? null : preset}
         customRange={customRange}
         onPresetChange={(p) => {
-          setPreset(p)
-          setCustomRange(null)
+          setPreset(p);
+          setCustomRange(null);
         }}
         onCustomRangeChange={(from, to) => {
-          setCustomRange({ from, to })
-          setPreset(null)
+          setCustomRange({ from, to });
+          setPreset(null);
         }}
         onClearCustomRange={() => {
-          setCustomRange(null)
-          setPreset('15m')
+          setCustomRange(null);
+          setPreset("15m");
         }}
         showLive
         isLive={isLive}
         onLiveChange={setIsLive}
       />
-    )
+    );
   },
-}
+};
 
 /**
  * Disabled state.
  */
 export const Disabled: Story = {
   args: {
-    preset: '7d',
+    preset: "7d",
     disabled: true,
   },
-}
+};
 
 /**
  * Full Datadog-style configuration with all features.
@@ -146,10 +146,10 @@ export const Disabled: Story = {
  */
 export const DatadogStyle: Story = {
   render: () => {
-    const [preset, setPreset] = useState<DateRangePreset | null>('7d')
-    const [customRange, setCustomRange] = useState<TimeRange | null>(null)
-    const [customLabel, setCustomLabel] = useState<string | null>(null)
-    const [isLive, setIsLive] = useState(false)
+    const [preset, setPreset] = useState<DateRangePreset | null>("7d");
+    const [customRange, setCustomRange] = useState<TimeRange | null>(null);
+    const [customLabel, setCustomLabel] = useState<string | null>(null);
+    const [isLive, setIsLive] = useState(false);
 
     return (
       <div className="space-y-4">
@@ -158,26 +158,26 @@ export const DatadogStyle: Story = {
           customRange={customRange}
           customRangeLabel={customLabel}
           onPresetChange={(p) => {
-            setPreset(p)
-            setCustomRange(null)
-            setCustomLabel(null)
+            setPreset(p);
+            setCustomRange(null);
+            setCustomLabel(null);
           }}
           onCustomRangeChange={(from, to, label) => {
-            setCustomRange({ from, to })
-            setPreset(null)
-            setCustomLabel(label || null)
+            setCustomRange({ from, to });
+            setPreset(null);
+            setCustomLabel(label || null);
           }}
           onClearCustomRange={() => {
-            setCustomRange(null)
-            setPreset('7d')
-            setCustomLabel(null)
+            setCustomRange(null);
+            setPreset("7d");
+            setCustomLabel(null);
           }}
           showLive
           isLive={isLive}
           onLiveChange={setIsLive}
           timezone="UTC-08:00"
         />
-        <div className="text-muted-foreground bg-muted rounded-md p-3 text-xs">
+        <div className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
           <strong>Current state:</strong>
           <pre className="mt-1 overflow-auto">
             {JSON.stringify(
@@ -193,14 +193,14 @@ export const DatadogStyle: Story = {
                 isLive,
               },
               null,
-              2
+              2,
             )}
           </pre>
         </div>
       </div>
-    )
+    );
   },
-}
+};
 
 /**
  * Natural language parsing demo.
@@ -213,13 +213,13 @@ export const DatadogStyle: Story = {
  */
 export const NaturalLanguageParsing: Story = {
   render: () => {
-    const [preset, setPreset] = useState<DateRangePreset | null>('30d')
-    const [customRange, setCustomRange] = useState<TimeRange | null>(null)
-    const [customLabel, setCustomLabel] = useState<string | null>(null)
+    const [preset, setPreset] = useState<DateRangePreset | null>("30d");
+    const [customRange, setCustomRange] = useState<TimeRange | null>(null);
+    const [customLabel, setCustomLabel] = useState<string | null>(null);
 
     return (
       <div className="space-y-4">
-        <p className="text-muted-foreground text-sm">
+        <p className="text-sm text-muted-foreground">
           Try typing: "yesterday", "3 days ago", "last Wednesday", "January"
         </p>
         <TimeRangePicker
@@ -227,23 +227,23 @@ export const NaturalLanguageParsing: Story = {
           customRange={customRange}
           customRangeLabel={customLabel}
           onPresetChange={(p) => {
-            setPreset(p)
-            setCustomRange(null)
-            setCustomLabel(null)
+            setPreset(p);
+            setCustomRange(null);
+            setCustomLabel(null);
           }}
           onCustomRangeChange={(from, to, label) => {
-            setCustomRange({ from, to })
-            setPreset(null)
-            setCustomLabel(label || null)
-            console.log('AI parsed:', { from, to, label })
+            setCustomRange({ from, to });
+            setPreset(null);
+            setCustomLabel(label || null);
+            console.log("AI parsed:", { from, to, label });
           }}
           onClearCustomRange={() => {
-            setCustomRange(null)
-            setPreset('30d')
-            setCustomLabel(null)
+            setCustomRange(null);
+            setPreset("30d");
+            setCustomLabel(null);
           }}
         />
       </div>
-    )
+    );
   },
-}
+};

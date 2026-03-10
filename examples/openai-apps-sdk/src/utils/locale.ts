@@ -2,12 +2,14 @@ const DEFAULT_LOCALE = "en-US" as const;
 
 function hasOwn<T extends Record<string, unknown>>(
   obj: T,
-  key: PropertyKey
+  key: PropertyKey,
 ): key is keyof T {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
-export function resolveLocale<T extends Record<string, unknown>>(messages: T): keyof T {
+export function resolveLocale<T extends Record<string, unknown>>(
+  messages: T,
+): keyof T {
   if (typeof document !== "undefined") {
     const lang = document.documentElement.lang;
     if (lang && hasOwn(messages, lang)) {

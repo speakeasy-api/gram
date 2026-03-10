@@ -18,8 +18,8 @@
  * ```
  */
 
-import type { FastifyRequest, FastifyReply } from 'fastify'
-import { createChatSession, type SessionHandlerOptions } from './core'
+import type { FastifyRequest, FastifyReply } from "fastify";
+import { createChatSession, type SessionHandlerOptions } from "./core";
 
 /**
  * Create a Fastify route handler for the chat session endpoint.
@@ -31,31 +31,31 @@ export function createFastifyHandler(
   options:
     | SessionHandlerOptions
     | ((
-        request: FastifyRequest
-      ) => SessionHandlerOptions | Promise<SessionHandlerOptions>)
+        request: FastifyRequest,
+      ) => SessionHandlerOptions | Promise<SessionHandlerOptions>),
 ) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const projectSlug = Array.isArray(request.headers['gram-project'])
-      ? request.headers['gram-project'][0]
-      : request.headers['gram-project']
+    const projectSlug = Array.isArray(request.headers["gram-project"])
+      ? request.headers["gram-project"][0]
+      : request.headers["gram-project"];
 
     if (!projectSlug) {
-      reply.code(400).send({ error: 'Missing Gram-Project header' })
-      return
+      reply.code(400).send({ error: "Missing Gram-Project header" });
+      return;
     }
 
     const sessionOptions =
-      typeof options === 'function' ? await options(request) : options
+      typeof options === "function" ? await options(request) : options;
 
     const result = await createChatSession({
       projectSlug,
       options: sessionOptions,
-    })
+    });
 
     reply
       .code(result.status)
       .headers(result.headers)
-      .type('application/json')
-      .send(result.body)
-  }
+      .type("application/json")
+      .send(result.body);
+  };
 }

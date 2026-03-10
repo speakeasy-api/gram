@@ -123,7 +123,7 @@ func buildToolListEntries(
 
 	userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
 
-	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	// Extract general OAuth token (no security-key binding)
 	var oauthToken string
 	for _, t := range payload.oauthTokenInputs {
 		if len(t.securityKeys) == 0 && t.Token != "" {

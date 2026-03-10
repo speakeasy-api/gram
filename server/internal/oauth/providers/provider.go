@@ -11,18 +11,29 @@ import (
 
 // TokenExchangeResult contains the result of exchanging an authorization code
 type TokenExchangeResult struct {
-	AccessToken string
-	ExpiresAt   *time.Time
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    *time.Time
 }
 
 // Provider defines the interface for OAuth provider implementations
 type Provider interface {
-	// ExchangeToken exchanges an authorization code for an access token
+	// ExchangeToken exchanges an authorization code for an access token.
+	// codeVerifier is the PKCE verifier for the upstream provider (empty if not used).
 	ExchangeToken(
 		ctx context.Context,
 		code string,
 		provider repo.OauthProxyProvider,
 		toolset *toolsets_repo.Toolset,
 		serverURL *url.URL,
+		codeVerifier string,
+	) (*TokenExchangeResult, error)
+
+	// RefreshToken exchanges a refresh token for a new access token
+	RefreshToken(
+		ctx context.Context,
+		refreshToken string,
+		provider repo.OauthProxyProvider,
+		toolset *toolsets_repo.Toolset,
 	) (*TokenExchangeResult, error)
 }

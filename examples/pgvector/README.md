@@ -53,6 +53,7 @@ OPENROUTER_API_KEY=your_api_key_here
 ### 3. Start Database and Load Movie Data
 
 Run the following command to:
+
 1. Start PostgreSQL with pgvector in Docker
 2. Create the database schema
 3. Seed the database with ~5,000 movies (including pre-computed embeddings)
@@ -64,6 +65,7 @@ npm run db:start
 This command will automatically wait for the database to be ready and then seed it with movie data from the shared dataset at `/assets/pgvector/dataset_with_embeddings.csv.zip`.
 
 **Other database commands:**
+
 - `npm run db:stop` - Stop the database container
 - `npm run db:reset` - Reset everything (stops, removes data, restarts fresh)
 - `npm run db:seed` - Manually re-run the seed script
@@ -87,6 +89,7 @@ This opens an interactive playground where you can test the `search` tool. Try t
 ### Search Tool Parameters
 
 The `search` tool accepts:
+
 - `query` (required): Your natural language search query
 - `limit` (optional): Maximum number of results (1-100, default: 10)
 
@@ -106,7 +109,7 @@ The `search` tool accepts:
       "popularity": 98.5,
       "vote_average": 8.6,
       "similarity_score": 0.89
-    },
+    }
     // ... more results
   ]
 }
@@ -125,6 +128,7 @@ The semantic search system works in three steps:
 ### Why pgvector?
 
 Traditional keyword search only matches exact words. Vector similarity search understands semantic meaning:
+
 - "space adventure" matches "Star Wars" even though those exact words aren't in the description
 - "romantic comedy" matches movies tagged as "Romance" or "Comedy"
 - Searches work across different phrasings of the same concept
@@ -150,11 +154,13 @@ Traditional keyword search only matches exact words. Vector similarity search un
 ### Key Files
 
 **`src/gram.ts`**: Defines the `search` tool that:
+
 - Generates embeddings for search queries using OpenRouter
 - Queries PostgreSQL using pgvector's cosine distance operator (`<->`)
 - Returns ranked results with similarity scores
 
 **`init.sql`**: Sets up:
+
 - The `vector` extension for PostgreSQL
 - A `movies` table with a `vector(384)` column for embeddings
 - An IVFFlat index for fast similarity search
@@ -185,5 +191,6 @@ After deploying, users can install your MCP server and use the semantic search t
 ## Learn More
 
 To learn more about building Gram Functions, check out:
+
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Framework usage guide
 - [CLAUDE.md](./CLAUDE.md) - Development guidelines

@@ -13,7 +13,7 @@ export async function searchFiles(
   accessToken: string,
   query: string,
   folderId?: string,
-  fileType?: string
+  fileType?: string,
 ): Promise<DriveFile[]> {
   const driveClient = drive({
     version: "v3",
@@ -58,7 +58,7 @@ export async function searchFiles(
 
 export async function downloadFile(
   accessToken: string,
-  fileId: string
+  fileId: string,
 ): Promise<Buffer> {
   const driveClient = drive({
     version: "v3",
@@ -74,7 +74,7 @@ export async function downloadFile(
     },
     {
       responseType: "stream",
-    }
+    },
   );
 
   return new Promise((resolve, reject) => {

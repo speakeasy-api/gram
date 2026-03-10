@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/url"
@@ -29,8 +30,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var (
@@ -149,6 +152,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 // mockOAuthService allows controlling OAuth validation behavior in tests
 type mockOAuthService struct {
 	validateFunc func(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error)
+	refreshFunc  func(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error)
 }
 
 func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error) {
@@ -156,6 +160,13 @@ func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uu
 		return m.validateFunc(ctx, toolsetId, accessToken)
 	}
 	return nil, oauth.ErrInvalidAccessToken
+}
+
+func (m *mockOAuthService) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error) {
+	if m.refreshFunc != nil {
+		return m.refreshFunc(ctx, toolsetID, token, proxyProvider, toolset)
+	}
+	return nil, fmt.Errorf("not implemented")
 }
 
 // newTestMCPServiceWithOAuth creates a test MCP service with a custom OAuth service

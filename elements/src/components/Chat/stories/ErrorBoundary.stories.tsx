@@ -1,4 +1,4 @@
-import type { Meta, StoryFn } from '@storybook/react-vite'
+import type { Meta, StoryFn } from "@storybook/react-vite";
 import {
   createContext,
   useContext,
@@ -6,78 +6,78 @@ import {
   useState,
   type ComponentType,
   type FC,
-} from 'react'
-import { Chat } from '..'
-import { Button } from '../../ui/button'
+} from "react";
+import { Chat } from "..";
+import { Button } from "../../ui/button";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/ErrorBoundary',
+  title: "Chat/ErrorBoundary",
   component: Chat,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
-type Story = StoryFn<typeof Chat>
+type Story = StoryFn<typeof Chat>;
 
 // Context to trigger errors from outside the component tree
 const ErrorTriggerContext = createContext<{
-  shouldThrow: boolean
-  resetError: () => void
+  shouldThrow: boolean;
+  resetError: () => void;
 }>({
   shouldThrow: false,
   resetError: () => {},
-})
+});
 
 // Component that throws when context says so - used to override ThreadWelcome
 const ThrowingThreadWelcome: FC = () => {
-  const { shouldThrow, resetError } = useContext(ErrorTriggerContext)
+  const { shouldThrow, resetError } = useContext(ErrorTriggerContext);
 
   // Reset the error state when this component unmounts (happens when "Try again" is clicked)
   useEffect(() => {
     return () => {
-      resetError()
-    }
-  }, [resetError])
+      resetError();
+    };
+  }, [resetError]);
 
   if (shouldThrow) {
-    throw new Error('Simulated error: Failed to load chat interface')
+    throw new Error("Simulated error: Failed to load chat interface");
   }
 
   // Render a simple welcome that matches the default styling
   return (
     <div className="my-auto flex w-full grow flex-col items-center justify-center gap-4 p-6">
-      <h2 className="text-foreground text-2xl font-semibold">Hello there!</h2>
+      <h2 className="text-2xl font-semibold text-foreground">Hello there!</h2>
       <p className="text-muted-foreground">How can I help you today?</p>
-      <p className="text-muted-foreground/60 mt-4 text-sm">
+      <p className="mt-4 text-sm text-muted-foreground/60">
         Click &quot;Trigger Error&quot; above to see the error boundary
       </p>
     </div>
-  )
-}
+  );
+};
 
 // Wrapper to provide the error trigger context
 const ErrorTriggerProvider: FC<{
-  children: React.ReactNode
-  shouldThrow: boolean
-  onReset: () => void
+  children: React.ReactNode;
+  shouldThrow: boolean;
+  onReset: () => void;
 }> = ({ children, shouldThrow, onReset }) => {
   return (
     <ErrorTriggerContext.Provider value={{ shouldThrow, resetError: onReset }}>
       {children}
     </ErrorTriggerContext.Provider>
-  )
-}
+  );
+};
 
 // Control bar component for triggering errors
 const ErrorControls: FC<{
-  onTriggerError: () => void
-  hasError: boolean
+  onTriggerError: () => void;
+  hasError: boolean;
 }> = ({ onTriggerError, hasError }) => (
-  <div className="bg-muted/50 border-border flex items-center gap-3 border-b px-4 py-2">
-    <span className="text-muted-foreground text-sm font-medium">
+  <div className="flex items-center gap-3 border-b border-border bg-muted/50 px-4 py-2">
+    <span className="text-sm font-medium text-muted-foreground">
       Error Boundary Demo:
     </span>
     <Button
@@ -89,11 +89,11 @@ const ErrorControls: FC<{
       Trigger Error
     </Button>
   </div>
-)
+);
 
 // Modal variant story
 export const Modal: Story = () => {
-  const [shouldThrow, setShouldThrow] = useState(false)
+  const [shouldThrow, setShouldThrow] = useState(false);
 
   return (
     <ErrorTriggerProvider
@@ -115,23 +115,23 @@ export const Modal: Story = () => {
         </div>
       </div>
     </ErrorTriggerProvider>
-  )
-}
+  );
+};
 Modal.parameters = {
   elements: {
     config: {
-      variant: 'widget',
+      variant: "widget",
       modal: { defaultOpen: true },
       components: {
         ThreadWelcome: ThrowingThreadWelcome as ComponentType,
       },
     },
   },
-}
+};
 
 // Standalone variant story
 export const Standalone: Story = () => {
-  const [shouldThrow, setShouldThrow] = useState(false)
+  const [shouldThrow, setShouldThrow] = useState(false);
 
   return (
     <ErrorTriggerProvider
@@ -148,22 +148,22 @@ export const Standalone: Story = () => {
         </div>
       </div>
     </ErrorTriggerProvider>
-  )
-}
+  );
+};
 Standalone.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
+      variant: "standalone",
       components: {
         ThreadWelcome: ThrowingThreadWelcome as ComponentType,
       },
     },
   },
-}
+};
 
 // Sidecar variant story
 export const Sidecar: Story = () => {
-  const [shouldThrow, setShouldThrow] = useState(false)
+  const [shouldThrow, setShouldThrow] = useState(false);
 
   return (
     <ErrorTriggerProvider
@@ -185,18 +185,18 @@ export const Sidecar: Story = () => {
         </div>
       </div>
     </ErrorTriggerProvider>
-  )
-}
+  );
+};
 Sidecar.parameters = {
   elements: {
     config: {
-      variant: 'sidecar',
+      variant: "sidecar",
       sidecar: {
-        title: 'Error Boundary Demo',
+        title: "Error Boundary Demo",
       },
       components: {
         ThreadWelcome: ThrowingThreadWelcome as ComponentType,
       },
     },
   },
-}
+};

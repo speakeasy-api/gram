@@ -1,5 +1,40 @@
 # @gram/client
 
+## 0.27.20
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- e616da7: Add admin-only cache purging functionality
+
+## 0.27.24
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+
+## 0.28.0
+
+### Minor Changes
+
+- be6dcae: Upgrade zod to v4 across the monorepo. Bump @modelcontextprotocol/sdk
+
+### Patch Changes
+
+- 1821e46: Adds an initial pass "POC" implementation of Gram hooks for tool capture
+- fb7439b: Improve settings page with tabs routing and logging API
+- 998102f: Update telemetry search logs API response to sent unix nano timestamps as strings instead of int.
+
+## 0.28.0
+
+### Minor Changes
+
+- f364cc0: Adds listAttributeKeys endpoint to retrieve distinct attribute keys for telemetry filtering.
+
+### Patch Changes
+
+- e2c00cb: Adds a new filtering option to the search logs endpoint to filter any attribute.
+
 ## 0.28.1
 
 ### Patch Changes
@@ -126,6 +161,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level

@@ -20,14 +20,11 @@ To get started, install dependencies:
 pnpm install
 ```
 
-
 Bundle all HTML, JS, and CSS content into a single `widget-template.ts` file. This bundles everything into your Gram function, making it easy to deploy without hosting assets separately:
-
 
 ```bash
 pnpm inline:app
 ```
-
 
 To build a zip file that can be deployed to Gram, run:
 

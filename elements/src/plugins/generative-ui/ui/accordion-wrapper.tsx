@@ -1,43 +1,43 @@
-'use client'
+"use client";
 
-import * as React from 'react'
+import * as React from "react";
 import {
   Accordion as AccordionPrimitive,
   AccordionItem as AccordionItemPrimitive,
   AccordionTrigger,
   AccordionContent,
-} from './accordion'
+} from "./accordion";
 
 export interface AccordionWrapperProps {
-  type?: 'single' | 'multiple'
-  children?: React.ReactNode
+  type?: "single" | "multiple";
+  children?: React.ReactNode;
 }
 
 /**
  * Accordion wrapper that adapts the compound Accordion to the catalog's props-based API.
  */
 export function AccordionWrapper({
-  type = 'single',
+  type = "single",
   children,
 }: AccordionWrapperProps) {
   // Type assertion needed because Radix types are complex
   const AccordionRoot = AccordionPrimitive as React.FC<{
-    type: 'single' | 'multiple'
-    collapsible?: boolean
-    children?: React.ReactNode
-  }>
+    type: "single" | "multiple";
+    collapsible?: boolean;
+    children?: React.ReactNode;
+  }>;
 
   return (
-    <AccordionRoot type={type} collapsible={type === 'single'}>
+    <AccordionRoot type={type} collapsible={type === "single"}>
       {children}
     </AccordionRoot>
-  )
+  );
 }
 
 export interface AccordionItemWrapperProps {
-  value: string
-  title: string
-  children?: React.ReactNode
+  value: string;
+  title: string;
+  children?: React.ReactNode;
 }
 
 /**
@@ -53,5 +53,5 @@ export function AccordionItemWrapper({
       <AccordionTrigger>{title}</AccordionTrigger>
       <AccordionContent>{children}</AccordionContent>
     </AccordionItemPrimitive>
-  )
+  );
 }
