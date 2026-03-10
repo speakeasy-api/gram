@@ -9,12 +9,10 @@ export interface ActiveLogFilter {
   value?: string;
 }
 
-export const OP_LABELS: Record<Op, string> = {
+export const OP_LABELS: Partial<Record<Op, string>> = {
   eq: "=",
   not_eq: "!=",
   contains: "~",
-  exists: "exists",
-  not_exists: "not exists",
   in: "in",
 };
 
