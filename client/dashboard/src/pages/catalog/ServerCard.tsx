@@ -2,7 +2,7 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
@@ -45,10 +45,6 @@ export function ServerCard({
     const serverTools = (server.tools ?? []) as any[];
     return serverTools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
-
-  // Check server hosting/auth status
-  const isSelfHosted = server.isSelfHosted ?? false;
-  const requiresAuth = server.requiresAuth ?? false;
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation(); // Prevent click-outside-to-deselect from firing
@@ -114,13 +110,8 @@ export function ServerCard({
               v{server.version}
             </Type>
           </div>
-          {/* Tool badge: hide for self-hosted, show "Needs auth" for OAuth servers */}
-          {toolNames.length === 0 && isSelfHosted ? null : toolNames.length ===
-              0 && requiresAuth ? (
-            <Badge variant="warning">
-              <Badge.Text>Needs OAuth</Badge.Text>
-            </Badge>
-          ) : (
+          {/* Tool badge: hide for self-hosted or OAuth servers with no tools */}
+          {toolNames.length === 0 ? null : (
             <ToolCollectionBadge toolNames={toolNames} />
           )}
         </div>
