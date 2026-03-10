@@ -256,10 +256,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     });
     const paramsToForwardString = forwardParams.toString();
 
-    console.log(
-      "[AuthHandler] REDIRECT: no projectSlug, going to default project →",
-      preferredProject,
-    );
     return (
       <Navigate
         to={`/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`}
