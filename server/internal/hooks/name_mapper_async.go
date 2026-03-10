@@ -69,13 +69,14 @@ func (n *AsyncNameMapper) GetMappedName(attrs map[attr.Key]any) (*string, error)
 		}
 
 		// Launch workflow asynchronously (don't block on result)
+		toolCallAttrs := convertAttrsToMap(attrs)
 		go func() {
 			bgCtx := context.Background()
 			params := background.ProcessNameMappingWorkflowParams{
 				ServerName:    serverName,
 				OrgID:         orgID,
 				ProjectID:     projectID,
-				ToolCallAttrs: convertAttrsToMap(attrs),
+				ToolCallAttrs: toolCallAttrs,
 			}
 
 			_, err := background.ExecuteProcessNameMappingWorkflow(bgCtx, n.temporalEnv, params)

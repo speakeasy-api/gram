@@ -140,11 +140,12 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 			} else if s.temporalEnv != nil {
 				// No cached mapping - trigger async workflow to generate one
 				// Fire-and-forget - don't block hook processing
+				toolCallAttrs := convertAttrsToMap(attrs)
 				go func() {
 					bgCtx := context.Background()
 					_, err := background.ExecuteProcessNameMappingWorkflow(bgCtx, s.temporalEnv, background.ProcessNameMappingWorkflowParams{
 						ServerName:    source,
-						ToolCallAttrs: convertAttrsToMap(attrs),
+						ToolCallAttrs: toolCallAttrs,
 						OrgID:         metadata.GramOrgID,
 						ProjectID:     metadata.ProjectID,
 					})
