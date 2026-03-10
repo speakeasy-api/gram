@@ -96,7 +96,6 @@ Activate a skill when your task falls within its scope.
 | `vercel-react-best-practices` | Optimizing React performance, reviewing components for best practices      |
 | `gram-functions`              | Understanding or modifying the Gram Functions serverless execution feature |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
-| `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |
 
 # Plan Mode
 
