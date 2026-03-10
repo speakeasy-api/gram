@@ -364,7 +364,7 @@ function HooksContent() {
     return Array.from(traceMap.values()).sort((a, b) =>
       a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
     );
-  }, [logs]);
+  }, [logsData]);
 
   const handleServerChange = useCallback(
     (serverName: string | null) => {
