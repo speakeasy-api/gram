@@ -10,32 +10,33 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Op } from "@gram/client/models/components/attributefilter";
+import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { Command as CmdkRoot } from "cmdk";
 import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  type ActiveAttributeFilter,
+  type ActiveLogFilter,
   OP_LABELS,
   parseOperatorSymbol,
   tryParseFilterExpression,
-} from "./attribute-filter-types";
+} from "./log-filter-types";
 
 type Step = "key" | "operator" | "value";
 
 const OP_OPTIONS: { value: Op; label: string; description: string }[] = [
   { value: Op.Eq, label: "equals", description: "Exact match" },
-  {
-    value: Op.NotEq,
-    label: "not equals",
-    description: "Exclude exact match",
-  },
+  { value: Op.NotEq, label: "not equals", description: "Exclude exact match" },
   { value: Op.Contains, label: "contains", description: "Partial match" },
+  {
+    value: Op.In,
+    label: "in",
+    description: "Match any of a comma-separated list",
+  },
 ];
 
-interface AttributeFilterBarProps {
-  filters: ActiveAttributeFilter[];
-  onChange: (filters: ActiveAttributeFilter[]) => void;
+interface LogFilterBarProps {
+  filters: ActiveLogFilter[];
+  onChange: (filters: ActiveLogFilter[]) => void;
   attributeKeys: string[];
   isLoadingKeys?: boolean;
   searchInput: string;
@@ -44,7 +45,7 @@ interface AttributeFilterBarProps {
   onSearchSubmit: (query: string) => void;
 }
 
-export function AttributeFilterBar({
+export function LogFilterBar({
   filters,
   onChange,
   attributeKeys,
@@ -52,7 +53,7 @@ export function AttributeFilterBar({
   searchInput,
   onSearchInputChange,
   onSearchSubmit,
-}: AttributeFilterBarProps) {
+}: LogFilterBarProps) {
   const [step, setStep] = useState<Step>("key");
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedOp, setSelectedOp] = useState<Op | null>(null);
@@ -101,7 +102,7 @@ export function AttributeFilterBar({
       // impossible AND conditions (e.g. status_code = 404 AND status_code = 500).
       // For != and ~ multiple filters on the same path are valid.
       const rest =
-        op === Op.Eq
+        op === Op.Eq || op === Op.In
           ? filters.filter((f) => !(f.path === path && f.op === op))
           : filters;
       onChange([...rest, newFilter]);
@@ -238,6 +239,9 @@ export function AttributeFilterBar({
     }
   };
 
+  const valuePlaceholder =
+    selectedOp === Op.In ? "value1, value2, ..." : "value";
+
   return (
     <CmdkRoot
       shouldFilter={false}
@@ -302,9 +306,11 @@ export function AttributeFilterBar({
                         break;
                     }
                   }}
-                  placeholder="value"
+                  placeholder={valuePlaceholder}
                   className="bg-transparent outline-none text-xs font-mono w-[80px]"
-                  style={{ width: `${Math.max(filterValue.length, 5)}ch` }}
+                  style={{
+                    width: `${Math.max(filterValue.length, valuePlaceholder.length)}ch`,
+                  }}
                   autoFocus
                 />
               </span>
@@ -327,7 +333,7 @@ export function AttributeFilterBar({
                     ? "Type operator + value (e.g. != 200) or select below..."
                     : filters.length > 0
                       ? "Add filter..."
-                      : "Search by URN or filter (e.g. http.status != 200)"
+                      : "Search by URN or filter (e.g. http.response.status_code != 200)"
                 }
                 className="flex-1 min-w-[120px] bg-transparent outline-none min-h-[24px] text-sm"
               />

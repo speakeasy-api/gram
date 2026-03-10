@@ -16,10 +16,6 @@ import {
  */
 export type GetUserMetricsSummaryResult = {
   /**
-   * Whether telemetry is enabled for the organization
-   */
-  enabled: boolean;
-  /**
    * Aggregated metrics
    */
   metrics: ProjectSummary;
@@ -30,7 +26,6 @@ export const GetUserMetricsSummaryResult$inboundSchema: z.ZodMiniType<
   GetUserMetricsSummaryResult,
   unknown
 > = z.object({
-  enabled: z.boolean(),
   metrics: ProjectSummary$inboundSchema,
 });
 

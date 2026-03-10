@@ -41,9 +41,9 @@ import {
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
-import type { ActiveAttributeFilter } from "./attribute-filter-types";
-import { parseFilters, serializeFilters } from "./attribute-filter-url";
-import { AttributeFilterBar } from "./AttributeFilterBar";
+import type { ActiveLogFilter } from "./log-filter-types";
+import { parseFilters, serializeFilters } from "./log-filter-url";
+import { LogFilterBar } from "./LogFilterBar";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { TraceRow } from "./TraceRow";
 import { useAttributeLogsQuery } from "./use-attribute-logs-query";
@@ -307,14 +307,14 @@ function LogsContent() {
   );
 
   // Attribute filter state from URL
-  const [attributeFilters, setAttributeFilters] = useState<
-    ActiveAttributeFilter[]
-  >(() => parseFilters(searchParams.get("af")));
+  const [logFilters, setAttributeFilters] = useState<ActiveLogFilter[]>(() =>
+    parseFilters(searchParams.get("af")),
+  );
 
-  const hasAttributeFilters = attributeFilters.length > 0;
+  const hasLogFilters = logFilters.length > 0;
 
-  const handleAttributeFiltersChange = useCallback(
-    (filters: ActiveAttributeFilter[]) => {
+  const handleLogFiltersChange = useCallback(
+    (filters: ActiveLogFilter[]) => {
       setAttributeFilters(filters);
       setSearchParams(
         (prev) => {
@@ -360,9 +360,11 @@ function LogsContent() {
 
   // Fetch attribute keys for filter bar
   const { data: attributeKeysData, isLoading: isLoadingAttributeKeys } =
-    useListAttributeKeys({
-      getProjectMetricsSummaryPayload: { from, to },
-    });
+    useListAttributeKeys(
+      { getProjectMetricsSummaryPayload: { from, to } },
+      undefined,
+      { throwOnError: false },
+    );
   const attributeKeys = attributeKeysData?.keys ?? [];
 
   // Standard tool calls query (used when no attribute filters active)
@@ -392,7 +394,7 @@ function LogsContent() {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      enabled: !hasAttributeFilters,
+      enabled: !hasLogFilters,
       throwOnError: false,
     }),
   );
@@ -400,11 +402,11 @@ function LogsContent() {
   // Attribute-filtered logs query (used when attribute filters are active)
   const attrLogsQuery = useLogsEnabledErrorCheck(
     useAttributeLogsQuery({
-      attributeFilters,
+      logFilters,
       gramUrn: effectiveGramUrn,
       from,
       to,
-      enabled: hasAttributeFilters,
+      enabled: hasLogFilters,
     }),
   );
 
@@ -418,14 +420,14 @@ function LogsContent() {
     isFetchingNextPage,
     refetch,
     isLogsDisabled,
-  } = hasAttributeFilters ? attrLogsQuery : toolCallsQuery;
+  } = hasLogFilters ? attrLogsQuery : toolCallsQuery;
 
   // Flatten all pages into a single array of traces, merging duplicates that
   // span page boundaries (attribute-filtered logs are grouped per-page, so the
   // same traceId can appear in multiple pages with partial counts).
   const allTraces = useMemo(() => {
     const raw = data?.pages.flatMap((page) => page.toolCalls) ?? [];
-    if (!hasAttributeFilters) return raw;
+    if (!hasLogFilters) return raw;
 
     const merged = new Map<string, ToolCallSummary>();
     for (const trace of raw) {
@@ -444,7 +446,7 @@ function LogsContent() {
     return Array.from(merged.values()).sort((a, b) =>
       a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
     );
-  }, [data?.pages, hasAttributeFilters]);
+  }, [data?.pages, hasLogFilters]);
 
   // Handler for server filter change
   const handleServerChange = useCallback(
@@ -571,8 +573,8 @@ function LogsContent() {
         onClearCustomRange={clearCustomRange}
         projectSlug={projectSlug}
         // Attribute filter props
-        attributeFilters={attributeFilters}
-        onAttributeFiltersChange={handleAttributeFiltersChange}
+        logFilters={logFilters}
+        onLogFiltersChange={handleLogFiltersChange}
         attributeKeys={attributeKeys}
         isLoadingAttributeKeys={isLoadingAttributeKeys}
       />
@@ -613,8 +615,8 @@ function LogsInnerContent({
   onClearCustomRange,
   projectSlug,
   // Attribute filter props
-  attributeFilters,
-  onAttributeFiltersChange,
+  logFilters,
+  onLogFiltersChange,
   attributeKeys,
   isLoadingAttributeKeys,
 }: {
@@ -650,8 +652,8 @@ function LogsInnerContent({
   onClearCustomRange: () => void;
   projectSlug?: string;
   // Attribute filter props
-  attributeFilters: ActiveAttributeFilter[];
-  onAttributeFiltersChange: (filters: ActiveAttributeFilter[]) => void;
+  logFilters: ActiveLogFilter[];
+  onLogFiltersChange: (filters: ActiveLogFilter[]) => void;
   attributeKeys: string[];
   isLoadingAttributeKeys?: boolean;
 }) {
@@ -707,9 +709,9 @@ function LogsInnerContent({
                       isLoading={isLoadingToolsets}
                     />
                     <div className="flex-1">
-                      <AttributeFilterBar
-                        filters={attributeFilters}
-                        onChange={onAttributeFiltersChange}
+                      <LogFilterBar
+                        filters={logFilters}
+                        onChange={onLogFiltersChange}
                         attributeKeys={attributeKeys}
                         isLoadingKeys={isLoadingAttributeKeys}
                         searchInput={searchInput}
@@ -760,7 +762,7 @@ function LogsInnerContent({
                         isLoading={isLoading}
                         allTraces={allTraces}
                         searchQuery={searchQuery}
-                        hasAttributeFilters={attributeFilters.length > 0}
+                        hasLogFilters={logFilters.length > 0}
                         expandedTraceId={expandedTraceId}
                         isFetchingNextPage={isFetchingNextPage}
                         onToggleExpand={toggleExpand}
@@ -800,7 +802,7 @@ function TraceListContent({
   isLoading,
   allTraces,
   searchQuery,
-  hasAttributeFilters,
+  hasLogFilters,
   expandedTraceId,
   isFetchingNextPage,
   onToggleExpand,
@@ -810,7 +812,7 @@ function TraceListContent({
   isLoading: boolean;
   allTraces: ToolCallSummary[];
   searchQuery: string | null;
-  hasAttributeFilters: boolean;
+  hasLogFilters: boolean;
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
   onToggleExpand: (traceId: string) => void;
@@ -834,10 +836,7 @@ function TraceListContent({
 
   if (allTraces.length === 0) {
     return (
-      <LogsEmptyState
-        searchQuery={searchQuery}
-        hasAttributeFilters={hasAttributeFilters}
-      />
+      <LogsEmptyState searchQuery={searchQuery} hasLogFilters={hasLogFilters} />
     );
   }
 
@@ -888,12 +887,12 @@ function LogsLoading() {
 
 function LogsEmptyState({
   searchQuery,
-  hasAttributeFilters,
+  hasLogFilters,
 }: {
   searchQuery: string | null;
-  hasAttributeFilters: boolean;
+  hasLogFilters: boolean;
 }) {
-  const hasActiveFilters = !!searchQuery || hasAttributeFilters;
+  const hasActiveFilters = !!searchQuery || hasLogFilters;
   return (
     <div className="py-12 text-center">
       <div className="flex flex-col items-center gap-3">

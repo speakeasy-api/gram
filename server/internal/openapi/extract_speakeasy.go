@@ -516,7 +516,8 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 			}
 
 			if u.Scheme != "https" {
-				_ = oops.E(oops.CodeUnauthorized, err, "%s: %s: skipping non-https server url [%d:%d]", docInfo.Name, server.URL, line, col).Log(ctx, logger)
+				message := fmt.Sprintf("%s: %s: skipping non-https server url [%d:%d]", docInfo.Name, server.URL, line, col)
+				logger.WarnContext(ctx, message)
 				continue
 			}
 

@@ -50,6 +50,10 @@ var oauthFailurePageTmplData string
 //go:embed hosted_oauth_status_script.js
 var oauthSuccessScriptData []byte
 
+const (
+	requestMaxBodyBytes int64 = 10 * 1024 * 1024 // 10 MiB
+)
+
 type gramOAuthResultPageData struct {
 	RedirectURL template.URL
 	ScriptHash  string
@@ -77,6 +81,7 @@ type Service struct {
 	sessions                  *sessions.Manager
 	gramProvider              *providers.GramProvider
 	customProvider            *providers.CustomProvider
+	upstreamPKCEStorage       cache.TypedCacheObject[UpstreamPKCEVerifier]
 	successPageTmpl           *template.Template
 	failurePageTmpl           *template.Template
 	oauthStatusPageScriptHash string
@@ -125,8 +130,9 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		sessions:           sessions,
 
 		// OAuth providers
-		gramProvider:   gramProvider,
-		customProvider: customProvider,
+		gramProvider:        gramProvider,
+		customProvider:      customProvider,
+		upstreamPKCEStorage: cache.NewTypedObjectCache[UpstreamPKCEVerifier](logger.With(attr.SlogCacheNamespace("upstream_pkce")), cacheImpl, cache.SuffixNone),
 
 		// HTML templates
 		successPageTmpl: successPageTmpl,
@@ -356,11 +362,35 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
 		}
 
+		// Generate PKCE for the upstream provider
+		upstreamCodeVerifier, err := generateCodeVerifier()
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to generate PKCE verifier").Log(ctx, s.logger)
+		}
+		upstreamCodeChallenge := generateCodeChallenge(upstreamCodeVerifier)
+
+		// Store verifier server-side (Redis) so it never traverses the front-channel.
+		// Only a random nonce goes into the state parameter.
+		pkceNonce := uuid.New().String()
+		if err := s.upstreamPKCEStorage.Store(ctx, UpstreamPKCEVerifier{
+			Nonce:    pkceNonce,
+			Verifier: upstreamCodeVerifier,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to store upstream PKCE verifier").Log(ctx, s.logger)
+		}
+		oauthReqInfo["upstream_pkce_nonce"] = pkceNonce
+		oauthReqInfoJSON, err = json.Marshal(oauthReqInfo)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "failed to encode OAuth request info").Log(ctx, s.logger)
+		}
+
 		urlParams := url.Values{}
 		urlParams.Set("client_id", clientID)
 		urlParams.Set("redirect_uri", callbackURL)
 		urlParams.Set("response_type", "code")
 		urlParams.Add("state", string(oauthReqInfoJSON))
+		urlParams.Set("code_challenge", upstreamCodeChallenge)
+		urlParams.Set("code_challenge_method", "S256")
 
 		// We will recommend the provider configuration, fallback to request scope
 		if len(provider.ScopesSupported) > 0 {
@@ -398,6 +428,7 @@ func (s *Service) validateAuthorizationRequest(ctx context.Context, req *Authori
 // handleToken handles OAuth 2.1 token requests
 func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -454,6 +485,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 // handleClientRegistration handles OAuth 2.1 dynamic client registration
 func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -555,7 +587,22 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		oauthProvider = s.customProvider
 	}
 
-	result, err := oauthProvider.ExchangeToken(ctx, externalCode, provider, toolset, s.serverURL)
+	// Retrieve upstream PKCE verifier from server-side storage (if present)
+	var upstreamCodeVerifier string
+	if pkceNonce := oauthReqInfo["upstream_pkce_nonce"]; pkceNonce != "" {
+		pkceKey := UpstreamPKCEVerifier{Nonce: pkceNonce, Verifier: ""}.CacheKey()
+		stored, err := s.upstreamPKCEStorage.Get(ctx, pkceKey)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to retrieve upstream PKCE verifier").Log(ctx, s.logger)
+		}
+		upstreamCodeVerifier = stored.Verifier
+		// Clean up after use
+		if delErr := s.upstreamPKCEStorage.DeleteByKey(ctx, pkceKey); delErr != nil {
+			s.logger.ErrorContext(ctx, "failed to delete upstream PKCE verifier", attr.SlogError(delErr))
+		}
+	}
+
+	result, err := oauthProvider.ExchangeToken(ctx, externalCode, provider, toolset, s.serverURL, upstreamCodeVerifier)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "provider token exchange failed",
 			attr.SlogOAuthProvider(provider.Slug),
@@ -632,9 +679,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	s.logger.InfoContext(ctx, "authorization grant created after external provider callback",
-		attr.SlogOAuthClientID(authReq.ClientID),
-		attr.SlogOAuthCode(grant.Code),
-		attr.SlogOAuthExternalCode(externalCode))
+		attr.SlogOAuthClientID(authReq.ClientID))
 
 	// Build authorization response and redirect back to client
 	responseURL, err := s.grantManager.BuildAuthorizationResponse(ctx, grant, authReq.RedirectURI)

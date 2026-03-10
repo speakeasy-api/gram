@@ -1,31 +1,31 @@
-import { Op } from "@gram/client/models/components/attributefilter";
+import { Operator } from "@gram/client/models/components/logfilter";
 
-export type { Op };
+export type Op = Operator;
 
-export interface ActiveAttributeFilter {
+export interface ActiveLogFilter {
   id: string;
   path: string;
   op: Op;
   value?: string;
 }
 
-export const OP_LABELS: Record<Op, string> = {
+export const OP_LABELS: Partial<Record<Op, string>> = {
   eq: "=",
   not_eq: "!=",
   contains: "~",
-  exists: "exists",
-  not_exists: "∄",
+  in: "in",
 };
 
 // Ordered longest-first so `!=` is checked before `=`.
 const SYMBOL_TO_OP: [string, Op][] = [
-  ["!=", Op.NotEq],
-  ["=", Op.Eq],
-  ["~", Op.Contains],
+  ["!=", Operator.NotEq],
+  ["=", Operator.Eq],
+  ["~", Operator.Contains],
 ];
 
-/** Match an operator symbol (e.g. `!=`, `=`, `~`) to its Op enum value. */
+/** Match an operator symbol or keyword to its Op enum value. */
 export function parseOperatorSymbol(input: string): Op | null {
+  if (input === "in") return Operator.In;
   for (const [symbol, op] of SYMBOL_TO_OP) {
     if (input === symbol) return op;
   }
@@ -33,7 +33,7 @@ export function parseOperatorSymbol(input: string): Op | null {
 }
 
 /**
- * Try to parse a freeform filter expression like `http.status != 200`.
+ * Try to parse a freeform filter expression like `http.response.status_code != 200`.
  * Returns an `{ key, op, value }` triple on success, or `null` when the input
  * doesn't look like a filter expression (so the caller can fall through to
  * plain-text search).

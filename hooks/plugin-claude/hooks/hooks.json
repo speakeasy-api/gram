@@ -1,21 +1,12 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram"
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
+            "async": true
           }
         ]
       }
@@ -25,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "async": true
           }
         ]
@@ -36,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "async": true
           }
         ]

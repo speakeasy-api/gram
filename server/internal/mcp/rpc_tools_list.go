@@ -24,7 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type toolsListResult struct {
+type toolsListResult = result[toolsListResultTools]
+
+type toolsListResultTools struct {
 	Tools []*toolListEntry `json:"tools"`
 }
 
@@ -89,9 +91,9 @@ func handleToolsList(
 		}
 	}
 
-	result := &result[toolsListResult]{
+	result := &toolsListResult{
 		ID: req.ID,
-		Result: toolsListResult{
+		Result: toolsListResultTools{
 			Tools: tools,
 		},
 	}
@@ -121,7 +123,7 @@ func buildToolListEntries(
 
 	userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
 
-	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	// Extract general OAuth token (no security-key binding)
 	var oauthToken string
 	for _, t := range payload.oauthTokenInputs {
 		if len(t.securityKeys) == 0 && t.Token != "" {

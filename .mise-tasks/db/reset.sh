@@ -6,7 +6,7 @@ set -e
 
 echo "Dropping and recreating public schema..."
 
-psql "${GRAM_DATABASE_URL//&search_path=public/}" \
+docker compose exec -T gram-db psql -U "${DB_USER}" -d "${DB_NAME}" \
   -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 
 echo "Schema reset. Running migrations..."

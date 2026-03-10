@@ -55,7 +55,7 @@ export function useInfiniteListMCPCatalog(
     };
   }, [search]);
 
-  return useInfiniteQuery({
+  const query = useInfiniteQuery({
     queryKey: queryKeyListMCPCatalog({ search: debouncedSearch, registryId }),
     queryFn: async ({ pageParam }) => {
       return client.mcpRegistries.listCatalog({
@@ -68,4 +68,8 @@ export function useInfiniteListMCPCatalog(
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: 5 * 60 * 1000, // 5 minutes - won't refetch if data is fresh
   });
+
+  // Return both the query result and the debounced search value
+  // so consumers can check if the query state matches their expected search
+  return { ...query, debouncedSearch };
 }

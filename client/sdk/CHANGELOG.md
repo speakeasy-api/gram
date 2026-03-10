@@ -1,5 +1,18 @@
 # @gram/client
 
+## 0.27.20
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- e616da7: Add admin-only cache purging functionality
+
+## 0.27.24
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+
 ## 0.28.0
 
 ### Minor Changes
@@ -148,6 +161,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level

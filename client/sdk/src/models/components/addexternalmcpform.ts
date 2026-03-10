@@ -19,6 +19,10 @@ export type AddExternalMCPForm = {
    */
   registryServerSpecifier: string;
   /**
+   * URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.
+   */
+  selectedRemotes?: Array<string> | undefined;
+  /**
    * A short url-friendly label that uniquely identifies a resource.
    */
   slug: string;
@@ -29,6 +33,7 @@ export type AddExternalMCPForm$Outbound = {
   name: string;
   registry_id: string;
   registry_server_specifier: string;
+  selected_remotes?: Array<string> | undefined;
   slug: string;
 };
 
@@ -41,12 +46,14 @@ export const AddExternalMCPForm$outboundSchema: z.ZodMiniType<
     name: z.string(),
     registryId: z.string(),
     registryServerSpecifier: z.string(),
+    selectedRemotes: z.optional(z.array(z.string())),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       registryId: "registry_id",
       registryServerSpecifier: "registry_server_specifier",
+      selectedRemotes: "selected_remotes",
     });
   }),
 );

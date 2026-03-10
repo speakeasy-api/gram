@@ -1,5 +1,26 @@
 # server
 
+## 0.27.1
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- e616da7: Add admin-only cache purging functionality
+
+## 0.27.0
+
+### Minor Changes
+
+- 63d10d0: ## Changeset
+
+  External MCP servers now use the same OAuth configuration pathway as all other toolsets — no more special-cased token resolution.
+
+  The "Configure OAuth" button is now enabled for external MCP servers that require OAuth. When discovered OAuth metadata is available, the configuration form can be auto-populated with a single click.
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+
 ## 0.26.1
 
 ### Patch Changes
@@ -297,6 +318,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level
@@ -719,11 +741,13 @@
   ```
 
   Notably:
+
   - The file must export an async function called `handleToolCall` which takes the tool name and input object as parameters.
   - This function must return a `Response` object.
   - You can use any npm packages you like but you must ensure they are included in the zip file.
 
   ## What is currently supported?
+
   - We currently only support TypeScript/JavaScript functions and deploy them into small Firecracker microVMs running Node.js v22.
   - Each function zip file must be a little under 750KiB in size or less than 1MiB when encoded in base64.
   - Third-party dependencies are supported but you must decide how to include in zip archives. You may bundle everything into a single file or include a `package.json` and node_modules directory in the zip file. As long as the total size is under the limit, it should work.

@@ -4,8 +4,7 @@ info:
   description: Gram is the tools platform for AI agents
   version: 0.0.1
 servers:
-  - url: http://localhost:80
-    description: Default server for gram
+  - url: https://app.getgram.ai
 paths:
   /rpc/assets.createSignedChatAttachmentURL:
     post:
@@ -5870,6 +5869,222 @@ paths:
       tags:
         - mcpMetadata
       x-speakeasy-name-override: set
+  /rpc/mcpRegistries.clearCache:
+    delete:
+      description: Clear the registry cache for a specific registry (admin only)
+      operationId: clearMCPRegistryCache
+      parameters:
+        - allowEmptyValue: true
+          description: The registry to clear cache for
+          in: query
+          name: registry_id
+          required: true
+          schema:
+            description: The registry to clear cache for
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: clearCache mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: clearCache
+  /rpc/mcpRegistries.getServerDetails:
+    get:
+      description: Get detailed information about an MCP server including remotes
+      operationId: getMCPServerDetails
+      parameters:
+        - allowEmptyValue: true
+          description: ID of the registry
+          in: query
+          name: registry_id
+          required: true
+          schema:
+            description: ID of the registry
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Server specifier (e.g., 'io.github.user/server')
+          in: query
+          name: server_specifier
+          required: true
+          schema:
+            description: Server specifier (e.g., 'io.github.user/server')
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalMCPServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getServerDetails mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: getServerDetails
   /rpc/mcpRegistries.listCatalog:
     get:
       description: List available MCP servers from configured registries
@@ -5991,6 +6206,105 @@ paths:
       x-speakeasy-name-override: listCatalog
       x-speakeasy-react-hook:
         name: ListMCPCatalog
+  /rpc/mcpRegistries.listRegistries:
+    get:
+      description: List all MCP registries (admin only)
+      operationId: listMCPRegistries
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRegistriesResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listRegistries mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: listRegistries
+      x-speakeasy-react-hook:
+        name: ListMCPRegistries
   /rpc/packages.create:
     post:
       description: Create a new package for a project.
@@ -12165,6 +12479,13 @@ components:
           type: string
           description: The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
           example: slack
+        selected_remotes:
+          type: array
+          items:
+            type: string
+          description: URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.
+          example:
+            - https://mcp.example.com/sse
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -12367,34 +12688,6 @@ components:
         - content_length
         - created_at
         - updated_at
-    AttributeFilter:
-      type: object
-      properties:
-        op:
-          type: string
-          description: Comparison operator
-          default: eq
-          enum:
-            - eq
-            - not_eq
-            - contains
-            - exists
-            - not_exists
-        path:
-          type: string
-          description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
-          example: '@user.region'
-          pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
-          minLength: 1
-          maxLength: 256
-        value:
-          type: string
-          description: Value to compare against (ignored for 'exists' and 'not_exists' operators)
-          example: us-east-1
-          maxLength: 1024
-      description: Filter on a log attribute by path.
-      required:
-        - path
     BaseResourceAttributes:
       type: object
       properties:
@@ -13854,6 +14147,23 @@ components:
         - header_name
         - required
         - secret
+    ExternalMCPRemote:
+      type: object
+      properties:
+        transport_type:
+          type: string
+          description: Transport type (sse or streamable-http)
+          enum:
+            - sse
+            - streamable-http
+        url:
+          type: string
+          description: URL of the remote endpoint
+          format: uri
+      description: A remote endpoint for an MCP server
+      required:
+        - url
+        - transport_type
     ExternalMCPServer:
       type: object
       properties:
@@ -13874,6 +14184,11 @@ components:
           type: string
           description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
           example: io.modelcontextprotocol.anonymous/exa
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPRemote'
+          description: Available remote endpoints for the server
         title:
           type: string
           description: Display name for the server
@@ -14433,9 +14748,6 @@ components:
     GetHooksSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         servers:
           type: array
           items:
@@ -14454,7 +14766,6 @@ components:
         - servers
         - total_events
         - total_sessions
-        - enabled
     GetInstanceForm:
       type: object
       properties:
@@ -14549,15 +14860,11 @@ components:
     GetMetricsSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         metrics:
           $ref: '#/components/schemas/ProjectSummary'
       description: Result of metrics summary query
       required:
         - metrics
-        - enabled
     GetObservabilityOverviewPayload:
       type: object
       properties:
@@ -14593,9 +14900,6 @@ components:
       properties:
         comparison:
           $ref: '#/components/schemas/ObservabilitySummary'
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         interval_seconds:
           type: integer
           description: The time bucket interval in seconds used for the time series data
@@ -14625,7 +14929,6 @@ components:
         - top_tools_by_count
         - top_tools_by_failure_rate
         - interval_seconds
-        - enabled
     GetProjectForm:
       type: object
       properties:
@@ -14709,15 +15012,11 @@ components:
     GetUserMetricsSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         metrics:
           $ref: '#/components/schemas/ProjectSummary'
       description: Result of user metrics summary query
       required:
         - metrics
-        - enabled
     GramProductFeatures:
       type: object
       properties:
@@ -15191,9 +15490,6 @@ components:
     ListFilterOptionsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         options:
           type: array
           items:
@@ -15202,7 +15498,6 @@ components:
       description: Result of listing filter options
       required:
         - options
-        - enabled
     ListIntegrationsForm:
       type: object
       properties:
@@ -15271,6 +15566,16 @@ components:
           description: The created prompt template
       required:
         - templates
+    ListRegistriesResponseBody:
+      type: object
+      properties:
+        registries:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPRegistry'
+          description: List of MCP registries
+      required:
+        - registries
     ListResourcesResult:
       type: object
       properties:
@@ -15346,6 +15651,54 @@ components:
       required:
         - package
         - versions
+    LogFilter:
+      type: object
+      properties:
+        operator:
+          type: string
+          description: Comparison operator
+          default: eq
+          enum:
+            - eq
+            - not_eq
+            - contains
+            - exists
+            - not_exists
+            - in
+        path:
+          type: string
+          description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
+          example: '@user.region'
+          pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
+          minLength: 1
+          maxLength: 256
+        values:
+          type: array
+          items:
+            type: string
+          description: Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'.
+          maxItems: 256
+      description: A single filter condition for a log search query.
+      required:
+        - path
+    MCPRegistry:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Registry ID
+          format: uuid
+        name:
+          type: string
+          description: Display name for the registry
+        url:
+          type: string
+          description: URL of the registry
+      description: An MCP registry
+      required:
+        - id
+        - name
+        - url
     McpEnvironmentConfig:
       type: object
       properties:
@@ -15691,6 +16044,134 @@ components:
       required:
         - slug
         - provider_type
+    OTELAttribute:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Attribute key
+        value:
+          $ref: '#/components/schemas/OTELAttributeValue'
+      description: OTEL log attribute with key and typed value
+      required:
+        - key
+        - value
+    OTELAttributeValue:
+      type: object
+      properties:
+        intValue:
+          type: integer
+          description: Integer value
+          format: int64
+        stringValue:
+          type: string
+          description: String value
+      description: OTEL attribute value - supports stringValue or intValue
+    OTELLogBody:
+      type: object
+      properties:
+        stringValue:
+          type: string
+          description: String body value
+      description: OTEL log body
+    OTELLogRecord:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELAttribute'
+          description: Log attributes
+        body:
+          $ref: '#/components/schemas/OTELLogBody'
+        droppedAttributesCount:
+          type: integer
+          description: Number of dropped attributes
+          format: int64
+        observedTimeUnixNano:
+          type: string
+          description: Observed timestamp in nanoseconds
+        timeUnixNano:
+          type: string
+          description: Timestamp in nanoseconds since Unix epoch
+      description: Individual OTEL log record
+      required:
+        - timeUnixNano
+        - observedTimeUnixNano
+        - body
+        - attributes
+    OTELLogsPayload:
+      type: object
+      properties:
+        resourceLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELResourceLog'
+          description: Array of resource logs
+      description: OTEL logs export payload
+      required:
+        - resourceLogs
+    OTELResource:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELResourceAttribute'
+          description: Resource attributes
+        droppedAttributesCount:
+          type: integer
+          description: Number of dropped attributes
+          format: int64
+      description: OTEL resource information
+    OTELResourceAttribute:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Resource attribute key
+        value:
+          $ref: '#/components/schemas/OTELAttributeValue'
+      description: OTEL resource attribute
+      required:
+        - key
+        - value
+    OTELResourceLog:
+      type: object
+      properties:
+        resource:
+          $ref: '#/components/schemas/OTELResource'
+        scopeLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELScopeLog'
+          description: Array of scope logs
+      description: OTEL resource logs container
+      required:
+        - scopeLogs
+    OTELScope:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Scope name
+        version:
+          type: string
+          description: Scope version
+      description: OTEL instrumentation scope
+    OTELScopeLog:
+      type: object
+      properties:
+        logRecords:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELLogRecord'
+          description: Array of log records
+        scope:
+          $ref: '#/components/schemas/OTELScope'
+      description: OTEL scope logs container
+      required:
+        - logRecords
     ObservabilitySummary:
       type: object
       properties:
@@ -16414,24 +16895,15 @@ components:
           items:
             $ref: '#/components/schemas/ChatSummary'
           description: List of chat session summaries
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
       description: Result of searching chat session summaries
       required:
         - chats
-        - enabled
     SearchLogsFilter:
       type: object
       properties:
-        attribute_filters:
-          type: array
-          items:
-            $ref: '#/components/schemas/AttributeFilter'
-          description: Filters on custom log attributes
         deployment_id:
           type: string
           description: Deployment ID filter
@@ -16513,6 +16985,16 @@ components:
           description: Cursor for pagination
         filter:
           $ref: '#/components/schemas/SearchLogsFilter'
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogFilter'
+          description: Filter conditions for the search query
+        from:
+          type: string
+          description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
         limit:
           type: integer
           description: Number of items to return (1-1000)
@@ -16527,13 +17009,15 @@ components:
           enum:
             - asc
             - desc
+        to:
+          type: string
+          description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
       description: Payload for searching telemetry logs
     SearchLogsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         logs:
           type: array
           items:
@@ -16545,7 +17029,6 @@ components:
       description: Result of searching telemetry logs
       required:
         - logs
-        - enabled
     SearchToolCallsFilter:
       type: object
       properties:
@@ -16600,9 +17083,6 @@ components:
     SearchToolCallsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
@@ -16611,14 +17091,9 @@ components:
           items:
             $ref: '#/components/schemas/ToolCallSummary'
           description: List of tool call summaries
-        tool_io_logs_enabled:
-          type: boolean
-          description: Whether tool input/output logging is enabled for the organization
       description: Result of searching tool call summaries
       required:
         - tool_calls
-        - enabled
-        - tool_io_logs_enabled
     SearchUsersFilter:
       type: object
       properties:
@@ -16675,9 +17150,6 @@ components:
     SearchUsersResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
@@ -16689,7 +17161,6 @@ components:
       description: Result of searching user usage summaries
       required:
         - users
-        - enabled
     SecurityVariable:
       type: object
       properties:

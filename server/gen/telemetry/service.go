@@ -66,17 +66,6 @@ const ServiceName = "telemetry"
 // MethodKey key.
 var MethodNames = [11]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary"}
 
-// Filter on a log attribute by path.
-type AttributeFilter struct {
-	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
-	// bare path for system attributes (e.g. 'http.route').
-	Path string
-	// Comparison operator
-	Op string
-	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
-	Value *string
-}
-
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
 type CaptureEventPayload struct {
@@ -161,8 +150,6 @@ type GetHooksSummaryResult struct {
 	TotalEvents int64
 	// Total number of unique sessions
 	TotalSessions int64
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -170,8 +157,6 @@ type GetHooksSummaryResult struct {
 type GetMetricsSummaryResult struct {
 	// Aggregated metrics
 	Metrics *ProjectSummary
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetObservabilityOverviewPayload is the payload type of the telemetry service
@@ -209,8 +194,6 @@ type GetObservabilityOverviewResult struct {
 	TopToolsByFailureRate []*ToolMetric
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetProjectMetricsSummaryPayload is the payload type of the telemetry service
@@ -246,8 +229,6 @@ type GetUserMetricsSummaryPayload struct {
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummary
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Aggregated hooks metrics for a single server
@@ -304,8 +285,19 @@ type ListFilterOptionsPayload struct {
 type ListFilterOptionsResult struct {
 	// List of filter options
 	Options []*FilterOption
-	// Whether telemetry is enabled for the organization
-	Enabled bool
+}
+
+// A single filter condition for a log search query.
+type LogFilter struct {
+	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
+	// bare path for system attributes (e.g. 'http.route').
+	Path string
+	// Comparison operator
+	Operator string
+	// Values to compare against. Pass one value for single-value operators (eq,
+	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
+	// 'not_exists'.
+	Values []string
 }
 
 // Model usage statistics
@@ -427,8 +419,6 @@ type SearchChatsResult struct {
 	Chats []*ChatSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
 }
 
 // Filter criteria for searching logs
@@ -455,8 +445,6 @@ type SearchLogsFilter struct {
 	ExternalUserID *string
 	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
 	EventSource *string
-	// Filters on custom log attributes
-	AttributeFilters []*AttributeFilter
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -475,7 +463,13 @@ type SearchLogsPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Filter criteria for the search
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string
+	// Filter conditions for the search query
+	Filters []*LogFilter
+	// [Deprecated] Use 'filters' and top-level 'from'/'to' instead.
 	Filter *SearchLogsFilter
 	// Cursor for pagination
 	Cursor *string
@@ -492,8 +486,6 @@ type SearchLogsResult struct {
 	Logs []*TelemetryLogRecord
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
 }
 
 // Filter criteria for searching tool calls
@@ -535,10 +527,6 @@ type SearchToolCallsResult struct {
 	ToolCalls []*ToolCallSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
-	// Whether tool input/output logging is enabled for the organization
-	ToolIoLogsEnabled bool
 }
 
 // Filter criteria for searching user usage summaries
@@ -576,8 +564,6 @@ type SearchUsersResult struct {
 	Users []*UserSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Service information

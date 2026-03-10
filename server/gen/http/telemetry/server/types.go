@@ -17,7 +17,13 @@ import (
 // SearchLogsRequestBody is the type of the "telemetry" service "searchLogs"
 // endpoint HTTP request body.
 type SearchLogsRequestBody struct {
-	// Filter criteria for the search
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Filter conditions for the search query
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// [Deprecated] Use 'filters' and top-level 'from'/'to' instead.
 	Filter *SearchLogsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
 	// Cursor for pagination
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
@@ -155,8 +161,6 @@ type SearchLogsResponseBody struct {
 	Logs []*TelemetryLogRecordResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether tool metrics are enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchToolCallsResponseBody is the type of the "telemetry" service
@@ -166,10 +170,6 @@ type SearchToolCallsResponseBody struct {
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether tool metrics are enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Whether tool input/output logging is enabled for the organization
-	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
 }
 
 // SearchChatsResponseBody is the type of the "telemetry" service "searchChats"
@@ -179,8 +179,6 @@ type SearchChatsResponseBody struct {
 	Chats []*ChatSummaryResponseBody `form:"chats" json:"chats" xml:"chats"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether tool metrics are enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchUsersResponseBody is the type of the "telemetry" service "searchUsers"
@@ -190,8 +188,6 @@ type SearchUsersResponseBody struct {
 	Users []*UserSummaryResponseBody `form:"users" json:"users" xml:"users"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // CaptureEventResponseBody is the type of the "telemetry" service
@@ -206,8 +202,6 @@ type CaptureEventResponseBody struct {
 type GetProjectMetricsSummaryResponseBody struct {
 	// Aggregated metrics
 	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // GetUserMetricsSummaryResponseBody is the type of the "telemetry" service
@@ -215,8 +209,6 @@ type GetProjectMetricsSummaryResponseBody struct {
 type GetUserMetricsSummaryResponseBody struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // GetObservabilityOverviewResponseBody is the type of the "telemetry" service
@@ -234,8 +226,6 @@ type GetObservabilityOverviewResponseBody struct {
 	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -243,8 +233,6 @@ type GetObservabilityOverviewResponseBody struct {
 type ListFilterOptionsResponseBody struct {
 	// List of filter options
 	Options []*FilterOptionResponseBody `form:"options" json:"options" xml:"options"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // ListAttributeKeysResponseBody is the type of the "telemetry" service
@@ -263,8 +251,6 @@ type GetHooksSummaryResponseBody struct {
 	TotalEvents int64 `form:"total_events" json:"total_events" xml:"total_events"`
 	// Total number of unique sessions
 	TotalSessions int64 `form:"total_sessions" json:"total_sessions" xml:"total_sessions"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -2581,6 +2567,19 @@ type HooksServerSummaryResponseBody struct {
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// LogFilterRequestBody is used to define fields on request body types.
+type LogFilterRequestBody struct {
+	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
+	// bare path for system attributes (e.g. 'http.route').
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Comparison operator
+	Operator *string `form:"operator,omitempty" json:"operator,omitempty" xml:"operator,omitempty"`
+	// Values to compare against. Pass one value for single-value operators (eq,
+	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
+	// 'not_exists'.
+	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+}
+
 // SearchLogsFilterRequestBody is used to define fields on request body types.
 type SearchLogsFilterRequestBody struct {
 	// Trace ID filter (32 hex characters)
@@ -2605,8 +2604,6 @@ type SearchLogsFilterRequestBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
-	// Filters on custom log attributes
-	AttributeFilters []*AttributeFilterRequestBody `form:"attribute_filters,omitempty" json:"attribute_filters,omitempty" xml:"attribute_filters,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -2617,17 +2614,6 @@ type SearchLogsFilterRequestBody struct {
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
 	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
-}
-
-// AttributeFilterRequestBody is used to define fields on request body types.
-type AttributeFilterRequestBody struct {
-	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
-	// bare path for system attributes (e.g. 'http.route').
-	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
-	// Comparison operator
-	Op *string `form:"op,omitempty" json:"op,omitempty" xml:"op,omitempty"`
-	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
 // SearchToolCallsFilterRequestBody is used to define fields on request body
@@ -2678,7 +2664,6 @@ type SearchUsersFilterRequestBody struct {
 func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsResponseBody {
 	body := &SearchLogsResponseBody{
 		NextCursor: res.NextCursor,
-		Enabled:    res.Enabled,
 	}
 	if res.Logs != nil {
 		body.Logs = make([]*TelemetryLogRecordResponseBody, len(res.Logs))
@@ -2699,9 +2684,7 @@ func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsRespo
 // of the "searchToolCalls" endpoint of the "telemetry" service.
 func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *SearchToolCallsResponseBody {
 	body := &SearchToolCallsResponseBody{
-		NextCursor:        res.NextCursor,
-		Enabled:           res.Enabled,
-		ToolIoLogsEnabled: res.ToolIoLogsEnabled,
+		NextCursor: res.NextCursor,
 	}
 	if res.ToolCalls != nil {
 		body.ToolCalls = make([]*ToolCallSummaryResponseBody, len(res.ToolCalls))
@@ -2723,7 +2706,6 @@ func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *Searc
 func NewSearchChatsResponseBody(res *telemetry.SearchChatsResult) *SearchChatsResponseBody {
 	body := &SearchChatsResponseBody{
 		NextCursor: res.NextCursor,
-		Enabled:    res.Enabled,
 	}
 	if res.Chats != nil {
 		body.Chats = make([]*ChatSummaryResponseBody, len(res.Chats))
@@ -2745,7 +2727,6 @@ func NewSearchChatsResponseBody(res *telemetry.SearchChatsResult) *SearchChatsRe
 func NewSearchUsersResponseBody(res *telemetry.SearchUsersResult) *SearchUsersResponseBody {
 	body := &SearchUsersResponseBody{
 		NextCursor: res.NextCursor,
-		Enabled:    res.Enabled,
 	}
 	if res.Users != nil {
 		body.Users = make([]*UserSummaryResponseBody, len(res.Users))
@@ -2775,9 +2756,7 @@ func NewCaptureEventResponseBody(res *telemetry.CaptureEventResult) *CaptureEven
 // the result of the "getProjectMetricsSummary" endpoint of the "telemetry"
 // service.
 func NewGetProjectMetricsSummaryResponseBody(res *telemetry.GetMetricsSummaryResult) *GetProjectMetricsSummaryResponseBody {
-	body := &GetProjectMetricsSummaryResponseBody{
-		Enabled: res.Enabled,
-	}
+	body := &GetProjectMetricsSummaryResponseBody{}
 	if res.Metrics != nil {
 		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
 	}
@@ -2787,9 +2766,7 @@ func NewGetProjectMetricsSummaryResponseBody(res *telemetry.GetMetricsSummaryRes
 // NewGetUserMetricsSummaryResponseBody builds the HTTP response body from the
 // result of the "getUserMetricsSummary" endpoint of the "telemetry" service.
 func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryResult) *GetUserMetricsSummaryResponseBody {
-	body := &GetUserMetricsSummaryResponseBody{
-		Enabled: res.Enabled,
-	}
+	body := &GetUserMetricsSummaryResponseBody{}
 	if res.Metrics != nil {
 		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
 	}
@@ -2802,7 +2779,6 @@ func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryRe
 func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetObservabilityOverviewResponseBody {
 	body := &GetObservabilityOverviewResponseBody{
 		IntervalSeconds: res.IntervalSeconds,
-		Enabled:         res.Enabled,
 	}
 	if res.Summary != nil {
 		body.Summary = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Summary)
@@ -2852,9 +2828,7 @@ func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOver
 // NewListFilterOptionsResponseBody builds the HTTP response body from the
 // result of the "listFilterOptions" endpoint of the "telemetry" service.
 func NewListFilterOptionsResponseBody(res *telemetry.ListFilterOptionsResult) *ListFilterOptionsResponseBody {
-	body := &ListFilterOptionsResponseBody{
-		Enabled: res.Enabled,
-	}
+	body := &ListFilterOptionsResponseBody{}
 	if res.Options != nil {
 		body.Options = make([]*FilterOptionResponseBody, len(res.Options))
 		for i, val := range res.Options {
@@ -2891,7 +2865,6 @@ func NewGetHooksSummaryResponseBody(res *telemetry.GetHooksSummaryResult) *GetHo
 	body := &GetHooksSummaryResponseBody{
 		TotalEvents:   res.TotalEvents,
 		TotalSessions: res.TotalSessions,
-		Enabled:       res.Enabled,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*HooksServerSummaryResponseBody, len(res.Servers))
@@ -4495,6 +4468,8 @@ func NewGetHooksSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetHooks
 // NewSearchLogsPayload builds a telemetry service searchLogs endpoint payload.
 func NewSearchLogsPayload(body *SearchLogsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.SearchLogsPayload {
 	v := &telemetry.SearchLogsPayload{
+		From:   body.From,
+		To:     body.To,
 		Cursor: body.Cursor,
 	}
 	if body.Sort != nil {
@@ -4502,6 +4477,16 @@ func NewSearchLogsPayload(body *SearchLogsRequestBody, apikeyToken *string, sess
 	}
 	if body.Limit != nil {
 		v.Limit = *body.Limit
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
+		}
 	}
 	if body.Filter != nil {
 		v.Filter = unmarshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter(body.Filter)
@@ -4724,6 +4709,19 @@ func NewGetHooksSummaryPayload(body *GetHooksSummaryRequestBody, apikeyToken *st
 // ValidateSearchLogsRequestBody runs the validations defined on
 // SearchLogsRequestBody
 func ValidateSearchLogsRequestBody(body *SearchLogsRequestBody) (err error) {
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.Filter != nil {
 		if err2 := ValidateSearchLogsFilterRequestBody(body.Filter); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -4971,47 +4969,9 @@ func ValidateGetHooksSummaryRequestBody(body *GetHooksSummaryRequestBody) (err e
 	return
 }
 
-// ValidateSearchLogsFilterRequestBody runs the validations defined on
-// SearchLogsFilterRequestBody
-func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
-	if body.TraceID != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
-	}
-	if body.SeverityText != nil {
-		if !(*body.SeverityText == "DEBUG" || *body.SeverityText == "INFO" || *body.SeverityText == "WARN" || *body.SeverityText == "ERROR" || *body.SeverityText == "FATAL") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity_text", *body.SeverityText, []any{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
-		}
-	}
-	if body.HTTPMethod != nil {
-		if !(*body.HTTPMethod == "GET" || *body.HTTPMethod == "POST" || *body.HTTPMethod == "PUT" || *body.HTTPMethod == "PATCH" || *body.HTTPMethod == "DELETE" || *body.HTTPMethod == "HEAD" || *body.HTTPMethod == "OPTIONS") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.http_method", *body.HTTPMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
-		}
-	}
-	for _, e := range body.AttributeFilters {
-		if e != nil {
-			if err2 := ValidateAttributeFilterRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	if body.From != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
-	}
-	if body.To != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
-	}
-	if body.DeploymentID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
-	}
-	if body.FunctionID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
-	}
-	return
-}
-
-// ValidateAttributeFilterRequestBody runs the validations defined on
-// AttributeFilterRequestBody
-func ValidateAttributeFilterRequestBody(body *AttributeFilterRequestBody) (err error) {
+// ValidateLogFilterRequestBody runs the validations defined on
+// LogFilterRequestBody
+func ValidateLogFilterRequestBody(body *LogFilterRequestBody) (err error) {
 	if body.Path == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
 	}
@@ -5028,15 +4988,44 @@ func ValidateAttributeFilterRequestBody(body *AttributeFilterRequestBody) (err e
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", *body.Path, utf8.RuneCountInString(*body.Path), 256, false))
 		}
 	}
-	if body.Op != nil {
-		if !(*body.Op == "eq" || *body.Op == "not_eq" || *body.Op == "contains" || *body.Op == "exists" || *body.Op == "not_exists") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"eq", "not_eq", "contains", "exists", "not_exists"}))
+	if body.Operator != nil {
+		if !(*body.Operator == "eq" || *body.Operator == "not_eq" || *body.Operator == "contains" || *body.Operator == "exists" || *body.Operator == "not_exists" || *body.Operator == "in") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operator", *body.Operator, []any{"eq", "not_eq", "contains", "exists", "not_exists", "in"}))
 		}
 	}
-	if body.Value != nil {
-		if utf8.RuneCountInString(*body.Value) > 1024 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.value", *body.Value, utf8.RuneCountInString(*body.Value), 1024, false))
+	if len(body.Values) > 256 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 256, false))
+	}
+	return
+}
+
+// ValidateSearchLogsFilterRequestBody runs the validations defined on
+// SearchLogsFilterRequestBody
+func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
+	if body.TraceID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
+	}
+	if body.SeverityText != nil {
+		if !(*body.SeverityText == "DEBUG" || *body.SeverityText == "INFO" || *body.SeverityText == "WARN" || *body.SeverityText == "ERROR" || *body.SeverityText == "FATAL") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity_text", *body.SeverityText, []any{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
 		}
+	}
+	if body.HTTPMethod != nil {
+		if !(*body.HTTPMethod == "GET" || *body.HTTPMethod == "POST" || *body.HTTPMethod == "PUT" || *body.HTTPMethod == "PATCH" || *body.HTTPMethod == "DELETE" || *body.HTTPMethod == "HEAD" || *body.HTTPMethod == "OPTIONS") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.http_method", *body.HTTPMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
+		}
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
 	}
 	return
 }

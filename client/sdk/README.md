@@ -229,7 +229,10 @@ run();
 
 ### [McpRegistries](docs/sdks/mcpregistries/README.md)
 
+* [clearCache](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
+* [getServerDetails](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 * [listCatalog](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
+* [listRegistries](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 
 ### [Packages](docs/sdks/packages/README.md)
 
@@ -396,7 +399,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpMetadataExport`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
+- [`mcpRegistriesClearCache`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
+- [`mcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
+- [`mcpRegistriesListRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -545,6 +551,7 @@ To learn about this feature and how to get started, check
 - [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
+- [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
@@ -555,6 +562,8 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
+- [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
+- [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
@@ -790,7 +799,7 @@ The default server can be overridden globally by passing a URL to the `serverURL
 import { Gram } from "@gram/client";
 
 const gram = new Gram({
-  serverURL: "http://localhost:80",
+  serverURL: "https://app.getgram.ai",
 });
 
 async function run() {

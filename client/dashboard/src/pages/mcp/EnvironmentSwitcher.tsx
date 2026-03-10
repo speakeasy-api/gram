@@ -53,7 +53,7 @@ export function EnvironmentSwitcher({
 
   // Helper to get display name for environment
   const getEnvironmentDisplayName = (env: Environment) => {
-    if (env.slug === "default") return "Project";
+    if (env.slug === "default") return "Default";
     return env.name;
   };
 
@@ -140,13 +140,13 @@ export function EnvironmentSwitcher({
               </span>
             ) : isViewingNonDefault ? (
               // Viewing non-default env - show Make Default
-              <SimpleTooltip tooltip="Set this as the default environment for this MCP server">
+              <SimpleTooltip tooltip="Attach this environment to this MCP server">
                 <Button
                   onClick={onSetDefaultEnvironment}
                   variant="secondary"
                   size="xs"
                 >
-                  <Button.Text>Make Default</Button.Text>
+                  <Button.Text>Attach</Button.Text>
                 </Button>
               </SimpleTooltip>
             ) : hasExistingConfigs ? (

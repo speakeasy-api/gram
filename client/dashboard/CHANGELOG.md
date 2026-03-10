@@ -1,5 +1,32 @@
 # dashboard
 
+## 0.32.1
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- 1500853: Surface correct http status attribute references in MCP logs search
+- e616da7: Add admin-only cache purging functionality
+- Updated dependencies [1765931]
+- Updated dependencies [e616da7]
+  - @gram/client@0.27.20
+
+## 0.32.0
+
+### Minor Changes
+
+- 63d10d0: ## Changeset
+
+  External MCP servers now use the same OAuth configuration pathway as all other toolsets — no more special-cased token resolution.
+
+  The "Configure OAuth" button is now enabled for external MCP servers that require OAuth. When discovered OAuth metadata is available, the configuration form can be auto-populated with a single click.
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+- Updated dependencies [0c90e1e]
+  - @gram/client@0.27.24
+
 ## 0.31.0
 
 ### Minor Changes
@@ -483,6 +510,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level
