@@ -275,6 +275,7 @@ export function ToolsetPanel({
           queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
+          invalidateAllToolset(queryClient);
           if (selectedToolset) {
             // Use partial query key (toolsetSlug only) to match all instances
             // of this toolset, regardless of environment
@@ -316,6 +317,7 @@ export function ToolsetPanel({
           queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
+          invalidateAllToolset(queryClient);
           if (selectedToolset) {
             // Use partial query key (toolsetSlug only) to match all instances
             // of this toolset, regardless of environment
