@@ -48,88 +48,100 @@ We provide framework-specific adapters to make it easy to set up a backend endpo
 ### Express
 
 ```typescript
-import { createExpressHandler } from '@gram-ai/elements/server/express'
-import express from 'express'
+import { createExpressHandler } from "@gram-ai/elements/server/express";
+import express from "express";
 
-const app = express()
-app.use(express.json())
+const app = express();
+app.use(express.json());
 
-app.post('/chat/session', createExpressHandler({
-  embedOrigin: 'http://localhost:3000',
-  userIdentifier: 'user-123',
-  expiresAfter: 3600, // optional, max 3600 seconds
-}))
+app.post(
+  "/chat/session",
+  createExpressHandler({
+    embedOrigin: "http://localhost:3000",
+    userIdentifier: "user-123",
+    expiresAfter: 3600, // optional, max 3600 seconds
+  }),
+);
 
-app.listen(3000)
+app.listen(3000);
 ```
 
 For dynamic options based on the request:
 
 ```typescript
-app.post('/chat/session', createExpressHandler((req) => ({
-  embedOrigin: req.headers.origin || 'http://localhost:3000',
-  userIdentifier: req.user?.id || 'anonymous',
-  expiresAfter: 3600,
-})))
+app.post(
+  "/chat/session",
+  createExpressHandler((req) => ({
+    embedOrigin: req.headers.origin || "http://localhost:3000",
+    userIdentifier: req.user?.id || "anonymous",
+    expiresAfter: 3600,
+  })),
+);
 ```
 
 ### Next.js App Router
 
 ```typescript
 // app/chat/session/route.ts
-import { createNextHandler } from '@gram-ai/elements/server/nextjs'
+import { createNextHandler } from "@gram-ai/elements/server/nextjs";
 
 export const POST = createNextHandler({
-  embedOrigin: 'http://localhost:3000',
-  userIdentifier: 'user-123',
+  embedOrigin: "http://localhost:3000",
+  userIdentifier: "user-123",
   expiresAfter: 3600,
-})
-import { cookies } from 'next/headers'
+});
+import { cookies } from "next/headers";
 
 export const POST = createNextHandler(async (request) => {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('userId')?.value || 'anonymous'
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("userId")?.value || "anonymous";
 
   return {
-    embedOrigin: request.headers.get('origin') || 'http://localhost:3000',
+    embedOrigin: request.headers.get("origin") || "http://localhost:3000",
     userIdentifier: userId,
     expiresAfter: 3600,
-  }
-})
+  };
+});
 ```
 
 ### Fastify
 
 ```typescript
-import { createFastifyHandler } from '@gram-ai/elements/server/fastify'
-import Fastify from 'fastify'
+import { createFastifyHandler } from "@gram-ai/elements/server/fastify";
+import Fastify from "fastify";
 
-const fastify = Fastify()
+const fastify = Fastify();
 
-fastify.post('/chat/session', createFastifyHandler({
-  embedOrigin: 'http://localhost:3000',
-  userIdentifier: 'user-123',
-  expiresAfter: 3600,
-}))
+fastify.post(
+  "/chat/session",
+  createFastifyHandler({
+    embedOrigin: "http://localhost:3000",
+    userIdentifier: "user-123",
+    expiresAfter: 3600,
+  }),
+);
 
-fastify.listen({ port: 3000 })
+fastify.listen({ port: 3000 });
 ```
 
 ### Hono
 
 ```typescript
-import { createHonoHandler } from '@gram-ai/elements/server/hono'
-import { Hono } from 'hono'
+import { createHonoHandler } from "@gram-ai/elements/server/hono";
+import { Hono } from "hono";
 
-const app = new Hono()
+const app = new Hono();
 
-app.post('/chat/session', createHonoHandler({
-  embedOrigin: 'http://localhost:3000',
-  userIdentifier: 'user-123',
-  expiresAfter: 3600,
-}))
+app.post(
+  "/chat/session",
+  createHonoHandler({
+    embedOrigin: "http://localhost:3000",
+    userIdentifier: "user-123",
+    expiresAfter: 3600,
+  }),
+);
 
-export default app
+export default app;
 ```
 
 ### Environment Variables
@@ -284,12 +296,12 @@ export const App = () => {
 You can also import and use plugins individually:
 
 ```typescript
-import { chart } from '@gram-ai/elements/plugins'
+import { chart } from "@gram-ai/elements/plugins";
 
 const config: ElementsConfig = {
   // ... other config
   plugins: [chart],
-}
+};
 ```
 
 ### Using Custom Plugins
@@ -352,17 +364,17 @@ import {
   GramElementsProvider,
   Chat,
   useRecordCassette,
-} from '@gram-ai/elements'
+} from "@gram-ai/elements";
 
 function RecordableChat() {
-  const { isRecording, startRecording, download } = useRecordCassette()
+  const { isRecording, startRecording, download } = useRecordCassette();
   return (
     <>
       <Chat />
       <button onClick={startRecording}>Record</button>
-      <button onClick={() => download('demo')}>Save</button>
+      <button onClick={() => download("demo")}>Save</button>
     </>
-  )
+  );
 }
 ```
 
@@ -371,15 +383,15 @@ function RecordableChat() {
 Use the `<Replay>` component, which replaces `GramElementsProvider` entirely:
 
 ```tsx
-import { Replay, Chat } from '@gram-ai/elements'
-import cassette from './demo.cassette.json'
+import { Replay, Chat } from "@gram-ai/elements";
+import cassette from "./demo.cassette.json";
 
 function MarketingDemo() {
   return (
-    <Replay cassette={cassette} config={{ variant: 'standalone' }}>
+    <Replay cassette={cassette} config={{ variant: "standalone" }}>
       <Chat />
     </Replay>
-  )
+  );
 }
 ```
 
@@ -405,13 +417,13 @@ React 18 and 19 work out of the box. For React 16 or 17, you need to configure y
 Add the compatibility plugin to your Vite config:
 
 ```typescript
-import react from '@vitejs/plugin-react'
-import { reactCompat } from '@gram-ai/elements/compat'
-import { defineConfig } from 'vite'
+import react from "@vitejs/plugin-react";
+import { reactCompat } from "@gram-ai/elements/compat";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react(), reactCompat()],
-})
+});
 ```
 
 This automatically shims React 18 APIs (`useSyncExternalStore`, `useId`, `useInsertionEffect`) so that Elements and its dependencies work correctly on older React versions.
