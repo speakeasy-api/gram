@@ -23,7 +23,7 @@ func TestBufferHook_AtomicAppend(t *testing.T) {
 	toolUseID := "toolu_123"
 
 	// Buffer a single hook
-	payload := &hooks.ClaudePayload{
+	payload := &hooks.ClaudeHookPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
@@ -65,7 +65,7 @@ func TestBufferHook_MultipleConcurrent(t *testing.T) {
 
 			toolName := "concurrent_tool"
 			toolUseID := uuid.NewString()
-			payload := &hooks.ClaudePayload{
+			payload := &hooks.ClaudeHookPayload{
 				HookEventName: "PreToolUse",
 				SessionID:     &sessionID,
 				ToolName:      &toolName,
@@ -97,7 +97,7 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
 	numHooks := 5
 	for i := 0; i < numHooks; i++ {
-		payload := hooks.ClaudePayload{
+		payload := hooks.ClaudeHookPayload{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
 			ToolName:      stringPtr("test_tool"),
@@ -182,7 +182,7 @@ func TestBufferAndFlush_MultipleSessionsConcurrent(t *testing.T) {
 			for hookIdx := 0; hookIdx < hooksPerSession; hookIdx++ {
 				toolName := "test_tool"
 				toolUseID := uuid.NewString()
-				payload := &hooks.ClaudePayload{
+				payload := &hooks.ClaudeHookPayload{
 					HookEventName: "PreToolUse",
 					SessionID:     &sessionID,
 					ToolName:      &toolName,
@@ -280,7 +280,7 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 
 	// Create test payloads
 	sessionID := uuid.NewString()
-	payloads := []hooks.ClaudePayload{
+	payloads := []hooks.ClaudeHookPayload{
 		{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
@@ -302,7 +302,7 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 	}
 
 	// Read back using ListRange
-	var retrieved []hooks.ClaudePayload
+	var retrieved []hooks.ClaudeHookPayload
 	err := cacheAdapter.ListRange(ctx, key, 0, -1, &retrieved)
 	require.NoError(t, err)
 

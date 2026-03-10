@@ -692,7 +692,7 @@ func newStartCommand() *cli.Command {
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient)))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, localEnvPath, temporalEnv))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
 			auth.Attach(mux, auth.NewService(
 				logger,
@@ -782,6 +782,7 @@ func newStartCommand() *cli.Command {
 						AgentsService:       agentsWorkerSvc,
 						MCPRegistryClient:   mcpRegistryClient,
 						TelemetryService:    telemSvc,
+						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

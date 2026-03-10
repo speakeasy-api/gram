@@ -3014,3 +3014,19 @@ func marshalTelemetryHooksServerSummaryToHooksServerSummaryResponseBody(v *telem
 
 	return res
 }
+
+// marshalTelemetryHooksUserSummaryToHooksUserSummaryResponseBody builds a
+// value of type *HooksUserSummaryResponseBody from a value of type
+// *telemetry.HooksUserSummary.
+func marshalTelemetryHooksUserSummaryToHooksUserSummaryResponseBody(v *telemetry.HooksUserSummary) *HooksUserSummaryResponseBody {
+	res := &HooksUserSummaryResponseBody{
+		UserEmail:    v.UserEmail,
+		EventCount:   v.EventCount,
+		UniqueTools:  v.UniqueTools,
+		SuccessCount: v.SuccessCount,
+		FailureCount: v.FailureCount,
+		FailureRate:  v.FailureRate,
+	}
+
+	return res
+}

@@ -723,6 +723,7 @@ async function seedObservabilityData(init: {
 
   const NUM_CHATS = 500; // Reduced for faster seeding
   const DAYS_BACK = 30;
+  const NUM_HOOKS = 500; // Reduced for faster seeding
 
   // Use actual tool URNs from the deployment
   const TOOLS = toolUrns;
@@ -1256,6 +1257,106 @@ async function seedObservabilityData(init: {
 
       chInserts.push(
         `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '${traceId}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
+      );
+    }
+  }
+
+  // Hook-specific constants
+  const HOOK_SOURCES = ["claude", "vscode", "cli", "api"];
+  const MCP_SERVERS = ["", "github", "filesystem", "postgres", "slack", ""]; // Empty string = local tools
+  const HOOK_TOOL_NAMES = [
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Grep",
+    "Glob",
+    "mcp__github__list-repos",
+    "mcp__filesystem__read-file",
+    "mcp__postgres__query",
+  ];
+  const USER_EMAILS = [
+    "alice@example.com",
+    "bob@example.com",
+    "charlie@example.com",
+    "",
+  ]; // Empty string = no user email
+
+  for (let i = 0; i < NUM_HOOKS; i++) {
+    const sessionId = `session-${i % 50}`; // Group hooks into sessions
+    const toolUseId = `toolu_${crypto.randomBytes(12).toString("hex")}`;
+    const userEmail =
+      USER_EMAILS[Math.floor(Math.random() * USER_EMAILS.length)];
+    const hookSource =
+      HOOK_SOURCES[Math.floor(Math.random() * HOOK_SOURCES.length)];
+    const toolName =
+      HOOK_TOOL_NAMES[Math.floor(Math.random() * HOOK_TOOL_NAMES.length)];
+    const mcpServer =
+      MCP_SERVERS[Math.floor(Math.random() * MCP_SERVERS.length)];
+
+    const daysAgo = Math.random() * DAYS_BACK;
+    const eventTime = new Date(now - daysAgo * msPerDay);
+    const baseTimeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
+
+    // Generate a unique trace ID for this tool call (32 hex chars)
+    const traceId = crypto.randomBytes(16).toString("hex");
+
+    // Decide if this is a successful call or failure (90% success)
+    const isFailure = Math.random() > 0.9;
+
+    // 1. SessionStart event (10% of the time)
+    if (Math.random() < 0.1) {
+      const attrs: Record<string, any> = {
+        "gram.event.source": "hook",
+        "gram.hook.event": "SessionStart",
+        "gram.hook.source": hookSource,
+        "gram.project.id": projectId,
+        "gen_ai.conversation.id": sessionId,
+      };
+      if (userEmail) attrs["user.email"] = userEmail;
+
+      chInserts.push(
+        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Hook: SessionStart', '${traceId}', '${JSON.stringify(attrs).replace(/'/g, "\\'")}', '{}', '${projectId}', 'SessionStart', '${hookSource}', '${sessionId}')`,
+      );
+    } else {
+      // 2. PreToolUse event
+      const preToolAttrs: Record<string, any> = {
+        "gram.event.source": "hook",
+        "gram.tool.name": toolName,
+        "gram.hook.event": "PreToolUse",
+        "gram.hook.source": hookSource,
+        "gram.project.id": projectId,
+        "gen_ai.conversation.id": sessionId,
+        "gen_ai.tool_call.id": toolUseId,
+      };
+      if (userEmail) preToolAttrs["user.email"] = userEmail;
+      if (mcpServer) preToolAttrs["gram.tool_call.source"] = mcpServer;
+
+      chInserts.push(
+        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '${JSON.stringify(preToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
+      );
+
+      // 3. PostToolUse or PostToolUseFailure event
+      const postHookEvent = isFailure ? "PostToolUseFailure" : "PostToolUse";
+      const postTimeNano =
+        baseTimeNano + BigInt(Math.floor(Math.random() * 5000000)); // 0-5ms later
+
+      const postToolAttrs: Record<string, any> = {
+        "gram.event.source": "hook",
+        "gram.tool.name": toolName,
+        "gram.hook.event": postHookEvent,
+        "gram.hook.source": hookSource,
+        "gram.project.id": projectId,
+        "gen_ai.conversation.id": sessionId,
+        "gen_ai.tool_call.id": toolUseId,
+        "http.response.status_code": isFailure ? 500 : 200,
+      };
+      if (userEmail) postToolAttrs["user.email"] = userEmail;
+      if (mcpServer) postToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (isFailure) postToolAttrs["gram.hook.error"] = "Tool execution failed";
+
+      chInserts.push(
+        `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${JSON.stringify(postToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
       );
     }
   }

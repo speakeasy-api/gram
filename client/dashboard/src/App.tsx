@@ -1,35 +1,34 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
+import { FontTexture, WebGLCanvas } from "@/components/webgl";
 import {
   MoonshineConfigProvider,
   TooltipProvider,
 } from "@speakeasy-api/moonshine";
-import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
   Route,
   Routes,
-  useSearchParams,
   useLocation,
+  useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
-import SlackRegister from "./pages/slackapp/SlackRegister";
+import { CommandPalette } from "./components/command-palette";
 import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
-import { SdkProvider } from "./contexts/Sdk.tsx";
-import { TelemetryProvider } from "./contexts/Telemetry.tsx";
-import { AppRoute, useRoutes } from "./routes";
-import { usePageTitle } from "./hooks/use-page-title";
-import { Toaster } from "@/components/ui/sonner";
-import CliCallback from "./pages/cli/CliCallback";
-import HooksLogin from "./pages/hooks/HooksLogin";
 import {
   CommandPaletteProvider,
   useCommandPalette,
 } from "./contexts/CommandPalette";
-import { CommandPalette } from "./components/command-palette";
-import { WebGLCanvas, FontTexture } from "@/components/webgl";
+import { SdkProvider } from "./contexts/Sdk.tsx";
+import { TelemetryProvider } from "./contexts/Telemetry.tsx";
+import { usePageTitle } from "./hooks/use-page-title";
+import CliCallback from "./pages/cli/CliCallback";
+import SlackRegister from "./pages/slackapp/SlackRegister";
+import { AppRoute, useRoutes } from "./routes";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -104,9 +103,9 @@ export default function App() {
 
 function AppContent() {
   /**
-   * NOTE(cjea): Do not wrap CliCallback or HooksLogin in an AuthProvider.
+   * NOTE(cjea): Do not wrap CliCallback in an AuthProvider.
    *
-   * CLI and Hooks requests don't include a redirect URL, so AuthProvider wouldn't know
+   * CLI requests don't include a redirect URL, so AuthProvider wouldn't know
    * where to send authenticated users. Instead, these components handle the flow:
    *
    * 1. Component receives an unauthenticated request.
@@ -115,7 +114,6 @@ function AppContent() {
    * 4. Authenticated user is redirected back to the component.
    */
   const cliFlow = useCliAuthFlow();
-  const hooksFlow = useHooksAuthFlow();
   const location = useLocation();
 
   // Only render WebGL canvas during onboarding
@@ -123,10 +121,6 @@ function AppContent() {
 
   if (cliFlow) {
     return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
-  }
-
-  if (hooksFlow) {
-    return <HooksLogin callbackUrl={hooksFlow.callbackUrl} />;
   }
 
   return (
@@ -270,19 +264,6 @@ function useCliAuthFlow() {
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
     return { cliCallbackUrl };
-  }
-
-  return null;
-}
-
-function useHooksAuthFlow() {
-  const [searchParams] = useSearchParams();
-  const location = useLocation();
-
-  const callbackUrl = searchParams.get("callback");
-
-  if (location.pathname === "/hooks-login" && callbackUrl) {
-    return { callbackUrl };
   }
 
   return null;
