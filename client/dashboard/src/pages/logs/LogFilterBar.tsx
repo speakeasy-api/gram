@@ -32,15 +32,7 @@ const OP_OPTIONS: { value: Op; label: string; description: string }[] = [
     label: "in",
     description: "Match any of a comma-separated list",
   },
-  { value: Op.Exists, label: "exists", description: "Attribute is set" },
-  {
-    value: Op.NotExists,
-    label: "not exists",
-    description: "Attribute is not set",
-  },
 ];
-
-const VALUELESS_OPS = new Set<Op>([Op.Exists, Op.NotExists]);
 
 interface LogFilterBarProps {
   filters: ActiveLogFilter[];
@@ -137,11 +129,6 @@ export function LogFilterBar({
   };
 
   const handleOpSelect = (op: Op) => {
-    // Valueless operators (exists, not_exists) skip the value step
-    if (VALUELESS_OPS.has(op)) {
-      addFilter(selectedKey, op);
-      return;
-    }
     setSelectedOp(op);
     setStep("value");
     setFilterValue("");

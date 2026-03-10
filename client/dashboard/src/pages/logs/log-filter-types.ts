@@ -14,7 +14,7 @@ export const OP_LABELS: Record<Op, string> = {
   not_eq: "!=",
   contains: "~",
   exists: "exists",
-  not_exists: "∄",
+  not_exists: "not exists",
   in: "in",
 };
 
@@ -25,8 +25,9 @@ const SYMBOL_TO_OP: [string, Op][] = [
   ["~", Operator.Contains],
 ];
 
-/** Match an operator symbol (e.g. `!=`, `=`, `~`) to its Op enum value. */
+/** Match an operator symbol or keyword to its Op enum value. */
 export function parseOperatorSymbol(input: string): Op | null {
+  if (input === "in") return Operator.In;
   for (const [symbol, op] of SYMBOL_TO_OP) {
     if (input === symbol) return op;
   }

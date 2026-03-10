@@ -135,11 +135,15 @@ export function useAttributeLogsQuery({
           searchLogsPayload: {
             from,
             to,
-            filters: toSdkFilters(logFilters),
-            filter: {
-              eventSource: "tool_call",
-              ...(gramUrn ? { gramUrn } : {}),
-            },
+            filters: [
+              {
+                path: "gram.event.source",
+                operator: "eq",
+                values: ["tool_call"],
+              },
+              ...toSdkFilters(logFilters),
+            ],
+            ...(gramUrn ? { filter: { gramUrn } } : {}),
             cursor: pageParam,
             limit: PER_PAGE,
             sort: "desc",
