@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"maps"
 	"strings"
 	"time"
@@ -262,11 +261,7 @@ func (s *Service) UpdateToolSourceBulk(ctx context.Context, projectID, oldSource
 		return fmt.Errorf("execute ClickHouse mutation: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "initiated ClickHouse tool source update mutation",
-		attr.SlogProjectID(projectID),
-		slog.String("old_source", oldSource),
-		slog.String("new_source", newSource),
-	)
+	s.logger.InfoContext(ctx, fmt.Sprintf("initiated ClickHouse tool source update mutation: project_id=%s old_source=%s new_source=%s", projectID, oldSource, newSource))
 
 	return nil
 }

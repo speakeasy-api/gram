@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -43,11 +42,7 @@ func (u *UpdateClickHouseToolSource) Do(ctx context.Context, args UpdateClickHou
 		return fmt.Errorf("update tool source in ClickHouse: %w", err)
 	}
 
-	u.logger.InfoContext(ctx, "updated tool source in ClickHouse",
-		attr.SlogProjectID(args.ProjectID),
-		slog.String("old_source", args.OldSource),
-		slog.String("new_source", args.NewSource),
-	)
+	u.logger.InfoContext(ctx, fmt.Sprintf("updated tool source in ClickHouse: project_id=%s old_source=%s new_source=%s", args.ProjectID, args.OldSource, args.NewSource))
 
 	return nil
 }

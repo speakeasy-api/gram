@@ -80,10 +80,7 @@ func (n *AsyncNameMapper) GetMappedName(attrs map[attr.Key]any) (*string, error)
 
 			_, err := background.ExecuteProcessNameMappingWorkflow(bgCtx, n.temporalEnv, params)
 			if err != nil {
-				n.logger.WarnContext(bgCtx, "failed to start name mapping workflow",
-					attr.SlogError(err),
-					slog.String("server_name", serverName),
-				)
+				n.logger.WarnContext(bgCtx, fmt.Sprintf("failed to start name mapping workflow: server_name=%s err=%v", serverName, err))
 			}
 		}()
 	}

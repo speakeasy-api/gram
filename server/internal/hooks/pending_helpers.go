@@ -3,7 +3,6 @@ package hooks
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -150,10 +149,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 						ProjectID:     metadata.ProjectID,
 					})
 					if err != nil {
-						s.logger.ErrorContext(bgCtx, "failed to start name mapping workflow",
-							slog.String("server_name", source),
-							attr.SlogError(err),
-						)
+						s.logger.ErrorContext(bgCtx, fmt.Sprintf("failed to start name mapping workflow: server_name=%s err=%v", source, err))
 					}
 				}()
 			}

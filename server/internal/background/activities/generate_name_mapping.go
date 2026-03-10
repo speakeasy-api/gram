@@ -144,10 +144,7 @@ func (g *GenerateNameMapping) Do(ctx context.Context, args GenerateNameMappingAr
 		return nil, fmt.Errorf("get from cache: %w", err)
 	}
 	if cachedName != "" {
-		g.logger.DebugContext(ctx, "name mapping already cached",
-			slog.String("server_name", args.ServerName),
-			slog.String("mapped_name", cachedName),
-		)
+		g.logger.DebugContext(ctx, fmt.Sprintf("name mapping already cached: server_name=%s mapped_name=%s", args.ServerName, cachedName))
 		return &GenerateNameMappingResult{
 			OriginalName: args.ServerName,
 			MappedName:   cachedName,
@@ -168,9 +165,7 @@ func (g *GenerateNameMapping) Do(ctx context.Context, args GenerateNameMappingAr
 	}
 
 	if mappedName == "" {
-		g.logger.InfoContext(ctx, "LLM returned empty mapping for server",
-			slog.String("server_name", args.ServerName),
-		)
+		g.logger.InfoContext(ctx, fmt.Sprintf("LLM returned empty mapping for server: server_name=%s", args.ServerName))
 		return &GenerateNameMappingResult{
 			OriginalName: args.ServerName,
 			MappedName:   "",
@@ -182,10 +177,7 @@ func (g *GenerateNameMapping) Do(ctx context.Context, args GenerateNameMappingAr
 		return nil, fmt.Errorf("save to cache: %w", err)
 	}
 
-	g.logger.InfoContext(ctx, "generated name mapping",
-		slog.String("server_name", args.ServerName),
-		slog.String("mapped_name", mappedName),
-	)
+	g.logger.InfoContext(ctx, fmt.Sprintf("generated name mapping: server_name=%s mapped_name=%s", args.ServerName, mappedName))
 
 	return &GenerateNameMappingResult{
 		OriginalName: args.ServerName,
