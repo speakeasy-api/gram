@@ -344,7 +344,7 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 	var metadata SessionMetadata
 	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
 	if err != nil {
-		return SessionMetadata{}, err
+		return SessionMetadata{}, fmt.Errorf("get session metadata: %w", err)
 	}
 	return metadata, nil
 }

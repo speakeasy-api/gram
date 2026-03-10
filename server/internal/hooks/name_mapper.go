@@ -58,8 +58,14 @@ func (n *NameMapperImpl) GetMappedName(attrs map[attr.Key]any) (*string, error) 
 		return &mappedName, nil
 	}
 
-	orgID := attrs[attr.OrganizationIDKey].(string)
-	projectID := attrs[attr.ProjectIDKey].(string)
+	orgID, ok := attrs[attr.OrganizationIDKey].(string)
+	if !ok {
+		return nil, fmt.Errorf("organization ID is not a string")
+	}
+	projectID, ok := attrs[attr.ProjectIDKey].(string)
+	if !ok {
+		return nil, fmt.Errorf("project ID is not a string")
+	}
 
 	toolCallData, err := json.Marshal(attrs)
 	if err != nil {
