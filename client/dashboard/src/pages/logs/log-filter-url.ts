@@ -1,5 +1,5 @@
 import { Operator as Op } from "@gram/client/models/components/logfilter";
-import type { ActiveAttributeFilter } from "./attribute-filter-types";
+import type { ActiveLogFilter } from "./log-filter-types";
 
 /**
  * Serialize active filters to a URL param value.
@@ -7,9 +7,7 @@ import type { ActiveAttributeFilter } from "./attribute-filter-types";
  * Path and value are URI-encoded so commas/colons inside them survive the round-trip.
  * Returns null when there are no filters.
  */
-export function serializeFilters(
-  filters: ActiveAttributeFilter[],
-): string | null {
+export function serializeFilters(filters: ActiveLogFilter[]): string | null {
   if (filters.length === 0) return null;
   return filters
     .map((f) => {
@@ -23,10 +21,10 @@ export function serializeFilters(
 const VALID_OPS = new Set<string>(Object.values(Op));
 
 /**
- * Parse the `af` URL param back into ActiveAttributeFilter[].
+ * Parse the `af` URL param back into ActiveLogFilter[].
  * Returns an empty array for null/empty input.
  */
-export function parseFilters(param: string | null): ActiveAttributeFilter[] {
+export function parseFilters(param: string | null): ActiveLogFilter[] {
   if (!param) return [];
 
   return param

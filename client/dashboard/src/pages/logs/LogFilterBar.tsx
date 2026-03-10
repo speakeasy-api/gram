@@ -15,27 +15,36 @@ import { Command as CmdkRoot } from "cmdk";
 import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  type ActiveAttributeFilter,
+  type ActiveLogFilter,
   OP_LABELS,
   parseOperatorSymbol,
   tryParseFilterExpression,
-} from "./attribute-filter-types";
+} from "./log-filter-types";
 
 type Step = "key" | "operator" | "value";
 
 const OP_OPTIONS: { value: Op; label: string; description: string }[] = [
   { value: Op.Eq, label: "equals", description: "Exact match" },
-  {
-    value: Op.NotEq,
-    label: "not equals",
-    description: "Exclude exact match",
-  },
+  { value: Op.NotEq, label: "not equals", description: "Exclude exact match" },
   { value: Op.Contains, label: "contains", description: "Partial match" },
+  {
+    value: Op.In,
+    label: "in",
+    description: "Match any of a comma-separated list",
+  },
+  { value: Op.Exists, label: "exists", description: "Attribute is set" },
+  {
+    value: Op.NotExists,
+    label: "not exists",
+    description: "Attribute is not set",
+  },
 ];
 
-interface AttributeFilterBarProps {
-  filters: ActiveAttributeFilter[];
-  onChange: (filters: ActiveAttributeFilter[]) => void;
+const VALUELESS_OPS = new Set<Op>([Op.Exists, Op.NotExists]);
+
+interface LogFilterBarProps {
+  filters: ActiveLogFilter[];
+  onChange: (filters: ActiveLogFilter[]) => void;
   attributeKeys: string[];
   isLoadingKeys?: boolean;
   searchInput: string;
@@ -44,7 +53,7 @@ interface AttributeFilterBarProps {
   onSearchSubmit: (query: string) => void;
 }
 
-export function AttributeFilterBar({
+export function LogFilterBar({
   filters,
   onChange,
   attributeKeys,
@@ -52,7 +61,7 @@ export function AttributeFilterBar({
   searchInput,
   onSearchInputChange,
   onSearchSubmit,
-}: AttributeFilterBarProps) {
+}: LogFilterBarProps) {
   const [step, setStep] = useState<Step>("key");
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedOp, setSelectedOp] = useState<Op | null>(null);
@@ -128,6 +137,11 @@ export function AttributeFilterBar({
   };
 
   const handleOpSelect = (op: Op) => {
+    // Valueless operators (exists, not_exists) skip the value step
+    if (VALUELESS_OPS.has(op)) {
+      addFilter(selectedKey, op);
+      return;
+    }
     setSelectedOp(op);
     setStep("value");
     setFilterValue("");
@@ -238,6 +252,9 @@ export function AttributeFilterBar({
     }
   };
 
+  const valuePlaceholder =
+    selectedOp === Op.In ? "value1, value2, ..." : "value";
+
   return (
     <CmdkRoot
       shouldFilter={false}
@@ -302,9 +319,11 @@ export function AttributeFilterBar({
                         break;
                     }
                   }}
-                  placeholder="value"
+                  placeholder={valuePlaceholder}
                   className="bg-transparent outline-none text-xs font-mono w-[80px]"
-                  style={{ width: `${Math.max(filterValue.length, 5)}ch` }}
+                  style={{
+                    width: `${Math.max(filterValue.length, valuePlaceholder.length)}ch`,
+                  }}
                   autoFocus
                 />
               </span>

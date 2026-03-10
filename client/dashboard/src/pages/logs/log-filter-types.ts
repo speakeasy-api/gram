@@ -2,7 +2,7 @@ import { Operator } from "@gram/client/models/components/logfilter";
 
 export type Op = Operator;
 
-export interface ActiveAttributeFilter {
+export interface ActiveLogFilter {
   id: string;
   path: string;
   op: Op;
