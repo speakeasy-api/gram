@@ -28,9 +28,33 @@ var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-
 // Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).
 // Bare paths target system/OTel attributes directly.
 type AttributeFilter struct {
-	Path  string // Attribute path, optionally @-prefixed (e.g. "@user.region", "http.route")
-	Op    string // Comparison operator: "eq", "not_eq", "contains", "exists", "not_exists"
-	Value string // Value to compare against (ignored for "exists"/"not_exists")
+	Path   string   // Attribute path, optionally @-prefixed (e.g. "@user.region", "http.route")
+	Op     string   // Comparison operator: "eq", "not_eq", "contains", "exists", "not_exists", "in"
+	Values []string // Values to compare against. One value for single-value ops, multiple for "in".
+}
+
+// Predicate returns the squirrel condition for this filter, or nil if the filter
+// should be skipped (e.g. an operator that requires values but none were provided).
+func (f AttributeFilter) Predicate(col string) squirrel.Sqlizer {
+	if len(f.Values) == 0 && f.Op != "exists" && f.Op != "not_exists" {
+		return nil
+	}
+	switch f.Op {
+	case "eq", "":
+		return squirrel.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
+	case "not_eq":
+		return squirrel.Expr(fmt.Sprintf("%s != ?", col), f.Values[0])
+	case "contains":
+		return squirrel.Expr(fmt.Sprintf("position(%s, ?) > 0", col), f.Values[0])
+	case "in":
+		return squirrel.Eq{col: f.Values}
+	case "exists":
+		return squirrel.Expr(fmt.Sprintf("%s != ''", col))
+	case "not_exists":
+		return squirrel.Expr(fmt.Sprintf("%s = ''", col))
+	default:
+		return squirrel.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
+	}
 }
 
 // resolveAttributeColumn maps an AttributeFilter.Path to the ClickHouse column
@@ -229,23 +253,11 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		if !validJSONPath.MatchString(f.Path) {
 			continue // skip invalid paths to prevent injection
 		}
-
-		col := resolveAttributeColumn(f.Path)
-
-		switch f.Op {
-		case "eq":
-			sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Value)
-		case "not_eq":
-			sb = sb.Where(fmt.Sprintf("%s != ?", col), f.Value)
-		case "contains":
-			sb = sb.Where(fmt.Sprintf("position(%s, ?) > 0", col), f.Value)
-		case "exists":
-			sb = sb.Where(fmt.Sprintf("%s != ''", col))
-		case "not_exists":
-			sb = sb.Where(fmt.Sprintf("%s = ''", col))
-		default:
-			sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Value)
+		pred := f.Predicate(resolveAttributeColumn(f.Path))
+		if pred == nil {
+			continue
 		}
+		sb = sb.Where(pred)
 	}
 
 	sb = withPagination(sb, arg.Cursor, arg.SortOrder)

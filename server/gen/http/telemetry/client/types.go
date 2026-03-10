@@ -17,7 +17,13 @@ import (
 // SearchLogsRequestBody is the type of the "telemetry" service "searchLogs"
 // endpoint HTTP request body.
 type SearchLogsRequestBody struct {
-	// Filter criteria for the search
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Filter conditions for the search query
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// [Deprecated] Use 'filters' and top-level 'from'/'to' instead.
 	Filter *SearchLogsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
 	// Cursor for pagination
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
@@ -2289,6 +2295,19 @@ type GetHooksSummaryGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// LogFilterRequestBody is used to define fields on request body types.
+type LogFilterRequestBody struct {
+	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
+	// bare path for system attributes (e.g. 'http.route').
+	Path string `form:"path" json:"path" xml:"path"`
+	// Comparison operator
+	Operator string `form:"operator" json:"operator" xml:"operator"`
+	// Values to compare against. Pass one value for single-value operators (eq,
+	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
+	// 'not_exists'.
+	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+}
+
 // SearchLogsFilterRequestBody is used to define fields on request body types.
 type SearchLogsFilterRequestBody struct {
 	// Trace ID filter (32 hex characters)
@@ -2313,8 +2332,6 @@ type SearchLogsFilterRequestBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
-	// Filters on custom log attributes
-	AttributeFilters []*AttributeFilterRequestBody `form:"attribute_filters,omitempty" json:"attribute_filters,omitempty" xml:"attribute_filters,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -2325,17 +2342,6 @@ type SearchLogsFilterRequestBody struct {
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
 	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
-}
-
-// AttributeFilterRequestBody is used to define fields on request body types.
-type AttributeFilterRequestBody struct {
-	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
-	// bare path for system attributes (e.g. 'http.route').
-	Path string `form:"path" json:"path" xml:"path"`
-	// Comparison operator
-	Op string `form:"op" json:"op" xml:"op"`
-	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
 // TelemetryLogRecordResponseBody is used to define fields on response body
@@ -2675,9 +2681,21 @@ type HooksUserSummaryResponseBody struct {
 // the "searchLogs" endpoint of the "telemetry" service.
 func NewSearchLogsRequestBody(p *telemetry.SearchLogsPayload) *SearchLogsRequestBody {
 	body := &SearchLogsRequestBody{
+		From:   p.From,
+		To:     p.To,
 		Cursor: p.Cursor,
 		Sort:   p.Sort,
 		Limit:  p.Limit,
+	}
+	if p.Filters != nil {
+		body.Filters = make([]*LogFilterRequestBody, len(p.Filters))
+		for i, val := range p.Filters {
+			if val == nil {
+				body.Filters[i] = nil
+				continue
+			}
+			body.Filters[i] = marshalTelemetryLogFilterToLogFilterRequestBody(val)
+		}
 	}
 	if p.Filter != nil {
 		body.Filter = marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody(p.Filter)
@@ -7568,6 +7586,25 @@ func ValidateGetHooksSummaryGatewayErrorResponseBody(body *GetHooksSummaryGatewa
 	return
 }
 
+// ValidateLogFilterRequestBody runs the validations defined on
+// LogFilterRequestBody
+func ValidateLogFilterRequestBody(body *LogFilterRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.path", body.Path, "^@?[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$"))
+	if utf8.RuneCountInString(body.Path) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 1, true))
+	}
+	if utf8.RuneCountInString(body.Path) > 256 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 256, false))
+	}
+	if !(body.Operator == "eq" || body.Operator == "not_eq" || body.Operator == "contains" || body.Operator == "exists" || body.Operator == "not_exists" || body.Operator == "in") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operator", body.Operator, []any{"eq", "not_eq", "contains", "exists", "not_exists", "in"}))
+	}
+	if len(body.Values) > 256 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 256, false))
+	}
+	return
+}
+
 // ValidateSearchLogsFilterRequestBody runs the validations defined on
 // SearchLogsFilterRequestBody
 func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
@@ -7584,13 +7621,6 @@ func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.http_method", *body.HTTPMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
 		}
 	}
-	for _, e := range body.AttributeFilters {
-		if e != nil {
-			if err2 := ValidateAttributeFilterRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
 	}
@@ -7602,27 +7632,6 @@ func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err
 	}
 	if body.FunctionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
-	}
-	return
-}
-
-// ValidateAttributeFilterRequestBody runs the validations defined on
-// AttributeFilterRequestBody
-func ValidateAttributeFilterRequestBody(body *AttributeFilterRequestBody) (err error) {
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.path", body.Path, "^@?[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$"))
-	if utf8.RuneCountInString(body.Path) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 1, true))
-	}
-	if utf8.RuneCountInString(body.Path) > 256 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 256, false))
-	}
-	if !(body.Op == "eq" || body.Op == "not_eq" || body.Op == "contains" || body.Op == "exists" || body.Op == "not_exists") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"eq", "not_eq", "contains", "exists", "not_exists"}))
-	}
-	if body.Value != nil {
-		if utf8.RuneCountInString(*body.Value) > 1024 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.value", *body.Value, utf8.RuneCountInString(*body.Value), 1024, false))
-		}
 	}
 	return
 }

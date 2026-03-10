@@ -5,6 +5,7 @@ import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/ui/search-bar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -14,13 +15,12 @@ import {
   TimeRangePicker,
   type DateRangePreset,
 } from "@gram-ai/elements";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import type {
-  AttributeFilter,
   GetHooksSummaryResult,
   HooksServerSummary,
+  LogFilter,
   TelemetryLogRecord,
   ToolCallSummary,
 } from "@gram/client/models/components";
@@ -109,8 +109,11 @@ function HooksContent() {
     initialUserEmail || null,
   );
   const [userEmailInput, setUserEmailInput] = useState(initialUserEmail || "");
-  const [hideLocalToolCalls, setHideLocalToolCalls] = useState(initialHideLocal);
-  const [summaryView, setSummaryView] = useState<"servers" | "users">("servers");
+  const [hideLocalToolCalls, setHideLocalToolCalls] =
+    useState(initialHideLocal);
+  const [summaryView, setSummaryView] = useState<"servers" | "users">(
+    "servers",
+  );
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
@@ -216,16 +219,16 @@ function HooksContent() {
     }),
   );
 
-  // Build attribute filters for server, search query, user email, and hide local
-  const attributeFilters = useMemo(() => {
-    const filters: AttributeFilter[] = [];
+  // Build attribute filters for server, search query, and user email
+  const logFilters = useMemo(() => {
+    const filters: LogFilter[] = [];
 
     // Filter by tool source (gram.tool_call.source)
     if (selectedServer) {
       filters.push({
         path: "gram.tool_call.source",
-        op: "eq",
-        value: selectedServer,
+        operator: "eq",
+        values: [selectedServer],
       });
     }
 
@@ -233,8 +236,8 @@ function HooksContent() {
     if (searchQuery) {
       filters.push({
         path: "gram.tool.name",
-        op: "contains",
-        value: searchQuery,
+        operator: "contains",
+        values: [searchQuery],
       });
     }
 
@@ -242,8 +245,8 @@ function HooksContent() {
     if (userEmailFilter) {
       filters.push({
         path: "user.email",
-        op: "contains",
-        value: userEmailFilter,
+        operator: "contains",
+        values: [userEmailFilter],
       });
     }
 
@@ -251,8 +254,8 @@ function HooksContent() {
     if (hideLocalToolCalls) {
       filters.push({
         path: "gram.tool_call.source",
-        op: "not_eq",
-        value: "",
+        operator: "not_eq",
+        values: [""],
       });
     }
 
@@ -284,12 +287,10 @@ function HooksContent() {
         unwrapAsync(
           telemetrySearchLogs(client, {
             searchLogsPayload: {
-              filter: {
-                eventSource: "hook",
-                from,
-                to,
-                attributeFilters,
-              },
+              from,
+              to,
+              filters: logFilters,
+              filter: { eventSource: "hook" },
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -318,7 +319,9 @@ function HooksContent() {
         existing.logCount++;
 
         // Update status based on hook event
-        const hookEvent = log.attributes?.gram?.hook?.event as string | undefined;
+        const hookEvent = log.attributes?.gram?.hook?.event as
+          | string
+          | undefined;
         if (hookEvent === "PostToolUseFailure") {
           existing.httpStatusCode = 500; // Mark as failure
         } else if (hookEvent === "PostToolUse" && !existing.httpStatusCode) {
@@ -331,11 +334,17 @@ function HooksContent() {
         }
       } else {
         // Create new trace summary
-        const hookEvent = log.attributes?.gram?.hook?.event as string | undefined;
+        const hookEvent = log.attributes?.gram?.hook?.event as
+          | string
+          | undefined;
         const toolName = log.attributes?.gram?.tool?.name as string | undefined;
-        const serverName = log.attributes?.gram?.tool_call?.source as string | undefined;
+        const serverName = log.attributes?.gram?.tool_call?.source as
+          | string
+          | undefined;
         const userEmail = log.attributes?.user?.email as string | undefined;
-        const hookSource = log.attributes?.gram?.hook?.source as string | undefined;
+        const hookSource = log.attributes?.gram?.hook?.source as
+          | string
+          | undefined;
 
         // Determine initial status
         let httpStatusCode: number | undefined;
@@ -654,32 +663,45 @@ function HooksInnerContent({
           </div>
 
           {/* Summary Cards with Tabs */}
-          {summaryData && (summaryData.servers.length > 0 || (summaryData.users && summaryData.users.length > 0)) && (
-            <div className="mb-4">
-              <Tabs value={summaryView} onValueChange={(v) => onSummaryViewChange(v as "servers" | "users")} className="w-full">
-                <TabsList className="mb-3">
-                  <TabsTrigger value="servers">Servers</TabsTrigger>
-                  <TabsTrigger value="users">Users</TabsTrigger>
-                </TabsList>
-                <div className="max-h-[600px] overflow-y-auto">
-                  {summaryView === "servers" && summaryData.servers.length > 0 && (
-                    <HooksServerCards
-                      servers={summaryData.servers}
-                      selectedServer={selectedServer}
-                      onServerChange={onServerChange}
-                    />
-                  )}
-                  {summaryView === "users" && summaryData.users && summaryData.users.length > 0 && (
-                    <HooksUserCards
-                      users={summaryData.users}
-                      selectedUser={userEmailFilter}
-                      onUserChange={(email) => setUserEmailInput(email || "")}
-                    />
-                  )}
-                </div>
-              </Tabs>
-            </div>
-          )}
+          {summaryData &&
+            (summaryData.servers.length > 0 ||
+              (summaryData.users && summaryData.users.length > 0)) && (
+              <div className="mb-4">
+                <Tabs
+                  value={summaryView}
+                  onValueChange={(v) =>
+                    onSummaryViewChange(v as "servers" | "users")
+                  }
+                  className="w-full"
+                >
+                  <TabsList className="mb-3">
+                    <TabsTrigger value="servers">Servers</TabsTrigger>
+                    <TabsTrigger value="users">Users</TabsTrigger>
+                  </TabsList>
+                  <div className="max-h-[600px] overflow-y-auto">
+                    {summaryView === "servers" &&
+                      summaryData.servers.length > 0 && (
+                        <HooksServerCards
+                          servers={summaryData.servers}
+                          selectedServer={selectedServer}
+                          onServerChange={onServerChange}
+                        />
+                      )}
+                    {summaryView === "users" &&
+                      summaryData.users &&
+                      summaryData.users.length > 0 && (
+                        <HooksUserCards
+                          users={summaryData.users}
+                          selectedUser={userEmailFilter}
+                          onUserChange={(email) =>
+                            setUserEmailInput(email || "")
+                          }
+                        />
+                      )}
+                  </div>
+                </Tabs>
+              </div>
+            )}
 
           {/* Filter and Search Row */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -699,9 +721,15 @@ function HooksInnerContent({
               variant="outline"
               size="sm"
               onClick={() => onHideLocalToggle(!hideLocalToolCalls)}
-              className={cn("shrink-0 h-[42px]", hideLocalToolCalls ? "bg-primary/5" : "")}
+              className={cn(
+                "shrink-0 h-[42px]",
+                hideLocalToolCalls ? "bg-primary/5" : "",
+              )}
             >
-             <Icon name={hideLocalToolCalls ? "eye-off" : "eye"} className="size-4" />
+              <Icon
+                name={hideLocalToolCalls ? "eye-off" : "eye"}
+                className="size-4"
+              />
               {hideLocalToolCalls ? "Hiding local" : "Showing local"}
             </Button>
             <div className="ml-auto">
@@ -761,7 +789,8 @@ function HooksInnerContent({
             {groupedTraces.length > 0 && (
               <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
                 <span>
-                  {groupedTraces.length} {groupedTraces.length === 1 ? "trace" : "traces"}
+                  {groupedTraces.length}{" "}
+                  {groupedTraces.length === 1 ? "trace" : "traces"}
                   {hasNextPage && " • Scroll to load more"}
                 </span>
               </div>
@@ -892,7 +921,9 @@ function HooksUserCards({
         >
           <div className="flex items-start justify-between mb-2">
             <div className="font-medium text-sm truncate max-w-[200px]">
-              {user.userEmail === "Unknown" || user.userEmail === "" ? "Unknown user" : user.userEmail}
+              {user.userEmail === "Unknown" || user.userEmail === ""
+                ? "Unknown user"
+                : user.userEmail}
             </div>
             <Icon
               name={user.failureRate > 0.1 ? "circle-alert" : "circle-check"}
@@ -1025,7 +1056,9 @@ function HookTraceRow({
   onToggle: () => void;
   onLogClick: (log: TelemetryLogRecord) => void;
 }) {
-  const timestamp = new Date(Number(BigInt(trace.startTimeUnixNano) / 1_000_000n));
+  const timestamp = new Date(
+    Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
+  );
   const timeAgo = useMemo(() => {
     const now = new Date();
     const diff = now.getTime() - timestamp.getTime();
@@ -1160,4 +1193,3 @@ function HookTraceRow({
     </div>
   );
 }
-

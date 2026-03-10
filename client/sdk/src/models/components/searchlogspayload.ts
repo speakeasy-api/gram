@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { ClosedEnum } from "../../types/enums.js";
 import {
+  LogFilter,
+  LogFilter$Outbound,
+  LogFilter$outboundSchema,
+} from "./logfilter.js";
+import {
   SearchLogsFilter,
   SearchLogsFilter$Outbound,
   SearchLogsFilter$outboundSchema,
@@ -35,6 +40,14 @@ export type SearchLogsPayload = {
    */
   filter?: SearchLogsFilter | undefined;
   /**
+   * Filter conditions for the search query
+   */
+  filters?: Array<LogFilter> | undefined;
+  /**
+   * Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+   */
+  from?: Date | undefined;
+  /**
    * Number of items to return (1-1000)
    */
   limit?: number | undefined;
@@ -42,6 +55,10 @@ export type SearchLogsPayload = {
    * Sort order
    */
   sort?: SearchLogsPayloadSort | undefined;
+  /**
+   * End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+   */
+  to?: Date | undefined;
 };
 
 /** @internal */
@@ -53,8 +70,11 @@ export const SearchLogsPayloadSort$outboundSchema: z.ZodMiniEnum<
 export type SearchLogsPayload$Outbound = {
   cursor?: string | undefined;
   filter?: SearchLogsFilter$Outbound | undefined;
+  filters?: Array<LogFilter$Outbound> | undefined;
+  from?: string | undefined;
   limit: number;
   sort: string;
+  to?: string | undefined;
 };
 
 /** @internal */
@@ -64,8 +84,11 @@ export const SearchLogsPayload$outboundSchema: z.ZodMiniType<
 > = z.object({
   cursor: z.optional(z.string()),
   filter: z.optional(SearchLogsFilter$outboundSchema),
+  filters: z.optional(z.array(LogFilter$outboundSchema)),
+  from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
   limit: z._default(z.int(), 50),
   sort: z._default(SearchLogsPayloadSort$outboundSchema, "desc"),
+  to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
 });
 
 export function searchLogsPayloadToJSON(

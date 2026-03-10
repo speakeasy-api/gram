@@ -50,6 +50,10 @@ var oauthFailurePageTmplData string
 //go:embed hosted_oauth_status_script.js
 var oauthSuccessScriptData []byte
 
+const (
+	requestMaxBodyBytes int64 = 10 * 1024 * 1024 // 10 MiB
+)
+
 type gramOAuthResultPageData struct {
 	RedirectURL template.URL
 	ScriptHash  string
@@ -424,6 +428,7 @@ func (s *Service) validateAuthorizationRequest(ctx context.Context, req *Authori
 // handleToken handles OAuth 2.1 token requests
 func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -480,6 +485,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 // handleClientRegistration handles OAuth 2.1 dynamic client registration
 func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {

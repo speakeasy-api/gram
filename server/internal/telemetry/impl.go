@@ -123,9 +123,14 @@ func (s *Service) CheckLogsEnabled(ctx context.Context, organizationID string) e
 
 // SearchLogs retrieves unified telemetry logs with pagination.
 func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsPayload) (res *telem_gen.SearchLogsResult, err error) {
-	var from, to *string
-	if payload.Filter != nil {
-		from, to = payload.Filter.From, payload.Filter.To
+	// Prefer top-level from/to; fall back to deprecated filter fields.
+	from := payload.From
+	to := payload.To
+	if from == nil && payload.Filter != nil {
+		from = payload.Filter.From
+	}
+	if to == nil && payload.Filter != nil {
+		to = payload.Filter.To
 	}
 
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
@@ -133,11 +138,10 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		return nil, err
 	}
 
-	// Extract SearchLogs-specific filter fields
+	// Extract SearchLogs-specific filter fields (deprecated filter path).
 	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID, eventSource string
 	var httpStatusCode int32
 	var gramURNs []string
-	var attributeFilters []repo.AttributeFilter
 	if payload.Filter != nil {
 		// Handle both gram_urn (single) and gram_urns (array) for backwards compatibility
 		gramURNs = resolveGramURNs(payload.Filter.GramUrn, payload.Filter.GramUrns)
@@ -153,8 +157,10 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		userID = conv.PtrValOr(payload.Filter.UserID, "")
 		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
 		eventSource = conv.PtrValOr(payload.Filter.EventSource, "")
-		attributeFilters = toRepoAttributeFilters(payload.Filter.AttributeFilters)
 	}
+
+	// New top-level filters supersede filter.attribute_filters.
+	attributeFilters := toRepoAttributeFilters(payload.Filters)
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
@@ -691,8 +697,8 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*telem_gen.TelemetryLogRecord
 	}, nil
 }
 
-// toRepoAttributeFilters converts generated Goa attribute filters to repo types.
-func toRepoAttributeFilters(filters []*telem_gen.AttributeFilter) []repo.AttributeFilter {
+// toRepoAttributeFilters converts generated Goa log filters to repo types.
+func toRepoAttributeFilters(filters []*telem_gen.LogFilter) []repo.AttributeFilter {
 	if len(filters) == 0 {
 		return nil
 	}
@@ -702,9 +708,9 @@ func toRepoAttributeFilters(filters []*telem_gen.AttributeFilter) []repo.Attribu
 			continue
 		}
 		result = append(result, repo.AttributeFilter{
-			Path:  f.Path,
-			Op:    f.Op,
-			Value: conv.PtrValOr(f.Value, ""),
+			Path:   f.Path,
+			Op:     f.Operator,
+			Values: f.Values,
 		})
 	}
 	return result

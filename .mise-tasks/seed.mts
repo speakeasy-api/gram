@@ -1285,7 +1285,8 @@ async function seedObservabilityData(init: {
   for (let i = 0; i < NUM_HOOKS; i++) {
     const sessionId = `session-${i % 50}`; // Group hooks into sessions
     const toolUseId = `toolu_${crypto.randomBytes(12).toString("hex")}`;
-    const userEmail = USER_EMAILS[Math.floor(Math.random() * USER_EMAILS.length)];
+    const userEmail =
+      USER_EMAILS[Math.floor(Math.random() * USER_EMAILS.length)];
     const hookSource =
       HOOK_SOURCES[Math.floor(Math.random() * HOOK_SOURCES.length)];
     const toolName =
@@ -1337,7 +1338,8 @@ async function seedObservabilityData(init: {
 
       // 3. PostToolUse or PostToolUseFailure event
       const postHookEvent = isFailure ? "PostToolUseFailure" : "PostToolUse";
-      const postTimeNano = baseTimeNano + BigInt(Math.floor(Math.random() * 5000000)); // 0-5ms later
+      const postTimeNano =
+        baseTimeNano + BigInt(Math.floor(Math.random() * 5000000)); // 0-5ms later
 
       const postToolAttrs: Record<string, any> = {
         "gram.event.source": "hook",
@@ -1351,8 +1353,7 @@ async function seedObservabilityData(init: {
       };
       if (userEmail) postToolAttrs["user.email"] = userEmail;
       if (mcpServer) postToolAttrs["gram.tool_call.source"] = mcpServer;
-      if (isFailure)
-        postToolAttrs["gram.hook.error"] = "Tool execution failed";
+      if (isFailure) postToolAttrs["gram.hook.error"] = "Tool execution failed";
 
       chInserts.push(
         `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${JSON.stringify(postToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,

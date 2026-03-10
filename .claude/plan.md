@@ -1,6 +1,7 @@
 # Async Name Mapper with ClickHouse Backfill
 
 ## Current State
+
 - Name mapper synchronously calls LLM to map tool sources (e.g., UUID → "Linear")
 - Mapping stored in Redis cache with 1yr TTL
 - Called during hook processing in `pending_helpers.go:126-134`
@@ -9,7 +10,9 @@
 ## Plan
 
 ### 1. Create Temporal Activity: GenerateNameMapping
+
 **File**: `server/internal/background/activities/generate_name_mapping.go`
+
 - Input: `GenerateNameMappingArgs{ServerName, ToolCallAttrs, OrgID, ProjectID}`
 - Call LLM via `openrouter.CompletionClient` (reuse existing prompt from `name_mapper.go:83-86`)
 - Return `GenerateNameMappingResult{OriginalName, MappedName}`
@@ -17,10 +20,12 @@
 - Retries: 3 attempts, exponential backoff
 
 ### 2. Create Temporal Activity: UpdateClickHouseToolSource
+
 **File**: `server/internal/background/activities/update_clickhouse_tool_source.go`
 **New method in telemetry service**: `UpdateToolSourceBulk(ctx, projectID, oldSource, newSource)`
 
 ClickHouse update strategy:
+
 ```sql
 ALTER TABLE telemetry_logs
 UPDATE attributes = JSONSet(attributes, 'gram.tool_call.source', ?)
@@ -29,6 +34,7 @@ WHERE project_id = ?
 ```
 
 **CRITICAL**: ClickHouse mutations are **async** and **non-transactional**
+
 - Use `ALTER TABLE...UPDATE` (mutation)
 - Won't update materialized columns directly - those derive from attributes JSON
 - Materialize view `trace_summaries_mv` will update on next aggregation
@@ -37,7 +43,9 @@ WHERE project_id = ?
 - Retries: 5 attempts (mutations may be slow/resource constrained)
 
 ### 3. Create Workflow: ProcessNameMappingWorkflow
+
 **File**: `server/internal/background/process_name_mapping.go`
+
 - `ProcessNameMappingWorkflowParams{ServerName, OrgID, ProjectID, ToolCallAttrs}`
 - Workflow ID: `v1:process-name-mapping:{serverName}:{projectID}`
 - ID reuse policy: `ALLOW_DUPLICATE_FAILED_ONLY` (don't rerun if succeeded)
@@ -50,7 +58,9 @@ WHERE project_id = ?
   3. If no mapping: return nil (not an error)
 
 ### 4. Update Hooks Service Integration
+
 **File**: `server/internal/hooks/pending_helpers.go`
+
 - Remove synchronous `s.nameMapper.GetMappedName()` call (lines 126-134)
 - Instead: check Redis cache synchronously
   - Cache hit: use cached mapping immediately
@@ -59,28 +69,36 @@ WHERE project_id = ?
 - Call `ExecuteProcessNameMappingWorkflow` with fire-and-forget pattern
 
 **File**: `server/internal/hooks/impl.go`
+
 - Update `NewService` to accept `temporalClient client.Client`
 - Store in Service struct
 
 **File**: `server/cmd/gram/start.go`
+
 - Pass temporal client when constructing hooks service
 
 ### 5. Update Background Activities Registration
+
 **File**: `server/internal/background/activities.go`
+
 - Add activity fields to `Activities` struct
 - Wire up in `NewActivities` constructor
 
 **File**: `server/cmd/gram/worker.go`
+
 - Register `ProcessNameMappingWorkflow`
 - Register activities
 
 ### 6. Testing
+
 **File**: `server/internal/background/activities/generate_name_mapping_test.go`
+
 - Test successful mapping generation
 - Test empty mapping (LLM returns empty string)
 - Test LLM client error handling
 
 **File**: `server/internal/background/activities/update_clickhouse_tool_source_test.go`
+
 - Insert test logs with `tool_source` = "old-source"
 - Run activity to update to "new-source"
 - Sleep 500ms (ClickHouse mutation + eventual consistency)
@@ -88,11 +106,13 @@ WHERE project_id = ?
 - Verify materialized `tool_source` column reflects change (via re-materialization)
 
 **File**: `server/internal/background/process_name_mapping_test.go`
+
 - Test full workflow end-to-end with testenv infra
 - Verify Redis cache populated
 - Verify ClickHouse records updated
 
 ## Skills Needed
+
 - `golang` (active)
 - `clickhouse` (active)
 
