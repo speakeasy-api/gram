@@ -103,12 +103,9 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		SystemPrompt:    &systemPrompt,
 		ToolsetSlug:     &input.ToolsetSlug,
 		AdditionalTools: []chat.AgentTool{currentDatetimeTool},
-		AddedEnvironmentEntries: map[string]string{
-			"SLACK_TOKEN": authInfo.AccessToken,
-		},
-		AgentTimeout: &slackChatCompletionTimeout,
-		Temperature:  nil,
-		Model:        "",
+		AgentTimeout:    &slackChatCompletionTimeout,
+		Temperature:     nil,
+		Model:           "",
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))
@@ -124,14 +121,13 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			chatResponse,
 		)
 		chatResponse, err = s.chatClient.AgentChat(ctx, authInfo.OrganizationID, authInfo.ProjectID, retryPrompt, chat.AgentChatOptions{
-			SystemPrompt:            &retrySystemPrompt,
-			ToolsetSlug:             nil,
-			AgentTimeout:            &slackChatCompletionTimeout,
-			AdditionalTools:         []chat.AgentTool{},
-			AddedEnvironmentEntries: map[string]string{},
-			Temperature:             nil,
-			Model:                   "",
-			UsageSource:             "",
+			SystemPrompt:    &retrySystemPrompt,
+			ToolsetSlug:     nil,
+			AgentTimeout:    &slackChatCompletionTimeout,
+			AdditionalTools: []chat.AgentTool{},
+			Temperature:     nil,
+			Model:           "",
+			UsageSource:     "",
 		})
 		if err != nil {
 			s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))

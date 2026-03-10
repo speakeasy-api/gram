@@ -97,13 +97,6 @@ type oauthTokenInputs struct {
 	Token        string
 }
 
-type ToolMode string
-
-const (
-	ToolModeStatic  ToolMode = "static"
-	ToolModeDynamic ToolMode = "dynamic"
-)
-
 type mcpInputs struct {
 	projectID        uuid.UUID
 	toolset          string
@@ -999,4 +992,153 @@ func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *typ
 	}
 
 	return accessToken, nil
+}
+
+// HandleToolsList executes tools/list RPC for internal clients (e.g., agent workflows).
+// This method provides direct access to tool listing without HTTP overhead.
+func (s *Service) HandleToolsList(
+	ctx context.Context,
+	inputs *McpInputs,
+) (*ToolListResult, error) {
+	// Convert exported inputs to internal format
+	payload := inputs.toInternal()
+
+	// Create a dummy rawRequest for the internal handler
+	req := &rawRequest{
+		JSONRPC: "2.0",
+		ID:      msgID{format: 1, Number: 1, String: ""},
+		Method:  "tools/list",
+		Params:  json.RawMessage("{}"),
+	}
+
+	// Call existing handleToolsList with all dependencies
+	result, err := handleToolsList(
+		ctx,
+		s.logger,
+		s.db,
+		s.env,
+		payload,
+		req,
+		s.posthog,
+		&s.toolsetCache,
+		s.vectorToolStore,
+		s.temporal,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("handle tools list: %w", err)
+	}
+
+	// Parse the JSON result
+	var internalResult toolsListResult
+	if err := json.Unmarshal(result, &internalResult); err != nil {
+		return nil, fmt.Errorf("unmarshal tools list result: %w", err)
+	}
+
+	// Convert internal result to exported format
+	tools := make([]ToolListEntry, len(internalResult.Result.Tools))
+	for i, t := range internalResult.Result.Tools {
+		tools[i] = ToolListEntry{
+			Name:        t.Name,
+			Description: t.Description,
+			InputSchema: t.InputSchema,
+			Annotations: t.Annotations,
+			Meta:        t.Meta,
+		}
+	}
+
+	return &ToolListResult{
+		Tools: tools,
+	}, nil
+}
+
+// HandleToolsCall executes tools/call RPC for internal clients (e.g., agent workflows).
+// This method provides direct access to tool execution without HTTP overhead.
+func (s *Service) HandleToolsCall(
+	ctx context.Context,
+	inputs *McpInputs,
+	toolName string,
+	arguments json.RawMessage,
+) (*ToolCallResult, error) {
+	// Convert exported inputs to internal format
+	payload := inputs.toInternal()
+
+	// Construct rawRequest with tools/call parameters
+	params, err := json.Marshal(map[string]any{
+		"name":      toolName,
+		"arguments": arguments,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal tool call params: %w", err)
+	}
+
+	req := &rawRequest{
+		JSONRPC: "2.0",
+		ID:      msgID{format: 1, Number: 1, String: ""},
+		Method:  "tools/call",
+		Params:  params,
+	}
+
+	// Call existing handleToolsCall
+	result, err := handleToolsCall(
+		ctx,
+		s.logger,
+		s.metrics,
+		s.db,
+		s.env,
+		payload,
+		req,
+		s.toolProxy,
+		s.billingTracker,
+		s.billingRepository,
+		&s.toolsetCache,
+		s.telemetryService,
+		s.vectorToolStore,
+		s.temporal,
+		s.mcpMetadataRepo,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("handle tool call: %w", err)
+	}
+
+	// Parse the JSON result wrapper
+	var wrapper struct {
+		Result struct {
+			Content []json.RawMessage `json:"content"`
+			IsError bool              `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(result, &wrapper); err != nil {
+		return nil, fmt.Errorf("unmarshal tool call result: %w", err)
+	}
+
+	// Convert content chunks from json.RawMessage to ContentChunk
+	content := make([]ContentChunk, len(wrapper.Result.Content))
+	for i, rawChunk := range wrapper.Result.Content {
+		var chunk struct {
+			Type     string  `json:"type"`
+			Text     string  `json:"text,omitempty"`
+			Data     string  `json:"data,omitempty"`
+			MimeType *string `json:"mimeType,omitempty"`
+		}
+		if err := json.Unmarshal(rawChunk, &chunk); err != nil {
+			return nil, fmt.Errorf("unmarshal content chunk %d: %w", i, err)
+		}
+
+		mimeType := ""
+		if chunk.MimeType != nil {
+			mimeType = *chunk.MimeType
+		}
+
+		content[i] = ContentChunk{
+			Type:     chunk.Type,
+			Text:     chunk.Text,
+			Data:     chunk.Data,
+			MimeType: mimeType,
+		}
+	}
+
+	return &ToolCallResult{
+		Content: content,
+		IsError: wrapper.Result.IsError,
+	}, nil
 }
