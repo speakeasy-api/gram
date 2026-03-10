@@ -868,24 +868,6 @@ CREATE TABLE IF NOT EXISTS chat_resolution_messages (
   CONSTRAINT chat_resolution_messages_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS slack_app_connections (
-  slack_team_id TEXT NOT NULL,
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  access_token TEXT NOT NULL,
-  slack_team_name TEXT NOT NULL,
-  default_toolset_slug TEXT CHECK (
-    default_toolset_slug IS NULL OR (default_toolset_slug <> '' AND CHAR_LENGTH(default_toolset_slug) <= 40)
-  ),
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT slack_auth_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT slack_auth_connections_slack_team_id_key PRIMARY KEY (slack_team_id),
-  CONSTRAINT slack_auth_connections_organization_id_project_id_key UNIQUE (organization_id, project_id)
-);
-
 CREATE TABLE IF NOT EXISTS slack_apps (
   -- Column order optimized for alignment (PG110)
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -913,7 +895,7 @@ CREATE TABLE IF NOT EXISTS slack_apps (
 CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_project_name_key
   ON slack_apps (project_id, name) WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_slack_team_id_key
+CREATE INDEX IF NOT EXISTS slack_apps_slack_team_id_idx
   ON slack_apps (slack_team_id) WHERE deleted IS FALSE AND slack_team_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS slack_app_toolsets (
@@ -925,6 +907,19 @@ CREATE TABLE IF NOT EXISTS slack_app_toolsets (
   CONSTRAINT slack_app_toolsets_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
   CONSTRAINT slack_app_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
   CONSTRAINT slack_app_toolsets_slack_app_id_toolset_id_key UNIQUE (slack_app_id, toolset_id)
+);
+
+CREATE TABLE IF NOT EXISTS slack_registrations (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  slack_app_id uuid NOT NULL,
+  slack_account_id TEXT NOT NULL,
+  user_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_registrations_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
+  CONSTRAINT slack_registrations_slack_app_id_slack_account_id_key UNIQUE (slack_app_id, slack_account_id)
 );
 
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
