@@ -964,6 +964,34 @@ func TestSearchLogs_LogFilters(t *testing.T) {
 			expectedCount: 2,
 		},
 		{
+			name: "in operator matches any of listed values for user attribute",
+			filters: []*gen.LogFilter{
+				{Path: "@user.region", Operator: "in", Values: []string{"us-east-1", "eu-west-1"}},
+			},
+			expectedCount: 3, // us-east-1 (×2) + eu-west-1 (×1)
+		},
+		{
+			name: "in operator with single value behaves like eq",
+			filters: []*gen.LogFilter{
+				{Path: "@env", Operator: "in", Values: []string{"production"}},
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "in operator with no matching values returns zero logs",
+			filters: []*gen.LogFilter{
+				{Path: "@user.region", Operator: "in", Values: []string{"ap-southeast-1", "ap-northeast-1"}},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "in operator on system attribute matches http.route",
+			filters: []*gen.LogFilter{
+				{Path: "http.route", Operator: "in", Values: []string{"/api/health", "/api/nonexistent"}},
+			},
+			expectedCount: 1,
+		},
+		{
 			name: "invalid path is silently skipped",
 			filters: []*gen.LogFilter{
 				{Path: "1invalid", Operator: eq, Values: []string{"test"}},
