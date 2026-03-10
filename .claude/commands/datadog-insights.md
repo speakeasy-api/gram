@@ -1,5 +1,5 @@
 ---
-description: Query Datadog logs for the last 24h, summarize problems, and post findings to Slack
+description: Investigate Datadog for the last 24h and post a digest of production insights to Slack
 ---
 
 # Daily Log Digest
