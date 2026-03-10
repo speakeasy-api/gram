@@ -10,6 +10,9 @@ CREATE TABLE "slack_registrations" (
   CONSTRAINT "slack_registrations_slack_app_id_slack_account_id_key" UNIQUE ("slack_app_id", "slack_account_id"),
   CONSTRAINT "slack_registrations_slack_app_id_fkey" FOREIGN KEY ("slack_app_id") REFERENCES "slack_apps" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
+-- Change slack_apps slack_team_id index from unique to non-unique
+DROP INDEX IF EXISTS slack_apps_slack_team_id_key;
+CREATE INDEX IF NOT EXISTS slack_apps_slack_team_id_idx ON slack_apps (slack_team_id) WHERE deleted IS FALSE AND slack_team_id IS NOT NULL;
 -- atlas:nolint destructive
 -- Drop "slack_app_connections" table
 DROP TABLE "slack_app_connections";

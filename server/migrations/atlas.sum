@@ -1,4 +1,4 @@
-h1:ZOP7XG7thGWAq1M7J55RLoNC7TlNDClscf12sq0k7YY=
+h1:RZTNXllPK61pnOQ6F3iVXNv2JO5JqpyPVE1TsjD4/xM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -110,5 +110,5 @@ h1:ZOP7XG7thGWAq1M7J55RLoNC7TlNDClscf12sq0k7YY=
 20260227224912_add-slack-apps-tables.sql h1:7gBj1mNj0I2mqDoqG55pi1HnAyloA9kMoF5fOdJ6F08=
 20260303144420_deployment-tags.sql h1:+4b/+iiEGBsOu7PZv5doW83CeiGLB6sTanGTXeSWwJU=
 20260305144932_add-workos-org-id.sql h1:KNcwC34iHLPViXsZrVK5ugIwGs1WZXs0sbUoYc8tNBE=
-20260310000001_slack-user-auth-tables.sql h1:pfcW6v7G610XcUkgRUwkCEDOkVCO6zoYZgCTgRziOHU=
-20260310000002_increase-api-key-name-length.sql h1:yEGYXeeQIaHDWbIgtxnoV6LaEMvTO4gvh1OTI2ZZLuY=
+20260310000001_slack-user-auth-tables.sql h1:46IMfMBKbpw/JrTcGxb2vL140LZvGZiqWtapmEXueP8=
+20260310000002_increase-api-key-name-length.sql h1:i6ZzNJ0GnB3/6CX9/NkdSMwKp9NTg39V7pRj/MdPfdI=
