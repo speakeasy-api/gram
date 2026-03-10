@@ -1,4 +1,4 @@
-h1:9LEyIxJjiEr2IarO0ALgFdsRiXmH3OyvnPdQwfhvH9Y=
+h1:MqFvCd47R3IHDfBRcZiQVwZG9mWNY+adORgEY0RPInU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -112,4 +112,4 @@ h1:9LEyIxJjiEr2IarO0ALgFdsRiXmH3OyvnPdQwfhvH9Y=
 20260305144932_add-workos-org-id.sql h1:KNcwC34iHLPViXsZrVK5ugIwGs1WZXs0sbUoYc8tNBE=
 20260306000001_increase-api-key-name-length.sql h1:V2z6Vz8TIKPnm5YU1j35xa3zN0HNQ/ypm4BJA8rxz6E=
 20260306123333_add-selected-remotes-column.sql h1:rxIWPKJv8Skpp6GPr4sTKWVL2SmVh3w5S4Un0CWMK38=
-20260310212348_slack_app_registrations.sql h1:nvaMAb3k+vmndcbJN5FAxX0QoMU+NcpRiF6SN8on32g=
+20260310212348_slack_app_registrations.sql h1:RqVogi5e4YZLe9b14dNKrtzxag0YGZL7FlB1Rn/PwcY=
