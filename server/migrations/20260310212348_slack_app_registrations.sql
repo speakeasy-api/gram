@@ -6,7 +6,7 @@ DROP INDEX CONCURRENTLY "slack_apps_slack_team_id_key";
 CREATE INDEX CONCURRENTLY "slack_apps_slack_team_id_idx" ON "slack_apps" ("slack_team_id") WHERE ((deleted IS FALSE) AND (slack_team_id IS NOT NULL));
 -- Create "slack_registrations" table
 CREATE TABLE "slack_registrations" (
-  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "slack_app_id" uuid NOT NULL,
   "slack_account_id" text NOT NULL,
   "user_id" uuid NOT NULL,
