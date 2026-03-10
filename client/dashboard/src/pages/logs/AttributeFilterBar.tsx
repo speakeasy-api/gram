@@ -10,7 +10,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Op } from "@gram/client/models/components/logfilter";
+import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { Command as CmdkRoot } from "cmdk";
 import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -327,7 +327,7 @@ export function AttributeFilterBar({
                     ? "Type operator + value (e.g. != 200) or select below..."
                     : filters.length > 0
                       ? "Add filter..."
-                      : "Search by URN or filter (e.g. http.status != 200)"
+                      : "Search by URN or filter (e.g. http.response.status_code != 200)"
                 }
                 className="flex-1 min-w-[120px] bg-transparent outline-none min-h-[24px] text-sm"
               />

@@ -3,7 +3,7 @@
 // mcpRegistries client HTTP transport
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o .
 
 package client
 
@@ -17,6 +17,14 @@ import (
 
 // Client lists the mcpRegistries service endpoint HTTP clients.
 type Client struct {
+	// ClearCache Doer is the HTTP client used to make requests to the clearCache
+	// endpoint.
+	ClearCacheDoer goahttp.Doer
+
+	// ListRegistries Doer is the HTTP client used to make requests to the
+	// listRegistries endpoint.
+	ListRegistriesDoer goahttp.Doer
+
 	// ListCatalog Doer is the HTTP client used to make requests to the listCatalog
 	// endpoint.
 	ListCatalogDoer goahttp.Doer
@@ -46,6 +54,8 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ClearCacheDoer:       doer,
+		ListRegistriesDoer:   doer,
 		ListCatalogDoer:      doer,
 		GetServerDetailsDoer: doer,
 		RestoreResponseBody:  restoreBody,
@@ -53,6 +63,54 @@ func NewClient(
 		host:                 host,
 		decoder:              dec,
 		encoder:              enc,
+	}
+}
+
+// ClearCache returns an endpoint that makes HTTP requests to the mcpRegistries
+// service clearCache server.
+func (c *Client) ClearCache() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeClearCacheRequest(c.encoder)
+		decodeResponse = DecodeClearCacheResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildClearCacheRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ClearCacheDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "clearCache", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistries returns an endpoint that makes HTTP requests to the
+// mcpRegistries service listRegistries server.
+func (c *Client) ListRegistries() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistriesRequest(c.encoder)
+		decodeResponse = DecodeListRegistriesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistriesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistriesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "listRegistries", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

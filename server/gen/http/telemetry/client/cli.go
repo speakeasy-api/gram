@@ -3,7 +3,7 @@
 // telemetry HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o .
 
 package client
 
@@ -24,7 +24,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\",\n         \"user_id\": \"abc123\"\n      },\n      \"filters\": [\n         {\n            \"op\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\",\n         \"user_id\": \"abc123\"\n      },\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
 		}
 	}
 	var apikeyToken *string

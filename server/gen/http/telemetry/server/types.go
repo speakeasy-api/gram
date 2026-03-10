@@ -3,7 +3,7 @@
 // telemetry HTTP server types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o .
 
 package server
 
@@ -2573,7 +2573,7 @@ type LogFilterRequestBody struct {
 	// bare path for system attributes (e.g. 'http.route').
 	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
 	// Comparison operator
-	Op *string `form:"op,omitempty" json:"op,omitempty" xml:"op,omitempty"`
+	Operator *string `form:"operator,omitempty" json:"operator,omitempty" xml:"operator,omitempty"`
 	// Values to compare against. Pass one value for single-value operators (eq,
 	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
 	// 'not_exists'.
@@ -4988,9 +4988,9 @@ func ValidateLogFilterRequestBody(body *LogFilterRequestBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", *body.Path, utf8.RuneCountInString(*body.Path), 256, false))
 		}
 	}
-	if body.Op != nil {
-		if !(*body.Op == "eq" || *body.Op == "not_eq" || *body.Op == "contains" || *body.Op == "exists" || *body.Op == "not_exists" || *body.Op == "in") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"eq", "not_eq", "contains", "exists", "not_exists", "in"}))
+	if body.Operator != nil {
+		if !(*body.Operator == "eq" || *body.Operator == "not_eq" || *body.Operator == "contains" || *body.Operator == "exists" || *body.Operator == "not_exists" || *body.Operator == "in") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operator", *body.Operator, []any{"eq", "not_eq", "contains", "exists", "not_exists", "in"}))
 		}
 	}
 	if len(body.Values) > 256 {

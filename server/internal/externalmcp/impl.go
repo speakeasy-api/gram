@@ -35,6 +35,7 @@ type Service struct {
 	db             *pgxpool.Pool
 	repo           *repo.Queries
 	auth           *auth.Auth
+	sessions       *sessions.Manager
 	registryClient *RegistryClient
 }
 
@@ -50,6 +51,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:             db,
 		repo:           repo.New(db),
 		auth:           auth.New(logger, db, sessions),
+		sessions:       sessions,
 		registryClient: registryClient,
 	}
 }
@@ -66,6 +68,78 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return oops.C(oops.CodeForbidden)
+	}
+
+	registryID, err := uuid.Parse(payload.RegistryID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+	}
+
+	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
+	}
+
+	if err := s.registryClient.ClearCache(ctx, registry.Url); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "clear registry cache").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "registry cache cleared",
+		attr.SlogMCPRegistryID(registryID.String()),
+		attr.SlogMCPRegistryURL(registry.Url),
+	)
+
+	return nil
+}
+
+func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistriesPayload) (*gen.ListRegistriesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	registries, err := s.repo.ListMCPRegistries(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list registries").Log(ctx, s.logger)
+	}
+
+	result := make([]*types.MCPRegistry, 0, len(registries))
+	for _, r := range registries {
+		result = append(result, &types.MCPRegistry{
+			ID:   r.ID.String(),
+			Name: r.Name,
+			URL:  r.Url,
+		})
+	}
+
+	return &gen.ListRegistriesResult{
+		Registries: result,
+	}, nil
 }
 
 func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPayload) (*gen.ListCatalogResult, error) {

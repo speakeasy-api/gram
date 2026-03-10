@@ -3,7 +3,7 @@
 // telemetry HTTP server encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o .
 
 package server
 
@@ -2647,11 +2647,11 @@ func unmarshalLogFilterRequestBodyToTelemetryLogFilter(v *LogFilterRequestBody) 
 	res := &telemetry.LogFilter{
 		Path: *v.Path,
 	}
-	if v.Op != nil {
-		res.Op = *v.Op
+	if v.Operator != nil {
+		res.Operator = *v.Operator
 	}
-	if v.Op == nil {
-		res.Op = "eq"
+	if v.Operator == nil {
+		res.Operator = "eq"
 	}
 	if v.Values != nil {
 		res.Values = make([]string, len(v.Values))

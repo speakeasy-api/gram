@@ -709,7 +709,7 @@ func toRepoAttributeFilters(filters []*telem_gen.LogFilter) []repo.AttributeFilt
 		}
 		result = append(result, repo.AttributeFilter{
 			Path:   f.Path,
-			Op:     f.Op,
+			Op:     f.Operator,
 			Values: f.Values,
 		})
 	}

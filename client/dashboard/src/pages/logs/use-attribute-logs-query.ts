@@ -58,7 +58,7 @@ export function logsToTraceSummaries(
         if (typeof urn === "string") gramUrn = urn;
       }
       if (httpStatusCode === undefined) {
-        const code = getNestedAttr(log.attributes, "http.status_code");
+        const code = getNestedAttr(log.attributes, "http.response.status_code");
         if (typeof code === "number") httpStatusCode = code;
       }
       if (gramUrn && httpStatusCode !== undefined) break;
@@ -85,7 +85,7 @@ export function logsToTraceSummaries(
 function toSdkFilters(filters: ActiveAttributeFilter[]): LogFilter[] {
   return filters.map((f) => ({
     path: f.path,
-    op: f.op,
+    operator: f.op,
     ...(f.value !== undefined ? { values: [f.value] } : {}),
   }));
 }

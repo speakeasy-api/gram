@@ -392,7 +392,7 @@ var LogFilter = Type("LogFilter", func() {
 		MaxLength(256)
 		Example("@user.region")
 	})
-	Attribute("op", String, "Comparison operator", func() {
+	Attribute("operator", String, "Comparison operator", func() {
 		Enum("eq", "not_eq", "contains", "exists", "not_exists", "in")
 		Default("eq")
 	})

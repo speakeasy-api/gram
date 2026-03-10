@@ -3,7 +3,7 @@
 // telemetry service
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o .
 
 package telemetry
 
@@ -293,7 +293,7 @@ type LogFilter struct {
 	// bare path for system attributes (e.g. 'http.route').
 	Path string
 	// Comparison operator
-	Op string
+	Operator string
 	// Values to compare against. Pass one value for single-value operators (eq,
 	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
 	// 'not_exists'.

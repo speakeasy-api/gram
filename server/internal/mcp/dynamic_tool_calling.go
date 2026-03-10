@@ -232,7 +232,7 @@ func handleSearchToolsCall(
 		})
 	}
 
-	payload, err := json.Marshal(toolsListResult{Tools: results})
+	payload, err := json.Marshal(toolsListResultTools{Tools: results})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search result").Log(ctx, logger)
 	}
@@ -346,7 +346,7 @@ func handleDescribeToolsCall(
 		logger.WarnContext(ctx, "some tools not found", attr.SlogExpected(notFound))
 	}
 
-	payload, err := json.Marshal(toolsListResult{Tools: entries})
+	payload, err := json.Marshal(toolsListResultTools{Tools: entries})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool description result").Log(ctx, logger)
 	}

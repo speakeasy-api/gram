@@ -212,7 +212,7 @@ function HooksContent() {
     if (selectedServer) {
       filters.push({
         path: "gram.tool_call.source",
-        op: "eq",
+        operator: "eq",
         values: [selectedServer],
       });
     }
@@ -221,7 +221,7 @@ function HooksContent() {
     if (searchQuery) {
       filters.push({
         path: "gram.tool.name",
-        op: "contains",
+        operator: "contains",
         values: [searchQuery],
       });
     }
@@ -230,7 +230,7 @@ function HooksContent() {
     if (userEmailFilter) {
       filters.push({
         path: "user.email",
-        op: "contains",
+        operator: "contains",
         values: [userEmailFilter],
       });
     }

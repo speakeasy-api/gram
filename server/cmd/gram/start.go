@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -622,27 +623,17 @@ func newStartCommand() *cli.Command {
 
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
-			chatClient := chat.NewAgenticChatClient(
+			completionsClient := openrouter.NewUnifiedClient(
 				logger,
-				tracerProvider,
-				meterProvider,
-				db,
-				env,
-				encryptionClient,
-				cache.NewRedisCacheAdapter(redisClient),
-				guardianPolicy,
-				functionsOrchestrator,
 				openRouter,
-				temporalEnv,
-				telemSvc,
-				assetStorage,
-				billingTracker,
-				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
+				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
+				telemSvc,
 			)
 
-			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, chatClient)
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
@@ -651,6 +642,42 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
+
+			authAuth := auth.New(logger, db, sessionManager)
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
+			externalOAuthService := oauth.NewExternalOAuthService(logger, db, cache.NewRedisCacheAdapter(redisClient), authAuth, encryptionClient, externalMcpOAuthConfig)
+
+			mcpService := mcp.NewService(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				sessionManager,
+				chatSessionsManager,
+				env,
+				posthogClient,
+				serverURL,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
+				oauthService,
+				billingTracker,
+				billingRepo,
+				telemSvc,
+				productFeatures,
+				ragService,
+				temporalEnv,
+			)
+
+			chatClient := chat.NewAgenticChatClient(
+				logger,
+				db,
+				env,
+				cache.NewRedisCacheAdapter(redisClient),
+				completionsClient,
+				mcpclient.NewInternalMCPClient(mcpService),
+			)
 
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
@@ -663,7 +690,6 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.AdminOverrideMiddleware)
 
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
-			authAuth := auth.New(logger, db, sessionManager)
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient)))
@@ -692,15 +718,13 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			resources.Attach(mux, resources.NewService(logger, db, sessionManager))
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
-			externalOAuthService := oauth.NewExternalOAuthService(logger, db, cache.NewRedisCacheAdapter(redisClient), authAuth, encryptionClient, externalMcpOAuthConfig)
 			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, billingTracker, telemSvc, productFeatures, serverURL))
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
-			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalEnv), mcpMetadataService)
+			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage))
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}))

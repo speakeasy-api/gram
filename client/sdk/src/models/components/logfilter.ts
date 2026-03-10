@@ -8,7 +8,7 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * Comparison operator
  */
-export const Op = {
+export const Operator = {
   Eq: "eq",
   NotEq: "not_eq",
   Contains: "contains",
@@ -19,7 +19,7 @@ export const Op = {
 /**
  * Comparison operator
  */
-export type Op = ClosedEnum<typeof Op>;
+export type Operator = ClosedEnum<typeof Operator>;
 
 /**
  * A single filter condition for a log search query.
@@ -28,7 +28,7 @@ export type LogFilter = {
   /**
    * Comparison operator
    */
-  op?: Op | undefined;
+  operator?: Operator | undefined;
   /**
    * Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
    */
@@ -40,11 +40,13 @@ export type LogFilter = {
 };
 
 /** @internal */
-export const Op$outboundSchema: z.ZodMiniEnum<typeof Op> = z.enum(Op);
+export const Operator$outboundSchema: z.ZodMiniEnum<typeof Operator> = z.enum(
+  Operator,
+);
 
 /** @internal */
 export type LogFilter$Outbound = {
-  op: string;
+  operator: string;
   path: string;
   values?: Array<string> | undefined;
 };
@@ -54,7 +56,7 @@ export const LogFilter$outboundSchema: z.ZodMiniType<
   LogFilter$Outbound,
   LogFilter
 > = z.object({
-  op: z._default(Op$outboundSchema, "eq"),
+  operator: z._default(Operator$outboundSchema, "eq"),
   path: z.string(),
   values: z.optional(z.array(z.string())),
 });

@@ -246,7 +246,9 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 				sb = sb.Where(fmt.Sprintf("position(%s, ?) > 0", col), f.Values[0])
 			}
 		case "in":
-			sb = sb.Where(squirrel.Eq{col: f.Values})
+			if len(f.Values) > 0 {
+				sb = sb.Where(squirrel.Eq{col: f.Values})
+			}
 		case "exists":
 			sb = sb.Where(fmt.Sprintf("%s != ''", col))
 		case "not_exists":

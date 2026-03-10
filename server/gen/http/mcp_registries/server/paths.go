@@ -3,9 +3,19 @@
 // HTTP request path constructors for the mcpRegistries service.
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o .
 
 package server
+
+// ClearCacheMcpRegistriesPath returns the URL path to the mcpRegistries service clearCache HTTP endpoint.
+func ClearCacheMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.clearCache"
+}
+
+// ListRegistriesMcpRegistriesPath returns the URL path to the mcpRegistries service listRegistries HTTP endpoint.
+func ListRegistriesMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.listRegistries"
+}
 
 // ListCatalogMcpRegistriesPath returns the URL path to the mcpRegistries service listCatalog HTTP endpoint.
 func ListCatalogMcpRegistriesPath() string {

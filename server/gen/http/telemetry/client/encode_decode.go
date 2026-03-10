@@ -3,7 +3,7 @@
 // telemetry HTTP client encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o .
 
 package client
 
@@ -2694,13 +2694,13 @@ func marshalTelemetryLogFilterToLogFilterRequestBody(v *telemetry.LogFilter) *Lo
 		return nil
 	}
 	res := &LogFilterRequestBody{
-		Path: v.Path,
-		Op:   v.Op,
+		Path:     v.Path,
+		Operator: v.Operator,
 	}
 	{
 		var zero string
-		if res.Op == zero {
-			res.Op = "eq"
+		if res.Operator == zero {
+			res.Operator = "eq"
 		}
 	}
 	if v.Values != nil {
@@ -2754,13 +2754,13 @@ func marshalLogFilterRequestBodyToTelemetryLogFilter(v *LogFilterRequestBody) *t
 		return nil
 	}
 	res := &telemetry.LogFilter{
-		Path: v.Path,
-		Op:   v.Op,
+		Path:     v.Path,
+		Operator: v.Operator,
 	}
 	{
 		var zero string
-		if res.Op == zero {
-			res.Op = "eq"
+		if res.Operator == zero {
+			res.Operator = "eq"
 		}
 	}
 	if v.Values != nil {

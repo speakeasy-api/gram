@@ -3,7 +3,7 @@
 // mcpRegistries HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o .
 
 package client
 
@@ -11,6 +11,74 @@ import (
 	mcpregistries "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildClearCachePayload builds the payload for the mcpRegistries clearCache
+// endpoint from CLI flags.
+func BuildClearCachePayload(mcpRegistriesClearCacheRegistryID string, mcpRegistriesClearCacheSessionToken string, mcpRegistriesClearCacheApikeyToken string, mcpRegistriesClearCacheProjectSlugInput string) (*mcpregistries.ClearCachePayload, error) {
+	var err error
+	var registryID string
+	{
+		registryID = mcpRegistriesClearCacheRegistryID
+		err = goa.MergeErrors(err, goa.ValidateFormat("registry_id", registryID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesClearCacheSessionToken != "" {
+			sessionToken = &mcpRegistriesClearCacheSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesClearCacheApikeyToken != "" {
+			apikeyToken = &mcpRegistriesClearCacheApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesClearCacheProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesClearCacheProjectSlugInput
+		}
+	}
+	v := &mcpregistries.ClearCachePayload{}
+	v.RegistryID = registryID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListRegistriesPayload builds the payload for the mcpRegistries
+// listRegistries endpoint from CLI flags.
+func BuildListRegistriesPayload(mcpRegistriesListRegistriesSessionToken string, mcpRegistriesListRegistriesApikeyToken string, mcpRegistriesListRegistriesProjectSlugInput string) (*mcpregistries.ListRegistriesPayload, error) {
+	var sessionToken *string
+	{
+		if mcpRegistriesListRegistriesSessionToken != "" {
+			sessionToken = &mcpRegistriesListRegistriesSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesListRegistriesApikeyToken != "" {
+			apikeyToken = &mcpRegistriesListRegistriesApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesListRegistriesProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesListRegistriesProjectSlugInput
+		}
+	}
+	v := &mcpregistries.ListRegistriesPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
 
 // BuildListCatalogPayload builds the payload for the mcpRegistries listCatalog
 // endpoint from CLI flags.

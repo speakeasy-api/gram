@@ -909,64 +909,64 @@ func TestSearchLogs_LogFilters(t *testing.T) {
 		{
 			name: "@ prefix equality matches user attribute",
 			filters: []*gen.LogFilter{
-				{Path: "@user.region", Op: eq, Values: []string{"us-east-1"}},
+				{Path: "@user.region", Operator: eq, Values: []string{"us-east-1"}},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "@ prefix not-equal excludes matching user attribute",
 			filters: []*gen.LogFilter{
-				{Path: "@user.region", Op: notEq, Values: []string{"us-east-1"}},
+				{Path: "@user.region", Operator: notEq, Values: []string{"us-east-1"}},
 			},
 			expectedCount: 2, // eu-west-1 + log with no attribute (toString returns '' which != 'us-east-1')
 		},
 		{
 			name: "@ prefix contains searches within value",
 			filters: []*gen.LogFilter{
-				{Path: "@user.region", Op: contains, Values: []string{"east"}},
+				{Path: "@user.region", Operator: contains, Values: []string{"east"}},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "@ prefix exists returns logs with attribute set",
 			filters: []*gen.LogFilter{
-				{Path: "@user.tier", Op: exists},
+				{Path: "@user.tier", Operator: exists},
 			},
 			expectedCount: 3,
 		},
 		{
 			name: "@ prefix not_exists returns logs without attribute",
 			filters: []*gen.LogFilter{
-				{Path: "@user.tier", Op: notExists},
+				{Path: "@user.tier", Operator: notExists},
 			},
 			expectedCount: 1,
 		},
 		{
 			name: "bare path matches system attribute directly",
 			filters: []*gen.LogFilter{
-				{Path: "http.route", Op: eq, Values: []string{"/api/health"}},
+				{Path: "http.route", Operator: eq, Values: []string{"/api/health"}},
 			},
 			expectedCount: 1,
 		},
 		{
 			name: "combine @ filter with existing filter field",
 			filters: []*gen.LogFilter{
-				{Path: "@env", Op: eq, Values: []string{"production"}},
+				{Path: "@env", Operator: eq, Values: []string{"production"}},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "multiple attribute filters are ANDed",
 			filters: []*gen.LogFilter{
-				{Path: "@user.region", Op: eq, Values: []string{"us-east-1"}},
-				{Path: "@user.tier", Op: eq, Values: []string{"premium"}},
+				{Path: "@user.region", Operator: eq, Values: []string{"us-east-1"}},
+				{Path: "@user.tier", Operator: eq, Values: []string{"premium"}},
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "invalid path is silently skipped",
 			filters: []*gen.LogFilter{
-				{Path: "1invalid", Op: eq, Values: []string{"test"}},
+				{Path: "1invalid", Operator: eq, Values: []string{"test"}},
 			},
 			expectedCount: 4, // no filter applied, all logs returned
 		},
