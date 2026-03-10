@@ -6,7 +6,6 @@ local linters = new Mapping<String, Step> {
   ["pklfmt"] = Builtins.pkl_format
   ["gomodtidy"] {
     glob = List("**/go.mod", "**/go.sum", "**/*.go")
-    check_diff = "go mod tidy -diff"
     fix = "go mod tidy"
   }
   ["gofmt"] {
