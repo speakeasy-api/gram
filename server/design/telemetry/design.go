@@ -379,11 +379,10 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 	Attribute("user_id", String, "User ID filter")
 	Attribute("external_user_id", String, "External user ID filter")
 	Attribute("event_source", String, "Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')")
-	Attribute("attribute_filters", ArrayOf(AttributeFilter), "Filters on custom log attributes")
 })
 
-var AttributeFilter = Type("AttributeFilter", func() {
-	Description("Filter on a log attribute by path.")
+var LogFilter = Type("LogFilter", func() {
+	Description("A single filter condition for a log search query.")
 
 	Attribute("path", String, "Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').", func() {
 		// Optional @ prefix for user-defined attributes, then letter/underscore start,
@@ -393,13 +392,12 @@ var AttributeFilter = Type("AttributeFilter", func() {
 		MaxLength(256)
 		Example("@user.region")
 	})
-	Attribute("op", String, "Comparison operator", func() {
-		Enum("eq", "not_eq", "contains", "exists", "not_exists")
+	Attribute("operator", String, "Comparison operator", func() {
+		Enum("eq", "not_eq", "contains", "exists", "not_exists", "in")
 		Default("eq")
 	})
-	Attribute("value", String, "Value to compare against (ignored for 'exists' and 'not_exists' operators)", func() {
-		MaxLength(1024)
-		Example("us-east-1")
+	Attribute("values", ArrayOf(String), "Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'.", func() {
+		MaxLength(256)
 	})
 	Required("path")
 })
@@ -407,7 +405,16 @@ var AttributeFilter = Type("AttributeFilter", func() {
 var SearchLogsPayload = Type("SearchLogsPayload", func() {
 	Description("Payload for searching telemetry logs")
 
-	Attribute("filter", SearchLogsFilter, "Filter criteria for the search")
+	Attribute("from", String, "Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("filters", ArrayOf(LogFilter), "Filter conditions for the search query")
+	Attribute("filter", SearchLogsFilter, "[Deprecated] Use 'filters' and top-level 'from'/'to' instead.")
 	Attribute("cursor", String, "Cursor for pagination")
 	Attribute("sort", String, "Sort order", func() {
 		Enum("asc", "desc")

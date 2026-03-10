@@ -1,11 +1,12 @@
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
-import type { AttributeFilter } from "@gram/client/models/components/attributefilter";
+import type { LogFilter } from "@gram/client/models/components/logfilter";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord";
 import type { ToolCallSummary } from "@gram/client/models/components/toolcallsummary";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import type { ActiveAttributeFilter } from "./attribute-filter-types";
+import { Operator as Op } from "@gram/client/models/components/logfilter";
+import type { ActiveLogFilter } from "./log-filter-types";
 
 const PER_PAGE = 100; // fetch more logs to improve grouping coverage
 
@@ -82,12 +83,23 @@ export function logsToTraceSummaries(
   return summaries;
 }
 
-function toSdkFilters(filters: ActiveAttributeFilter[]): AttributeFilter[] {
-  return filters.map((f) => ({
-    path: f.path,
-    op: f.op,
-    ...(f.value !== undefined ? { value: f.value } : {}),
-  }));
+function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
+  return filters.map((f) => {
+    let values: string[] | undefined;
+    if (f.op === Op.In) {
+      values = f.value
+        ?.split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+    } else if (f.value !== undefined) {
+      values = [f.value];
+    }
+    return {
+      path: f.path,
+      operator: f.op,
+      ...(values !== undefined ? { values } : {}),
+    };
+  });
 }
 
 /**
@@ -95,13 +107,13 @@ function toSdkFilters(filters: ActiveAttributeFilter[]): AttributeFilter[] {
  * returns data shaped like the searchToolCalls query for transparent swapping.
  */
 export function useAttributeLogsQuery({
-  attributeFilters,
+  logFilters,
   gramUrn,
   from,
   to,
   enabled,
 }: {
-  attributeFilters: ActiveAttributeFilter[];
+  logFilters: ActiveLogFilter[];
   gramUrn: string | null;
   from: Date;
   to: Date;
@@ -112,7 +124,7 @@ export function useAttributeLogsQuery({
   return useInfiniteQuery({
     queryKey: [
       "attribute-logs",
-      attributeFilters.map((f) => `${f.path}:${f.op}:${f.value ?? ""}`),
+      logFilters.map((f) => `${f.path}:${f.op}:${f.value ?? ""}`),
       gramUrn,
       from.toISOString(),
       to.toISOString(),
@@ -121,12 +133,17 @@ export function useAttributeLogsQuery({
       const result = await unwrapAsync(
         telemetrySearchLogs(client, {
           searchLogsPayload: {
-            filter: {
-              attributeFilters: toSdkFilters(attributeFilters),
-              ...(gramUrn ? { gramUrn } : {}),
-              from,
-              to,
-            },
+            from,
+            to,
+            filters: [
+              {
+                path: "gram.event.source",
+                operator: "eq",
+                values: ["tool_call"],
+              },
+              ...toSdkFilters(logFilters),
+            ],
+            ...(gramUrn ? { filter: { gramUrn } } : {}),
             cursor: pageParam,
             limit: PER_PAGE,
             sort: "desc",

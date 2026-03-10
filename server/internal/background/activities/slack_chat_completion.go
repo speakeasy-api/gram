@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -55,7 +56,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 
 	systemPrompt := slackSystemPrompt
 
-	previousConversationContext := ""
+	var previousConversationContext strings.Builder
 	if input.Event.Event.ThreadTs != "" {
 		if replies, err := s.slackClient.GetConversationReplies(ctx, authInfo.AccessToken, client.SlackConversationInput{
 			ChannelID: input.Event.Event.Channel,
@@ -65,13 +66,13 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			s.logger.ErrorContext(ctx, "error getting conversation replies", attr.SlogError(err))
 		} else {
 			for _, reply := range replies.Messages {
-				previousConversationContext += fmt.Sprintf("%s: %s\n\n", reply.User, reply.Text)
+				fmt.Fprintf(&previousConversationContext, "%s: %s\n\n", reply.User, reply.Text)
 			}
 		}
 	}
 
-	if previousConversationContext != "" {
-		systemPrompt += "\n\nHere is the previous conversation context for reference:\n" + previousConversationContext
+	if previousConversationContext.String() != "" {
+		systemPrompt += "\n\nHere is the previous conversation context for reference:\n" + previousConversationContext.String()
 	}
 
 	currentDatetimeParams := map[string]any{

@@ -12688,34 +12688,6 @@ components:
         - content_length
         - created_at
         - updated_at
-    AttributeFilter:
-      type: object
-      properties:
-        op:
-          type: string
-          description: Comparison operator
-          default: eq
-          enum:
-            - eq
-            - not_eq
-            - contains
-            - exists
-            - not_exists
-        path:
-          type: string
-          description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
-          example: '@user.region'
-          pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
-          minLength: 1
-          maxLength: 256
-        value:
-          type: string
-          description: Value to compare against (ignored for 'exists' and 'not_exists' operators)
-          example: us-east-1
-          maxLength: 1024
-      description: Filter on a log attribute by path.
-      required:
-        - path
     BaseResourceAttributes:
       type: object
       properties:
@@ -15679,6 +15651,36 @@ components:
       required:
         - package
         - versions
+    LogFilter:
+      type: object
+      properties:
+        operator:
+          type: string
+          description: Comparison operator
+          default: eq
+          enum:
+            - eq
+            - not_eq
+            - contains
+            - exists
+            - not_exists
+            - in
+        path:
+          type: string
+          description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
+          example: '@user.region'
+          pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
+          minLength: 1
+          maxLength: 256
+        values:
+          type: array
+          items:
+            type: string
+          description: Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'.
+          maxItems: 256
+      description: A single filter condition for a log search query.
+      required:
+        - path
     MCPRegistry:
       type: object
       properties:
@@ -16902,11 +16904,6 @@ components:
     SearchLogsFilter:
       type: object
       properties:
-        attribute_filters:
-          type: array
-          items:
-            $ref: '#/components/schemas/AttributeFilter'
-          description: Filters on custom log attributes
         deployment_id:
           type: string
           description: Deployment ID filter
@@ -16988,6 +16985,16 @@ components:
           description: Cursor for pagination
         filter:
           $ref: '#/components/schemas/SearchLogsFilter'
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogFilter'
+          description: Filter conditions for the search query
+        from:
+          type: string
+          description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
         limit:
           type: integer
           description: Number of items to return (1-1000)
@@ -17002,6 +17009,11 @@ components:
           enum:
             - asc
             - desc
+        to:
+          type: string
+          description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
       description: Payload for searching telemetry logs
     SearchLogsResult:
       type: object
