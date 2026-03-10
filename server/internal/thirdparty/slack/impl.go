@@ -293,6 +293,20 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 	}
 
 	if processEvent {
+		// React with eyes immediately to acknowledge receipt
+		decryptedBotToken, err := s.enc.Decrypt(app.SlackBotToken.String)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "decrypt bot token for reaction", attr.SlogError(err))
+		} else {
+			if err := s.client.AddReaction(ctx, decryptedBotToken, slack_client.SlackAddReactionInput{
+				ChannelID: event.Event.Channel,
+				Timestamp: event.Event.Ts,
+				Name:      "eyes",
+			}); err != nil {
+				s.logger.ErrorContext(ctx, "add eyes reaction to message", attr.SlogError(err))
+			}
+		}
+
 		slackAccountID := event.Event.User
 		if slackAccountID != "" {
 			_, err := s.repo.GetSlackRegistrationWithUser(ctx, repo.GetSlackRegistrationWithUserParams{
@@ -331,7 +345,7 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 					ChannelID: event.Event.Channel,
 					UserID:    slackAccountID,
 					Message:   fmt.Sprintf("To use this bot, please link your Gram account first: <%s|Connect to Gram>", registerURL),
-					ThreadTS:  &threadTs,
+					ThreadTS:  nil, // Intentionally don't post ephemeral messages in threads because they don't show up easily
 				}); err != nil {
 					s.logger.ErrorContext(ctx, "send ephemeral registration link", attr.SlogError(err))
 				}

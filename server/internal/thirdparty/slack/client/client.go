@@ -411,3 +411,60 @@ func (s *SlackClient) OAuthV2AccessWithCredentials(ctx context.Context, code, re
 
 	return &oauthResponse, nil
 }
+
+type SlackAddReactionInput struct {
+	ChannelID string
+	Timestamp string
+	Name      string
+}
+
+func (s *SlackClient) AddReaction(ctx context.Context, accessToken string, input SlackAddReactionInput) error {
+	urlStr := slackServer + "/reactions.add"
+
+	form := url.Values{}
+	form.Set("channel", input.ChannelID)
+	form.Set("timestamp", input.Timestamp)
+	form.Set("name", input.Name)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlStr, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("create reaction request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send reaction request to Slack: %w", err)
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			fmt.Printf("failed to close response body: %v\n", cerr)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("slack reactions.add non-200 response: %d, read body: %w", resp.StatusCode, err)
+		}
+		return fmt.Errorf("slack reactions.add non-200 response: %d, body: %s", resp.StatusCode, string(respBody))
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read reaction response body: %w", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("unmarshal reaction response: %w", err)
+	}
+
+	if ok, exists := result["ok"].(bool); !exists || !ok {
+		errMsg, _ := result["error"].(string)
+		return fmt.Errorf("slack reactions.add failed: %s", errMsg)
+	}
+
+	return nil
+}

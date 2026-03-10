@@ -1,4 +1,5 @@
 import { Type } from "@/components/ui/type";
+import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useCallback, useEffect, useState } from "react";
@@ -18,6 +19,7 @@ export default function SlackRegister() {
   const [state, setState] = useState<PageState>("loading");
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const client = useSdkClient();
 
   useEffect(() => {
     if (!token) {
