@@ -253,7 +253,7 @@ func (s *Service) UpdateToolSourceBulk(ctx context.Context, projectID, oldSource
 			'JSON'
 		)
 		WHERE project_id = ?
-		  AND toString(attributes.`gram.tool_call.source`) = ?
+		  AND toString(attributes.gram.tool_call.source) = ?
 	`
 
 	err := s.chConn.Exec(ctx, query, oldSource, newSource, projectID, oldSource)

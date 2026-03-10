@@ -142,7 +142,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 				// Fire-and-forget - don't block hook processing
 				toolCallAttrs := convertAttrsToMap(attrs)
 				go func() {
-					bgCtx := context.Background()
+					bgCtx := context.WithoutCancel(ctx)
 					_, err := background.ExecuteProcessNameMappingWorkflow(bgCtx, s.temporalEnv, background.ProcessNameMappingWorkflowParams{
 						ServerName:    source,
 						ToolCallAttrs: toolCallAttrs,
