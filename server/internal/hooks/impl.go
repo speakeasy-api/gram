@@ -81,7 +81,13 @@ func NewService(
 	localEnvPath string,
 	temporalEnv *tenv.Environment,
 ) *Service {
-	nameMapper := NewNameMapper(cacheAdapter, completionsClient, logger)
+	// Use async name mapper when temporalEnv is available, otherwise fall back to sync
+	var nameMapper NameMapper
+	if temporalEnv != nil {
+		nameMapper = NewAsyncNameMapper(cacheAdapter, temporalEnv, logger)
+	} else {
+		nameMapper = NewNameMapper(cacheAdapter, completionsClient, logger)
+	}
 
 	var localEnvData sessions.LocalEnvFile
 	if localEnvPath != "" {

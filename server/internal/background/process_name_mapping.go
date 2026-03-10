@@ -23,11 +23,10 @@ type ProcessNameMappingWorkflowParams struct {
 func ExecuteProcessNameMappingWorkflow(ctx context.Context, env *tenv.Environment, params ProcessNameMappingWorkflowParams) (client.WorkflowRun, error) {
 	id := fmt.Sprintf("v1:process-name-mapping:%s:%s", params.ServerName, params.ProjectID)
 	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                       id,
-		TaskQueue:                string(env.Queue()),
-		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		WorkflowRunTimeout:       5 * time.Minute,
+		ID:                    id,
+		TaskQueue:             string(env.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowRunTimeout:    5 * time.Minute,
 	}, ProcessNameMappingWorkflow, params)
 }
 

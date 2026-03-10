@@ -241,14 +241,23 @@ func (s *Service) UpdateToolSourceBulk(ctx context.Context, projectID, oldSource
 		return fmt.Errorf("oldSource and newSource cannot be empty")
 	}
 
+	// ClickHouse doesn't have JSONSet. We use replaceAll on the JSON string representation
+	// to update the nested value. This is safe because we're matching the exact JSON key-value pair.
 	query := `
 		ALTER TABLE telemetry_logs
-		UPDATE attributes = JSONSet(attributes, 'gram.tool_call.source', ?)
+		UPDATE attributes = CAST(
+			replaceAll(
+				toString(attributes),
+				concat('"gram.tool_call.source":"', ?, '"'),
+				concat('"gram.tool_call.source":"', ?, '"')
+			),
+			'JSON'
+		)
 		WHERE project_id = ?
 		  AND toString(attributes.gram.tool_call.source) = ?
 	`
 
-	err := s.chConn.Exec(ctx, query, newSource, projectID, oldSource)
+	err := s.chConn.Exec(ctx, query, oldSource, newSource, projectID, oldSource)
 	if err != nil {
 		return fmt.Errorf("execute ClickHouse mutation: %w", err)
 	}
