@@ -910,7 +910,7 @@ CREATE TABLE IF NOT EXISTS slack_app_toolsets (
 );
 
 CREATE TABLE IF NOT EXISTS slack_registrations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   slack_app_id uuid NOT NULL,
   slack_account_id TEXT NOT NULL,
   user_id uuid NOT NULL,
