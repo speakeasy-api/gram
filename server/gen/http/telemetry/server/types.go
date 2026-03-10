@@ -247,6 +247,8 @@ type ListAttributeKeysResponseBody struct {
 type GetHooksSummaryResponseBody struct {
 	// Aggregated metrics grouped by server
 	Servers []*HooksServerSummaryResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// Aggregated metrics grouped by user
+	Users []*HooksUserSummaryResponseBody `form:"users" json:"users" xml:"users"`
 	// Total number of hook events
 	TotalEvents int64 `form:"total_events" json:"total_events" xml:"total_events"`
 	// Total number of unique sessions
@@ -2567,6 +2569,22 @@ type HooksServerSummaryResponseBody struct {
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// HooksUserSummaryResponseBody is used to define fields on response body types.
+type HooksUserSummaryResponseBody struct {
+	// User email address
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// Total number of hook events for this user
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+	// Number of unique tools used by this user
+	UniqueTools int64 `form:"unique_tools" json:"unique_tools" xml:"unique_tools"`
+	// Number of successful tool completions (PostToolUse events)
+	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
+	// Number of failed tool completions (PostToolUseFailure events)
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+	// Failure rate as a decimal (0.0 to 1.0)
+	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
+}
+
 // LogFilterRequestBody is used to define fields on request body types.
 type LogFilterRequestBody struct {
 	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
@@ -2877,6 +2895,18 @@ func NewGetHooksSummaryResponseBody(res *telemetry.GetHooksSummaryResult) *GetHo
 		}
 	} else {
 		body.Servers = []*HooksServerSummaryResponseBody{}
+	}
+	if res.Users != nil {
+		body.Users = make([]*HooksUserSummaryResponseBody, len(res.Users))
+		for i, val := range res.Users {
+			if val == nil {
+				body.Users[i] = nil
+				continue
+			}
+			body.Users[i] = marshalTelemetryHooksUserSummaryToHooksUserSummaryResponseBody(val)
+		}
+	} else {
+		body.Users = []*HooksUserSummaryResponseBody{}
 	}
 	return body
 }

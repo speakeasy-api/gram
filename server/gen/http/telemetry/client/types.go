@@ -247,6 +247,8 @@ type ListAttributeKeysResponseBody struct {
 type GetHooksSummaryResponseBody struct {
 	// Aggregated metrics grouped by server
 	Servers []*HooksServerSummaryResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Aggregated metrics grouped by user
+	Users []*HooksUserSummaryResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
 	// Total number of hook events
 	TotalEvents *int64 `form:"total_events,omitempty" json:"total_events,omitempty" xml:"total_events,omitempty"`
 	// Total number of unique sessions
@@ -2659,6 +2661,22 @@ type HooksServerSummaryResponseBody struct {
 	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
 }
 
+// HooksUserSummaryResponseBody is used to define fields on response body types.
+type HooksUserSummaryResponseBody struct {
+	// User email address
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Total number of hook events for this user
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of unique tools used by this user
+	UniqueTools *int64 `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
+	// Number of successful tool completions (PostToolUse events)
+	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
+	// Number of failed tool completions (PostToolUseFailure events)
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Failure rate as a decimal (0.0 to 1.0)
+	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
+}
+
 // NewSearchLogsRequestBody builds the HTTP request body from the payload of
 // the "searchLogs" endpoint of the "telemetry" service.
 func NewSearchLogsRequestBody(p *telemetry.SearchLogsPayload) *SearchLogsRequestBody {
@@ -4548,6 +4566,14 @@ func NewGetHooksSummaryResultOK(body *GetHooksSummaryResponseBody) *telemetry.Ge
 		}
 		v.Servers[i] = unmarshalHooksServerSummaryResponseBodyToTelemetryHooksServerSummary(val)
 	}
+	v.Users = make([]*telemetry.HooksUserSummary, len(body.Users))
+	for i, val := range body.Users {
+		if val == nil {
+			v.Users[i] = nil
+			continue
+		}
+		v.Users[i] = unmarshalHooksUserSummaryResponseBodyToTelemetryHooksUserSummary(val)
+	}
 
 	return v
 }
@@ -4889,6 +4915,9 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	if body.Servers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
 	}
+	if body.Users == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
+	}
 	if body.TotalEvents == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_events", "body"))
 	}
@@ -4898,6 +4927,13 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	for _, e := range body.Servers {
 		if e != nil {
 			if err2 := ValidateHooksServerSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Users {
+		if e != nil {
+			if err2 := ValidateHooksUserSummaryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -8037,6 +8073,30 @@ func ValidateFilterOptionResponseBody(body *FilterOptionResponseBody) (err error
 func ValidateHooksServerSummaryResponseBody(body *HooksServerSummaryResponseBody) (err error) {
 	if body.ServerName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
+	}
+	if body.UniqueTools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unique_tools", "body"))
+	}
+	if body.SuccessCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("success_count", "body"))
+	}
+	if body.FailureCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
+	}
+	if body.FailureRate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_rate", "body"))
+	}
+	return
+}
+
+// ValidateHooksUserSummaryResponseBody runs the validations defined on
+// HooksUserSummaryResponseBody
+func ValidateHooksUserSummaryResponseBody(body *HooksUserSummaryResponseBody) (err error) {
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
 	}
 	if body.EventCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))

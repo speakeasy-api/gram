@@ -580,6 +580,7 @@ func newWorkerCommand() *cli.Command {
 				AgentsService:       agentsService,
 				MCPRegistryClient:   mcpRegistryClient,
 				TelemetryService:    telemetryService,
+				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

@@ -21,7 +21,8 @@ import (
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-type localEnvFile map[string]struct {
+// LocalEnvFile represents the structure of the local environment file for development
+type LocalEnvFile map[string]struct {
 	UserEmail     string  `json:"user_email"`
 	DisplayName   *string `json:"display_name"`
 	Admin         bool    `json:"admin"`
@@ -30,6 +31,7 @@ type localEnvFile map[string]struct {
 		OrganizationName string `json:"organization_name"`
 		OrganizationSlug string `json:"organization_slug"`
 		AccountType      string `json:"account_type"`
+		DefaultProjectID string `json:"default_project_id"`
 	} `json:"organizations"`
 }
 
@@ -37,7 +39,7 @@ type Manager struct {
 	logger                 *slog.Logger
 	sessionCache           cache.TypedCacheObject[Session]
 	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
-	localEnvFile           localEnvFile
+	localEnvFile           LocalEnvFile
 	unsafeLocal            bool
 	speakeasyServerAddress string
 	speakeasySecretKey     string
@@ -67,7 +69,7 @@ func NewManager(
 		logger:                 logger.With(attr.SlogComponent("sessions")),
 		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		localEnvFile:           localEnvFile{},
+		localEnvFile:           LocalEnvFile{},
 		unsafeLocal:            false,
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,

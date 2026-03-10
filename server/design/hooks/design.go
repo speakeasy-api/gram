@@ -116,9 +116,7 @@ var _ = Service("hooks", func() {
 	Method("claude", func() {
 		Description("Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.")
 
-		Payload(func() {
-			Extend(ClaudeHookPayload)
-		})
+		Payload(ClaudeHookPayload)
 		Result(ClaudeHookResult)
 		HTTP(func() {
 			POST("/rpc/hooks.claude")
@@ -129,7 +127,7 @@ var _ = Service("hooks", func() {
 		Description("Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("producer")
+			Scope("hooks")
 		})
 
 		Payload(func() {

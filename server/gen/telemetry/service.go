@@ -146,6 +146,8 @@ type GetHooksSummaryPayload struct {
 type GetHooksSummaryResult struct {
 	// Aggregated metrics grouped by server
 	Servers []*HooksServerSummary
+	// Aggregated metrics grouped by user
+	Users []*HooksUserSummary
 	// Total number of hook events
 	TotalEvents int64
 	// Total number of unique sessions
@@ -238,6 +240,22 @@ type HooksServerSummary struct {
 	// Total number of hook events for this server
 	EventCount int64
 	// Number of unique tools used for this server
+	UniqueTools int64
+	// Number of successful tool completions (PostToolUse events)
+	SuccessCount int64
+	// Number of failed tool completions (PostToolUseFailure events)
+	FailureCount int64
+	// Failure rate as a decimal (0.0 to 1.0)
+	FailureRate float64
+}
+
+// Aggregated hooks metrics for a single user
+type HooksUserSummary struct {
+	// User email address
+	UserEmail string
+	// Total number of hook events for this user
+	EventCount int64
+	// Number of unique tools used by this user
 	UniqueTools int64
 	// Number of successful tool completions (PostToolUse events)
 	SuccessCount int64

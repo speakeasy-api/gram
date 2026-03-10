@@ -18,7 +18,7 @@ import (
 type Service interface {
 	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
-	Claude(context.Context, *ClaudePayload) (res *ClaudeHookResult, err error)
+	Claude(context.Context, *ClaudeHookPayload) (res *ClaudeHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -46,18 +46,8 @@ const ServiceName = "hooks"
 // MethodKey key.
 var MethodNames = [2]string{"claude", "logs"}
 
-// ClaudeHookResult is the result type of the hooks service claude method.
-type ClaudeHookResult struct {
-	// Whether to continue (SessionStart only)
-	Continue *bool
-	// Reason if blocked (SessionStart only)
-	StopReason *string
-	// Hook-specific output as JSON object
-	HookSpecificOutput any
-}
-
-// ClaudePayload is the payload type of the hooks service claude method.
-type ClaudePayload struct {
+// ClaudeHookPayload is the payload type of the hooks service claude method.
+type ClaudeHookPayload struct {
 	// The type of hook event
 	HookEventName string
 	// The name of the tool (for tool-related events)
@@ -74,6 +64,16 @@ type ClaudePayload struct {
 	SessionID *string
 	// Additional hook-specific data
 	AdditionalData map[string]any
+}
+
+// ClaudeHookResult is the result type of the hooks service claude method.
+type ClaudeHookResult struct {
+	// Whether to continue (SessionStart only)
+	Continue *bool
+	// Reason if blocked (SessionStart only)
+	StopReason *string
+	// Hook-specific output as JSON object
+	HookSpecificOutput any
 }
 
 // LogsPayload is the payload type of the hooks service logs method.

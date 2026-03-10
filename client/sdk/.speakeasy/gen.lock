@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 1ebfa768e81f8098f30cc148c8e36c69
+  docChecksum: be1715c254b4af107683e0e37e716fd5
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.22
-  configChecksum: e19113acdda657f404349e8ad799429c
+  releaseVersion: 0.27.23
+  configChecksum: 7df4aa723bdef3855527c2cd72d73eba
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -225,7 +225,7 @@ trackedFiles:
   docs/models/components/getdeploymentresult.md:
     last_write_checksum: sha1:d071a02508f3cfd7908fdd374fa5fc6d6ee8376f
   docs/models/components/gethookssummaryresult.md:
-    last_write_checksum: sha1:41fea740e6c6b596cc75be34dbdd901c14ba42dc
+    last_write_checksum: sha1:d5ee132c6d0e15d66961387590ddfafb24271e00
   docs/models/components/getinstanceresult.md:
     last_write_checksum: sha1:bb61b209573a535441fd5265f48ee2ebeb156a0f
   docs/models/components/getintegrationresult.md:
@@ -256,6 +256,8 @@ trackedFiles:
     last_write_checksum: sha1:e13a3260b468b705a4d29c806220a5dc2fce7677
   docs/models/components/hooksserversummary.md:
     last_write_checksum: sha1:65f741f7c4c0dd72b7fcc482bdc7b586b2419629
+  docs/models/components/hooksusersummary.md:
+    last_write_checksum: sha1:527d021e36b1f44fd86ee89dfd9814d2046e6797
   docs/models/components/httpmethod.md:
     last_write_checksum: sha1:f4bf8618fef5279a71cd413d3f6ca989ab29e766
   docs/models/components/httptooldefinition.md:
@@ -1432,11 +1434,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:57b5685808142d12ad737864e303a2dff7ee68ad
+    last_write_checksum: sha1:fd662514e1088bc84b7856e2d27b9b9fcd8f0044
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:cdf7c4a5095e2ca0134c7ff4669ea5e82d9fd51a
+    last_write_checksum: sha1:17794304257dcedda4bbff44ed635b0537cfb70e
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1900,7 +1902,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:417f8b7e9894afb68324cb3a380b31d32d9967ca
+    last_write_checksum: sha1:41b6a99323bd819b6bbdae584c3a637c57e0e8c7
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2209,7 +2211,7 @@ trackedFiles:
     last_write_checksum: sha1:984fe80d9be6dc99ae420ce5d2d3d0f13709d98b
     pristine_git_object: d1c8cfa0335d49d507da3c1b229a42e0012091c0
   src/models/components/gethookssummaryresult.ts:
-    last_write_checksum: sha1:027448576cb22aefd0711c64b1528911141f6be3
+    last_write_checksum: sha1:1c07957cd0f40f63ee5c03f703baa9ca28e6b6de
   src/models/components/getinstanceresult.ts:
     id: 1d161207cec2
     last_write_checksum: sha1:79261e8e88a9dd0f49e915c808b6c17ebd3e9c1d
@@ -2254,13 +2256,15 @@ trackedFiles:
     last_write_checksum: sha1:53db3d8c6f6f23596dd8c8bf47b345bde94af207
   src/models/components/hooksserversummary.ts:
     last_write_checksum: sha1:654233f904a052364881cbe25a2092a9fe85eb4c
+  src/models/components/hooksusersummary.ts:
+    last_write_checksum: sha1:3eeb9121e84176a2d5134fbf9b129ab0c6096933
   src/models/components/httptooldefinition.ts:
     id: 4530c9b75199
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:87802c9fc042eacee3f7563c48fbbf6d47b8afb2
+    last_write_checksum: sha1:1b2dba050aa1d5a1cf2097d4851f7a839b3c8c90
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -5398,7 +5402,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"servers": [], "total_events": 748850, "total_sessions": 583521}
+          application/json: {"servers": [], "total_events": 748850, "total_sessions": 583521, "users": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

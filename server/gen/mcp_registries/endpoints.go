@@ -74,7 +74,7 @@ func NewClearCacheEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -133,7 +133,7 @@ func NewListRegistriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -192,7 +192,7 @@ func NewListCatalogEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -251,7 +251,7 @@ func NewGetServerDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

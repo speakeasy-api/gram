@@ -3161,3 +3161,19 @@ func unmarshalHooksServerSummaryResponseBodyToTelemetryHooksServerSummary(v *Hoo
 
 	return res
 }
+
+// unmarshalHooksUserSummaryResponseBodyToTelemetryHooksUserSummary builds a
+// value of type *telemetry.HooksUserSummary from a value of type
+// *HooksUserSummaryResponseBody.
+func unmarshalHooksUserSummaryResponseBodyToTelemetryHooksUserSummary(v *HooksUserSummaryResponseBody) *telemetry.HooksUserSummary {
+	res := &telemetry.HooksUserSummary{
+		UserEmail:    *v.UserEmail,
+		EventCount:   *v.EventCount,
+		UniqueTools:  *v.UniqueTools,
+		SuccessCount: *v.SuccessCount,
+		FailureCount: *v.FailureCount,
+		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}

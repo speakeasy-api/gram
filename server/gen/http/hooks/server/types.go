@@ -779,9 +779,9 @@ func NewLogsGatewayErrorResponseBody(res *goa.ServiceError) *LogsGatewayErrorRes
 	return body
 }
 
-// NewClaudePayload builds a hooks service claude endpoint payload.
-func NewClaudePayload(body *ClaudeRequestBody) *hooks.ClaudePayload {
-	v := &hooks.ClaudePayload{
+// NewClaudeHookPayload builds a hooks service claude endpoint payload.
+func NewClaudeHookPayload(body *ClaudeRequestBody) *hooks.ClaudeHookPayload {
+	v := &hooks.ClaudeHookPayload{
 		HookEventName: *body.HookEventName,
 		ToolName:      body.ToolName,
 		ToolUseID:     body.ToolUseID,

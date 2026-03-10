@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -49,16 +50,17 @@ var unsafeSessionData = []byte(`
 }
 `)
 
-func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string, billingRepo billing.Repository) (*Manager, error) {
-	logger = logger.With(attr.SlogComponent("sessions"))
+// LoadLocalEnvFile loads the local environment file from the given path
+func LoadLocalEnvFile(ctx context.Context, logger *slog.Logger, localEnvPath string, db *pgxpool.Pool) (LocalEnvFile, error) {
+	pr := projectsRepo.New(db)
 
 	raw := unsafeSessionData
 	if localEnvPath != "" {
 		file, err := os.Open(filepath.Clean(localEnvPath))
 		if err != nil {
-			logger.WarnContext(context.Background(), "failed to open local env file, defaulting to inlined data (localdev.go)", attr.SlogError(err))
+			logger.WarnContext(ctx, "failed to open local env file, defaulting to inlined data", attr.SlogError(err))
 		} else if file != nil {
-			defer o11y.LogDefer(context.Background(), logger, func() error {
+			defer o11y.LogDefer(ctx, logger, func() error {
 				return file.Close()
 			})
 
@@ -69,9 +71,34 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		}
 	}
 
-	var data localEnvFile
+	var data LocalEnvFile
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal local env file: %w", err)
+	}
+
+	for _, user := range data {
+		for i, org := range user.Organizations {
+			project, err := pr.GetProjectBySlug(ctx, projectsRepo.GetProjectBySlugParams{
+				OrganizationID: org.OrganizationID,
+				Slug:           "default",
+			})
+			if err != nil {
+				continue
+			}
+			org.DefaultProjectID = project.ID.String()
+			user.Organizations[i] = org
+		}
+	}
+
+	return data, nil
+}
+
+func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string, billingRepo billing.Repository) (*Manager, error) {
+	logger = logger.With(attr.SlogComponent("sessions"))
+
+	data, err := LoadLocalEnvFile(context.Background(), logger, localEnvPath, db)
+	if err != nil {
+		return nil, err
 	}
 
 	fakePylon, err := pylon.NewPylon(logger, "")

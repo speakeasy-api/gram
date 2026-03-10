@@ -5,6 +5,7 @@ import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/ui/search-bar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -17,10 +18,11 @@ import {
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import type {
-  LogFilter,
   GetHooksSummaryResult,
   HooksServerSummary,
+  LogFilter,
   TelemetryLogRecord,
+  ToolCallSummary,
 } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -30,6 +32,7 @@ import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "../logs/LogDetailSheet";
+import { TraceLogsList } from "../logs/TraceLogsList";
 import { HooksEmptyState } from "./HooksEmptyState";
 import { HookSourceIcon } from "./HookSourceIcon";
 
@@ -48,6 +51,11 @@ const validPresets: DateRangePreset[] = [
 
 function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
+}
+
+interface HookTrace extends ToolCallSummary {
+  userEmail?: string;
+  hookSource?: string;
 }
 
 function safeBase64Encode(str: string): string {
@@ -71,7 +79,7 @@ function safeBase64Decode(str: string): string | null {
   }
 }
 
-const perPage = 25;
+const perPage = 100;
 
 export default function HooksPage() {
   return <HooksContent />;
@@ -89,6 +97,7 @@ function HooksContent() {
   const initialQuery = searchParams.get("q");
   const initialServer = searchParams.get("server");
   const initialUserEmail = searchParams.get("user");
+  const initialHideLocal = searchParams.get("hideLocal") !== "false"; // default to true
   const [searchQuery, setSearchQuery] = useState<string | null>(
     initialQuery || null,
   );
@@ -100,6 +109,12 @@ function HooksContent() {
     initialUserEmail || null,
   );
   const [userEmailInput, setUserEmailInput] = useState(initialUserEmail || "");
+  const [hideLocalToolCalls, setHideLocalToolCalls] =
+    useState(initialHideLocal);
+  const [summaryView, setSummaryView] = useState<"servers" | "users">(
+    "servers",
+  );
+  const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
   );
@@ -235,8 +250,17 @@ function HooksContent() {
       });
     }
 
+    // Hide local tool calls (filter out empty gram.tool_call.source)
+    if (hideLocalToolCalls) {
+      filters.push({
+        path: "gram.tool_call.source",
+        operator: "not_eq",
+        values: [""],
+      });
+    }
+
     return filters.length > 0 ? filters : undefined;
-  }, [selectedServer, searchQuery, userEmailFilter]);
+  }, [selectedServer, searchQuery, userEmailFilter, hideLocalToolCalls]);
 
   // Fetch hooks logs with infinite scroll
   const {
@@ -255,6 +279,7 @@ function HooksContent() {
         searchQuery,
         selectedServer,
         userEmailFilter,
+        hideLocalToolCalls,
         from.toISOString(),
         to.toISOString(),
       ],
@@ -279,6 +304,76 @@ function HooksContent() {
   );
 
   const logs = logsData?.pages.flatMap((page) => page.logs) ?? [];
+
+  // Group logs by trace ID to create ToolCallSummary objects with extra metadata
+  const groupedTraces = useMemo(() => {
+    const traceMap = new Map<string, HookTrace>();
+
+    for (const log of logs) {
+      const traceId = log.traceId;
+      if (!traceId) continue;
+
+      const existing = traceMap.get(traceId);
+      if (existing) {
+        // Update existing trace
+        existing.logCount++;
+
+        // Update status based on hook event
+        const hookEvent = log.attributes?.gram?.hook?.event as
+          | string
+          | undefined;
+        if (hookEvent === "PostToolUseFailure") {
+          existing.httpStatusCode = 500; // Mark as failure
+        } else if (hookEvent === "PostToolUse" && !existing.httpStatusCode) {
+          existing.httpStatusCode = 200; // Mark as success
+        }
+
+        // Track earliest timestamp
+        if (BigInt(log.timeUnixNano) < BigInt(existing.startTimeUnixNano)) {
+          existing.startTimeUnixNano = log.timeUnixNano;
+        }
+      } else {
+        // Create new trace summary
+        const hookEvent = log.attributes?.gram?.hook?.event as
+          | string
+          | undefined;
+        const toolName = log.attributes?.gram?.tool?.name as string | undefined;
+        const serverName = log.attributes?.gram?.tool_call?.source as
+          | string
+          | undefined;
+        const userEmail = log.attributes?.user?.email as string | undefined;
+        const hookSource = log.attributes?.gram?.hook?.source as
+          | string
+          | undefined;
+
+        // Determine initial status
+        let httpStatusCode: number | undefined;
+        if (hookEvent === "PostToolUseFailure") {
+          httpStatusCode = 500;
+        } else if (hookEvent === "PostToolUse") {
+          httpStatusCode = 200;
+        }
+
+        traceMap.set(traceId, {
+          traceId,
+          gramUrn: toolName || "",
+          toolName: toolName,
+          toolSource: serverName,
+          logCount: 1,
+          startTimeUnixNano: log.timeUnixNano,
+          httpStatusCode,
+          eventSource: "hook",
+          userEmail,
+          hookSource,
+        });
+      }
+    }
+
+    // Sort by timestamp descending
+    return Array.from(traceMap.values()).sort((a, b) =>
+      a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
+    );
+  }, [logsData]);
 
   const handleServerChange = useCallback(
     (serverName: string | null) => {
@@ -359,13 +454,36 @@ function HooksContent() {
     setSelectedLog(log);
   };
 
+  const toggleExpand = (traceId: string) => {
+    setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
+  };
+
+  const handleHideLocalToggle = useCallback(
+    (value: boolean) => {
+      setHideLocalToolCalls(value);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.delete("hideLocal"); // default is true, so remove param
+          } else {
+            next.set("hideLocal", "false");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const refetch = useCallback(() => {
     refetchSummary();
     refetchLogs();
   }, [refetchSummary, refetchLogs]);
 
   const isLogsDisabled = isSummaryLogsDisabled || isLogsLogsDisabled;
-  const isLoading = isFetching && logs.length === 0;
+  const isLoading = isFetching && groupedTraces.length === 0;
 
   return (
     <InsightsSidebar
@@ -390,7 +508,9 @@ function HooksContent() {
                 isFetching={isFetching}
                 error={error}
                 summaryData={summaryData}
-                logs={logs}
+                summaryView={summaryView}
+                onSummaryViewChange={setSummaryView}
+                groupedTraces={groupedTraces}
                 searchQuery={searchQuery}
                 searchInput={searchInput}
                 setSearchInput={setSearchInput}
@@ -399,6 +519,10 @@ function HooksContent() {
                 userEmailFilter={userEmailFilter}
                 selectedServer={selectedServer}
                 onServerChange={handleServerChange}
+                hideLocalToolCalls={hideLocalToolCalls}
+                onHideLocalToggle={handleHideLocalToggle}
+                expandedTraceId={expandedTraceId}
+                toggleExpand={toggleExpand}
                 selectedLog={selectedLog}
                 handleLogClick={handleLogClick}
                 setSelectedLog={setSelectedLog}
@@ -429,7 +553,9 @@ function HooksInnerContent({
   isFetching,
   error,
   summaryData,
-  logs,
+  summaryView,
+  onSummaryViewChange,
+  groupedTraces,
   searchQuery,
   searchInput,
   setSearchInput,
@@ -438,6 +564,10 @@ function HooksInnerContent({
   userEmailFilter,
   selectedServer,
   onServerChange,
+  hideLocalToolCalls,
+  onHideLocalToggle,
+  expandedTraceId,
+  toggleExpand,
   selectedLog,
   handleLogClick,
   setSelectedLog,
@@ -459,7 +589,9 @@ function HooksInnerContent({
   isFetching: boolean;
   error: Error | null;
   summaryData?: GetHooksSummaryResult;
-  logs: TelemetryLogRecord[];
+  summaryView: "servers" | "users";
+  onSummaryViewChange: (view: "servers" | "users") => void;
+  groupedTraces: HookTrace[];
   searchQuery: string | null;
   searchInput: string;
   setSearchInput: (value: string) => void;
@@ -468,6 +600,10 @@ function HooksInnerContent({
   userEmailFilter: string | null;
   selectedServer: string | null;
   onServerChange: (serverName: string | null) => void;
+  hideLocalToolCalls: boolean;
+  onHideLocalToggle: (value: boolean) => void;
+  expandedTraceId: string | null;
+  toggleExpand: (traceId: string) => void;
   selectedLog: TelemetryLogRecord | null;
   handleLogClick: (log: TelemetryLogRecord) => void;
   setSelectedLog: (log: TelemetryLogRecord | null) => void;
@@ -526,19 +662,49 @@ function HooksInnerContent({
             </Button>
           </div>
 
-          {/* Server Cards */}
-          {summaryData && summaryData.servers.length > 0 && (
-            <div className="mb-4">
-              <HooksServerCards
-                servers={summaryData.servers}
-                selectedServer={selectedServer}
-                onServerChange={onServerChange}
-              />
-            </div>
-          )}
+          {/* Summary Cards with Tabs */}
+          {summaryData &&
+            (summaryData.servers.length > 0 ||
+              (summaryData.users && summaryData.users.length > 0)) && (
+              <div className="mb-4">
+                <Tabs
+                  value={summaryView}
+                  onValueChange={(v) =>
+                    onSummaryViewChange(v as "servers" | "users")
+                  }
+                  className="w-full"
+                >
+                  <TabsList className="mb-3">
+                    <TabsTrigger value="servers">Servers</TabsTrigger>
+                    <TabsTrigger value="users">Users</TabsTrigger>
+                  </TabsList>
+                  <div className="max-h-[600px] overflow-y-auto">
+                    {summaryView === "servers" &&
+                      summaryData.servers.length > 0 && (
+                        <HooksServerCards
+                          servers={summaryData.servers}
+                          selectedServer={selectedServer}
+                          onServerChange={onServerChange}
+                        />
+                      )}
+                    {summaryView === "users" &&
+                      summaryData.users &&
+                      summaryData.users.length > 0 && (
+                        <HooksUserCards
+                          users={summaryData.users}
+                          selectedUser={userEmailFilter}
+                          onUserChange={(email) =>
+                            setUserEmailInput(email || "")
+                          }
+                        />
+                      )}
+                  </div>
+                </Tabs>
+              </div>
+            )}
 
           {/* Filter and Search Row */}
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <SearchBar
               value={searchInput}
               onChange={setSearchInput}
@@ -551,6 +717,21 @@ function HooksInnerContent({
               placeholder="Filter by user email"
               className="flex-1 min-w-[200px]"
             />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onHideLocalToggle(!hideLocalToolCalls)}
+              className={cn(
+                "shrink-0 h-[42px]",
+                hideLocalToolCalls ? "bg-primary/5" : "",
+              )}
+            >
+              <Icon
+                name={hideLocalToolCalls ? "eye-off" : "eye"}
+                className="size-4"
+              />
+              {hideLocalToolCalls ? "Hiding local" : "Showing local"}
+            </Button>
             <div className="ml-auto">
               <TimeRangePicker
                 preset={customRange ? null : dateRange}
@@ -568,7 +749,7 @@ function HooksInnerContent({
         {/* Content section */}
         <div className="flex-1 overflow-hidden min-h-0 border-t">
           <div className="h-full flex flex-col bg-background">
-            {isFetching && logs.length > 0 && (
+            {isFetching && groupedTraces.length > 0 && (
               <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
                 <div className="h-full bg-primary animate-pulse" />
               </div>
@@ -577,35 +758,39 @@ function HooksInnerContent({
             {/* Header */}
             <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
               <div className="shrink-0 w-[150px]">Timestamp</div>
+              <div className="shrink-0 w-5" />
               <div className="flex-1 min-w-0">Server / Tool</div>
-              <div className="shrink-0 w-[250px]">User</div>
-              <div className="shrink-0 w-[150px]">Source</div>
-              <div className="shrink-0 w-20 text-right">Event</div>
+              <div className="shrink-0 w-[260px]">User</div>
+              <div className="shrink-0 w-[120px]">Source</div>
+              <div className="shrink-0 w-20 text-right">Status</div>
             </div>
 
-            {/* Scrollable logs list */}
+            {/* Scrollable trace list */}
             <div
               ref={containerRef}
               className="overflow-y-auto flex-1"
               onScroll={handleScroll}
             >
-              <HooksLogsContent
+              <HooksTraceContent
                 error={error}
                 isLoading={isLoading}
-                logs={logs}
+                groupedTraces={groupedTraces}
                 searchQuery={searchQuery}
                 selectedServer={selectedServer}
                 userEmailFilter={userEmailFilter}
+                expandedTraceId={expandedTraceId}
                 isFetchingNextPage={isFetchingNextPage}
+                onToggleExpand={toggleExpand}
                 onLogClick={handleLogClick}
               />
             </div>
 
             {/* Footer */}
-            {logs.length > 0 && (
+            {groupedTraces.length > 0 && (
               <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
                 <span>
-                  {logs.length} {logs.length === 1 ? "event" : "events"}
+                  {groupedTraces.length}{" "}
+                  {groupedTraces.length === 1 ? "trace" : "traces"}
                   {hasNextPage && " • Scroll to load more"}
                 </span>
               </div>
@@ -632,9 +817,28 @@ function HooksServerCards({
   selectedServer: string | null;
   onServerChange: (serverName: string | null) => void;
 }) {
+  // Sort servers: non-empty server names first (alphabetically), then local (empty serverName) last
+  const sortedServers = useMemo(() => {
+    return [...servers].sort((a, b) => {
+      // If both are local or both are not local, maintain original order
+      const aIsLocal = !a.serverName;
+      const bIsLocal = !b.serverName;
+
+      if (aIsLocal && !bIsLocal) return 1; // a (local) goes after b
+      if (!aIsLocal && bIsLocal) return -1; // a goes before b (local)
+
+      // Both are non-local, sort alphabetically
+      if (!aIsLocal && !bIsLocal) {
+        return a.serverName.localeCompare(b.serverName);
+      }
+
+      return 0; // Both are local, maintain order
+    });
+  }, [servers]);
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      {servers.map((server) => (
+      {sortedServers.map((server) => (
         <button
           key={server.serverName}
           onClick={() =>
@@ -677,23 +881,95 @@ function HooksServerCards({
   );
 }
 
-function HooksLogsContent({
+function HooksUserCards({
+  users,
+  selectedUser,
+  onUserChange,
+}: {
+  users: Array<{
+    userEmail: string;
+    eventCount: number;
+    uniqueTools: number;
+    successCount: number;
+    failureCount: number;
+    failureRate: number;
+  }>;
+  selectedUser: string | null;
+  onUserChange: (userEmail: string | null) => void;
+}) {
+  // Sort users by event count descending
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => b.eventCount - a.eventCount);
+  }, [users]);
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {sortedUsers.map((user) => (
+        <button
+          key={user.userEmail}
+          onClick={() =>
+            onUserChange(
+              selectedUser === user.userEmail ? null : user.userEmail,
+            )
+          }
+          className={cn(
+            "p-4 rounded-lg border transition-all text-left",
+            selectedUser === user.userEmail
+              ? "border-primary bg-primary/5"
+              : "border-border hover:border-primary/50 hover:bg-muted/50",
+          )}
+        >
+          <div className="flex items-start justify-between mb-2">
+            <div className="font-medium text-sm truncate max-w-[200px]">
+              {user.userEmail === "Unknown" || user.userEmail === ""
+                ? "Unknown user"
+                : user.userEmail}
+            </div>
+            <Icon
+              name={user.failureRate > 0.1 ? "circle-alert" : "circle-check"}
+              className={cn(
+                "size-4 shrink-0",
+                user.failureRate > 0.1
+                  ? "text-destructive"
+                  : "text-emerald-500",
+              )}
+            />
+          </div>
+          <div className="space-y-1">
+            <div className="text-2xl font-semibold">{user.eventCount}</div>
+            <div className="text-xs text-muted-foreground">
+              {user.uniqueTools} {user.uniqueTools === 1 ? "tool" : "tools"}
+              {" • "}
+              {Math.round((1 - user.failureRate) * 100)}% success
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function HooksTraceContent({
   error,
   isLoading,
-  logs,
+  groupedTraces,
   searchQuery,
   selectedServer,
   userEmailFilter,
+  expandedTraceId,
   isFetchingNextPage,
+  onToggleExpand,
   onLogClick,
 }: {
   error: Error | null;
   isLoading: boolean;
-  logs: TelemetryLogRecord[];
+  groupedTraces: HookTrace[];
   searchQuery: string | null;
   selectedServer: string | null;
   userEmailFilter: string | null;
+  expandedTraceId: string | null;
   isFetchingNextPage: boolean;
+  onToggleExpand: (traceId: string) => void;
   onLogClick: (log: TelemetryLogRecord) => void;
 }) {
   if (error) {
@@ -721,7 +997,7 @@ function HooksLogsContent({
     );
   }
 
-  if (logs.length === 0) {
+  if (groupedTraces.length === 0) {
     // Show the full empty state if no filters are applied
     const hasFilters = searchQuery || selectedServer || userEmailFilter;
 
@@ -749,8 +1025,14 @@ function HooksLogsContent({
 
   return (
     <>
-      {logs.map((log) => (
-        <HookLogRow key={log.id} log={log} onClick={() => onLogClick(log)} />
+      {groupedTraces.map((trace) => (
+        <HookTraceRow
+          key={trace.traceId}
+          trace={trace}
+          isExpanded={expandedTraceId === trace.traceId}
+          onToggle={() => onToggleExpand(trace.traceId)}
+          onLogClick={onLogClick}
+        />
       ))}
 
       {isFetchingNextPage && (
@@ -763,22 +1045,20 @@ function HooksLogsContent({
   );
 }
 
-function HookLogRow({
-  log,
-  onClick,
+function HookTraceRow({
+  trace,
+  isExpanded,
+  onToggle,
+  onLogClick,
 }: {
-  log: TelemetryLogRecord;
-  onClick: () => void;
+  trace: HookTrace;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onLogClick: (log: TelemetryLogRecord) => void;
 }) {
-  const hookEventName = log.attributes?.gram?.hook?.event as string | undefined;
-  const toolName = log.attributes?.gram?.tool?.name as string | undefined;
-  const serverName = log.attributes?.gram?.tool_call?.source as
-    | string
-    | undefined;
-  const hookSource = log.attributes?.gram?.hook?.source as string | undefined;
-  const userEmail = log.attributes?.user?.email as string | undefined;
-
-  const timestamp = new Date(Number(log.timeUnixNano) / 1000000);
+  const timestamp = new Date(
+    Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
+  );
   const timeAgo = useMemo(() => {
     const now = new Date();
     const diff = now.getTime() - timestamp.getTime();
@@ -793,12 +1073,17 @@ function HookLogRow({
     return `${seconds}s ago`;
   }, [timestamp]);
 
+  const serverName = trace.toolSource;
+  const toolName = trace.toolName;
+  const userEmail = trace.userEmail;
+  const hookSource = trace.hookSource;
+
   const serverNameBadge = useMemo(() => {
     const isLocal = !serverName;
     return (
       <span
         className={cn(
-          "text-xs font-mono truncate px-2 py-1 rounded-md",
+          "text-xs font-mono truncate px-2 py-1 rounded-md shrink-0",
           isLocal
             ? "bg-muted/50 text-muted-foreground"
             : "bg-primary/10 text-primary border border-primary/20 font-medium",
@@ -809,91 +1094,102 @@ function HookLogRow({
     );
   }, [serverName]);
 
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center gap-3 px-5 py-3 border-b hover:bg-muted/30 transition-colors text-left"
-    >
-      <div className="shrink-0 w-[150px] text-sm text-muted-foreground">
-        {timeAgo}
-      </div>
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        {serverNameBadge}
-        <span className="text-sm font-mono truncate">
-          {toolName || "unknown"}
-        </span>
-      </div>
-      <div className="shrink-0 w-[250px] text-sm text-muted-foreground truncate">
-        {userEmail || "—"}
-      </div>
-      <div className="shrink-0 w-[150px] flex items-center gap-2">
-        <HookSourceIcon source={hookSource} className="size-4 shrink-0" />
-        {hookSource && (
-          <span className="text-xs text-foreground font-medium truncate">
-            {hookSource}
-          </span>
-        )}
-      </div>
-      <div className="shrink-0 w-20 flex justify-end">
-        <HookEventBadge eventName={hookEventName} />
-      </div>
-    </button>
-  );
-}
-
-function HookEventBadge({ eventName }: { eventName?: string }) {
-  const config = useMemo(() => {
-    switch (eventName) {
-      case "SessionStart":
-        return {
-          color: "text-blue-500",
-          bgColor: "bg-blue-500/10",
-          label: "Session Start",
-        };
-      case "PreToolUse":
-        return {
-          color: "text-yellow-500",
-          bgColor: "bg-yellow-500/10",
-          label: "Pre Tool",
-        };
-      case "PostToolUse":
-        return {
-          color: "text-emerald-500",
-          bgColor: "bg-emerald-500/10",
-          label: "Success",
-        };
-      case "PostToolUseFailure":
-        return {
-          color: "text-destructive",
-          bgColor: "bg-destructive/10",
-          label: "Failure",
-        };
-      default:
-        return {
-          color: "text-muted-foreground",
-          bgColor: "bg-muted",
-          label: "Unknown",
-        };
+  const statusConfig = useMemo(() => {
+    if (trace.httpStatusCode === 500) {
+      return {
+        color: "text-destructive",
+        bgColor: "bg-destructive/10",
+        label: "Failure",
+      };
+    } else if (trace.httpStatusCode === 200) {
+      return {
+        color: "text-emerald-500",
+        bgColor: "bg-emerald-500/10",
+        label: "Success",
+      };
     }
-  }, [eventName]);
+    return {
+      color: "text-muted-foreground",
+      bgColor: "bg-muted",
+      label: "Pending",
+    };
+  }, [trace.httpStatusCode]);
 
   return (
-    <div
-      className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium",
-        config.bgColor,
-        config.color,
+    <div className="border-b border-border/50 last:border-b-0">
+      {/* Parent trace row */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-muted/50 transition-colors text-left"
+      >
+        {/* Timestamp */}
+        <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono">
+          {timeAgo}
+        </div>
+
+        {/* Expand/collapse indicator */}
+        <div className="shrink-0 w-5 flex items-center justify-center">
+          <Icon
+            name={isExpanded ? "chevron-down" : "chevron-right"}
+            className="size-4 text-muted-foreground"
+          />
+        </div>
+
+        {/* Server badge + Tool name */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {serverNameBadge}
+          <span className="text-sm font-mono truncate">
+            {toolName || "unknown"}
+          </span>
+        </div>
+
+        {/* User email */}
+        <div className="shrink-0 w-[260px] text-sm text-muted-foreground truncate">
+          {userEmail || "—"}
+        </div>
+
+        {/* Hook source */}
+        <div className="shrink-0 w-[120px] flex items-center gap-2">
+          <HookSourceIcon source={hookSource} className="size-4 shrink-0" />
+          {hookSource && (
+            <span className="text-xs text-foreground font-medium truncate">
+              {hookSource}
+            </span>
+          )}
+        </div>
+
+        {/* Status badge */}
+        <div className="shrink-0 w-20 flex justify-end">
+          <div
+            className={cn(
+              "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium",
+              statusConfig.bgColor,
+              statusConfig.color,
+            )}
+          >
+            <div
+              className={cn(
+                "size-1.5 rounded-full",
+                statusConfig.color === "text-muted-foreground"
+                  ? "bg-muted-foreground"
+                  : "bg-current",
+              )}
+            />
+            {statusConfig.label}
+          </div>
+        </div>
+      </button>
+
+      {/* Expanded child logs */}
+      {isExpanded && (
+        <TraceLogsList
+          traceId={trace.traceId}
+          toolName={toolName || "unknown"}
+          isExpanded={isExpanded}
+          onLogClick={onLogClick}
+          parentTimestamp={trace.startTimeUnixNano}
+        />
       )}
-    >
-      <div
-        className={cn(
-          "size-1.5 rounded-full",
-          config.color === "text-muted-foreground"
-            ? "bg-muted-foreground"
-            : "bg-current",
-        )}
-      />
-      {config.label}
     </div>
   );
 }

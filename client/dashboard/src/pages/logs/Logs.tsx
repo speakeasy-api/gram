@@ -1,10 +1,30 @@
-import { InsightsSidebar } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
-import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { McpIcon } from "@/components/ui/mcp-icon";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useSlugs } from "@/contexts/Sdk";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
+import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import {
+  getPresetRange,
+  TimeRangePicker,
+  type DateRangePreset,
+} from "@gram-ai/elements";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
 import {
   TelemetryLogRecord,
@@ -16,35 +36,15 @@ import {
   useListToolsets,
 } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import {
-  TimeRangePicker,
-  type DateRangePreset,
-  getPresetRange,
-} from "@gram-ai/elements";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Settings, XIcon } from "lucide-react";
-import { McpIcon } from "@/components/ui/mcp-icon";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { Button } from "@/components/ui/button";
 import type { ActiveLogFilter } from "./log-filter-types";
 import { parseFilters, serializeFilters } from "./log-filter-url";
-import { LogFilterBar } from "./LogFilterBar";
 import { LogDetailSheet } from "./LogDetailSheet";
+import { LogFilterBar } from "./LogFilterBar";
 import { TraceRow } from "./TraceRow";
 import { useAttributeLogsQuery } from "./use-attribute-logs-query";
 
@@ -91,7 +91,7 @@ function safeBase64Decode(str: string): string | null {
   }
 }
 
-const perPage = 25;
+const perPage = 100;
 
 /**
  * MCP Server filter dropdown
