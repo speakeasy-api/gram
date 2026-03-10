@@ -253,6 +253,8 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		Meta:              nil, // Not available from details endpoint
 		Tools:             details.Tools,
 		Remotes:           details.Remotes,
+		IsSelfHosted:      nil, // Not available from details endpoint
+		RequiresAuth:      nil, // Not available from details endpoint
 	}, nil
 }
 
