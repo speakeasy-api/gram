@@ -66,7 +66,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			s.logger.ErrorContext(ctx, "error getting conversation replies", attr.SlogError(err))
 		} else {
 			for _, reply := range replies.Messages {
-				previousConversationContext.WriteString(fmt.Sprintf("%s: %s\n\n", reply.User, reply.Text))
+				fmt.Fprintf(&previousConversationContext, "%s: %s\n\n", reply.User, reply.Text)
 			}
 		}
 	}
