@@ -3,7 +3,7 @@
 // mcpMetadata HTTP server
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design -o .
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 

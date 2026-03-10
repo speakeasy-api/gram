@@ -3,7 +3,7 @@
 // hooks HTTP server encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design -o .
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 

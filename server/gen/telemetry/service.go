@@ -3,7 +3,7 @@
 // telemetry service
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design -o .
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package telemetry
 
