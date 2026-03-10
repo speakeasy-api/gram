@@ -10,6 +10,7 @@ export const BOT_SCOPES = [
   "users:read",
   "channels:history",
   "channels:read",
+  "reactions:write",
 ];
 
 export const BOT_EVENTS = ["app_mention", "message.im"];
