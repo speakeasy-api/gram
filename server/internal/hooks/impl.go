@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -46,6 +47,7 @@ type Service struct {
 	cache            cache.Cache
 	nameMapper       NameMapper
 	localEnvData     sessions.LocalEnvFile
+	temporalEnv      *tenv.Environment
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -77,6 +79,7 @@ func NewService(
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	localEnvPath string,
+	temporalEnv *tenv.Environment,
 ) *Service {
 	nameMapper := NewNameMapper(cacheAdapter, completionsClient, logger)
 
@@ -99,6 +102,7 @@ func NewService(
 		cache:            cacheAdapter,
 		nameMapper:       nameMapper,
 		localEnvData:     localEnvData,
+		temporalEnv:      temporalEnv,
 	}
 }
 

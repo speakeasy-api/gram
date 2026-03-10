@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 	"time"
@@ -226,4 +227,37 @@ func getStringPtr(attrs map[attr.Key]any, key attribute.Key) *string {
 		return nil
 	}
 	return &s
+}
+
+// UpdateToolSourceBulk updates the tool_call.source attribute in ClickHouse for all logs
+// matching the given project and old source name. This is used to backfill historical
+// records when a name mapping is discovered.
+//
+// Note: This uses ALTER TABLE...UPDATE which is an async mutation in ClickHouse.
+// Materialized columns (tool_source) derive from the attributes JSON and will reflect
+// changes on next read, but the mutation itself may take time to complete.
+func (s *Service) UpdateToolSourceBulk(ctx context.Context, projectID, oldSource, newSource string) error {
+	if oldSource == "" || newSource == "" {
+		return fmt.Errorf("oldSource and newSource cannot be empty")
+	}
+
+	query := `
+		ALTER TABLE telemetry_logs
+		UPDATE attributes = JSONSet(attributes, 'gram.tool_call.source', ?)
+		WHERE project_id = ?
+		  AND toString(attributes.gram.tool_call.source) = ?
+	`
+
+	err := s.chConn.Exec(ctx, query, newSource, projectID, oldSource)
+	if err != nil {
+		return fmt.Errorf("execute ClickHouse mutation: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "initiated ClickHouse tool source update mutation",
+		attr.SlogProjectID(projectID),
+		slog.String("old_source", oldSource),
+		slog.String("new_source", newSource),
+	)
+
+	return nil
 }

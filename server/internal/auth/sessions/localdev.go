@@ -83,7 +83,7 @@ func LoadLocalEnvFile(ctx context.Context, logger *slog.Logger, localEnvPath str
 				Slug:           "default",
 			})
 			if err != nil {
-				return nil, fmt.Errorf("failed to get project by slug: %w", err)
+				continue
 			}
 			org.DefaultProjectID = project.ID.String()
 			user.Organizations[i] = org
