@@ -136,7 +136,10 @@ export function useAttributeLogsQuery({
             from,
             to,
             filters: toSdkFilters(logFilters),
-            ...(gramUrn ? { filter: { gramUrn } } : {}),
+            filter: {
+              eventSource: "tool_call",
+              ...(gramUrn ? { gramUrn } : {}),
+            },
             cursor: pageParam,
             limit: PER_PAGE,
             sort: "desc",
