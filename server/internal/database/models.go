@@ -684,22 +684,20 @@ type SlackApp struct {
 	Deleted            bool
 }
 
-type SlackAppConnection struct {
-	SlackTeamID        string
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	AccessToken        string
-	SlackTeamName      string
-	DefaultToolsetSlug pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-}
-
 type SlackAppToolset struct {
 	ID         uuid.UUID
 	SlackAppID uuid.UUID
 	ToolsetID  uuid.UUID
 	CreatedAt  pgtype.Timestamptz
+}
+
+type SlackRegistration struct {
+	ID             uuid.UUID
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+	UserID         uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type SourceEnvironment struct {
