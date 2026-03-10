@@ -8,16 +8,9 @@ You are performing a daily log investigation for the Gram production service.
 
 **Before starting**: activate the `datadog` skill — it defines the Gram service names, available MCP tools, and query guidelines you must follow throughout this task.
 
-## Step 1: Query Datadog logs
+## Step 1: Investigate the last 24 hours
 
-Following the datadog skill guidelines, run these searches across `gram-server` and `gram-worker` for the **last 24 hours** (`env:prod`):
-
-1. **Error patterns**: `analyze_datadog_logs` — count errors grouped by pattern to identify the top offenders by volume
-2. **Warnings**: `search_datadog_logs` with `status:warn` using `use_log_patterns: true` to surface repeating warning clusters
-3. **Timeouts / context cancellations**: search for `timeout OR "deadline exceeded" OR "context canceled"` patterns
-4. **Active incidents**: check `search_datadog_incidents` for any open incidents before diving into logs
-
-Aim for representative samples and frequencies — not raw log dumps.
+Using the datadog skill, investigate `env:prod` for the **last 24 hours**. The goal is to surface the top problems affecting Gram in production — errors, warnings, timeouts, and any open incidents.
 
 ## Step 2: Analyze and identify problem areas
 
