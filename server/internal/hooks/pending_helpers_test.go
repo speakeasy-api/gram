@@ -58,7 +58,7 @@ func TestBufferHook_MultipleConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Buffer multiple hooks concurrently to test for race conditions
-	for i := 0; i < numHooks; i++ {
+	for i := range numHooks {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -96,12 +96,12 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	// Buffer multiple hooks using the cache directly
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
 	numHooks := 5
-	for i := 0; i < numHooks; i++ {
+	for range numHooks {
 		payload := hooks.ClaudeHookPayload{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
-			ToolName:      stringPtr("test_tool"),
-			ToolUseID:     stringPtr(uuid.NewString()),
+			ToolName:      new("test_tool"),
+			ToolUseID:     new(uuid.NewString()),
 		}
 
 		err := cacheAdapter.ListAppend(ctx, "hook:pending:"+sessionID, payload, 24*time.Hour)
@@ -171,7 +171,7 @@ func TestBufferAndFlush_MultipleSessionsConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Create multiple sessions and buffer hooks concurrently
-	for sessionIdx := 0; sessionIdx < numSessions; sessionIdx++ {
+	for sessionIdx := range numSessions {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -179,7 +179,7 @@ func TestBufferAndFlush_MultipleSessionsConcurrent(t *testing.T) {
 			sessionID := uuid.NewString()
 
 			// Buffer multiple hooks for this session
-			for hookIdx := 0; hookIdx < hooksPerSession; hookIdx++ {
+			for range hooksPerSession {
 				toolName := "test_tool"
 				toolUseID := uuid.NewString()
 				payload := &hooks.ClaudeHookPayload{
@@ -284,14 +284,14 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 		{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
-			ToolName:      stringPtr("tool1"),
-			ToolUseID:     stringPtr("id1"),
+			ToolName:      new("tool1"),
+			ToolUseID:     new("id1"),
 		},
 		{
 			HookEventName: "PostToolUse",
 			SessionID:     &sessionID,
-			ToolName:      stringPtr("tool2"),
-			ToolUseID:     stringPtr("id2"),
+			ToolName:      new("tool2"),
+			ToolUseID:     new("id2"),
 		},
 	}
 
@@ -314,6 +314,7 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 	assert.Equal(t, "tool2", *retrieved[1].ToolName)
 }
 
+//go:fix inline
 func stringPtr(s string) *string {
-	return &s
+	return new(s)
 }
