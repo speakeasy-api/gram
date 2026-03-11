@@ -721,7 +721,7 @@ function HooksInnerContent({
             )}
 
           {/* Filter and Search Row */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap mt-8">
             <SearchBar
               value={serverInput}
               onChange={setServerInput}
