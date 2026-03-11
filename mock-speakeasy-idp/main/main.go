@@ -13,21 +13,23 @@ import (
 
 func main() {
 	port := 35291
-	if v := os.Getenv("PORT"); v != "" {
+	if v := os.Getenv("MOCK_IDP_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid PORT: %s\n", v)
+			fmt.Fprintf(os.Stderr, "invalid MOCK_IDP_PORT: %s\n", v)
 			os.Exit(1)
 		}
 		port = p
 	}
+
+	host := os.Getenv("MOCK_IDP_HOST")
 
 	cfg := mockidp.DefaultConfig()
 	handler := mockidp.Handler(cfg)
 
 	mockidp.LogConfig(cfg, port)
 
-	addr := fmt.Sprintf(":%d", port)
+	addr := fmt.Sprintf("%s:%d", host, port)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)

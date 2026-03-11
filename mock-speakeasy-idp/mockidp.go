@@ -470,7 +470,7 @@ func envBool(key string, fallback bool) bool {
 // LogConfig prints the server configuration to stdout, matching the TypeScript
 // version's startup output.
 func LogConfig(cfg Config, port int) {
-	fmt.Printf("Mock Speakeasy IDP running on http://localhost:%d\n", port)
+	fmt.Printf("Mock Speakeasy IDP running on port %d\n", port)
 	fmt.Printf("User: %s <%s> (admin=%v)\n", cfg.User.DisplayName, cfg.User.Email, cfg.User.Admin)
 	fmt.Printf("Org:  %s (%s)\n", cfg.Organization.Name, cfg.Organization.Slug)
 	fmt.Println("Endpoints:")
