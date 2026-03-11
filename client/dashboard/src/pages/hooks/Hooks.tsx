@@ -28,7 +28,7 @@ import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Settings } from "lucide-react";
+import { Filter, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "../logs/LogDetailSheet";
@@ -94,17 +94,13 @@ function HooksContent() {
       toolName.includes("logs") || toolName.includes("hooks"),
   });
 
-  const initialQuery = searchParams.get("q");
   const initialServer = searchParams.get("server");
   const initialUserEmail = searchParams.get("user");
   const initialHideLocal = searchParams.get("hideLocal") !== "false"; // default to true
-  const [searchQuery, setSearchQuery] = useState<string | null>(
-    initialQuery || null,
-  );
-  const [searchInput, setSearchInput] = useState(initialQuery || "");
-  const [selectedServer, setSelectedServer] = useState<string | null>(
+  const [serverFilter, setServerFilter] = useState<string | null>(
     initialServer || null,
   );
+  const [serverInput, setServerInput] = useState(initialServer || "");
   const [userEmailFilter, setUserEmailFilter] = useState<string | null>(
     initialUserEmail || null,
   );
@@ -219,25 +215,16 @@ function HooksContent() {
     }),
   );
 
-  // Build attribute filters for server, search query, and user email
+  // Build attribute filters for server and user email
   const logFilters = useMemo(() => {
     const filters: LogFilter[] = [];
 
     // Filter by tool source (gram.tool_call.source)
-    if (selectedServer) {
+    if (serverFilter) {
       filters.push({
         path: "gram.tool_call.source",
-        operator: "eq",
-        values: [selectedServer],
-      });
-    }
-
-    // Filter by tool name (search query)
-    if (searchQuery) {
-      filters.push({
-        path: "gram.tool.name",
         operator: "contains",
-        values: [searchQuery],
+        values: [serverFilter],
       });
     }
 
@@ -260,7 +247,7 @@ function HooksContent() {
     }
 
     return filters.length > 0 ? filters : undefined;
-  }, [selectedServer, searchQuery, userEmailFilter, hideLocalToolCalls]);
+  }, [serverFilter, userEmailFilter, hideLocalToolCalls]);
 
   // Fetch hooks logs with infinite scroll
   const {
@@ -276,8 +263,7 @@ function HooksContent() {
     useInfiniteQuery({
       queryKey: [
         "hooks-logs",
-        searchQuery,
-        selectedServer,
+        serverFilter,
         userEmailFilter,
         hideLocalToolCalls,
         from.toISOString(),
@@ -375,15 +361,17 @@ function HooksContent() {
     );
   }, [logsData]);
 
-  const handleServerChange = useCallback(
-    (serverName: string | null) => {
-      if (serverName === "") serverName = null;
-      setSelectedServer(serverName);
+  const updateServerFilter = useCallback((value: string, immediate = false) => {
+    const newServer = value || null;
+    setServerInput(value);
+
+    const applyFilter = () => {
+      setServerFilter(newServer);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (serverName) {
-            next.set("server", serverName);
+          if (newServer) {
+            next.set("server", newServer);
           } else {
             next.delete("server");
           }
@@ -391,21 +379,53 @@ function HooksContent() {
         },
         { replace: true },
       );
-    },
-    [setSearchParams],
-  );
+    };
 
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      const newQuery = searchInput || null;
-      setSearchQuery(newQuery);
+    if (immediate) {
+      applyFilter();
+    } else {
+      // Will be handled by the debounced effect
+    }
+  }, [setSearchParams]);
+
+  const updateUserFilter = useCallback((value: string, immediate = false) => {
+    const newUserEmail = value || null;
+    setUserEmailInput(value);
+
+    const applyFilter = () => {
+      setUserEmailFilter(newUserEmail);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (newQuery) {
-            next.set("q", newQuery);
+          if (newUserEmail) {
+            next.set("user", newUserEmail);
           } else {
-            next.delete("q");
+            next.delete("user");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    };
+
+    if (immediate) {
+      applyFilter();
+    } else {
+      // Will be handled by the debounced effect
+    }
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      const newServer = serverInput || null;
+      setServerFilter(newServer);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (newServer) {
+            next.set("server", newServer);
+          } else {
+            next.delete("server");
           }
           return next;
         },
@@ -413,7 +433,7 @@ function HooksContent() {
       );
     }, 500);
     return () => clearTimeout(timeoutId);
-  }, [searchInput, setSearchParams]);
+  }, [serverInput, setSearchParams]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -511,14 +531,14 @@ function HooksContent() {
                 summaryView={summaryView}
                 onSummaryViewChange={setSummaryView}
                 groupedTraces={groupedTraces}
-                searchQuery={searchQuery}
-                searchInput={searchInput}
-                setSearchInput={setSearchInput}
+                serverInput={serverInput}
+                setServerInput={setServerInput}
+                updateServerFilter={updateServerFilter}
                 userEmailInput={userEmailInput}
                 setUserEmailInput={setUserEmailInput}
+                updateUserFilter={updateUserFilter}
                 userEmailFilter={userEmailFilter}
-                selectedServer={selectedServer}
-                onServerChange={handleServerChange}
+                serverFilter={serverFilter}
                 hideLocalToolCalls={hideLocalToolCalls}
                 onHideLocalToggle={handleHideLocalToggle}
                 expandedTraceId={expandedTraceId}
@@ -556,14 +576,14 @@ function HooksInnerContent({
   summaryView,
   onSummaryViewChange,
   groupedTraces,
-  searchQuery,
-  searchInput,
-  setSearchInput,
+  serverInput,
+  setServerInput,
+  updateServerFilter,
   userEmailInput,
   setUserEmailInput,
+  updateUserFilter,
   userEmailFilter,
-  selectedServer,
-  onServerChange,
+  serverFilter,
   hideLocalToolCalls,
   onHideLocalToggle,
   expandedTraceId,
@@ -592,14 +612,14 @@ function HooksInnerContent({
   summaryView: "servers" | "users";
   onSummaryViewChange: (view: "servers" | "users") => void;
   groupedTraces: HookTrace[];
-  searchQuery: string | null;
-  searchInput: string;
-  setSearchInput: (value: string) => void;
+  serverInput: string;
+  setServerInput: (value: string) => void;
+  updateServerFilter: (value: string, immediate?: boolean) => void;
   userEmailInput: string;
   setUserEmailInput: (value: string) => void;
+  updateUserFilter: (value: string, immediate?: boolean) => void;
   userEmailFilter: string | null;
-  selectedServer: string | null;
-  onServerChange: (serverName: string | null) => void;
+  serverFilter: string | null;
   hideLocalToolCalls: boolean;
   onHideLocalToggle: (value: boolean) => void;
   expandedTraceId: string | null;
@@ -662,53 +682,38 @@ function HooksInnerContent({
             </Button>
           </div>
 
-          {/* Summary Cards with Tabs */}
+          {/* Summary Tables */}
           {summaryData &&
             (summaryData.servers.length > 0 ||
               (summaryData.users && summaryData.users.length > 0)) && (
-              <div className="mb-4">
-                <Tabs
-                  value={summaryView}
-                  onValueChange={(v) =>
-                    onSummaryViewChange(v as "servers" | "users")
-                  }
-                  className="w-full"
-                >
-                  <TabsList className="mb-3">
-                    <TabsTrigger value="servers">Servers</TabsTrigger>
-                    <TabsTrigger value="users">Users</TabsTrigger>
-                  </TabsList>
-                  <div className="max-h-[600px] overflow-y-auto">
-                    {summaryView === "servers" &&
-                      summaryData.servers.length > 0 && (
-                        <HooksServerCards
-                          servers={summaryData.servers}
-                          selectedServer={selectedServer}
-                          onServerChange={onServerChange}
-                        />
-                      )}
-                    {summaryView === "users" &&
-                      summaryData.users &&
-                      summaryData.users.length > 0 && (
-                        <HooksUserCards
-                          users={summaryData.users}
-                          selectedUser={userEmailFilter}
-                          onUserChange={(email) =>
-                            setUserEmailInput(email || "")
-                          }
-                        />
-                      )}
-                  </div>
-                </Tabs>
+              <div className="mb-4 border rounded-lg overflow-hidden">
+                {summaryView === "servers" && summaryData.servers.length > 0 && (
+                  <HooksServerTable
+                    servers={summaryData.servers}
+                    onServerChange={(server) => updateServerFilter(server || "", true)}
+                    summaryView={summaryView}
+                    onSummaryViewChange={onSummaryViewChange}
+                  />
+                )}
+                {summaryView === "users" &&
+                  summaryData.users &&
+                  summaryData.users.length > 0 && (
+                    <HooksUserTable
+                      users={summaryData.users}
+                      onUserChange={(email) => updateUserFilter(email || "", true)}
+                      summaryView={summaryView}
+                      onSummaryViewChange={onSummaryViewChange}
+                    />
+                  )}
               </div>
             )}
 
           {/* Filter and Search Row */}
           <div className="flex items-center gap-2 flex-wrap">
             <SearchBar
-              value={searchInput}
-              onChange={setSearchInput}
-              placeholder="Search by tool name"
+              value={serverInput}
+              onChange={setServerInput}
+              placeholder="Filter by server name"
               className="flex-1 min-w-[200px]"
             />
             <SearchBar
@@ -775,8 +780,7 @@ function HooksInnerContent({
                 error={error}
                 isLoading={isLoading}
                 groupedTraces={groupedTraces}
-                searchQuery={searchQuery}
-                selectedServer={selectedServer}
+                serverFilter={serverFilter}
                 userEmailFilter={userEmailFilter}
                 expandedTraceId={expandedTraceId}
                 isFetchingNextPage={isFetchingNextPage}
@@ -808,83 +812,204 @@ function HooksInnerContent({
   );
 }
 
-function HooksServerCards({
-  servers,
-  selectedServer,
-  onServerChange,
-}: {
-  servers: HooksServerSummary[];
-  selectedServer: string | null;
-  onServerChange: (serverName: string | null) => void;
-}) {
-  // Sort servers: non-empty server names first (alphabetically), then local (empty serverName) last
-  const sortedServers = useMemo(() => {
-    return [...servers].sort((a, b) => {
-      // If both are local or both are not local, maintain original order
-      const aIsLocal = !a.serverName;
-      const bIsLocal = !b.serverName;
+interface SummaryItemData {
+  name: string;
+  displayName?: string;
+  uniqueTools: number;
+  failureRate: number;
+}
 
-      if (aIsLocal && !bIsLocal) return 1; // a (local) goes after b
-      if (!aIsLocal && bIsLocal) return -1; // a goes before b (local)
+interface SummaryTableProps {
+  items: SummaryItemData[];
+  onItemSelect: (key: string) => void;
+  sortItems?: (items: SummaryItemData[]) => SummaryItemData[];
+  tabValue?: string;
+  onTabChange?: (value: string) => void;
+  tabs?: Array<{ value: string; label: string }>;
+}
 
-      // Both are non-local, sort alphabetically
-      if (!aIsLocal && !bIsLocal) {
-        return a.serverName.localeCompare(b.serverName);
-      }
-
-      return 0; // Both are local, maintain order
-    });
-  }, [servers]);
+function SummaryTable({
+  items,
+  selectedItemKey,
+  onItemSelect,
+  sortItems,
+  tabValue,
+  onTabChange,
+  tabs,
+}: SummaryTableProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const sortedItems = useMemo(() => {
+    return sortItems ? sortItems([...items, ...items, ...items]) : items;
+  }, [items, sortItems]);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      {sortedServers.map((server) => (
-        <button
-          key={server.serverName}
-          onClick={() =>
-            onServerChange(
-              selectedServer === server.serverName ? null : server.serverName,
-            )
-          }
-          className={cn(
-            "p-4 rounded-lg border transition-all text-left",
-            selectedServer === server.serverName
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/50 hover:bg-muted/50",
+    <div className="bg-background relative">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-1 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {/* First column - tabs or header */}
+        <div className="flex-1 min-w-0">
+          {tabs && tabValue && onTabChange ? (
+            <Tabs value={tabValue} onValueChange={onTabChange}>
+              <TabsList className="h-7 p-0.5">
+                {tabs.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="text-xs px-2.5 h-6"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : (
+            "Name"
           )}
+        </div>
+        <div className="shrink-0 w-[100px] text-right">Tool Calls</div>
+        <div className="shrink-0 w-[100px] text-right">Success Rate</div>
+        <div className="shrink-0 w-[80px] text-right">Status</div>
+      </div>
+
+      {/* Rows */}
+      <div
+        className={cn(
+          "overflow-y-auto transition-all duration-300",
+          isExpanded ? "max-h-[400px]" : "max-h-[150px]",
+        )}
+      >
+        {sortedItems.map((item) => (
+          <div
+            key={item.name}
+            className={cn(
+              "group w-full flex items-center gap-3 px-5 py-3 border-b last:border-b-0 transition-colors",
+              selectedItemKey === item.name ? "bg-primary/5" : "hover:bg-muted/50",
+            )}
+          >
+            <button
+              onClick={() =>
+                onItemSelect(selectedItemKey === item.name ? null : item.name)
+              }
+              className="flex items-center gap-2 w-full text-left"
+            >
+              {/* Name + Actions */}
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-sm font-medium truncate">
+                  {item.displayName || item.name}
+                </span>
+
+                {/* Actions - shown on hover */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onItemSelect(item.name);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-primary/10 transition-opacity shrink-0"
+                  title={`Filter by ${item.displayName || item.name}`}
+                >
+                  <Filter className="size-4 text-muted-foreground hover:text-primary" />
+                </button>
+              </div>
+
+              {/* Tools (despite the name, this is NOT the number of unique tools, but the number of tool calls) */}
+              <div className="shrink-0 w-[100px] text-right text-sm text-muted-foreground">
+                {item.uniqueTools}
+              </div>
+
+              {/* Success Rate */}
+              <div className="shrink-0 w-[100px] text-right text-sm text-muted-foreground">
+                {Math.round((1 - item.failureRate) * 100)}%
+              </div>
+
+              {/* Status */}
+              <div className="shrink-0 w-[80px] flex justify-end">
+                <Icon
+                  name={item.failureRate > 0.1 ? "circle-alert" : "circle-check"}
+                  className={cn(
+                    "size-4 shrink-0",
+                    item.failureRate > 0.1 ? "text-destructive" : "text-emerald-500",
+                  )}
+                />
+              </div>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Expand/Collapse Button */}
+      {sortedItems.length > 3 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 h-7 px-2 bg-background/95 backdrop-blur-sm shadow-sm border border-border/50 hover:bg-muted"
         >
-          <div className="flex items-start justify-between mb-2">
-            <div className="font-medium text-sm truncate">
-              {!server.serverName ? "Local Tools" : server.serverName}
-            </div>
-            <Icon
-              name={server.failureRate > 0.1 ? "circle-alert" : "circle-check"}
-              className={cn(
-                "size-4 shrink-0",
-                server.failureRate > 0.1
-                  ? "text-destructive"
-                  : "text-emerald-500",
-              )}
-            />
-          </div>
-          <div className="space-y-1">
-            <div className="text-2xl font-semibold">{server.eventCount}</div>
-            <div className="text-xs text-muted-foreground">
-              {server.uniqueTools} {server.uniqueTools === 1 ? "tool" : "tools"}
-              {" • "}
-              {Math.round((1 - server.failureRate) * 100)}% success
-            </div>
-          </div>
-        </button>
-      ))}
+          <Icon
+            name={isExpanded ? "chevrons-up" : "chevrons-down"}
+            className="size-3.5"
+          />
+          <span className="text-xs ml-1">
+            {isExpanded ? "Collapse" : "Expand"}
+          </span>
+        </Button>
+      )}
     </div>
   );
 }
 
-function HooksUserCards({
+function HooksServerTable({
+  servers,
+  selectedServer,
+  onServerChange,
+  summaryView,
+  onSummaryViewChange,
+}: {
+  servers: HooksServerSummary[];
+  selectedServer: string | null;
+  onServerChange: (serverName: string | null) => void;
+  summaryView: "servers" | "users";
+  onSummaryViewChange: (view: "servers" | "users") => void;
+}) {
+  const items: SummaryItemData[] = servers.map((s) => ({
+    name: s.serverName,
+    displayName: !s.serverName ? "Local Tools" : s.serverName,
+    uniqueTools: s.uniqueTools,
+    failureRate: s.failureRate,
+  }));
+
+  return (
+    <SummaryTable
+      items={items}
+      selectedItemKey={selectedServer}
+      onItemSelect={onServerChange}
+      sortItems={(items) =>
+        items.sort((a, b) => {
+          const aIsLocal = !a.name;
+          const bIsLocal = !b.name;
+          if (aIsLocal && !bIsLocal) return 1;
+          if (!aIsLocal && bIsLocal) return -1;
+          if (!aIsLocal && !bIsLocal) {
+            return a.name.localeCompare(b.name);
+          }
+          return 0;
+        })
+      }
+      tabValue={summaryView}
+      onTabChange={(v) => onSummaryViewChange(v as "servers" | "users")}
+      tabs={[
+        { value: "servers", label: "Servers" },
+        { value: "users", label: "Users" },
+      ]}
+    />
+  );
+}
+
+function HooksUserTable({
   users,
   selectedUser,
   onUserChange,
+  summaryView,
+  onSummaryViewChange,
 }: {
   users: Array<{
     userEmail: string;
@@ -896,56 +1021,38 @@ function HooksUserCards({
   }>;
   selectedUser: string | null;
   onUserChange: (userEmail: string | null) => void;
+  summaryView: "servers" | "users";
+  onSummaryViewChange: (view: "servers" | "users") => void;
 }) {
-  // Sort users by event count descending
-  const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => b.eventCount - a.eventCount);
-  }, [users]);
+  const items: SummaryItemData[] = users.map((u) => ({
+    name: u.userEmail,
+    displayName:
+      u.userEmail === "Unknown" || u.userEmail === ""
+        ? "Unknown user"
+        : u.userEmail,
+    uniqueTools: u.uniqueTools,
+    failureRate: u.failureRate,
+  }));
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      {sortedUsers.map((user) => (
-        <button
-          key={user.userEmail}
-          onClick={() =>
-            onUserChange(
-              selectedUser === user.userEmail ? null : user.userEmail,
-            )
-          }
-          className={cn(
-            "p-4 rounded-lg border transition-all text-left",
-            selectedUser === user.userEmail
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/50 hover:bg-muted/50",
-          )}
-        >
-          <div className="flex items-start justify-between mb-2">
-            <div className="font-medium text-sm truncate max-w-[200px]">
-              {user.userEmail === "Unknown" || user.userEmail === ""
-                ? "Unknown user"
-                : user.userEmail}
-            </div>
-            <Icon
-              name={user.failureRate > 0.1 ? "circle-alert" : "circle-check"}
-              className={cn(
-                "size-4 shrink-0",
-                user.failureRate > 0.1
-                  ? "text-destructive"
-                  : "text-emerald-500",
-              )}
-            />
-          </div>
-          <div className="space-y-1">
-            <div className="text-2xl font-semibold">{user.eventCount}</div>
-            <div className="text-xs text-muted-foreground">
-              {user.uniqueTools} {user.uniqueTools === 1 ? "tool" : "tools"}
-              {" • "}
-              {Math.round((1 - user.failureRate) * 100)}% success
-            </div>
-          </div>
-        </button>
-      ))}
-    </div>
+    <SummaryTable
+      items={items}
+      selectedItemKey={selectedUser}
+      onItemSelect={onUserChange}
+      sortItems={(items) =>
+        items.sort((a, b) => {
+          const aCount = users.find((u) => u.userEmail === a.name)?.eventCount ?? 0;
+          const bCount = users.find((u) => u.userEmail === b.name)?.eventCount ?? 0;
+          return bCount - aCount;
+        })
+      }
+      tabValue={summaryView}
+      onTabChange={(v) => onSummaryViewChange(v as "servers" | "users")}
+      tabs={[
+        { value: "servers", label: "Servers" },
+        { value: "users", label: "Users" },
+      ]}
+    />
   );
 }
 
@@ -953,8 +1060,7 @@ function HooksTraceContent({
   error,
   isLoading,
   groupedTraces,
-  searchQuery,
-  selectedServer,
+  serverFilter,
   userEmailFilter,
   expandedTraceId,
   isFetchingNextPage,
@@ -964,8 +1070,7 @@ function HooksTraceContent({
   error: Error | null;
   isLoading: boolean;
   groupedTraces: HookTrace[];
-  searchQuery: string | null;
-  selectedServer: string | null;
+  serverFilter: string | null;
   userEmailFilter: string | null;
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
@@ -999,7 +1104,7 @@ function HooksTraceContent({
 
   if (groupedTraces.length === 0) {
     // Show the full empty state if no filters are applied
-    const hasFilters = searchQuery || selectedServer || userEmailFilter;
+    const hasFilters = serverFilter || userEmailFilter;
 
     if (!hasFilters) {
       return <HooksEmptyState />;
