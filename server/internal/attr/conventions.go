@@ -329,6 +329,11 @@ func SlogHTTPResponseOriginalStatusCode(v int) slog.Attr {
 	return slog.Int(string(HTTPResponseOriginalStatusCodeKey), v)
 }
 
+func HTTPResponseBody(v string) attribute.KeyValue { return HTTPResponseBodyKey.String(v) }
+func SlogHTTPResponseBody(v string) slog.Attr {
+	return slog.String(string(HTTPResponseBodyKey), v)
+}
+
 func HTTPRoute(v string) attribute.KeyValue { return HTTPRouteKey.String(v) }
 func SlogHTTPRoute(v string) slog.Attr      { return slog.String(string(HTTPRouteKey), v) }
 

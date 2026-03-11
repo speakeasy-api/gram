@@ -223,7 +223,7 @@ func (p *CustomProvider) ExchangeToken(
 		p.logger.ErrorContext(ctx, "OAuth token exchange failed",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode),
-			slog.String("response_body", string(errBody)))
+			attr.SlogHTTPResponseBody(string(errBody)))
 		return nil, fmt.Errorf("token exchange failed with status %d", tokenResp.StatusCode)
 	}
 
@@ -302,7 +302,7 @@ func (p *CustomProvider) RefreshToken(
 		p.logger.ErrorContext(ctx, "OAuth token refresh failed",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode),
-			slog.String("response_body", string(errBody)))
+			attr.SlogHTTPResponseBody(string(errBody)))
 		return nil, fmt.Errorf("token refresh failed with status %d", tokenResp.StatusCode)
 	}
 

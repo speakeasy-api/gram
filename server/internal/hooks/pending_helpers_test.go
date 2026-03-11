@@ -313,8 +313,3 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 	assert.Equal(t, "tool1", *retrieved[0].ToolName)
 	assert.Equal(t, "tool2", *retrieved[1].ToolName)
 }
-
-//go:fix inline
-func stringPtr(s string) *string {
-	return new(s)
-}
