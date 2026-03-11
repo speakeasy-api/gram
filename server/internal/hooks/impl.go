@@ -133,7 +133,7 @@ type formDecoder struct {
 	r *http.Request
 }
 
-func (d *formDecoder) Decode(v interface{}) error {
+func (d *formDecoder) Decode(v any) error {
 	body, err := io.ReadAll(d.r.Body)
 	if err != nil {
 		return fmt.Errorf("read body: %w", err)
@@ -146,11 +146,11 @@ func (d *formDecoder) Decode(v interface{}) error {
 
 	// Convert form values to JSON string and then unmarshal
 	// This works because the form keys match the JSON field names
-	jsonData := make(map[string]interface{})
+	jsonData := make(map[string]any)
 	for key, vals := range values {
 		if len(vals) > 0 {
 			// Try to unmarshal as JSON if the value looks like JSON
-			var parsed interface{}
+			var parsed any
 			if err := json.Unmarshal([]byte(vals[0]), &parsed); err == nil {
 				jsonData[key] = parsed
 			} else {
