@@ -219,9 +219,11 @@ func (p *CustomProvider) ExchangeToken(
 	}()
 
 	if tokenResp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(tokenResp.Body)
 		p.logger.ErrorContext(ctx, "OAuth token exchange failed",
 			attr.SlogOAuthProvider(provider.Slug),
-			attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode))
+			attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode),
+			slog.String("response_body", string(errBody)))
 		return nil, fmt.Errorf("token exchange failed with status %d", tokenResp.StatusCode)
 	}
 
@@ -296,6 +298,11 @@ func (p *CustomProvider) RefreshToken(
 	}()
 
 	if tokenResp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(tokenResp.Body)
+		p.logger.ErrorContext(ctx, "OAuth token refresh failed",
+			attr.SlogOAuthProvider(provider.Slug),
+			attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode),
+			slog.String("response_body", string(errBody)))
 		return nil, fmt.Errorf("token refresh failed with status %d", tokenResp.StatusCode)
 	}
 
