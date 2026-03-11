@@ -1474,7 +1474,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
 ON team_invites (token);
 
 -- Server display name overrides for hooks dashboard
-CREATE TABLE hooks_server_name_overrides (
+CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   raw_server_name TEXT NOT NULL CHECK (raw_server_name <> ''),
@@ -1486,4 +1486,4 @@ CREATE TABLE hooks_server_name_overrides (
   CONSTRAINT hooks_overrides_unique_raw UNIQUE (project_id, raw_server_name)
 );
 
-CREATE INDEX hooks_overrides_display_idx ON hooks_server_name_overrides(project_id, display_name);
+CREATE INDEX IF NOT EXISTS hooks_overrides_display_idx ON hooks_server_name_overrides(project_id, display_name);
