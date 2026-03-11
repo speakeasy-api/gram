@@ -512,7 +512,7 @@ func (s *Service) ExecuteTool(
 	}
 
 	descriptor := plan.Descriptor
-	ctx, _ = o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
+	ctx, _ = o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug, descriptor.URN.String())
 
 	systemConfig, err := s.env.LoadSourceEnv(ctx, projectID, string(toolURN.Kind), toolURN.Source)
 	if err != nil {

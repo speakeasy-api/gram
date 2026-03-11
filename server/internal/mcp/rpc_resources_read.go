@@ -99,7 +99,7 @@ func handleResourcesRead(
 
 	descriptor := plan.Descriptor
 
-	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
+	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug, descriptor.URN.String())
 
 	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
 	if err != nil {

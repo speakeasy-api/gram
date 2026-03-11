@@ -80,15 +80,17 @@ func PullActivityExecutionInfo(ctx context.Context) *ActivityExecutionInfo {
 	return nil
 }
 
-func EnrichToolCallContext(ctx context.Context, logger *slog.Logger, orgSlug, projectSlug string) (context.Context, *slog.Logger) {
+func EnrichToolCallContext(ctx context.Context, logger *slog.Logger, orgSlug, projectSlug, toolURN string) (context.Context, *slog.Logger) {
 	logger = logger.With(
 		attr.SlogOrganizationSlug(orgSlug),
 		attr.SlogProjectSlug(projectSlug),
+		attr.SlogToolURN(toolURN),
 	)
 
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationSlug(orgSlug),
 		attr.ProjectSlug(projectSlug),
+		attr.ToolURN(toolURN),
 	)
 
 	orgMember, err := baggage.NewMember(string(attr.OrganizationSlugKey), orgSlug)
