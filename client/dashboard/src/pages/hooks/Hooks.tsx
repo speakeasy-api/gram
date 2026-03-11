@@ -851,7 +851,7 @@ function SummaryTable({
 }: SummaryTableProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const sortedItems = useMemo(() => {
-    return sortItems ? sortItems([...items, ...items, ...items]) : items;
+    return sortItems ? sortItems(items) : items;
   }, [items, sortItems]);
 
   return (
