@@ -3,6 +3,7 @@ import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
+import { PieProgress } from "@/components/PieProgress";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -361,59 +362,65 @@ function HooksContent() {
     );
   }, [logsData]);
 
-  const updateServerFilter = useCallback((value: string, immediate = false) => {
-    const newServer = value || null;
-    setServerInput(value);
+  const updateServerFilter = useCallback(
+    (value: string, immediate = false) => {
+      const newServer = value || null;
+      setServerInput(value);
 
-    const applyFilter = () => {
-      setServerFilter(newServer);
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (newServer) {
-            next.set("server", newServer);
-          } else {
-            next.delete("server");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    };
+      const applyFilter = () => {
+        setServerFilter(newServer);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            if (newServer) {
+              next.set("server", newServer);
+            } else {
+              next.delete("server");
+            }
+            return next;
+          },
+          { replace: true },
+        );
+      };
 
-    if (immediate) {
-      applyFilter();
-    } else {
-      // Will be handled by the debounced effect
-    }
-  }, [setSearchParams]);
+      if (immediate) {
+        applyFilter();
+      } else {
+        // Will be handled by the debounced effect
+      }
+    },
+    [setSearchParams],
+  );
 
-  const updateUserFilter = useCallback((value: string, immediate = false) => {
-    const newUserEmail = value || null;
-    setUserEmailInput(value);
+  const updateUserFilter = useCallback(
+    (value: string, immediate = false) => {
+      const newUserEmail = value || null;
+      setUserEmailInput(value);
 
-    const applyFilter = () => {
-      setUserEmailFilter(newUserEmail);
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (newUserEmail) {
-            next.set("user", newUserEmail);
-          } else {
-            next.delete("user");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    };
+      const applyFilter = () => {
+        setUserEmailFilter(newUserEmail);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            if (newUserEmail) {
+              next.set("user", newUserEmail);
+            } else {
+              next.delete("user");
+            }
+            return next;
+          },
+          { replace: true },
+        );
+      };
 
-    if (immediate) {
-      applyFilter();
-    } else {
-      // Will be handled by the debounced effect
-    }
-  }, [setSearchParams]);
+      if (immediate) {
+        applyFilter();
+      } else {
+        // Will be handled by the debounced effect
+      }
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -687,20 +694,25 @@ function HooksInnerContent({
             (summaryData.servers.length > 0 ||
               (summaryData.users && summaryData.users.length > 0)) && (
               <div className="mb-4 border rounded-lg overflow-hidden">
-                {summaryView === "servers" && summaryData.servers.length > 0 && (
-                  <HooksServerTable
-                    servers={summaryData.servers}
-                    onServerChange={(server) => updateServerFilter(server || "", true)}
-                    summaryView={summaryView}
-                    onSummaryViewChange={onSummaryViewChange}
-                  />
-                )}
+                {summaryView === "servers" &&
+                  summaryData.servers.length > 0 && (
+                    <HooksServerTable
+                      servers={summaryData.servers}
+                      onServerChange={(server) =>
+                        updateServerFilter(server || "", true)
+                      }
+                      summaryView={summaryView}
+                      onSummaryViewChange={onSummaryViewChange}
+                    />
+                  )}
                 {summaryView === "users" &&
                   summaryData.users &&
                   summaryData.users.length > 0 && (
                     <HooksUserTable
                       users={summaryData.users}
-                      onUserChange={(email) => updateUserFilter(email || "", true)}
+                      onUserChange={(email) =>
+                        updateUserFilter(email || "", true)
+                      }
                       summaryView={summaryView}
                       onSummaryViewChange={onSummaryViewChange}
                     />
@@ -815,6 +827,7 @@ function HooksInnerContent({
 interface SummaryItemData {
   name: string;
   displayName?: string;
+  toolCallCount: number;
   uniqueTools: number;
   failureRate: number;
 }
@@ -830,7 +843,6 @@ interface SummaryTableProps {
 
 function SummaryTable({
   items,
-  selectedItemKey,
   onItemSelect,
   sortItems,
   tabValue,
@@ -866,9 +878,9 @@ function SummaryTable({
             "Name"
           )}
         </div>
+        <div className="shrink-0 w-[100px] text-right">Unique Tools</div>
         <div className="shrink-0 w-[100px] text-right">Tool Calls</div>
         <div className="shrink-0 w-[100px] text-right">Success Rate</div>
-        <div className="shrink-0 w-[80px] text-right">Status</div>
       </div>
 
       {/* Rows */}
@@ -881,15 +893,10 @@ function SummaryTable({
         {sortedItems.map((item) => (
           <div
             key={item.name}
-            className={cn(
-              "group w-full flex items-center gap-3 px-5 py-3 border-b last:border-b-0 transition-colors",
-              selectedItemKey === item.name ? "bg-primary/5" : "hover:bg-muted/50",
-            )}
+            className="group w-full flex items-center gap-3 px-5 py-3 border-b last:border-b-0 transition-colors hover:bg-muted/50"
           >
             <button
-              onClick={() =>
-                onItemSelect(selectedItemKey === item.name ? null : item.name)
-              }
+              onClick={() => onItemSelect(item.name)}
               className="flex items-center gap-2 w-full text-left"
             >
               {/* Name + Actions */}
@@ -911,24 +918,24 @@ function SummaryTable({
                 </button>
               </div>
 
-              {/* Tools (despite the name, this is NOT the number of unique tools, but the number of tool calls) */}
+              {/* Unique Tools */}
               <div className="shrink-0 w-[100px] text-right text-sm text-muted-foreground">
                 {item.uniqueTools}
               </div>
 
-              {/* Success Rate */}
-              <div className="shrink-0 w-[100px] text-right text-sm text-muted-foreground">
-                {Math.round((1 - item.failureRate) * 100)}%
+              {/* Tool Calls (successCount + failureCount (eventCount is something else)) */}
+              <div className="shrink-0 w-[100px] text-right text-sm">
+                {item.toolCallCount}
               </div>
 
-              {/* Status */}
-              <div className="shrink-0 w-[80px] flex justify-end">
-                <Icon
-                  name={item.failureRate > 0.1 ? "circle-alert" : "circle-check"}
-                  className={cn(
-                    "size-4 shrink-0",
-                    item.failureRate > 0.1 ? "text-destructive" : "text-emerald-500",
-                  )}
+              {/* Success Rate */}
+              <div className="shrink-0 w-[100px] flex justify-end items-center gap-1.5">
+                <span className="text-sm font-medium tabular-nums">
+                  {Math.round((1 - item.failureRate) * 100)}%
+                </span>
+                <PieProgress
+                  value={Math.round((1 - item.failureRate) * 100)}
+                  size={16}
                 />
               </div>
             </button>
@@ -959,20 +966,19 @@ function SummaryTable({
 
 function HooksServerTable({
   servers,
-  selectedServer,
   onServerChange,
   summaryView,
   onSummaryViewChange,
 }: {
   servers: HooksServerSummary[];
-  selectedServer: string | null;
-  onServerChange: (serverName: string | null) => void;
+  onServerChange: (serverName: string) => void;
   summaryView: "servers" | "users";
   onSummaryViewChange: (view: "servers" | "users") => void;
 }) {
   const items: SummaryItemData[] = servers.map((s) => ({
     name: s.serverName,
     displayName: !s.serverName ? "Local Tools" : s.serverName,
+    toolCallCount: s.successCount + s.failureCount,
     uniqueTools: s.uniqueTools,
     failureRate: s.failureRate,
   }));
@@ -980,7 +986,6 @@ function HooksServerTable({
   return (
     <SummaryTable
       items={items}
-      selectedItemKey={selectedServer}
       onItemSelect={onServerChange}
       sortItems={(items) =>
         items.sort((a, b) => {
@@ -1006,7 +1011,6 @@ function HooksServerTable({
 
 function HooksUserTable({
   users,
-  selectedUser,
   onUserChange,
   summaryView,
   onSummaryViewChange,
@@ -1019,8 +1023,7 @@ function HooksUserTable({
     failureCount: number;
     failureRate: number;
   }>;
-  selectedUser: string | null;
-  onUserChange: (userEmail: string | null) => void;
+  onUserChange: (userEmail: string) => void;
   summaryView: "servers" | "users";
   onSummaryViewChange: (view: "servers" | "users") => void;
 }) {
@@ -1030,6 +1033,7 @@ function HooksUserTable({
       u.userEmail === "Unknown" || u.userEmail === ""
         ? "Unknown user"
         : u.userEmail,
+    toolCallCount: u.successCount + u.failureCount,
     uniqueTools: u.uniqueTools,
     failureRate: u.failureRate,
   }));
@@ -1037,13 +1041,10 @@ function HooksUserTable({
   return (
     <SummaryTable
       items={items}
-      selectedItemKey={selectedUser}
       onItemSelect={onUserChange}
       sortItems={(items) =>
         items.sort((a, b) => {
-          const aCount = users.find((u) => u.userEmail === a.name)?.eventCount ?? 0;
-          const bCount = users.find((u) => u.userEmail === b.name)?.eventCount ?? 0;
-          return bCount - aCount;
+          return b.toolCallCount - a.toolCallCount;
         })
       }
       tabValue={summaryView}
