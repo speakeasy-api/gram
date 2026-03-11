@@ -127,11 +127,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		posthog,
 	)
 
-	temporalEnv, devserver := infra.NewTemporalEnv(t)
-	t.Cleanup(func() {
-		temporalEnv.Client().Close()
-		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
-	})
+	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
@@ -213,11 +209,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	temporalEnv, devserver := infra.NewTemporalEnv(t)
-	t.Cleanup(func() {
-		temporalEnv.Client().Close()
-		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
-	})
+	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)

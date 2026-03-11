@@ -88,12 +88,10 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 
 	f := &feature.InMemory{}
 
-	temporal, devserver := infra.NewTemporalEnv(t)
+	temporal, _ := infra.NewTemporalEnv(t)
 	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
-		temporal.Client().Close()
-		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 

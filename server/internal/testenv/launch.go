@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,6 +43,9 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 	var pgcontainer terminateable
 	var rediscontainer terminateable
 	var clickhousecontainer terminateable
+	var temporalserver *testsuite.DevServer
+	var temporalserverErr error
+	var temporalserverOnce sync.Once
 
 	res := &Environment{
 		CloneTestDatabase:   unsupportedPostgresCloneFunc(),
@@ -81,11 +85,15 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 		res.NewTemporalEnv = func(t *testing.T) (*temporal.Environment, *testsuite.DevServer) {
 			t.Helper()
 
-			devserver, err := NewTemporalDevServer(t, ctx)
-			require.NoError(t, err, "start temporal dev server")
+			temporalserverOnce.Do(func() {
+				temporalserver, temporalserverErr = NewTemporalDevServer(ctx)
+			})
+			require.NoError(t, temporalserverErr, "start temporal dev server")
 
-			client := devserver.Client()
-			return temporal.NewEnvironment(client, temporal.NamespaceName("default"), temporal.TaskQueueName("main")), devserver
+			env, err := NewTemporalEnvironment(t, temporalserver)
+			require.NoError(t, err, "create temporal environment")
+
+			return env, temporalserver
 		}
 	}
 
@@ -117,6 +125,15 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 				defer cancel()
 				if err := clickhousecontainer.Terminate(ctx); err != nil {
 					log.Printf("terminate clickhouse container: %v", err)
+				}
+				return nil
+			})
+		}
+		if temporalserver != nil {
+			eg.Go(func() error {
+				temporalserver.Client().Close()
+				if err := temporalserver.Stop(); err != nil {
+					log.Printf("terminate temporal dev server: %v", err)
 				}
 				return nil
 			})

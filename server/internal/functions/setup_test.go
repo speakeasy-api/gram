@@ -83,12 +83,10 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	tigrisStore := assets.NewTigrisStore(assetStorage)
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
-	temporalEnv, devserver := infra.NewTemporalEnv(t)
+	temporalEnv, _ := infra.NewTemporalEnv(t)
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
-		temporalEnv.Client().Close()
-		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
