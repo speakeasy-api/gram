@@ -22,12 +22,14 @@ func main() {
 		port = p
 	}
 
+	host := os.Getenv("MOCK_IDP_HOST")
+
 	cfg := mockidp.DefaultConfig()
 	handler := mockidp.Handler(cfg)
 
 	mockidp.LogConfig(cfg, port)
 
-	addr := fmt.Sprintf(":%d", port)
+	addr := fmt.Sprintf("%s:%d", host, port)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
