@@ -1472,3 +1472,18 @@ WHERE deleted IS FALSE AND status = 'pending';
 -- Index for looking up invites by token (unconditional to prevent token reuse)
 CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
 ON team_invites (token);
+
+-- Server display name overrides for hooks dashboard
+CREATE TABLE hooks_server_name_overrides (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  raw_server_name TEXT NOT NULL CHECK (raw_server_name <> ''),
+  display_name TEXT NOT NULL CHECK (display_name <> '' AND CHAR_LENGTH(display_name) <= 100),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT hooks_overrides_unique_raw UNIQUE (project_id, raw_server_name)
+);
+
+CREATE INDEX hooks_overrides_display_idx ON hooks_server_name_overrides(project_id, display_name);
