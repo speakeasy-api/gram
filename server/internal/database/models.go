@@ -388,6 +388,15 @@ type FunctionsAccess struct {
 	Deleted       bool
 }
 
+type HooksServerNameOverride struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	RawServerName string
+	DisplayName   string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type HttpSecurity struct {
 	ID                  uuid.UUID
 	DeploymentID        uuid.UUID
