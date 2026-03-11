@@ -131,6 +131,60 @@ func TestGetObservabilityOverview_TimeSeriesMetrics(t *testing.T) {
 	require.Positive(t, result.TimeSeries[0].BucketTimeUnixNano)
 }
 
+func TestGetObservabilityOverview_UnevaluatedChats(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	chatID1 := uuid.New().String()
+	chatID2 := uuid.New().String()
+	chatID3 := uuid.New().String()
+
+	// Insert chat completion logs without any evaluation label (the common case for unresolved chats)
+	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID1, 100, 50, 150, 30.0, "stop", "gpt-4", "openai")
+	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), chatID2, 200, 100, 300, 45.0, "stop", "gpt-4", "openai")
+
+	// Insert one evaluated chat for comparison
+	insertResolutionLog(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), chatID3, "success", 90)
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+		From:              from,
+		To:                to,
+		IncludeTimeSeries: true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Summary)
+
+	// All 3 chats must be counted — unevaluated chats should not be excluded
+	require.Equal(t, int64(3), result.Summary.TotalChats)
+
+	// Only the one evaluated-as-success chat counts toward resolved
+	require.Equal(t, int64(1), result.Summary.ResolvedChats)
+	require.Equal(t, int64(0), result.Summary.FailedChats)
+
+	// Session duration is computed from chat completion events regardless of evaluation label
+	require.Greater(t, result.Summary.AvgSessionDurationMs, float64(0))
+
+	// Time series must also reflect all 3 chats in total
+	totalInTimeSeries := int64(0)
+	for _, b := range result.TimeSeries {
+		totalInTimeSeries += b.TotalChats
+	}
+	require.Equal(t, int64(3), totalInTimeSeries)
+}
+
 func TestGetObservabilityOverview_FromAfterTo(t *testing.T) {
 	t.Parallel()
 

@@ -555,113 +555,81 @@ type GetTimeSeriesMetricsParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMetricsParams) ([]TimeSeriesBucket, error) {
-	// Calculate the number of buckets needed
 	intervalNanos := arg.IntervalSeconds * 1_000_000_000
-	// Align start time to interval boundary
+	// Align start time to interval boundary (mirrors toStartOfInterval epoch alignment)
 	alignedStart := (arg.TimeStart / intervalNanos) * intervalNanos
 
-	// Build the query with a generated time series that covers the full range
-	// This ensures we get buckets even for periods with no data
-	query := fmt.Sprintf(`
-		WITH
-			-- Generate all bucket timestamps for the requested range
-			buckets AS (
-				SELECT toInt64(%d + (number * %d)) AS bucket_time_unix_nano
-				FROM numbers(toUInt64(ceil((%d - %d) / %d)) + 1)
-				WHERE %d + (number * %d) <= %d
-			),
-			-- Aggregate actual data by bucket
-			data AS (
-				SELECT
-					toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), INTERVAL %d SECOND)) * 1000000000 as bucket_time_unix_nano,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'partial') as partial_chats,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'abandoned') as abandoned_chats,
-					countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls,
-					countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls,
-					avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_tool_latency_ms,
-					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms
-				FROM telemetry_logs
-				WHERE gram_project_id = ?
-					AND time_unix_nano >= ?
-					AND time_unix_nano <= ?
-					%s
-				GROUP BY bucket_time_unix_nano
-			)
-		SELECT
-			b.bucket_time_unix_nano,
-			coalesce(d.total_chats, 0) as total_chats,
-			coalesce(d.resolved_chats, 0) as resolved_chats,
-			coalesce(d.failed_chats, 0) as failed_chats,
-			coalesce(d.partial_chats, 0) as partial_chats,
-			coalesce(d.abandoned_chats, 0) as abandoned_chats,
-			coalesce(d.total_tool_calls, 0) as total_tool_calls,
-			coalesce(d.failed_tool_calls, 0) as failed_tool_calls,
-			coalesce(d.avg_tool_latency_ms, 0) as avg_tool_latency_ms,
-			coalesce(d.avg_session_duration_ms, 0) as avg_session_duration_ms
-		FROM buckets b
-		LEFT JOIN data d ON b.bucket_time_unix_nano = d.bucket_time_unix_nano
-		ORDER BY b.bucket_time_unix_nano ASC
-	`,
-		alignedStart, intervalNanos, // First bucket and interval for generation
-		arg.TimeEnd, alignedStart, intervalNanos, // For calculating number of buckets
-		alignedStart, intervalNanos, arg.TimeEnd, // WHERE clause for bucket generation
-		arg.IntervalSeconds, // INTERVAL for data aggregation
-		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID, arg.ToolsetID), // Optional filters - parameterized
-	)
+	// toIntervalSecond(?) allows the interval to be fully parameterized — unlike INTERVAL literals.
+	sb := sq.Select().
+		Column(squirrel.Expr(
+			"toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), toIntervalSecond(?))) * 1000000000 AS bucket_time_unix_nano",
+			arg.IntervalSeconds,
+		)).
+		Columns(
+			"uniqExactIf(chat_id, chat_id != '') AS total_chats",
+			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') AS resolved_chats",
+			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') AS failed_chats",
+			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') AS partial_chats",
+			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') AS abandoned_chats",
+			"countIf(startsWith(gram_urn, 'tools:')) AS total_tool_calls",
+			"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS failed_tool_calls",
+			"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) AS avg_tool_latency_ms",
+			"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_session_duration_ms",
+		).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		GroupBy("bucket_time_unix_nano")
 
-	queryArgs := []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
-	// Append optional filter values as parameterized args (in order)
 	if arg.ExternalUserID != "" {
-		queryArgs = append(queryArgs, arg.ExternalUserID)
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
 	if arg.APIKeyID != "" {
-		queryArgs = append(queryArgs, arg.APIKeyID)
+		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
 	if arg.ToolsetID != "" {
-		// ToolsetID is expected to be a URN prefix like "tools:http:gram"
-		// We append ":" to ensure we match the full prefix segment
-		queryArgs = append(queryArgs, arg.ToolsetID+":")
+		// ToolsetID is a URN prefix like "tools:http:gram"; append ":" to match the full prefix segment
+		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
 	}
 
-	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building time series query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var buckets []TimeSeriesBucket
+	// Collect results into a map keyed by bucket timestamp
+	dataMap := make(map[int64]TimeSeriesBucket)
 	for rows.Next() {
 		var bucket TimeSeriesBucket
 		if err = rows.ScanStruct(&bucket); err != nil {
-			return nil, fmt.Errorf("error scanning row: %w", err)
+			return nil, fmt.Errorf("scanning time series row: %w", err)
 		}
-		buckets = append(buckets, bucket)
+		dataMap[bucket.BucketTimeUnixNano] = bucket
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
 
-	return buckets, nil
-}
+	// Generate all expected bucket timestamps, filling zeros for periods with no data.
+	// This ensures the caller always receives a complete, evenly-spaced series.
+	var buckets []TimeSeriesBucket
+	for t := alignedStart; t <= arg.TimeEnd; t += intervalNanos {
+		if b, ok := dataMap[t]; ok {
+			buckets = append(buckets, b)
+		} else {
+			buckets = append(buckets, TimeSeriesBucket{BucketTimeUnixNano: t})
+		}
+	}
 
-// buildOptionalFiltersSQL creates the WHERE clause additions for optional filters using parameterized placeholders.
-// The caller must append the corresponding values to queryArgs in the same order.
-func buildOptionalFiltersSQL(externalUserID, apiKeyID, toolsetID string) string {
-	var filters string
-	if externalUserID != "" {
-		filters += " AND external_user_id = ?"
-	}
-	if apiKeyID != "" {
-		filters += " AND api_key_id = ?"
-	}
-	if toolsetID != "" {
-		filters += " AND startsWith(gram_urn, ?)"
-	}
-	return filters
+	return buckets, nil
 }
 
 // GetToolMetricsBreakdownParams contains the parameters for getting tool metrics breakdown.
@@ -808,7 +776,7 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 // getOverviewSummaryMV builds a query against the pre-aggregated metrics_summaries table.
 func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.SelectBuilder {
 	return sq.Select(
-		"uniqExactIfMerge(evaluated_chats) as total_chats",
+		"uniqExactIfMerge(total_chats) as total_chats",
 		"uniqExactIfMerge(resolved_chats) as resolved_chats",
 		"uniqExactIfMerge(failed_chats) as failed_chats",
 		"avgIfMerge(avg_chat_duration_ms) as avg_session_duration_ms",
@@ -826,9 +794,9 @@ func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.Se
 // getOverviewSummaryRaw builds a query against the raw telemetry_logs table (used when filters are applied).
 func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.SelectBuilder {
 	sb := sq.Select(
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats",
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
+		"uniqExactIf(chat_id, chat_id != '') as total_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
 		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
