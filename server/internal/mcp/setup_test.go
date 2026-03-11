@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -87,8 +88,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -187,8 +187,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -262,10 +261,12 @@ func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) stri
 	return *key.Key
 }
 
-// getSessionToken returns a valid session token for testing
+// getSessionToken returns a valid session token for testing.
+// The session must already be established via InitAuthContext.
 func (ti *testInstance) getSessionToken(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	sessionToken, err := ti.sessionManager.PopulateLocalDevDefaultAuthSession(ctx)
-	require.NoError(t, err)
-	return sessionToken
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context must be set before calling getSessionToken")
+	require.NotNil(t, authCtx.SessionID, "session ID must be set in auth context")
+	return *authCtx.SessionID
 }

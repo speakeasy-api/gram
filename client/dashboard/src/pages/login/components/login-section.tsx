@@ -18,7 +18,6 @@ const unexpected = "Server error. Please try again later or contact support.";
 const authErrorMessages: Record<string, string> = {
   lookup_error: "Failed to look up account details.",
   init_error: "Failed to initialize account.",
-  local_dev_stubbed: "Authentication is stubbed during local development.",
   unexpected,
 };
 

@@ -119,11 +119,6 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
-			Name:    "unsafe-local-env-path",
-			Usage:   "The path to the local environment file used for session auth in local development",
-			EnvVars: []string{"GRAM_UNSAFE_LOCAL_ENV_PATH"},
-		},
-		&cli.StringFlag{
 			Name:     "site-url",
 			Usage:    "The URL of the site",
 			EnvVars:  []string{"GRAM_SITE_URL"},
@@ -460,30 +455,18 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
-			localEnvPath := c.String("unsafe-local-env-path")
-			var sessionManager *sessions.Manager
-			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(
-					logger,
-					db,
-					redisClient,
-					cache.SuffixNone,
-					c.String("speakeasy-server-address"),
-					c.String("speakeasy-secret-key"),
-					pylonClient,
-					posthogClient,
-					billingRepo,
-					workosClient,
-				)
-			} else {
-				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath, billingRepo)
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe session manager: %w", err)
-				}
-
-				sessionManager = s
-			}
+			sessionManager := sessions.NewManager(
+				logger,
+				db,
+				redisClient,
+				cache.SuffixNone,
+				c.String("speakeasy-server-address"),
+				c.String("speakeasy-secret-key"),
+				pylonClient,
+				posthogClient,
+				billingRepo,
+				workosClient,
+			)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
@@ -692,7 +675,7 @@ func newStartCommand() *cli.Command {
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, localEnvPath, temporalEnv))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, temporalEnv))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
 			auth.Attach(mux, auth.NewService(
 				logger,

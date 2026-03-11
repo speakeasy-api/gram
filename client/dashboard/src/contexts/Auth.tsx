@@ -229,9 +229,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
-    if (!__GRAM_DEV_AUTH_BYPASS__) {
-      return <Navigate to={redirectParam} replace />;
-    }
+    return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
     // Fall through to render children
   } else if (session.organization && !projectSlug) {

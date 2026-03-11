@@ -47,7 +47,7 @@ func TestService_Login(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		expectedReturnURL, err := url.JoinPath(instance.authConfigs.GramServerURL, "/rpc/auth.callback")
+		expectedReturnURL, err := url.JoinPath(instance.authConfigs.SignInRedirectURL, "/rpc/auth.callback")
 		require.NoError(t, err, "should construct expected return URL")
 
 		// The return URL is URL encoded, so decode to check

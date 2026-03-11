@@ -97,10 +97,6 @@ func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (
 }
 
 func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) error {
-	if s.unsafeLocal {
-		return nil
-	}
-
 	// Create the HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", s.speakeasyServerAddress+"/v1/speakeasy_provider/revoke", nil)
 	if err != nil {
@@ -331,11 +327,7 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 	var userInfo *CachedUserInfo
 	var err error
 
-	if s.unsafeLocal {
-		userInfo, err = s.GetUserInfoFromLocalEnvFile(userID)
-	} else {
-		userInfo, err = s.GetUserInfoFromSpeakeasy(ctx, sessionID)
-	}
+	userInfo, err = s.GetUserInfoFromSpeakeasy(ctx, sessionID)
 	if err != nil {
 		return nil, false, fmt.Errorf("fetch user info: %w", err)
 	}

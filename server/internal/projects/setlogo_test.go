@@ -109,12 +109,13 @@ func TestSetLogo_UnauthorizedNoAuthContext(t *testing.T) {
 
 func TestSetLogo_UnauthorizedNoProjectID(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	_, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t)
 
-	// Create auth context without project ID
-	ctx, err := ti.sessionManager.Authenticate(ctx, "", true)
-	require.NoError(t, err)
+	// Clear project ID from auth context
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ProjectID = nil
+	authCtx.ProjectSlug = nil
 
 	// Call SetLogo without project ID in auth context
 	payload := &projects.SetLogoPayload{
@@ -139,10 +140,6 @@ func TestSetLogo_UnauthorizedNoProjectID(t *testing.T) {
 func TestSetLogo_DatabaseErrorProjectNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProjectsService(t)
-
-	// Create auth context with non-existent project ID
-	ctx, err := ti.sessionManager.Authenticate(ctx, "", true)
-	require.NoError(t, err)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
