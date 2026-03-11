@@ -26,7 +26,8 @@ func NewTemporalDevServer(t *testing.T, ctx context.Context) (*testsuite.DevServ
 
 	for range 5 {
 		temporal, err = testsuite.StartDevServer(ctx, testsuite.DevServerOptions{
-			LogLevel: "error",
+			LogLevel:     "error",
+			ExistingPath: "temporal",
 			ClientOptions: &client.Options{
 				Namespace: fmt.Sprintf("test_%s", nextRandom()),
 				Logger:    logger,
