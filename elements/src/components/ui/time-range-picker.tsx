@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react";
 import { CalendarIcon, ChevronDown, Zap } from "lucide-react";
-import { generateObject } from "ai";
+import { generateObject, LanguageModel } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
@@ -233,7 +233,7 @@ async function parseWithAI(
         }),
     });
 
-    const model = openRouter.chat(TIME_RANGE_MODEL);
+    const model = openRouter.chat(TIME_RANGE_MODEL) as LanguageModel;
 
     const result = await generateObject({
       model,
