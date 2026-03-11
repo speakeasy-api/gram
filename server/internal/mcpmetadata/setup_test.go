@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,10 @@ import (
 
 var (
 	infra *testenv.Environment
+	// redisDBCounter assigns each parallel test its own Redis DB to prevent
+	// cache key collisions (e.g. speakeasyUserInfo:1245) between concurrent
+	// calls to PopulateLocalDevDefaultAuthSession during test auth setup.
+	redisDBCounter atomic.Int32
 )
 
 func TestMain(m *testing.M) {
@@ -60,7 +65,8 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	conn, err := infra.CloneTestDatabase(t, "mcpmetadatatest")
 	require.NoError(t, err)
 
-	redisClient, err := infra.NewRedisClient(t, 0)
+	redisDB := int(redisDBCounter.Add(1) % 16)
+	redisClient, err := infra.NewRedisClient(t, redisDB)
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
