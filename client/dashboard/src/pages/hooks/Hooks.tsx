@@ -893,52 +893,44 @@ function SummaryTable({
         {sortedItems.map((item) => (
           <div
             key={item.name}
-            className="group w-full flex items-center gap-3 px-5 py-3 border-b last:border-b-0 transition-colors hover:bg-muted/50"
+            className="group w-full flex items-center gap-3 px-5 py-3 border-b last:border-b-0"
           >
-            <button
-              onClick={() => onItemSelect(item.name)}
-              className="flex items-center gap-2 w-full text-left"
-            >
-              {/* Name + Actions */}
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-sm font-medium truncate">
-                  {item.displayName || item.name}
-                </span>
+            {/* Name + Actions */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-sm font-medium truncate">
+                {item.displayName || item.name}
+              </span>
 
-                {/* Actions - shown on hover */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onItemSelect(item.name);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-primary/10 transition-opacity shrink-0"
-                  title={`Filter by ${item.displayName || item.name}`}
-                >
-                  <Filter className="size-4 text-muted-foreground hover:text-primary" />
-                </button>
-              </div>
+              {/* Actions - shown on hover */}
+              <button
+                onClick={() => onItemSelect(item.name)}
+                className="opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-primary/10 transition-opacity shrink-0"
+                title={`Filter by ${item.displayName || item.name}`}
+              >
+                <Filter className="size-4 text-muted-foreground hover:text-primary" />
+              </button>
+            </div>
 
-              {/* Unique Tools */}
-              <div className="shrink-0 w-[100px] text-right text-sm text-muted-foreground">
-                {item.uniqueTools}
-              </div>
+            {/* Unique Tools */}
+            <div className="shrink-0 w-[100px] text-right text-sm text-muted-foreground">
+              {item.uniqueTools}
+            </div>
 
-              {/* Tool Calls (successCount + failureCount (eventCount is something else)) */}
-              <div className="shrink-0 w-[100px] text-right text-sm">
-                {item.toolCallCount}
-              </div>
+            {/* Tool Calls (successCount + failureCount (eventCount is something else)) */}
+            <div className="shrink-0 w-[100px] text-right text-sm">
+              {item.toolCallCount}
+            </div>
 
-              {/* Success Rate */}
-              <div className="shrink-0 w-[100px] flex justify-end items-center gap-1.5">
-                <span className="text-sm font-medium tabular-nums">
-                  {Math.round((1 - item.failureRate) * 100)}%
-                </span>
-                <PieProgress
-                  value={Math.round((1 - item.failureRate) * 100)}
-                  size={16}
-                />
-              </div>
-            </button>
+            {/* Success Rate */}
+            <div className="shrink-0 w-[100px] flex justify-end items-center gap-1.5">
+              <span className="text-sm font-medium tabular-nums">
+                {Math.round((1 - item.failureRate) * 100)}%
+              </span>
+              <PieProgress
+                value={Math.round((1 - item.failureRate) * 100)}
+                size={16}
+              />
+            </div>
           </div>
         ))}
       </div>
