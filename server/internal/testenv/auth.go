@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -28,7 +30,9 @@ import (
 func NewTestManager(t *testing.T, logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository) *sessions.Manager {
 	t.Helper()
 
-	mockIDP := NewMockIDP(t)
+	cfg := mockidp.NewConfig()
+	srv := httptest.NewServer(mockidp.Handler(cfg))
+	t.Cleanup(srv.Close)
 
 	fakePylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
@@ -40,8 +44,8 @@ func NewTestManager(t *testing.T, logger *slog.Logger, db *pgxpool.Pool, redisCl
 		db,
 		redisClient,
 		suffix,
-		mockIDP.URL,
-		MockSecretKey,
+		srv.URL,
+		mockidp.MockSecretKey,
 		fakePylon,
 		fakePosthog,
 		billingRepo,

@@ -3,4 +3,4 @@
 
 set -e
 
-exec pnpm --filter ./mock-speakeasy-idp dev
+exec go run ./mock-speakeasy-idp/main

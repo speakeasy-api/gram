@@ -11,7 +11,6 @@ packages:
   - evaluation
   - elements
   - elements/examples/*
-  - mock-speakeasy-idp
 
 catalog:
   "@ai-sdk/openai": ^2.0.0

@@ -1,6 +1,6 @@
 # Mock Speakeasy IDP
 
-A lightweight mock identity provider for local development. It implements the `/v1/speakeasy_provider/*` endpoints that the Gram server calls during authentication, replacing the need for a real Speakeasy IDP connection.
+A lightweight mock identity provider for local development and testing. It implements the `/v1/speakeasy_provider/*` endpoints that the Gram server calls during authentication, replacing the need for a real Speakeasy IDP connection.
 
 ## How it works
 
@@ -10,14 +10,35 @@ When you click "Login" in the dashboard:
 2. The mock IDP auto-approves the login (no credentials needed) and redirects back with an auth code
 3. The server exchanges the code for a token, validates it, and creates a session
 
-There is no username/password prompt — login is instant.
+There is no username/password prompt -- login is instant.
 
-## Running
+## Package usage
 
-The mock IDP starts automatically as part of `mise run start` (via mprocs). You can also start it standalone:
+The `mockidp` Go package can be used in two ways:
+
+### In tests
+
+```go
+import (
+    "net/http/httptest"
+    mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+)
+
+cfg := mockidp.NewConfig()  // deterministic defaults, no env vars
+srv := httptest.NewServer(mockidp.Handler(cfg))
+defer srv.Close()
+```
+
+### As a standalone server
 
 ```sh
 mise run start:mock-idp
+```
+
+Or directly:
+
+```sh
+go run ./mock-speakeasy-idp/main
 ```
 
 It runs on `http://localhost:35291` by default.
