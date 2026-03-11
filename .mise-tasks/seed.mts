@@ -58,6 +58,43 @@ const SEED_PROJECTS: {
   },
 ];
 
+async function authenticateViaMockIDP(serverURL: string): Promise<string> {
+  const idpAddress = process.env["SPEAKEASY_SERVER_ADDRESS"];
+  if (!idpAddress) {
+    throw new Error("SPEAKEASY_SERVER_ADDRESS is not set");
+  }
+
+  const secretKey = process.env["SPEAKEASY_SECRET_KEY"];
+  if (!secretKey) {
+    throw new Error("SPEAKEASY_SECRET_KEY is not set");
+  }
+
+  // Step 1: Hit the mock IDP login endpoint to get an auth code.
+  // Use a dummy return_url — we only need the code from the redirect Location.
+  const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=http://localhost/callback`;
+  const loginRes = await fetch(loginURL, { redirect: "manual" });
+  const location = loginRes.headers.get("location");
+  if (!location) {
+    throw new Error("Mock IDP login did not return a redirect");
+  }
+  const code = new URL(location).searchParams.get("code");
+  if (!code) {
+    throw new Error("Mock IDP login redirect did not contain a code");
+  }
+
+  // Step 2: Call the server's callback endpoint with the code to create a session.
+  const callbackURL = `${serverURL}/rpc/auth.callback?code=${encodeURIComponent(code)}`;
+  const callbackRes = await fetch(callbackURL, { redirect: "manual" });
+  const sessionToken = callbackRes.headers.get("gram-session");
+  if (!sessionToken) {
+    throw new Error(
+      `Server callback did not return a session (status=${callbackRes.status})`,
+    );
+  }
+
+  return sessionToken;
+}
+
 async function seed() {
   let success = false;
   intro("Seeding local development environment...");
@@ -73,22 +110,19 @@ async function seed() {
 
   const gram = new GramCore({ serverURL });
 
-  const res = await authInfo(gram);
+  // Authenticate via the mock IDP to get a session token.
+  log.info("Authenticating via mock IDP...");
+  const sessionId = await authenticateViaMockIDP(serverURL);
+  log.info("Authenticated successfully.");
+
+  const res = await authInfo(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
   if (!res.ok) {
     abort("Failed to query session info", res.error);
   }
   const sessionInfo = res.value;
   const sessionJSON = JSON.stringify(sessionInfo, null, 2);
-  const sessionHeaders = new Headers(
-    Object.entries(sessionInfo.headers).map(([k, vs]): [string, string] => [
-      k,
-      vs.join(","),
-    ]),
-  );
-  const sessionId = sessionHeaders.get("gram-session");
-  if (!sessionId) {
-    abort("Session ID not found in session headers", sessionInfo);
-  }
 
   const activeOrgID = sessionInfo.result.activeOrganizationId;
   if (!activeOrgID) {

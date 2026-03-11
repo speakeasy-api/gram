@@ -102,8 +102,7 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 

@@ -248,11 +248,6 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:    "unsafe-local-env-path",
-			Usage:   "The path to the local environment file used for session auth in local development",
-			EnvVars: []string{"GRAM_UNSAFE_LOCAL_ENV_PATH"},
-		},
-		&cli.StringFlag{
 			Name:     "speakeasy-server-address",
 			Usage:    "Speakeasy server address",
 			EnvVars:  []string{"SPEAKEASY_SERVER_ADDRESS"},
@@ -491,19 +486,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			localEnvPath := c.String("unsafe-local-env-path")
-			var sessionManager *sessions.Manager
-			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
-			} else {
-				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath, billingRepo)
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe session manager: %w", err)
-				}
-
-				sessionManager = s
-			}
+			sessionManager := sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 

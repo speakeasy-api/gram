@@ -2,7 +2,6 @@
 
 declare const __GRAM_SERVER_URL__: string | undefined;
 declare const __GRAM_GIT_SHA__: string | undefined;
-declare const __GRAM_DEV_AUTH_BYPASS__: boolean;
 
 interface ViteTypeOptions {
   // By adding this line, you can make the type of ImportMetaEnv strict

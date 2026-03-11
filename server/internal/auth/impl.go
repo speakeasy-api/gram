@@ -36,9 +36,8 @@ import (
 type authErr string
 
 const (
-	authErrCodeLookup      authErr = "lookup_error"
-	authErrInit            authErr = "init_error"
-	authErrLocalDevStubbed authErr = "local_dev_stubbed"
+	authErrCodeLookup authErr = "lookup_error"
+	authErrInit       authErr = "init_error"
 )
 
 const gramWaitlistTypeForm = "https://speakeasyapi.typeform.com/to/h6WJdwWr"
@@ -99,7 +98,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.Authenticate(ctx, key, true) // TODO: canStubAuth is a temporary hack to allow us to limit auth stubbing to rpc/auth endpoints
+	return s.sessions.Authenticate(ctx, key)
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
@@ -198,15 +197,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
-	if s.sessions.IsUnsafeLocalDevelopment() {
-		err = errors.New("calling rpc.login for local development stubbed auth is not supported because stubbed auth implies always being logged in. Reaching this point suggests a problem with dashboard authentication")
-		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(authErrLocalDevStubbed)))
-		return &gen.LoginResult{
-			Location: fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, authErrLocalDevStubbed),
-		}, nil
-	}
-
+	// In local dev, use the site URL so the mock IDP redirects back through
+	// the Vite proxy (which forwards /rpc to the server). In production, use
+	// the server URL directly since the site may not proxy /rpc paths.
 	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+	if s.cfg.Environment == "local" {
+		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	}
 
 	// Get the request context to access the Host
 	requestCtx, ok := contextvalues.GetRequestContext(ctx)

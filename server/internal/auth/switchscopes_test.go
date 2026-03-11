@@ -58,7 +58,7 @@ func TestService_SwitchScopes(t *testing.T) {
 		require.Equal(t, session.SessionID, result.SessionToken)
 		require.Equal(t, session.SessionID, result.SessionCookie)
 
-		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken, false)
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
@@ -176,7 +176,7 @@ func TestService_SwitchScopes(t *testing.T) {
 		require.Equal(t, session.SessionID, result.SessionToken)
 		require.Equal(t, session.SessionID, result.SessionCookie)
 
-		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken, false)
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")

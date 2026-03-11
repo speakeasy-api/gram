@@ -1,4 +1,8 @@
 procs:
+  mock-idp:
+    cmd: ["mise", "run", "start:mock-idp"]
+    stop:
+      send-keys: ["<C-c>"]
   server:
     cmd: ["mise", "run", "start:server"]
     stop: SIGTERM

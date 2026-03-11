@@ -22,8 +22,7 @@ import (
 var (
 	infra *testenv.Environment
 	// redisDBCounter assigns each parallel test its own Redis DB to prevent
-	// cache key collisions (e.g. speakeasyUserInfo:1245) between concurrent
-	// calls to PopulateLocalDevDefaultAuthSession during test auth setup.
+	// cache key collisions between concurrent test auth setups.
 	redisDBCounter atomic.Int32
 )
 
@@ -71,8 +70,7 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 

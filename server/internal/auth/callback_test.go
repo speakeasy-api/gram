@@ -51,7 +51,7 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
 		require.NotEmpty(t, result.SessionToken)
 
-		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken, false)
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
@@ -87,7 +87,7 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
 		require.NotEmpty(t, result.SessionToken)
 
-		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken, false)
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")

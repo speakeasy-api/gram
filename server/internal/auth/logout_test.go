@@ -53,7 +53,7 @@ func TestService_Logout(t *testing.T) {
 
 		require.Empty(t, result.SessionCookie)
 
-		_, err = instance.sessionManager.Authenticate(ctx, *authCtx.SessionID, false)
+		_, err = instance.sessionManager.Authenticate(ctx, *authCtx.SessionID)
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)

@@ -899,7 +899,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 			return ctx, oops.E(oops.CodeUnauthorized, nil, "no session token found")
 		}
 
-		ctx, err = s.sessions.Authenticate(ctx, oAuthToken.ExternalSecrets[0].Token, false)
+		ctx, err = s.sessions.Authenticate(ctx, oAuthToken.ExternalSecrets[0].Token)
 		if err != nil {
 			return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authenticate session")
 		}

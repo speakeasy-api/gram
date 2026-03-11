@@ -63,15 +63,14 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
 	// Pass nil for telemetry service and temporalEnv in tests - we'll add nil checks in the code
-	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, "", nil)
+	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -4,6 +4,24 @@ Run `./zero` until it succeeds. This script is what you will use to run the dash
 
 The main dependencies for this project are Mise and Docker. The `./zero` script will guide you to install these if they are not found.
 
+### Local auth (Mock IDP)
+
+Local development uses a mock Speakeasy identity provider that runs alongside the server. When you click "Login" in the dashboard, the mock IDP auto-approves instantly — no credentials needed.
+
+To customize the mock user identity, add the following to `mise.local.toml` (create it if it doesn't exist):
+
+```toml
+[env]
+MOCK_IDP_USER_EMAIL = "you@example.com"
+MOCK_IDP_USER_DISPLAY_NAME = "Your Name"
+MOCK_IDP_ORG_NAME = "My Workspace"
+MOCK_IDP_ORG_SLUG = "my-workspace"
+```
+
+After changing these values, restart the `mock-idp` process in mprocs (select it and press `r`), then log out and back in.
+
+See [`mock-speakeasy-idp/README.md`](./mock-speakeasy-idp/README.md) for the full list of configurable variables.
+
 ### CLI development
 
 Quickstart:

@@ -34,8 +34,6 @@ export default defineConfig(({ command }) => {
         ? JSON.stringify(siteUrl) // Use siteUrl in dev to match the origin
         : JSON.stringify(serverUrl),
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
-      __GRAM_DEV_AUTH_BYPASS__:
-        isDev && !process.env["SPEAKEASY_SERVER_ADDRESS"],
     },
     build: {
       target: "es2022",

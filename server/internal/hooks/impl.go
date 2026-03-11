@@ -46,7 +46,6 @@ type Service struct {
 	auth             *auth.Auth
 	cache            cache.Cache
 	nameMapper       NameMapper
-	localEnvData     sessions.LocalEnvFile
 	temporalEnv      *tenv.Environment
 }
 
@@ -78,7 +77,6 @@ func NewService(
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
-	localEnvPath string,
 	temporalEnv *tenv.Environment,
 ) *Service {
 	// Use async name mapper when temporalEnv is available, otherwise fall back to sync
@@ -89,16 +87,6 @@ func NewService(
 		nameMapper = NewNameMapper(cacheAdapter, completionsClient, logger)
 	}
 
-	var localEnvData sessions.LocalEnvFile
-	if localEnvPath != "" {
-		data, err := sessions.LoadLocalEnvFile(context.Background(), logger, localEnvPath, db)
-		if err != nil {
-			logger.WarnContext(context.Background(), "failed to load local env file for hooks service", attr.SlogError(err))
-		} else {
-			localEnvData = data
-		}
-	}
-
 	return &Service{
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:           logger.With(attr.SlogComponent("hooks")),
@@ -107,7 +95,6 @@ func NewService(
 		auth:             auth.New(logger, db, sessionsMgr),
 		cache:            cacheAdapter,
 		nameMapper:       nameMapper,
-		localEnvData:     localEnvData,
 		temporalEnv:      temporalEnv,
 	}
 }
@@ -333,24 +320,6 @@ func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudeHookPa
 }
 
 func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (SessionMetadata, error) {
-	// In unsafe local mode, automatically authenticate using data from local env file
-	if len(s.localEnvData) > 0 {
-		// Get the first user from the local env data
-		for _, userInfo := range s.localEnvData {
-			if len(userInfo.Organizations) > 0 {
-				org := userInfo.Organizations[0]
-				return SessionMetadata{
-					SessionID:   sessionID,
-					UserEmail:   userInfo.UserEmail,
-					ServiceName: "claude-code",
-					ClaudeOrgID: "test-claude-org-id",
-					GramOrgID:   org.OrganizationID,
-					ProjectID:   org.DefaultProjectID,
-				}, nil
-			}
-		}
-	}
-
 	var metadata SessionMetadata
 	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
 	if err != nil {
