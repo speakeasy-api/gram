@@ -1486,4 +1486,4 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
   CONSTRAINT hooks_overrides_unique_raw UNIQUE (project_id, raw_server_name)
 );
 
-CREATE INDEX IF NOT EXISTS hooks_overrides_display_idx ON hooks_server_name_overrides(project_id, display_name);
+CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);

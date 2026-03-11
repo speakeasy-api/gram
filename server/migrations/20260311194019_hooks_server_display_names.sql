@@ -12,5 +12,5 @@ CREATE TABLE "hooks_server_name_overrides" (
   CONSTRAINT "hooks_server_name_overrides_display_name_check" CHECK (display_name <> ''::text),
   CONSTRAINT "hooks_server_name_overrides_raw_server_name_check" CHECK (raw_server_name <> ''::text)
 );
--- Create index "hooks_overrides_display_idx" to table: "hooks_server_name_overrides"
-CREATE INDEX "hooks_overrides_display_idx" ON "hooks_server_name_overrides" ("project_id", "display_name");
+-- Create index "hooks_server_name_overrides_project_id_display_name_idx" to table: "hooks_server_name_overrides"
+CREATE INDEX "hooks_server_name_overrides_project_id_display_name_idx" ON "hooks_server_name_overrides" ("project_id", "display_name");
