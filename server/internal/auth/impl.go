@@ -197,11 +197,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
-	// Use the site URL for the callback return address so that in local dev
-	// the mock IDP redirects back through the Vite proxy (which forwards
-	// /rpc to the actual server). In production, SignInRedirectURL is the
-	// site URL which serves the same purpose.
-	returnAddress := strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	// In local dev, use the site URL so the mock IDP redirects back through
+	// the Vite proxy (which forwards /rpc to the server). In production, use
+	// the server URL directly since the site may not proxy /rpc paths.
+	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+	if s.cfg.Environment == "local" {
+		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	}
 
 	// Get the request context to access the Host
 	requestCtx, ok := contextvalues.GetRequestContext(ctx)
