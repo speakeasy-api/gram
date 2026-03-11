@@ -9,7 +9,7 @@ CREATE TABLE "hooks_server_name_overrides" (
   PRIMARY KEY ("id"),
   CONSTRAINT "hooks_overrides_unique_raw" UNIQUE ("project_id", "raw_server_name"),
   CONSTRAINT "hooks_server_name_overrides_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "hooks_server_name_overrides_display_name_check" CHECK ((display_name <> ''::text) AND (char_length(display_name) <= 100)),
+  CONSTRAINT "hooks_server_name_overrides_display_name_check" CHECK (display_name <> ''::text),
   CONSTRAINT "hooks_server_name_overrides_raw_server_name_check" CHECK (raw_server_name <> ''::text)
 );
 -- Create index "hooks_overrides_display_idx" to table: "hooks_server_name_overrides"

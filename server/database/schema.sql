@@ -1478,7 +1478,7 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   raw_server_name TEXT NOT NULL CHECK (raw_server_name <> ''),
-  display_name TEXT NOT NULL CHECK (display_name <> '' AND CHAR_LENGTH(display_name) <= 100),
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
