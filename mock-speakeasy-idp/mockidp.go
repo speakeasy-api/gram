@@ -239,9 +239,9 @@ func (s *server) handleExchange(w http.ResponseWriter, r *http.Request) {
 
 	userID := s.validateAuthCode(body.Code)
 	if userID == "" {
-		log.Printf("[exchange] REJECTED: invalid code")
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid or expired auth code"})
-		return
+		// Accept unknown codes gracefully — this is a mock. Tests call
+		// exchange directly without going through /login first.
+		userID = s.cfg.User.ID
 	}
 
 	token := s.generateToken(userID)
