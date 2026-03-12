@@ -1488,11 +1488,8 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
 
--- RBAC: scope vocabulary (reference data, seeded at app startup)
 CREATE TABLE IF NOT EXISTS scopes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  -- Unique human-readable identifier, e.g. "project:read", "build:write".
-  -- Used as the FK target from principal_grants so grant rows are self-describing.
   slug TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1502,26 +1499,15 @@ CREATE TABLE IF NOT EXISTS scopes (
   CONSTRAINT scopes_slug_key UNIQUE (slug)
 );
 
--- RBAC: principal grants
--- One row per (org, principal, scope).
--- resources = NULL  -> unrestricted: principal has this scope for all resources in the org.
--- resources = ARRAY -> allowlist: principal has this scope only for the listed resource IDs.
--- The UNIQUE constraint guarantees at most one row per (org, principal, scope),
--- so NULL (unrestricted) and ARRAY (allowlist) are mutually exclusive by construction.
+COMMENT ON TABLE scopes IS 'RBAC scope vocabulary. Reference data seeded at app startup.';
+COMMENT ON COLUMN scopes.slug IS 'Unique human-readable identifier, e.g. "project:read", "build:write". Used as the FK target from principal_grants so grant rows are self-describing.';
+
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  -- The organization this grant belongs to. Grants are always org-scoped.
   organization_id TEXT NOT NULL,
-  -- Discriminator: 'user' for a direct user grant, 'role' for a WorkOS role grant.
   principal_type TEXT NOT NULL,
-  -- The identifier of the principal: a WorkOS user ID when principal_type='user',
-  -- or a WorkOS role slug when principal_type='role'.
   principal_id TEXT NOT NULL,
-  -- The scope being granted, e.g. "project:read". References scopes(slug).
   scope_slug TEXT NOT NULL,
-  -- NULL = unrestricted (scope applies to all resources in the org).
-  -- Non-empty array = allowlist of resource IDs this scope is restricted to.
-  -- Empty arrays are rejected by the CHECK constraint (use NULL for unrestricted).
   resources TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1535,6 +1521,12 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   CONSTRAINT principal_grants_organization_id_principal_type_principal_id_scope_slug_key UNIQUE (organization_id, principal_type, principal_id, scope_slug)
 );
 
--- Supports efficient @> (array containment) queries used by access.Filter()
--- to find all grants covering a specific resource ID.
+COMMENT ON TABLE principal_grants IS 'RBAC principal grants. One row per (org, principal, scope). The UNIQUE constraint guarantees at most one row per combination, so NULL resources (unrestricted) and array resources (allowlist) are mutually exclusive by construction.';
+COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
+COMMENT ON COLUMN principal_grants.principal_type IS 'Discriminator: ''user'' for a direct user grant, ''role'' for a WorkOS role grant.';
+COMMENT ON COLUMN principal_grants.principal_id IS 'The identifier of the principal: a WorkOS user ID when principal_type=''user'', or a WorkOS role slug when principal_type=''role''.';
+COMMENT ON COLUMN principal_grants.scope_slug IS 'The scope being granted, e.g. "project:read". References scopes(slug).';
+COMMENT ON COLUMN principal_grants.resources IS 'NULL = unrestricted (scope applies to all resources in the org). Non-empty array = allowlist of resource IDs this scope is restricted to. Empty arrays are rejected by the CHECK constraint.';
+
 CREATE INDEX IF NOT EXISTS principal_grants_resources_idx ON principal_grants USING GIN (resources);
+COMMENT ON INDEX principal_grants_resources_idx IS 'Supports efficient @> (array containment) queries used by access.Filter() to find grants covering a specific resource ID.';
