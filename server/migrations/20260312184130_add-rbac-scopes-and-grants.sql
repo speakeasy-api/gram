@@ -31,7 +31,7 @@ CREATE TABLE "principal_grants" (
 -- Create index "principal_grants_resources_idx" to table: "principal_grants"
 CREATE INDEX "principal_grants_resources_idx" ON "principal_grants" USING gin ("resources");
 -- Set comment to table: "principal_grants"
-COMMENT ON TABLE "principal_grants" IS 'RBAC principal grants. One row per (org, principal, scope). The UNIQUE constraint guarantees at most one row per combination, so NULL resources (unrestricted) and array resources (allowlist) are mutually exclusive by construction.';
+COMMENT ON TABLE "principal_grants" IS 'RBAC grants. One row per (org, principal, scope). NULL resources = unrestricted, array = allowlist.';
 -- Set comment to column: "organization_id" on table: "principal_grants"
 COMMENT ON COLUMN "principal_grants"."organization_id" IS 'The organization this grant belongs to. Grants are always org-scoped.';
 -- Set comment to column: "principal_type" on table: "principal_grants"

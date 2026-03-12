@@ -1521,7 +1521,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   CONSTRAINT principal_grants_organization_id_principal_type_principal_id_scope_slug_key UNIQUE (organization_id, principal_type, principal_id, scope_slug)
 );
 
-COMMENT ON TABLE principal_grants IS 'RBAC principal grants. One row per (org, principal, scope). The UNIQUE constraint guarantees at most one row per combination, so NULL resources (unrestricted) and array resources (allowlist) are mutually exclusive by construction.';
+COMMENT ON TABLE principal_grants IS 'RBAC grants. One row per (org, principal, scope). NULL resources = unrestricted, array = allowlist.';
 COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
 COMMENT ON COLUMN principal_grants.principal_type IS 'Discriminator: ''user'' for a direct user grant, ''role'' for a WorkOS role grant.';
 COMMENT ON COLUMN principal_grants.principal_id IS 'The identifier of the principal: a WorkOS user ID when principal_type=''user'', or a WorkOS role slug when principal_type=''role''.';
