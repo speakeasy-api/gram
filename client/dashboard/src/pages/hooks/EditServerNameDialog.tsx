@@ -94,7 +94,7 @@ export function EditServerNameDialog({
 
   const onUpsert = useCallback(
     async (rawServerName: string, displayName: string) => {
-      upsert.mutate({
+      await upsert.mutateAsync({
         request: {
           upsertRequestBody: {
             rawServerName: rawServerName,
