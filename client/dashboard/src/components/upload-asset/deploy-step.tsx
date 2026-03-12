@@ -123,30 +123,36 @@ export default function DeployStep() {
 
   React.useEffect(() => {
     if (!step.isCurrentStep || step.state !== "idle") return;
-    createOrEvolveDeployment().then((result) => {
-      stepper.meta.current.deployment = result;
+    createOrEvolveDeployment()
+      .then((result) => {
+        stepper.meta.current.deployment = result;
 
-      // Always mark as "completed" so we can check tool count
-      // The actual success/failure is determined by whether tools were created for THIS source
-      step.setState("completed");
-      stepper.setState("completed");
+        // Always mark as "completed" so we can check tool count
+        // The actual success/failure is determined by whether tools were created for THIS source
+        step.setState("completed");
+        stepper.setState("completed");
 
-      telemetry.capture("onboarding_event", {
-        action:
-          result.status === "failed"
-            ? "deployment_failed"
-            : "deployment_created",
-        num_tools: result?.openapiv3ToolCount,
-        deployment_status: result.status,
-      });
-
-      if (result?.openapiv3ToolCount === 0) {
         telemetry.capture("onboarding_event", {
-          action: "no_tools_found",
-          error: "no_tools_found",
+          action:
+            result.status === "failed"
+              ? "deployment_failed"
+              : "deployment_created",
+          num_tools: result?.openapiv3ToolCount,
+          deployment_status: result.status,
         });
-      }
-    });
+
+        if (result?.openapiv3ToolCount === 0) {
+          telemetry.capture("onboarding_event", {
+            action: "no_tools_found",
+            error: "no_tools_found",
+          });
+        }
+      })
+      .catch((err) => {
+        console.error("Deployment failed:", err);
+        step.setState("failed");
+        stepper.setState("error");
+      });
   }, [step.isCurrentStep, step.state]);
 
   if (!step.isCurrentStep) return null;

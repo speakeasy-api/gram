@@ -290,86 +290,89 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
     setCreatingDeployment(true);
 
-    const shouldCreateNew =
-      !latestDeployment ||
-      (forceNew && latestDeployment.deployment?.openapiv3ToolCount === 0);
+    try {
+      const shouldCreateNew =
+        !latestDeployment ||
+        (forceNew && latestDeployment.deployment?.openapiv3ToolCount === 0);
 
-    let deployment: Deployment | undefined;
-    if (shouldCreateNew) {
-      const createResult = await client.deployments.create({
-        idempotencyKey: crypto.randomUUID(),
-        createDeploymentRequestBody: {
-          nonBlocking: true,
-          openapiv3Assets: [
-            {
-              assetId: asset.asset.id,
-              name: documentSlug ?? apiName,
-              slug: documentSlug ?? slugify(apiName),
-            },
-          ],
-        },
-      });
+      let deployment: Deployment | undefined;
+      if (shouldCreateNew) {
+        const createResult = await client.deployments.create({
+          idempotencyKey: crypto.randomUUID(),
+          createDeploymentRequestBody: {
+            nonBlocking: true,
+            openapiv3Assets: [
+              {
+                assetId: asset.asset.id,
+                name: documentSlug ?? apiName,
+                slug: documentSlug ?? slugify(apiName),
+              },
+            ],
+          },
+        });
 
-      deployment = createResult.deployment;
-    } else {
-      const createResult = await client.deployments.evolveDeployment({
-        evolveForm: {
-          nonBlocking: true,
-          upsertOpenapiv3Assets: [
-            {
-              assetId: asset.asset.id,
-              name: documentSlug ?? apiName,
-              slug: documentSlug ?? slugify(apiName),
-            },
-          ],
-        },
-      });
+        deployment = createResult.deployment;
+      } else {
+        const createResult = await client.deployments.evolveDeployment({
+          evolveForm: {
+            nonBlocking: true,
+            upsertOpenapiv3Assets: [
+              {
+                assetId: asset.asset.id,
+                name: documentSlug ?? apiName,
+                slug: documentSlug ?? slugify(apiName),
+              },
+            ],
+          },
+        });
 
-      deployment = createResult.deployment;
-    }
-
-    if (!deployment) {
-      throw new Error("Deployment not found");
-    }
-
-    // Wait for deployment to finish
-    const maxAttempts = 600; // 5 minutes at 500ms intervals
-    let attempts = 0;
-    while (
-      deployment.status !== "completed" &&
-      deployment.status !== "failed"
-    ) {
-      if (++attempts >= maxAttempts) {
-        throw new Error("Deployment timed out waiting for completion");
+        deployment = createResult.deployment;
       }
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      deployment = await client.deployments.getById({
-        id: deployment.id,
-      });
+
+      if (!deployment) {
+        throw new Error("Deployment not found");
+      }
+
+      // Wait for deployment to finish
+      const maxAttempts = 600; // 5 minutes at 500ms intervals
+      let attempts = 0;
+      while (
+        deployment.status !== "completed" &&
+        deployment.status !== "failed"
+      ) {
+        if (++attempts >= maxAttempts) {
+          throw new Error("Deployment timed out waiting for completion");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        deployment = await client.deployments.getById({
+          id: deployment.id,
+        });
+      }
+
+      setDeployment(deployment);
+
+      if (deployment.status === "failed") {
+        telemetry.capture("onboarding_event", {
+          action: "deployment_failed",
+        });
+      } else {
+        telemetry.capture("onboarding_event", {
+          action: "deployment_created",
+          num_tools: deployment?.openapiv3ToolCount,
+        });
+      }
+
+      if (deployment?.openapiv3ToolCount === 0) {
+        telemetry.capture("onboarding_event", {
+          action: "no_tools_found",
+          error: "no_tools_found",
+        });
+      }
+
+      return deployment;
+    } finally {
+      setCreatingDeployment(false);
     }
-
-    setDeployment(deployment);
-    setCreatingDeployment(false);
-
-    if (deployment.status === "failed") {
-      telemetry.capture("onboarding_event", {
-        action: "deployment_failed",
-      });
-    } else {
-      telemetry.capture("onboarding_event", {
-        action: "deployment_created",
-        num_tools: deployment?.openapiv3ToolCount,
-      });
-    }
-
-    if (deployment?.openapiv3ToolCount === 0) {
-      telemetry.capture("onboarding_event", {
-        action: "no_tools_found",
-        error: "no_tools_found",
-      });
-    }
-
-    return deployment;
   };
 
   const undoSpecUpload = () => {
