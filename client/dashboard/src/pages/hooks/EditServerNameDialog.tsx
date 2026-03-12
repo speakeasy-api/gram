@@ -59,20 +59,24 @@ export function EditServerNameDialog({
   const [displayName, setDisplayName] = useState(
     groupedOverrides[0]?.displayName || serverName,
   );
-  const [individualDisplayNames, setIndividualDisplayNames] = useState<Map<string, string>>(
-    () => {
-      const map = new Map(groupedOverrides.map(o => [o.rawServerName, o.displayName]));
-      if (unmappedRawName) {
-        map.set(unmappedRawName, unmappedRawName);
-      }
-      return map;
+  const [individualDisplayNames, setIndividualDisplayNames] = useState<
+    Map<string, string>
+  >(() => {
+    const map = new Map(
+      groupedOverrides.map((o) => [o.rawServerName, o.displayName]),
+    );
+    if (unmappedRawName) {
+      map.set(unmappedRawName, unmappedRawName);
     }
-  );
+    return map;
+  });
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   const isProcessing = isUpserting || isDeleting;
   // Consider it grouped if we have multiple overrides OR if we have overrides plus an unmapped server
-  const isGrouped = groupedOverrides.length > 1 || (groupedOverrides.length === 1 && unmappedRawName);
+  const isGrouped =
+    groupedOverrides.length > 1 ||
+    (groupedOverrides.length === 1 && unmappedRawName);
 
   // Create a unified list of all servers to show (both overrides and unmapped)
   const allServers = useMemo(() => {
@@ -80,7 +84,7 @@ export function EditServerNameDialog({
     if (unmappedRawName) {
       // Add the unmapped server as a pseudo-override
       servers.push({
-        id: '', // Empty ID indicates this is unmapped
+        id: "", // Empty ID indicates this is unmapped
         rawServerName: unmappedRawName,
         displayName: unmappedRawName,
       } as ServerNameOverride);
@@ -116,7 +120,9 @@ export function EditServerNameDialog({
       if (isGrouped) {
         // For grouped servers, save each individual display name
         const promises = allServers.map((server) => {
-          const newDisplayName = individualDisplayNames.get(server.rawServerName) || server.displayName;
+          const newDisplayName =
+            individualDisplayNames.get(server.rawServerName) ||
+            server.displayName;
           return onUpsert(server.rawServerName, newDisplayName);
         });
         await Promise.all(promises);
@@ -174,10 +180,7 @@ export function EditServerNameDialog({
           {isGrouped && (
             <div className="space-y-3">
               {allServers.map((server) => (
-                <div
-                  key={server.rawServerName}
-                  className="space-y-2"
-                >
+                <div key={server.rawServerName} className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Label className="flex-1 font-mono text-xs text-muted-foreground">
                       {server.rawServerName}
@@ -203,9 +206,12 @@ export function EditServerNameDialog({
                     )}
                   </div>
                   <Input
-                    value={individualDisplayNames.get(server.rawServerName) || server.displayName}
+                    value={
+                      individualDisplayNames.get(server.rawServerName) ||
+                      server.displayName
+                    }
                     onChange={(value) => {
-                      setIndividualDisplayNames(prev => {
+                      setIndividualDisplayNames((prev) => {
                         const next = new Map(prev);
                         next.set(server.rawServerName, value);
                         return next;
@@ -218,7 +224,9 @@ export function EditServerNameDialog({
                 </div>
               ))}
               <p className="text-xs text-muted-foreground">
-                Change a server's display name to move it to a different group, or restore its original name to ungroup it. Click the trash icon to remove the override entirely.
+                Change a server's display name to move it to a different group,
+                or restore its original name to ungroup it. Click the trash icon
+                to remove the override entirely.
               </p>
             </div>
           )}
@@ -259,7 +267,8 @@ export function EditServerNameDialog({
                   }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  This name will be shown in the UI instead of the raw server name
+                  This name will be shown in the UI instead of the raw server
+                  name
                 </p>
               </div>
             </>
@@ -298,7 +307,9 @@ export function EditServerNameDialog({
             disabled={
               isProcessing ||
               (isGrouped
-                ? Array.from(individualDisplayNames.values()).some(name => !name?.trim())
+                ? Array.from(individualDisplayNames.values()).some(
+                    (name) => !name?.trim(),
+                  )
                 : !displayName.trim())
             }
           >

@@ -120,7 +120,10 @@ function HooksContent() {
 
     // Parse comma-separated server filters
     if (initialServer) {
-      const serverValues = initialServer.split(",").map((s) => s.trim()).filter(Boolean);
+      const serverValues = initialServer
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       serverValues.forEach((value) => {
         filters.push({
           display: value,
@@ -132,7 +135,10 @@ function HooksContent() {
 
     // Parse comma-separated user filters
     if (initialUserEmail) {
-      const userValues = initialUserEmail.split(",").map((s) => s.trim()).filter(Boolean);
+      const userValues = initialUserEmail
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       userValues.forEach((value) => {
         filters.push({
           display: value,
@@ -405,79 +411,85 @@ function HooksContent() {
   }, [logsData]);
 
   // Add a filter chip
-  const addFilter = useCallback((chip: FilterChip) => {
-    setActiveFilters((prev) => {
-      // Check if this exact filter already exists
-      const exists = prev.some(
-        (f) => f.path === chip.path && f.display === chip.display
-      );
-      if (exists) return prev;
+  const addFilter = useCallback(
+    (chip: FilterChip) => {
+      setActiveFilters((prev) => {
+        // Check if this exact filter already exists
+        const exists = prev.some(
+          (f) => f.path === chip.path && f.display === chip.display,
+        );
+        if (exists) return prev;
 
-      // Add the new filter alongside existing ones
-      const newFilters = [...prev, chip];
+        // Add the new filter alongside existing ones
+        const newFilters = [...prev, chip];
 
-      // Update URL params with all values (comma-separated)
-      setSearchParams(
-        (urlPrev) => {
-          const next = new URLSearchParams(urlPrev);
-          if (chip.path === "gram.tool_call.source") {
-            const serverFilters = newFilters
-              .filter((f) => f.path === "gram.tool_call.source")
-              .map((f) => f.display);
-            next.set("server", serverFilters.join(","));
-          } else if (chip.path === "user.email") {
-            const userFilters = newFilters
-              .filter((f) => f.path === "user.email")
-              .map((f) => f.display);
-            next.set("user", userFilters.join(","));
-          }
-          return next;
-        },
-        { replace: true },
-      );
+        // Update URL params with all values (comma-separated)
+        setSearchParams(
+          (urlPrev) => {
+            const next = new URLSearchParams(urlPrev);
+            if (chip.path === "gram.tool_call.source") {
+              const serverFilters = newFilters
+                .filter((f) => f.path === "gram.tool_call.source")
+                .map((f) => f.display);
+              next.set("server", serverFilters.join(","));
+            } else if (chip.path === "user.email") {
+              const userFilters = newFilters
+                .filter((f) => f.path === "user.email")
+                .map((f) => f.display);
+              next.set("user", userFilters.join(","));
+            }
+            return next;
+          },
+          { replace: true },
+        );
 
-      return newFilters;
-    });
-  }, [setSearchParams]);
+        return newFilters;
+      });
+    },
+    [setSearchParams],
+  );
 
   // Remove a filter chip by path and display value
-  const removeFilter = useCallback((path: string, display?: string) => {
-    setActiveFilters((prev) => {
-      const newFilters = display
-        ? prev.filter((f) => !(f.path === path && f.display === display))
-        : prev.filter((f) => f.path !== path);
+  const removeFilter = useCallback(
+    (path: string, display?: string) => {
+      setActiveFilters((prev) => {
+        const newFilters = display
+          ? prev.filter((f) => !(f.path === path && f.display === display))
+          : prev.filter((f) => f.path !== path);
 
-      // Update URL params with remaining values
-      setSearchParams(
-        (urlPrev) => {
-          const next = new URLSearchParams(urlPrev);
-          if (path === "gram.tool_call.source") {
-            const serverFilters = newFilters
-              .filter((f) => f.path === "gram.tool_call.source")
-              .map((f) => f.display);
-            if (serverFilters.length > 0) {
-              next.set("server", serverFilters.join(","));
-            } else {
-              next.delete("server");
+        // Update URL params with remaining values
+        setSearchParams(
+          (urlPrev) => {
+            const next = new URLSearchParams(urlPrev);
+            if (path === "gram.tool_call.source") {
+              const serverFilters = newFilters
+                .filter((f) => f.path === "gram.tool_call.source")
+                .map((f) => f.display);
+              if (serverFilters.length > 0) {
+                next.set("server", serverFilters.join(","));
+              } else {
+                next.delete("server");
+              }
+            } else if (path === "user.email") {
+              const userFilters = newFilters
+                .filter((f) => f.path === "user.email")
+                .map((f) => f.display);
+              if (userFilters.length > 0) {
+                next.set("user", userFilters.join(","));
+              } else {
+                next.delete("user");
+              }
             }
-          } else if (path === "user.email") {
-            const userFilters = newFilters
-              .filter((f) => f.path === "user.email")
-              .map((f) => f.display);
-            if (userFilters.length > 0) {
-              next.set("user", userFilters.join(","));
-            } else {
-              next.delete("user");
-            }
-          }
-          return next;
-        },
-        { replace: true },
-      );
+            return next;
+          },
+          { replace: true },
+        );
 
-      return newFilters;
-    });
-  }, [setSearchParams]);
+        return newFilters;
+      });
+    },
+    [setSearchParams],
+  );
 
   // Debounced server filter from search input
   useEffect(() => {
@@ -642,7 +654,6 @@ function HooksContent() {
 }
 
 function HooksInnerContent({
-  isLogsDisabled,
   isLoading,
   isFetching,
   error,
@@ -668,7 +679,6 @@ function HooksInnerContent({
   handleScroll,
   hasNextPage,
   isFetchingNextPage,
-  refetch,
   dateRange,
   customRange,
   customRangeLabel,
@@ -692,7 +702,7 @@ function HooksInnerContent({
   setUserEmailInput: (value: string) => void;
   activeFilters: FilterChip[];
   addFilter: (chip: FilterChip) => void;
-  removeFilter: (path: string) => void;
+  removeFilter: (path: string, display?: string) => void;
   hideLocalToolCalls: boolean;
   onHideLocalToggle: (value: boolean) => void;
   expandedTraceId: string | null;
@@ -769,23 +779,21 @@ function HooksInnerContent({
               onChange={setServerInput}
               placeholder="Filter by server name"
               className="flex-1 min-w-[200px]"
-              chips={
-                activeFilters
-                  .filter((f) => f.path === "gram.tool_call.source")
-                  .map((f) => ({ display: f.display, value: f.display }))
+              chips={activeFilters
+                .filter((f) => f.path === "gram.tool_call.source")
+                .map((f) => ({ display: f.display, value: f.display }))}
+              onRemoveChip={(display) =>
+                removeFilter("gram.tool_call.source", display)
               }
-              onRemoveChip={(display) => removeFilter("gram.tool_call.source", display)}
             />
             <MultiSearch
               value={userEmailInput}
               onChange={setUserEmailInput}
               placeholder="Filter by user email"
               className="flex-1 min-w-[200px]"
-              chips={
-                activeFilters
-                  .filter((f) => f.path === "user.email")
-                  .map((f) => ({ display: f.display, value: f.display }))
-              }
+              chips={activeFilters
+                .filter((f) => f.path === "user.email")
+                .map((f) => ({ display: f.display, value: f.display }))}
               onRemoveChip={(display) => removeFilter("user.email", display)}
             />
             <Button
@@ -1043,13 +1051,16 @@ function HooksServerTable({
 
   // Group servers by their final display name and merge metrics
   const items: SummaryItemData[] = useMemo(() => {
-    const grouped = new Map<string, {
-      rawNames: string[];
-      toolCallCount: number;
-      uniqueToolsSet: Set<string>;
-      successCount: number;
-      failureCount: number;
-    }>();
+    const grouped = new Map<
+      string,
+      {
+        rawNames: string[];
+        toolCallCount: number;
+        uniqueToolsSet: Set<string>;
+        successCount: number;
+        failureCount: number;
+      }
+    >();
 
     for (const s of servers) {
       const rawName = s.serverName;
@@ -1081,13 +1092,12 @@ function HooksServerTable({
 
     // Convert to SummaryItemData array
     return Array.from(grouped.entries()).map(([displayName, data]) => {
-      const failureRate = data.toolCallCount > 0
-        ? data.failureCount / data.toolCallCount
-        : 0;
+      const failureRate =
+        data.toolCallCount > 0 ? data.failureCount / data.toolCallCount : 0;
 
       // For uniqueTools, sum across servers (approximation)
       const uniqueTools = data.rawNames.reduce((sum, rawName) => {
-        const server = servers.find(s => s.serverName === rawName);
+        const server = servers.find((s) => s.serverName === rawName);
         return sum + (server?.uniqueTools || 0);
       }, 0);
 
@@ -1114,49 +1124,61 @@ function HooksServerTable({
 
     // Check if editingServer itself exists as a raw server name in the servers list
     // (meaning it's unmapped and shows as itself)
-    const serverExistsAsRaw = servers.some(s => s.serverName === editingServer);
+    const serverExistsAsRaw = servers.some(
+      (s) => s.serverName === editingServer,
+    );
 
     if (serverExistsAsRaw) {
       // Check if this raw server already has an override
-      const hasOverride = overridesForDisplay.some(o => o.rawServerName === editingServer);
+      const hasOverride = overridesForDisplay.some(
+        (o) => o.rawServerName === editingServer,
+      );
 
       if (!hasOverride && overridesForDisplay.length > 0) {
         // This server exists unmapped alongside other servers that map to it
-        return { overrides: overridesForDisplay, unmappedRawName: editingServer };
+        return {
+          overrides: overridesForDisplay,
+          unmappedRawName: editingServer,
+        };
       }
     }
 
     return { overrides: overridesForDisplay, unmappedRawName: null };
   }, [editingServer, serverNameMappings, servers]);
 
+  const handleItemSelect = useCallback(
+    (itemName: string) => {
+      // Find the item to get its display name and raw server names
+      const item = items.find((i) => i.name === itemName);
+      if (!item) return;
 
-  const handleItemSelect = useCallback((itemName: string) => {
-    // Find the item to get its display name and raw server names
-    const item = items.find(i => i.name === itemName);
-    if (!item) return;
+      const displayName = item.displayName || item.name;
 
-    const displayName = item.displayName || item.name;
+      // Get all raw server names that have overrides pointing to this display name
+      const mappedRawNames =
+        serverNameMappings.displayToRaws.get(displayName) || [];
 
-    // Get all raw server names that have overrides pointing to this display name
-    const mappedRawNames = serverNameMappings.displayToRaws.get(displayName) || [];
+      // Also include the display name itself if it exists as a raw server (no override to it)
+      const allRawNames = new Set(mappedRawNames);
 
-    // Also include the display name itself if it exists as a raw server (no override to it)
-    const allRawNames = new Set(mappedRawNames);
+      // Check if the display name itself exists as a raw server name in the data
+      // (this handles the case where "B" is both a display name and a raw server)
+      const displayNameExistsAsRaw = servers.some(
+        (s) => s.serverName === displayName,
+      );
+      if (displayNameExistsAsRaw) {
+        allRawNames.add(displayName);
+      }
 
-    // Check if the display name itself exists as a raw server name in the data
-    // (this handles the case where "B" is both a display name and a raw server)
-    const displayNameExistsAsRaw = servers.some(s => s.serverName === displayName);
-    if (displayNameExistsAsRaw) {
-      allRawNames.add(displayName);
-    }
-
-    // Create a filter chip
-    onFilterSelect({
-      display: displayName,
-      filters: Array.from(allRawNames),
-      path: "gram.tool_call.source",
-    });
-  }, [items, onFilterSelect, serverNameMappings.displayToRaws, servers]);
+      // Create a filter chip
+      onFilterSelect({
+        display: displayName,
+        filters: Array.from(allRawNames),
+        path: "gram.tool_call.source",
+      });
+    },
+    [items, onFilterSelect, serverNameMappings.displayToRaws, servers],
+  );
 
   return (
     <>
@@ -1222,16 +1244,19 @@ function HooksUserTable({
     failureRate: u.failureRate,
   }));
 
-  const handleItemSelect = useCallback((itemName: string) => {
-    const item = items.find(i => i.name === itemName);
-    if (!item) return;
+  const handleItemSelect = useCallback(
+    (itemName: string) => {
+      const item = items.find((i) => i.name === itemName);
+      if (!item) return;
 
-    onFilterSelect({
-      display: item.displayName || item.name,
-      filters: [item.name], // For users, filter by the actual email
-      path: "user.email",
-    });
-  }, [items, onFilterSelect]);
+      onFilterSelect({
+        display: item.displayName || item.name,
+        filters: [item.name], // For users, filter by the actual email
+        path: "user.email",
+      });
+    },
+    [items, onFilterSelect],
+  );
 
   return (
     <SummaryTable
