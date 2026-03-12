@@ -1,8 +1,8 @@
-[**@gram-ai/elements v1.27.4**](README.md)
+[**@gram-ai/elements v1.27.5**](README.md)
 
 ***
 
-# @gram-ai/elements v1.27.4
+# @gram-ai/elements v1.27.5
 
 ## Interfaces
 
