@@ -7,22 +7,42 @@
 
 package client
 
-// ListGrantsAccessPath returns the URL path to the access service listGrants HTTP endpoint.
-func ListGrantsAccessPath() string {
-	return "/rpc/access.listGrants"
+// ListRolesAccessPath returns the URL path to the access service listRoles HTTP endpoint.
+func ListRolesAccessPath() string {
+	return "/rpc/access.listRoles"
 }
 
-// UpsertGrantsAccessPath returns the URL path to the access service upsertGrants HTTP endpoint.
-func UpsertGrantsAccessPath() string {
-	return "/rpc/access.upsertGrants"
+// GetRoleAccessPath returns the URL path to the access service getRole HTTP endpoint.
+func GetRoleAccessPath() string {
+	return "/rpc/access.getRole"
 }
 
-// RemoveGrantsAccessPath returns the URL path to the access service removeGrants HTTP endpoint.
-func RemoveGrantsAccessPath() string {
-	return "/rpc/access.removeGrants"
+// CreateRoleAccessPath returns the URL path to the access service createRole HTTP endpoint.
+func CreateRoleAccessPath() string {
+	return "/rpc/access.createRole"
 }
 
-// RemovePrincipalGrantsAccessPath returns the URL path to the access service removePrincipalGrants HTTP endpoint.
-func RemovePrincipalGrantsAccessPath() string {
-	return "/rpc/access.removePrincipalGrants"
+// UpdateRoleAccessPath returns the URL path to the access service updateRole HTTP endpoint.
+func UpdateRoleAccessPath() string {
+	return "/rpc/access.updateRole"
+}
+
+// DeleteRoleAccessPath returns the URL path to the access service deleteRole HTTP endpoint.
+func DeleteRoleAccessPath() string {
+	return "/rpc/access.deleteRole"
+}
+
+// ListScopesAccessPath returns the URL path to the access service listScopes HTTP endpoint.
+func ListScopesAccessPath() string {
+	return "/rpc/access.listScopes"
+}
+
+// ListMembersAccessPath returns the URL path to the access service listMembers HTTP endpoint.
+func ListMembersAccessPath() string {
+	return "/rpc/access.listMembers"
+}
+
+// UpdateMemberRoleAccessPath returns the URL path to the access service updateMemberRole HTTP endpoint.
+func UpdateMemberRoleAccessPath() string {
+	return "/rpc/access.updateMemberRole"
 }
