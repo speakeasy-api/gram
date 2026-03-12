@@ -1,5 +1,12 @@
 # @gram-ai/elements
 
+## 1.27.5
+
+### Patch Changes
+
+- 6108c5a: fix: message feedback tooltip position
+- 686fee5: Add gpt-5.4 support in playground.
+
 ## 1.27.4
 
 ### Patch Changes
@@ -63,22 +70,26 @@
 - 9cb2f0e: Chart plugin and generative UI overhaul
 
   **Chart Plugin**
+
   - Replace Vega-Lite with Recharts for React 19 compatibility
   - Add themed tooltips using CSS variables (oklch colors)
   - Update chart stories to use MCP orders summary tool
 
   **Generative UI**
+
   - Add macOS-style window frames with traffic light buttons
   - Add whimsical cycling loading messages (50 messages, 2s fade transitions)
   - Streamline LLM prompt from ~150 lines to concise bulleted format
 
   **Component Fixes**
+
   - ActionButton executes tools via useToolExecution hook
   - Align Text, Badge, Progress props with LLM prompt specification
   - Fix catalog schema toolName → action mismatch
   - Fix setTimeout cleanup in CyclingLoadingMessage
 
   **Storybook**
+
   - Fix theme toggle causing full component remount
 
 ## 1.25.2
@@ -129,6 +140,7 @@
 ### Patch Changes
 
 - c17b9f7: Fix logs page performance, responsive charts, tool output rendering, and streaming indicator
+
   - Memoize config objects and callbacks in Logs page and thread to prevent unnecessary re-renders
   - Fix tool group count using startIndex/endIndex instead of filtering all message parts
   - Fix shimmer CSS in shadow DOM by setting custom properties on .gram-elements
@@ -365,6 +377,7 @@
 - eb72619: Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.
 
   The first release of Gram Elements includes:
+
   - An all-in-one `<Chat />` component that encapsulates the entire chat lifecycle, including built-in support for tool calling and streaming responses.
   - A powerful configuration framework to refine the chat experience, including different layouts, theming, and much more.
 

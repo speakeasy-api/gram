@@ -5061,9 +5061,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
         - {}
   /rpc/hooks.listServerNameOverrides:
     get:
@@ -5158,9 +5159,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
         - {}
   /rpc/hooks.otel/v1/logs:
     post:
@@ -5348,9 +5350,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
         - {}
   /rpc/instances.get:
     get:

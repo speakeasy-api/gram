@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
 
 type Key = attribute.Key
 
 const (
-	ErrorMessageKey                   = semconv.ErrorMessageKey
+	ErrorMessageKey                   = attribute.Key("error.message")
 	ExceptionStacktraceKey            = semconv.ExceptionStacktraceKey
 	ExternalUserIDKey                 = attribute.Key("gram.external_user.id")
 	APIKeyIDKey                       = attribute.Key("gram.api_key.id")

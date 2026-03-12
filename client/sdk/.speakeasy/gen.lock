@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 925dc5b18219b8e2ea6b5cc4e004c030
+  docChecksum: 7cedb0e2bf6dc4e58af5d4a7f9b5416a
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.32
-  configChecksum: 2840a123f9ecec40d4f8728ee1291bcf
+  releaseVersion: 0.27.26
+  configChecksum: f055918c681eedac4ec3dbfa19885516
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -775,7 +775,11 @@ trackedFiles:
   docs/models/operations/deleteservernameoverriderequest.md:
     last_write_checksum: sha1:866b50342f7bceb99b36d6d515f1f4008ae8dbc8
   docs/models/operations/deleteservernameoverridesecurity.md:
-    last_write_checksum: sha1:707f905a9c32af2f456c1780c8759e450e479d6e
+    last_write_checksum: sha1:677576542cb6bfe3171fc087bde3acc4bba92dfe
+  docs/models/operations/deleteservernameoverridesecurityoption1.md:
+    last_write_checksum: sha1:0e4b510863a7be9d95c4e3a39e9d82d3f79403cc
+  docs/models/operations/deleteservernameoverridesecurityoption2.md:
+    last_write_checksum: sha1:06a5c76b0f04370105aa7f1791fc1ed2c3a6b9bc
   docs/models/operations/deleteslackapprequest.md:
     last_write_checksum: sha1:7b0a46f84b3070f65d0e54609f595b2bd7db2969
   docs/models/operations/deleteslackappsecurity.md:
@@ -1097,7 +1101,11 @@ trackedFiles:
   docs/models/operations/listservernameoverridesrequest.md:
     last_write_checksum: sha1:6eb10ad29220a750398b4bdbb80606014977bf2e
   docs/models/operations/listservernameoverridessecurity.md:
-    last_write_checksum: sha1:60e7cb0f8ebaf5b0cb4fcdbb9f91af674af07988
+    last_write_checksum: sha1:5559556bbd87825cfb1df5c55158c38ad2faa7ec
+  docs/models/operations/listservernameoverridessecurityoption1.md:
+    last_write_checksum: sha1:a6cfe6f4daf33bc0f5d842b1c230aa338f5957d6
+  docs/models/operations/listservernameoverridessecurityoption2.md:
+    last_write_checksum: sha1:8d9ecac3bc39f2ddb04e60c77550e8fa0af01e6d
   docs/models/operations/listslackappsrequest.md:
     last_write_checksum: sha1:14dde349ba1c7493ea63341bd6e91d0a89cb2fe0
   docs/models/operations/listslackappssecurity.md:
@@ -1409,7 +1417,11 @@ trackedFiles:
   docs/models/operations/upsertservernameoverriderequest.md:
     last_write_checksum: sha1:d71fbac3db6e5c112275268033bbd7eae8c48bf5
   docs/models/operations/upsertservernameoverridesecurity.md:
-    last_write_checksum: sha1:ef420bb019eee15166e7e49ee37c794658138dd5
+    last_write_checksum: sha1:11f23f40116019b2f1fbdf89913719d9fb131367
+  docs/models/operations/upsertservernameoverridesecurityoption1.md:
+    last_write_checksum: sha1:3e2655edde971a92320f7b6822b061328829cda9
+  docs/models/operations/upsertservernameoverridesecurityoption2.md:
+    last_write_checksum: sha1:42a0a80ac47b06b9d8cf33fb3bb0b217632b0450
   docs/models/operations/validateapikeyrequest.md:
     last_write_checksum: sha1:69bb44cbe3a53ab8c66a24b69a732c0835bed205
   docs/models/operations/validateapikeysecurity.md:
@@ -1486,11 +1498,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:64cd6d065aa1f8c1c9b8deb44c4aea2db18028a6
+    last_write_checksum: sha1:56b57237623e09a8ec06f0fe5e9afa136ac9610e
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:fa761f9d59eb9a1c5a878c32493d85f136d7fe45
+    last_write_checksum: sha1:c24c867b8eaaab5248c9610245f763854ae64a13
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1697,11 +1709,11 @@ trackedFiles:
   src/funcs/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
   src/funcs/hooksServerNamesDeleteServerNameOverride.ts:
-    last_write_checksum: sha1:e5024a858bd7c332e6ccfa34ee95117deeed9031
+    last_write_checksum: sha1:5dcbf745a32b65a40f209c3346b6bbc09129d5ce
   src/funcs/hooksServerNamesListServerNameOverrides.ts:
-    last_write_checksum: sha1:c3517d57d84ad346bb64eaf504481de42053c385
+    last_write_checksum: sha1:ae7393a23b27e09bd709dd52d4189ea662fda738
   src/funcs/hooksServerNamesUpsertServerNameOverride.ts:
-    last_write_checksum: sha1:4dd548aa3728d5d623754f715099087f0bdb02f7
+    last_write_checksum: sha1:610647e4f47e4d1e87e202ed38bb60cc341d2933
   src/funcs/instancesGetBySlug.ts:
     id: f05f1e175cc0
     last_write_checksum: sha1:4a57eddae8c5cbe2d2add36978c6388e26784711
@@ -1964,7 +1976,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:33ccf617d96ccc192681b977d22507a51ef5e465
+    last_write_checksum: sha1:a1bcd9d472cc5dc75cc4e19e97938095620e6c17
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2927,7 +2939,7 @@ trackedFiles:
   src/models/operations/deleteresponse.ts:
     last_write_checksum: sha1:2d0940821e565f452b092ba9e6b5c2cd822522e0
   src/models/operations/deleteservernameoverride.ts:
-    last_write_checksum: sha1:b52bf9ad353390e81b43e0838eef755f34442220
+    last_write_checksum: sha1:5ccbd387f91542f93746f7548f653223a00cf5c2
   src/models/operations/deleteslackapp.ts:
     last_write_checksum: sha1:e35162bdf81f44859b3f21fa646696b43c58eebb
   src/models/operations/deletesourceenvironmentlink.ts:
@@ -3095,7 +3107,7 @@ trackedFiles:
     last_write_checksum: sha1:21c3d13bb096e5d799797de84857bf115f2061d4
     pristine_git_object: 9da95dab09d4e1d0c08ee95c4de06840b1d26462
   src/models/operations/listservernameoverrides.ts:
-    last_write_checksum: sha1:f1bdf2134d9bc3e978363e108bef3fdb80f3ebee
+    last_write_checksum: sha1:944a7a8abb10a2922165d89c2d046cbe8be3a9fb
   src/models/operations/listslackapps.ts:
     last_write_checksum: sha1:b7677375119ac6cf5e631fd8a701b2b6ad93d1ea
   src/models/operations/listtemplates.ts:
@@ -3263,7 +3275,7 @@ trackedFiles:
     last_write_checksum: sha1:e314995a441474665de807eba706ee2d29fe942f
     pristine_git_object: 005a793681df8849f9d50d6fa0d1ef3d1204c519
   src/models/operations/upsertservernameoverride.ts:
-    last_write_checksum: sha1:456fa309ca52a1016dde980b79ce68f5a54135bb
+    last_write_checksum: sha1:ebbd1b550a1d979debb64fa14b7ed06b868b0102
   src/models/operations/validateapikey.ts:
     id: 6f8c1effe5f1
     last_write_checksum: sha1:3abc74c8bf0f4c1c49ba1d402b8694aca6eb3e9d
@@ -5566,24 +5578,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  hooks#deleteServerNameOverride:
-    speakeasy-default-hooks#delete-server-name-override:
-      requestBody:
-        application/json: {"override_id": "<id>"}
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  hooks#listServerNameOverrides:
-    speakeasy-default-hooks#list-server-name-overrides:
-      responses:
-        "200":
-          application/json: [{"display_name": "Elouise_Braun", "id": "<id>", "raw_server_name": "<value>"}]
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   hooks#logs:
     speakeasy-default-hooks#logs:
       requestBody:
@@ -5593,46 +5587,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  hooks#upsertServerNameOverride:
-    speakeasy-default-hooks#upsert-server-name-override:
-      requestBody:
-        application/json: {"display_name": "Catherine15", "raw_server_name": "<value>"}
-      responses:
-        "200":
-          application/json: {"display_name": "Lina_Jast", "id": "<id>", "raw_server_name": "<value>"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  hooksServerNames#delete:
-    speakeasy-default-hooks-server-names#delete:
-      requestBody:
-        application/json: {"override_id": "<id>"}
-      responses:
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  hooksServerNames#list:
-    speakeasy-default-hooks-server-names#list:
-      responses:
-        "200":
-          application/json: [{"display_name": "Scotty_Hane", "id": "<id>", "raw_server_name": "<value>"}]
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  hooksServerNames#upsert:
-    speakeasy-default-hooks-server-names#upsert:
-      requestBody:
-        application/json: {"display_name": "Rafael.Barrows41", "raw_server_name": "<value>"}
-      responses:
-        "200":
-          application/json: {"display_name": "Demario_Considine2", "id": "<id>", "raw_server_name": "<value>"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteServerNameOverride:
     speakeasy-default-delete-server-name-override:
       requestBody:

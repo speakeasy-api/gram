@@ -691,9 +691,14 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Configure required credentials and add custom variables. Click the state
-        button to cycle between User Provided (set at runtime), System (set
-        here), and Omitted (not included).
+        Environments store key-value pairs that are passed to the backend when
+        users connect. They can be shared across multiple MCP servers, so you
+        only need to configure common values like API keys once.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Add variables for API keys, configuration options, or any custom data
+        your backend needs. Use the state button to set each variable as User
+        Provided (set at runtime), System (set here), or Omitted (not included).
       </p>
 
       {/* All Variables Section */}
@@ -744,8 +749,13 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         ) : (
           // Empty State
           <div className="border rounded-lg border-dashed p-8 text-center">
-            <p className="text-muted-foreground mb-4">
-              No environment variables added yet.
+            <p className="text-muted-foreground mb-2">
+              No environment variables configured yet.
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Add key-value pairs to pass API keys, configuration, or any custom
+              data to your backend. Environments can be shared across multiple
+              MCP servers.
             </p>
             <Button onClick={() => setIsAddingNew(true)} variant="secondary">
               <Button.LeftIcon>

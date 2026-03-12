@@ -6,10 +6,19 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
+export type UpsertServerNameOverrideSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type UpsertServerNameOverrideSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type UpsertServerNameOverrideSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: UpsertServerNameOverrideSecurityOption1 | undefined;
+  option2?: UpsertServerNameOverrideSecurityOption2 | undefined;
 };
 
 export type UpsertServerNameOverrideRequest = {
@@ -29,10 +38,79 @@ export type UpsertServerNameOverrideRequest = {
 };
 
 /** @internal */
+export type UpsertServerNameOverrideSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const UpsertServerNameOverrideSecurityOption1$outboundSchema:
+  z.ZodMiniType<
+    UpsertServerNameOverrideSecurityOption1$Outbound,
+    UpsertServerNameOverrideSecurityOption1
+  > = z.pipe(
+    z.object({
+      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+        sessionHeaderGramSession: "session_header_Gram-Session",
+      });
+    }),
+  );
+
+export function upsertServerNameOverrideSecurityOption1ToJSON(
+  upsertServerNameOverrideSecurityOption1:
+    UpsertServerNameOverrideSecurityOption1,
+): string {
+  return JSON.stringify(
+    UpsertServerNameOverrideSecurityOption1$outboundSchema.parse(
+      upsertServerNameOverrideSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type UpsertServerNameOverrideSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const UpsertServerNameOverrideSecurityOption2$outboundSchema:
+  z.ZodMiniType<
+    UpsertServerNameOverrideSecurityOption2$Outbound,
+    UpsertServerNameOverrideSecurityOption2
+  > = z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      });
+    }),
+  );
+
+export function upsertServerNameOverrideSecurityOption2ToJSON(
+  upsertServerNameOverrideSecurityOption2:
+    UpsertServerNameOverrideSecurityOption2,
+): string {
+  return JSON.stringify(
+    UpsertServerNameOverrideSecurityOption2$outboundSchema.parse(
+      upsertServerNameOverrideSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type UpsertServerNameOverrideSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: UpsertServerNameOverrideSecurityOption1$Outbound | undefined;
+  Option2?: UpsertServerNameOverrideSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -41,15 +119,17 @@ export const UpsertServerNameOverrideSecurity$outboundSchema: z.ZodMiniType<
   UpsertServerNameOverrideSecurity
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
-    projectSlugHeaderGramProject: z.optional(z.string()),
-    sessionHeaderGramSession: z.optional(z.string()),
+    option1: z.optional(
+      z.lazy(() => UpsertServerNameOverrideSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UpsertServerNameOverrideSecurityOption2$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
+      option1: "Option1",
+      option2: "Option2",
     });
   }),
 );
