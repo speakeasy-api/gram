@@ -333,11 +333,16 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
     }
 
     // Wait for deployment to finish
+    const maxAttempts = 600; // 5 minutes at 500ms intervals
+    let attempts = 0;
     while (
       deployment.status !== "completed" &&
       deployment.status !== "failed"
     ) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (++attempts >= maxAttempts) {
+        throw new Error("Deployment timed out waiting for completion");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
       deployment = await client.deployments.getById({
         id: deployment.id,
       });

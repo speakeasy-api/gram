@@ -312,10 +312,15 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
 
     // Poll until the deployment reaches a terminal state so we can
     // report accurate tool counts back to the stepper UI.
+    const maxAttempts = 600; // 5 minutes at 500ms intervals
+    let attempts = 0;
     while (
       deployment.status !== "completed" &&
       deployment.status !== "failed"
     ) {
+      if (++attempts >= maxAttempts) {
+        throw new Error("Deployment timed out waiting for completion");
+      }
       await new Promise((resolve) => setTimeout(resolve, 500));
       deployment = (await client.deployments.getById({
         id: deployment.id,
