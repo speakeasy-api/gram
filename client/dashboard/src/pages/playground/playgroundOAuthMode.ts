@@ -1,6 +1,14 @@
-import type { Toolset } from "@/lib/toolTypes";
-
 export type OAuthMode = "none" | "custom-proxy" | "external";
+
+/** Minimal shape of the proxy server fields we inspect. */
+type OAuthProxyServerLike = {
+  oauthProxyProviders?: Array<{ providerType: string; slug: string }>;
+};
+
+/** Minimal shape of the external OAuth server fields we inspect. */
+type ExternalOAuthServerLike = {
+  slug: string;
+};
 
 /**
  * Detect the OAuth mode from toolset-level configuration.
@@ -9,8 +17,8 @@ export type OAuthMode = "none" | "custom-proxy" | "external";
  * - "none": No OAuth needed (either no OAuth config, or Gram proxy which is transparent)
  */
 export function getToolsetOAuthMode(toolset: {
-  oauthProxyServer?: Toolset["oauthProxyServer"];
-  externalOauthServer?: Toolset["externalOauthServer"];
+  oauthProxyServer?: OAuthProxyServerLike;
+  externalOauthServer?: ExternalOAuthServerLike;
 }): OAuthMode {
   if (toolset.oauthProxyServer) {
     const provider = toolset.oauthProxyServer.oauthProxyProviders?.[0];
@@ -25,8 +33,8 @@ export function getToolsetOAuthMode(toolset: {
  * Derive a human-readable provider name from toolset OAuth config.
  */
 export function getOAuthProviderName(toolset: {
-  oauthProxyServer?: Toolset["oauthProxyServer"];
-  externalOauthServer?: Toolset["externalOauthServer"];
+  oauthProxyServer?: OAuthProxyServerLike;
+  externalOauthServer?: ExternalOAuthServerLike;
   name: string;
 }): string {
   if (toolset.oauthProxyServer) {
