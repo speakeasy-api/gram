@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Check, Link2 } from "lucide-react";
-import { type MouseEvent, useMemo, useState } from "react";
+import { Link2 } from "lucide-react";
+import { useMemo } from "react";
 import { useCatalogIconMap } from "../sources/Sources";
 import {
   ExternalMCPIllustration,
@@ -121,7 +121,14 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
             {toolset.name}
           </Type>
           <div className="flex items-center gap-1">
-            {installPageUrl && <CopyLinkButton url={installPageUrl} />}
+            {installPageUrl && (
+              <CopyButton
+                text={installPageUrl}
+                size="icon-sm"
+                icon={Link2}
+                tooltip="Copy install page URL"
+              />
+            )}
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
           </div>
         </div>
@@ -138,28 +145,5 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function CopyLinkButton({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleClick = (e: MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1000);
-  };
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={handleClick}
-      tooltip="Copy install page URL"
-    >
-      {copied ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-    </Button>
   );
 }
