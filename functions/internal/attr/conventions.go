@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
 
 type Key = attribute.Key
@@ -16,7 +16,7 @@ const (
 
 	DeviceKey              = semconv.SystemDeviceKey
 	ExceptionStacktraceKey = semconv.ExceptionStacktraceKey
-	ErrorMessageKey        = semconv.ErrorMessageKey
+	ErrorMessageKey        = attribute.Key("error.message")
 	ErrorIDKey             = attribute.Key("gram.error.id")
 	ProcessExitCodeKey     = semconv.ProcessExitCodeKey
 	ServerAddressKey       = semconv.ServerAddressKey
