@@ -3,6 +3,7 @@ import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogCo
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { waitForDeployment } from "@/lib/deployments";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type {
@@ -63,14 +64,18 @@ export function SourceSettingsTab({
     type: "openapi" | "function" | "externalmcp",
   ) => {
     try {
-      await client.deployments.evolveDeployment({
+      const result = await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.deployment?.id,
+          nonBlocking: true,
           ...(type === "openapi"
             ? { excludeOpenapiv3Assets: [assetId] }
             : { excludeFunctions: [assetId] }),
         },
       });
+      if (result.deployment) {
+        await waitForDeployment(client, result.deployment.id);
+      }
       await Promise.all([refetch(), refetchAssets()]);
       const typeLabel = type === "openapi" ? "API" : "Function";
       toast.success(`${typeLabel} source deleted successfully`);

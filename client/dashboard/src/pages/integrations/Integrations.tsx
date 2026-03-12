@@ -13,6 +13,7 @@ import { useIsAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
+import { waitForDeployment } from "@/lib/deployments";
 import { IntegrationEntry } from "@gram/client/models/components";
 import {
   useLatestDeployment,
@@ -222,8 +223,9 @@ export function IntegrationCard({
   const client = useSdkClient();
 
   const handleEnable = async () => {
-    await client.deployments.evolveDeployment({
+    const result = await client.deployments.evolveDeployment({
       evolveForm: {
+        nonBlocking: true,
         upsertPackages: [
           {
             name: integration.packageName,
@@ -233,6 +235,10 @@ export function IntegrationCard({
       },
     });
 
+    if (result.deployment) {
+      await waitForDeployment(client, result.deployment.id);
+    }
+
     telemetry.capture("integration_event", {
       action: "integration_enabled",
       integration_name: integration.packageName,
@@ -240,11 +246,16 @@ export function IntegrationCard({
   };
 
   const handleDisable = async () => {
-    await client.deployments.evolveDeployment({
+    const result = await client.deployments.evolveDeployment({
       evolveForm: {
+        nonBlocking: true,
         excludePackages: [integration.packageId],
       },
     });
+
+    if (result.deployment) {
+      await waitForDeployment(client, result.deployment.id);
+    }
 
     telemetry.capture("integration_event", {
       action: "integration_disabled",

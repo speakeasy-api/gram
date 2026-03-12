@@ -299,6 +299,7 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
       const createResult = await client.deployments.create({
         idempotencyKey: crypto.randomUUID(),
         createDeploymentRequestBody: {
+          nonBlocking: true,
           openapiv3Assets: [
             {
               assetId: asset.asset.id,
@@ -313,6 +314,7 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
     } else {
       const createResult = await client.deployments.evolveDeployment({
         evolveForm: {
+          nonBlocking: true,
           upsertOpenapiv3Assets: [
             {
               assetId: asset.asset.id,

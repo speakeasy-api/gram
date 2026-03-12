@@ -7,6 +7,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
+import { waitForDeployment } from "@/lib/deployments";
 import { useRoutes } from "@/routes";
 import { Deployment, DeploymentLogEvent } from "@gram/client/models/components";
 import {
@@ -292,25 +293,26 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       throw new Error("Asset or file not found");
     }
 
-    const deployment = await client.deployments
-      .evolveDeployment({
-        evolveForm: {
-          upsertOpenapiv3Assets: [
-            {
-              assetId: uploadResult.asset.id,
-              name: assetName,
-              slug: slugify(assetName),
-            },
-          ],
-        },
-      })
-      .then((result) => result.deployment);
+    const result = await client.deployments.evolveDeployment({
+      evolveForm: {
+        nonBlocking: true,
+        upsertOpenapiv3Assets: [
+          {
+            assetId: uploadResult.asset.id,
+            name: assetName,
+            slug: slugify(assetName),
+          },
+        ],
+      },
+    });
 
-    if (!deployment) {
+    if (!result.deployment) {
       throw new Error("Deployment not found");
     }
 
-    return deployment;
+    const settled = await waitForDeployment(client, result.deployment.id);
+
+    return settled as Deployment;
   }, [latestDeployment.data, step.isCurrentStep]);
 
   return _do;

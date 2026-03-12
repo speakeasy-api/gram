@@ -1,4 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSdkClient } from "@/contexts/Sdk";
+import { waitForDeployment } from "@/lib/deployments";
 import {
   useLatestDeployment,
   useListMCPCatalog,
@@ -85,6 +87,7 @@ interface ImportMCPTabContentProps {
 export default function ImportMCPTabContent({
   onSuccess,
 }: ImportMCPTabContentProps) {
+  const client = useSdkClient();
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
@@ -113,10 +116,11 @@ export default function ImportMCPTabContent({
     setImportingServer(serverKey);
 
     try {
-      await evolveMutation.mutateAsync({
+      const result = await evolveMutation.mutateAsync({
         request: {
           evolveForm: {
             deploymentId: deployment?.id,
+            nonBlocking: true,
             upsertExternalMcps: [
               {
                 registryId: server.registryId,
@@ -128,6 +132,10 @@ export default function ImportMCPTabContent({
           },
         },
       });
+
+      if (result.deployment) {
+        await waitForDeployment(client, result.deployment.id);
+      }
 
       await refetchDeployment();
       toast.success(`Imported ${server.title ?? server.registrySpecifier}`);
