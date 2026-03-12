@@ -43,10 +43,7 @@ export function buildGetPeriodUsageQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetPeriodUsageQueryData>;
 } {
   return {
-    queryKey: queryKeyGetPeriodUsage({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyGetPeriodUsage({ gramSession: request?.gramSession }),
     queryFn: async function getPeriodUsageQueryFn(
       ctx,
     ): Promise<GetPeriodUsageQueryData> {
@@ -72,10 +69,7 @@ export function buildGetPeriodUsageQuery(
 }
 
 export function queryKeyGetPeriodUsage(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "usage", "getPeriodUsage", parameters];
 }

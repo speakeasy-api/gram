@@ -6,7 +6,6 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateCustomerSessionSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -15,15 +14,10 @@ export type CreateCustomerSessionRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
 export type CreateCustomerSessionSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -33,12 +27,10 @@ export const CreateCustomerSessionSecurity$outboundSchema: z.ZodMiniType<
   CreateCustomerSessionSecurity
 > = z.pipe(
   z.object({
-    projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -57,7 +49,6 @@ export function createCustomerSessionSecurityToJSON(
 /** @internal */
 export type CreateCustomerSessionRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -67,12 +58,10 @@ export const CreateCustomerSessionRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );
