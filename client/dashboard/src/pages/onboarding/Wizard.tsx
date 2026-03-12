@@ -417,9 +417,16 @@ export const InitialChoiceStep = ({
       }
     } else {
       // Navigate to onboarding with appropriate start params
-      navigate(
-        routes.onboarding.href() + `?${START_STEP_PARAM}=first-party-choice`,
-      );
+      if (isFunctionsEnabled) {
+        navigate(
+          routes.onboarding.href() + `?${START_STEP_PARAM}=first-party-choice`,
+        );
+      } else {
+        navigate(
+          routes.onboarding.href() +
+            `?${START_STEP_PARAM}=upload&${START_PATH_PARAM}=openapi`,
+        );
+      }
     }
   };
 
