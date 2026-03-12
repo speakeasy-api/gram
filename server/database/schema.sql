@@ -1496,7 +1496,8 @@ CREATE TABLE IF NOT EXISTS scopes (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT scopes_pkey PRIMARY KEY (id),
-  CONSTRAINT scopes_slug_key UNIQUE (slug)
+  CONSTRAINT scopes_slug_key UNIQUE (slug),
+  CONSTRAINT scopes_slug_check CHECK (slug <> '' AND char_length(slug) <= 100)
 );
 
 COMMENT ON TABLE scopes IS 'RBAC scope vocabulary. Reference data seeded at app startup.';

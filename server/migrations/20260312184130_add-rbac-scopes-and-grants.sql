@@ -5,7 +5,8 @@ CREATE TABLE "scopes" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "scopes_slug_key" UNIQUE ("slug")
+  CONSTRAINT "scopes_slug_key" UNIQUE ("slug"),
+  CONSTRAINT "scopes_slug_check" CHECK ((slug <> ''::text) AND (char_length(slug) <= 100))
 );
 -- Set comment to table: "scopes"
 COMMENT ON TABLE "scopes" IS 'RBAC scope vocabulary. Reference data seeded at app startup.';
