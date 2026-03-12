@@ -1487,3 +1487,42 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 );
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
+
+-- RBAC: scope vocabulary (reference data, seeded at app startup)
+CREATE TABLE IF NOT EXISTS scopes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT scopes_pkey PRIMARY KEY (id),
+  CONSTRAINT scopes_slug_key UNIQUE (slug)
+);
+
+-- RBAC: principal grants
+-- One row per (org, principal, scope).
+-- resources = NULL  -> unrestricted: principal has this scope for all resources in the org.
+-- resources = ARRAY -> allowlist: principal has this scope only for the listed resource IDs.
+-- The UNIQUE constraint guarantees at most one row per (org, principal, scope),
+-- so NULL (unrestricted) and ARRAY (allowlist) are mutually exclusive by construction.
+CREATE TABLE IF NOT EXISTS principal_grants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  principal_type TEXT NOT NULL,
+  principal_id TEXT NOT NULL,
+  scope_slug TEXT NOT NULL,
+  resources TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
+  CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT principal_grants_scope_slug_fkey FOREIGN KEY (scope_slug) REFERENCES scopes (slug) ON DELETE RESTRICT,
+  CONSTRAINT principal_grants_principal_type_check CHECK (principal_type IN ('user', 'role')),
+  CONSTRAINT principal_grants_resources_check CHECK (resources IS NULL OR array_length(resources, 1) BETWEEN 1 AND 200),
+  CONSTRAINT principal_grants_organization_id_principal_type_principal_id_scope_slug_key UNIQUE (organization_id, principal_type, principal_id, scope_slug)
+);
+
+CREATE INDEX IF NOT EXISTS principal_grants_resources_idx ON principal_grants USING GIN (resources);

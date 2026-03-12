@@ -622,6 +622,17 @@ type PackageVersion struct {
 	Deleted      bool
 }
 
+type PrincipalGrant struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalType  string
+	PrincipalID    string
+	ScopeSlug      string
+	Resources      []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type Project struct {
 	ID                     uuid.UUID
 	Name                   string
@@ -670,6 +681,13 @@ type PromptTemplate struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type Scope struct {
+	ID        uuid.UUID
+	Slug      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SlackApp struct {
