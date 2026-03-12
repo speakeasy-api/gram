@@ -1,5 +1,18 @@
 # server
 
+## 0.28.0
+
+### Minor Changes
+
+- 8c72d8c: Renames attribute_filters to filters in searchLogs, and introduces "in" operator.
+
+### Patch Changes
+
+- 3b0c2c9: Modified deployment logging so that non-https server urls in openapi documents are logged as warnings instead of errors. These urls do not block deployment processing. They are ignored when present.
+- d8133af: Suite of hooks improvements
+- 3bbf15a: Adds agent loop support for all tool types (mainly applicable to slack apps)
+- 686fee5: Add gpt-5.4 support in playground.
+
 ## 0.27.1
 
 ### Patch Changes
