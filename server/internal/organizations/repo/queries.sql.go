@@ -105,7 +105,7 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 }
 
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
-SELECT id, organization_id, user_id, workos_membership_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, user_id, workos_membership_id, workos_role_slug, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
 WHERE organization_id = $1
   AND deleted_at IS NULL
@@ -125,6 +125,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.OrganizationID,
 			&i.UserID,
 			&i.WorkosMembershipID,
+			&i.WorkosRoleSlug,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -216,7 +217,7 @@ INSERT INTO organization_user_relationships (
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
-RETURNING id, organization_id, user_id, workos_membership_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, user_id, workos_membership_id, workos_role_slug, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertOrganizationUserRelationshipParams struct {
@@ -232,6 +233,7 @@ func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg Up
 		&i.OrganizationID,
 		&i.UserID,
 		&i.WorkosMembershipID,
+		&i.WorkosRoleSlug,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

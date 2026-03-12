@@ -582,6 +582,7 @@ type OrganizationUserRelationship struct {
 	OrganizationID     string
 	UserID             string
 	WorkosMembershipID pgtype.Text
+	WorkosRoleSlug     string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -620,6 +621,17 @@ type PackageVersion struct {
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
 	Deleted      bool
+}
+
+type PrincipalGrant struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalType  string
+	PrincipalID    string
+	ScopeSlug      string
+	Resources      []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type Project struct {
@@ -670,6 +682,10 @@ type PromptTemplate struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type Scope struct {
+	Slug string
 }
 
 type SlackApp struct {

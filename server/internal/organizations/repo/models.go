@@ -25,6 +25,7 @@ type OrganizationUserRelationship struct {
 	OrganizationID     string
 	UserID             string
 	WorkosMembershipID pgtype.Text
+	WorkosRoleSlug     string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
