@@ -47,10 +47,10 @@ SELECT
     countIfState(evaluation_score_label = 'abandoned') AS chat_resolution_abandoned,
     avgIfState(toFloat64OrZero(toString(attributes.gen_ai.evaluation.score.value)), evaluation_score_label != '') AS avg_chat_resolution_score,
 
-    -- Overview: evaluated chat counts (distinct chats by resolution status)
-    uniqExactIfState(ifNull(toString(gram_chat_id), ''), ifNull(toString(gram_chat_id), '') != '' AND evaluation_score_label != '') AS evaluated_chats,
-    uniqExactIfState(ifNull(toString(gram_chat_id), ''), ifNull(toString(gram_chat_id), '') != '' AND evaluation_score_label = 'success') AS resolved_chats,
-    uniqExactIfState(ifNull(toString(gram_chat_id), ''), ifNull(toString(gram_chat_id), '') != '' AND evaluation_score_label = 'failure') AS failed_chats,
+    -- Overview: chat counts by resolution status (uses gen_ai.conversation.id to stay consistent with total_chats)
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label != '') AS evaluated_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label = 'success') AS resolved_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label = 'failure') AS failed_chats,
     avgIfState(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') AS avg_resolution_time_ms,
 
     -- Model breakdown
