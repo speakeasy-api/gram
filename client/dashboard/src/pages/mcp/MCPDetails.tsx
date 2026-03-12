@@ -27,7 +27,6 @@ import {
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { waitForDeployment } from "@/lib/deployments";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
@@ -1038,17 +1037,13 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         const externalMcpSlug = parts[2];
 
         if (externalMcpSlug) {
-          const result = await client.deployments.evolveDeployment({
+          await client.deployments.evolveDeployment({
             evolveForm: {
               deploymentId: deployment.id,
               nonBlocking: true,
               excludeExternalMcps: [externalMcpSlug],
             },
           });
-
-          if (result.deployment) {
-            await waitForDeployment(client, result.deployment.id);
-          }
         }
       }
 

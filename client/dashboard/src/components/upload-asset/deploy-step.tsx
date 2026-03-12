@@ -7,7 +7,6 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
-import { waitForDeployment } from "@/lib/deployments";
 import { useRoutes } from "@/routes";
 import { Deployment, DeploymentLogEvent } from "@gram/client/models/components";
 import {
@@ -306,13 +305,24 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       },
     });
 
-    if (!result.deployment) {
+    let deployment = result.deployment;
+    if (!deployment) {
       throw new Error("Deployment not found");
     }
 
-    const settled = await waitForDeployment(client, result.deployment.id);
+    // Poll until the deployment reaches a terminal state so we can
+    // report accurate tool counts back to the stepper UI.
+    while (
+      deployment.status !== "completed" &&
+      deployment.status !== "failed"
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      deployment = (await client.deployments.getById({
+        id: deployment.id,
+      })) as Deployment;
+    }
 
-    return settled as Deployment;
+    return deployment;
   }, [latestDeployment.data, step.isCurrentStep]);
 
   return _do;

@@ -3,7 +3,6 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
-import { waitForDeployment } from "@/lib/deployments";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
@@ -76,16 +75,13 @@ export default function CatalogDetail() {
       );
 
       // Remove the external MCP from the deployment
-      const result = await client.deployments.evolveDeployment({
+      await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.id,
           nonBlocking: true,
           excludeExternalMcps: [slug],
         },
       });
-      if (result.deployment) {
-        await waitForDeployment(client, result.deployment.id);
-      }
     },
     onSuccess: async () => {
       await refetchDeployment();

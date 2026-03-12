@@ -2,7 +2,6 @@ import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
-import { waitForDeployment } from "@/lib/deployments";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -182,7 +181,7 @@ export default function Sources() {
     type: "openapi" | "function" | "externalmcp",
   ) => {
     try {
-      const result = await client.deployments.evolveDeployment({
+      await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.id,
           nonBlocking: true,
@@ -193,10 +192,6 @@ export default function Sources() {
               : { excludeExternalMcps: [assetId] }),
         },
       });
-
-      if (result.deployment) {
-        await waitForDeployment(client, result.deployment.id);
-      }
 
       await Promise.all([refetch(), refetchAssets()]);
 

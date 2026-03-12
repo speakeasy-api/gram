@@ -6,7 +6,6 @@ import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
-import { waitForDeployment } from "@/lib/deployments";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -85,16 +84,13 @@ export default function ExternalMCPDetails() {
     _type: "openapi" | "function" | "externalmcp",
   ) => {
     try {
-      const result = await client.deployments.evolveDeployment({
+      await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.deployment?.id,
           nonBlocking: true,
           excludeExternalMcps: [slug],
         },
       });
-      if (result.deployment) {
-        await waitForDeployment(client, result.deployment.id);
-      }
       await refetch();
       toast.success("External MCP source deleted successfully");
       navigate(routes.sources.href());

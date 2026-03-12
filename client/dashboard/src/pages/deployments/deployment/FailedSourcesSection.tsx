@@ -2,7 +2,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
 import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
-import { waitForDeployment } from "@/lib/deployments";
 import type {
   Deployment,
   DeploymentLogEvent,
@@ -131,7 +130,7 @@ export function FailedSourcesSection({
         }
       }
 
-      const result = await client.deployments.evolveDeployment({
+      await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment.id,
           nonBlocking: true,
@@ -142,10 +141,6 @@ export function FailedSourcesSection({
           ...(excludeExternalMcps.length > 0 && { excludeExternalMcps }),
         },
       });
-
-      if (result.deployment) {
-        await waitForDeployment(client, result.deployment.id);
-      }
 
       toast.success(
         `Removed ${selectedSources.length} failed source${selectedSources.length !== 1 ? "s" : ""}`,
