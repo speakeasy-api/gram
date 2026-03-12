@@ -1,4 +1,5 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { useOrgRoutes } from "@/routes";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
@@ -647,6 +648,8 @@ function HooksInnerContent({
   onClearCustomRange: () => void;
   projectSlug?: string;
 }) {
+  const orgRoutes = useOrgRoutes();
+
   if (isLogsDisabled) {
     return (
       <div className="space-y-6">
@@ -682,7 +685,7 @@ function HooksInnerContent({
               </p>
             </div>
             <Button variant="outline" size="sm" asChild>
-              <Link to="../settings/logs">
+              <Link to={orgRoutes.logs.href()}>
                 <Settings className="h-4 w-4" />
                 Configure settings
               </Link>

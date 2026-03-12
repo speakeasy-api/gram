@@ -1,5 +1,4 @@
 import { FullPageError } from "@/components/full-page-error";
-import { LINKED_FROM_PARAM } from "@/pages/home/Home";
 import {
   InfoResponseBody,
   OrganizationEntry,
@@ -145,7 +144,7 @@ export const ProjectProvider = ({
 
   const switchProject = async (slug: string) => {
     client.clear();
-    navigate(`/${organization.slug}/${slug}`);
+    navigate(`/${organization.slug}/projects/${slug}`);
   };
 
   const value = Object.assign(currentProject, {
@@ -226,6 +225,22 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     location.pathname.startsWith(p),
   );
 
+  const pathParts = location.pathname.split("/").filter(Boolean);
+
+  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
+  // If the second segment is a known project slug (and not "projects" or an org-level route),
+  // redirect to the new URL structure.
+  if (
+    pathParts.length >= 2 &&
+    pathParts[0] === session.organization?.slug &&
+    pathParts[1] !== "projects" &&
+    session.organization.projects.some((p) => p.slug === pathParts[1])
+  ) {
+    const rest = pathParts.slice(2).join("/");
+    const newPath = `/${pathParts[0]}/projects/${pathParts[1]}${rest ? `/${rest}` : ""}`;
+    return <Navigate to={newPath + location.search} replace />;
+  }
+
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
@@ -233,37 +248,20 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   } else if (isSlugExempt) {
     // Fall through to render children
   } else if (session.organization && !projectSlug) {
-    // if we're logged in but the URL doesn't have a project slug, redirect to
-    // the default project
-    let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
-
-    if (
-      !preferredProject ||
-      !session.organization.projects.find((p) => p.slug === preferredProject)
-    ) {
-      preferredProject = session.organization.projects[0]!.slug;
+    // On an org-level page or bare URL with no project context — that's fine,
+    // unless we're at the root "/" with no org slug either
+    if (!orgSlug || orgSlug !== session.organization.slug) {
+      // Redirect to org home
+      return <Navigate to={`/${session.organization.slug}`} replace />;
     }
-
-    const paramsToForward = [LINKED_FROM_PARAM];
-    const forwardParams = new URLSearchParams();
-    paramsToForward.forEach((param) => {
-      const value = searchParams.get(param);
-      if (value !== null) {
-        forwardParams.set(param, value);
-      }
-    });
-    const paramsToForwardString = forwardParams.toString();
-
-    return (
-      <Navigate
-        to={`/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`}
-        replace
-      />
-    );
+    // Otherwise we're on a valid org-level path, fall through
   } else if (session.organization.slug !== orgSlug) {
     // make sure we don't direct to an org we aren't authenticated with
     return (
-      <Navigate to={`/${session.organization.slug}/${projectSlug}`} replace />
+      <Navigate
+        to={`/${session.organization.slug}/projects/${projectSlug}`}
+        replace
+      />
     );
   }
 

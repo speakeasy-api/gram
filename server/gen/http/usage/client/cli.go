@@ -13,66 +13,45 @@ import (
 
 // BuildGetPeriodUsagePayload builds the payload for the usage getPeriodUsage
 // endpoint from CLI flags.
-func BuildGetPeriodUsagePayload(usageGetPeriodUsageSessionToken string, usageGetPeriodUsageProjectSlugInput string) (*usage.GetPeriodUsagePayload, error) {
+func BuildGetPeriodUsagePayload(usageGetPeriodUsageSessionToken string) (*usage.GetPeriodUsagePayload, error) {
 	var sessionToken *string
 	{
 		if usageGetPeriodUsageSessionToken != "" {
 			sessionToken = &usageGetPeriodUsageSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if usageGetPeriodUsageProjectSlugInput != "" {
-			projectSlugInput = &usageGetPeriodUsageProjectSlugInput
-		}
-	}
 	v := &usage.GetPeriodUsagePayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildCreateCustomerSessionPayload builds the payload for the usage
 // createCustomerSession endpoint from CLI flags.
-func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken string, usageCreateCustomerSessionProjectSlugInput string) (*usage.CreateCustomerSessionPayload, error) {
+func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken string) (*usage.CreateCustomerSessionPayload, error) {
 	var sessionToken *string
 	{
 		if usageCreateCustomerSessionSessionToken != "" {
 			sessionToken = &usageCreateCustomerSessionSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if usageCreateCustomerSessionProjectSlugInput != "" {
-			projectSlugInput = &usageCreateCustomerSessionProjectSlugInput
-		}
-	}
 	v := &usage.CreateCustomerSessionPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildCreateCheckoutPayload builds the payload for the usage createCheckout
 // endpoint from CLI flags.
-func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string, usageCreateCheckoutProjectSlugInput string) (*usage.CreateCheckoutPayload, error) {
+func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.CreateCheckoutPayload, error) {
 	var sessionToken *string
 	{
 		if usageCreateCheckoutSessionToken != "" {
 			sessionToken = &usageCreateCheckoutSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if usageCreateCheckoutProjectSlugInput != "" {
-			projectSlugInput = &usageCreateCheckoutProjectSlugInput
-		}
-	}
 	v := &usage.CreateCheckoutPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

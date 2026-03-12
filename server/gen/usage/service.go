@@ -16,7 +16,7 @@ import (
 
 // Read usage for gram.
 type Service interface {
-	// Get the usage for a project for a given period
+	// Get the usage for an organization for a given period
 	GetPeriodUsage(context.Context, *GetPeriodUsagePayload) (res *PeriodUsage, err error)
 	// Get the usage tiers
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
@@ -51,22 +51,19 @@ var MethodNames = [4]string{"getPeriodUsage", "getUsageTiers", "createCustomerSe
 // CreateCheckoutPayload is the payload type of the usage service
 // createCheckout method.
 type CreateCheckoutPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // CreateCustomerSessionPayload is the payload type of the usage service
 // createCustomerSession method.
 type CreateCustomerSessionPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // GetPeriodUsagePayload is the payload type of the usage service
 // getPeriodUsage method.
 type GetPeriodUsagePayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // PeriodUsage is the result type of the usage service getPeriodUsage method.

@@ -16,7 +16,7 @@ import {
   useLocation,
   useSearchParams,
 } from "react-router";
-import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
+import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
 import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import {
@@ -28,7 +28,7 @@ import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { usePageTitle } from "./hooks/use-page-title";
 import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
-import { AppRoute, useRoutes } from "./routes";
+import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -140,6 +140,7 @@ function AppContent() {
 
 const RouteProvider = () => {
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const { addActions, removeActions } = useCommandPalette();
 
   // Update document title based on active route
@@ -214,11 +215,14 @@ const RouteProvider = () => {
           <Route index element={<SlackRegister />} />
         </Route>
         <Route path="/" element={<LoginCheck />}>
-          <Route path=":orgSlug/:projectSlug">
+          <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
-          <Route path=":orgSlug/:projectSlug" element={<AppLayout />}>
+          <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
+          </Route>
+          <Route path=":orgSlug" element={<OrgLayout />}>
+            {routesWithSubroutes(Object.values(orgRoutes))}
           </Route>
         </Route>
       </Routes>

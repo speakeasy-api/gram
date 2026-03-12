@@ -121,7 +121,7 @@ function PageHeaderBreadcrumbs({
               <span>{elem.display}</span>
             ) : (
               <Link
-                to={`/${orgSlug}/${projectSlug}${elem.url}`}
+                to={`/${orgSlug}/projects/${projectSlug}${elem.url}`}
                 className="text-muted-foreground hover:text-foreground trans"
               >
                 {elem.display}

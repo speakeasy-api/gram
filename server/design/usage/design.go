@@ -47,15 +47,14 @@ var UsageTiers = Type("UsageTiers", func() {
 
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
-	Security(security.Session, security.ProjectSlug)
+	Security(security.Session)
 	shared.DeclareErrorResponses()
 
 	Method("getPeriodUsage", func() {
-		Description("Get the usage for a project for a given period")
+		Description("Get the usage for an organization for a given period")
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		Result(PeriodUsage)
@@ -63,7 +62,6 @@ var _ = Service("usage", func() {
 		HTTP(func() {
 			GET("/rpc/usage.getPeriodUsage")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -94,7 +92,6 @@ var _ = Service("usage", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		Result(String)
@@ -102,7 +99,6 @@ var _ = Service("usage", func() {
 		HTTP(func() {
 			POST("/rpc/usage.createCustomerSession")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -116,7 +112,6 @@ var _ = Service("usage", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		Result(String)
@@ -124,7 +119,6 @@ var _ = Service("usage", func() {
 		HTTP(func() {
 			POST("/rpc/usage.createCheckout")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
