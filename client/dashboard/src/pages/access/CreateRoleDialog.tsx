@@ -261,22 +261,20 @@ export function CreateRoleDialog({
                                   </div>
                                 </label>
 
-                                {scopeDef.resourceType !== "org" && (
-                                  <div className="w-[110px] shrink-0 flex justify-end">
-                                    {isChecked && (
-                                      <ScopePickerPopover
-                                        resourceType={scopeDef.resourceType}
-                                        resources={grant.resources}
-                                        onChangeResources={(resources) =>
-                                          setGrantResources(
-                                            scopeDef.slug,
-                                            resources,
-                                          )
-                                        }
-                                      />
-                                    )}
-                                  </div>
-                                )}
+                                <div className="w-[110px] shrink-0 flex justify-end">
+                                  {isChecked && (
+                                    <ScopePickerPopover
+                                      resourceType={scopeDef.resourceType}
+                                      resources={grant.resources}
+                                      onChangeResources={(resources) =>
+                                        setGrantResources(
+                                          scopeDef.slug,
+                                          resources,
+                                        )
+                                      }
+                                    />
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
