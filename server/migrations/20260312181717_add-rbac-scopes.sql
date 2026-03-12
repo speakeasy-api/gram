@@ -22,7 +22,7 @@ CREATE TABLE "principal_grants" (
   CONSTRAINT "principal_grants_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "principal_grants_scope_slug_fkey" FOREIGN KEY ("scope_slug") REFERENCES "scopes" ("slug") ON UPDATE NO ACTION ON DELETE RESTRICT,
   CONSTRAINT "principal_grants_principal_type_check" CHECK (principal_type = ANY (ARRAY['user'::text, 'role'::text])),
-  CONSTRAINT "principal_grants_resources_check" CHECK ((resources IS NULL) OR ((array_length(resources, 1) >= 1) AND (array_length(resources, 1) <= 200)))
+  CONSTRAINT "principal_grants_resources_check" CHECK ((resources IS NULL) OR ((cardinality(resources) >= 1) AND (cardinality(resources) <= 200)))
 );
 -- Create index "principal_grants_resources_idx" to table: "principal_grants"
 CREATE INDEX "principal_grants_resources_idx" ON "principal_grants" USING gin ("resources");

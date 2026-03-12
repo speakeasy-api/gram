@@ -1491,6 +1491,8 @@ CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_i
 -- RBAC: scope vocabulary (reference data, seeded at app startup)
 CREATE TABLE IF NOT EXISTS scopes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- Unique human-readable identifier, e.g. "project:read", "build:write".
+  -- Used as the FK target from principal_grants so grant rows are self-describing.
   slug TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1508,10 +1510,18 @@ CREATE TABLE IF NOT EXISTS scopes (
 -- so NULL (unrestricted) and ARRAY (allowlist) are mutually exclusive by construction.
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- The organization this grant belongs to. Grants are always org-scoped.
   organization_id TEXT NOT NULL,
+  -- Discriminator: 'user' for a direct user grant, 'role' for a WorkOS role grant.
   principal_type TEXT NOT NULL,
+  -- The identifier of the principal: a WorkOS user ID when principal_type='user',
+  -- or a WorkOS role slug when principal_type='role'.
   principal_id TEXT NOT NULL,
+  -- The scope being granted, e.g. "project:read". References scopes(slug).
   scope_slug TEXT NOT NULL,
+  -- NULL = unrestricted (scope applies to all resources in the org).
+  -- Non-empty array = allowlist of resource IDs this scope is restricted to.
+  -- Empty arrays are rejected by the CHECK constraint (use NULL for unrestricted).
   resources TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1521,8 +1531,10 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT principal_grants_scope_slug_fkey FOREIGN KEY (scope_slug) REFERENCES scopes (slug) ON DELETE RESTRICT,
   CONSTRAINT principal_grants_principal_type_check CHECK (principal_type IN ('user', 'role')),
-  CONSTRAINT principal_grants_resources_check CHECK (resources IS NULL OR array_length(resources, 1) BETWEEN 1 AND 200),
+  CONSTRAINT principal_grants_resources_check CHECK (resources IS NULL OR cardinality(resources) BETWEEN 1 AND 200),
   CONSTRAINT principal_grants_organization_id_principal_type_principal_id_scope_slug_key UNIQUE (organization_id, principal_type, principal_id, scope_slug)
 );
 
+-- Supports efficient @> (array containment) queries used by access.Filter()
+-- to find all grants covering a specific resource ID.
 CREATE INDEX IF NOT EXISTS principal_grants_resources_idx ON principal_grants USING GIN (resources);
