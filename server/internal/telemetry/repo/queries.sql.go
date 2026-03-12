@@ -552,12 +552,15 @@ type GetTimeSeriesMetricsParams struct {
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
 // Returns buckets for the entire requested time range, with zeros for periods without data.
+// Gap-filling is handled by ClickHouse's ORDER BY ... WITH FILL clause.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMetricsParams) ([]TimeSeriesBucket, error) {
 	intervalNanos := arg.IntervalSeconds * 1_000_000_000
-	// Align start time to interval boundary (mirrors toStartOfInterval epoch alignment)
+	// Align boundaries to interval so WITH FILL produces evenly-spaced buckets.
 	alignedStart := (arg.TimeStart / intervalNanos) * intervalNanos
+	// Add one step so WITH FILL's exclusive TO boundary includes the last aligned bucket.
+	alignedEnd := ((arg.TimeEnd / intervalNanos) * intervalNanos) + intervalNanos
 
 	// toIntervalSecond(?) allows the interval to be fully parameterized — unlike INTERVAL literals.
 	sb := sq.Select().
@@ -593,6 +596,13 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
 	}
 
+	// ClickHouse fills missing buckets with zeros via WITH FILL.
+	// FROM/TO use aligned nanosecond boundaries; TO is exclusive so we add one step.
+	sb = sb.OrderByClause(squirrel.Expr(
+		"bucket_time_unix_nano ASC WITH FILL FROM ? TO ? STEP ?",
+		alignedStart, alignedEnd, intervalNanos,
+	))
+
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building time series query: %w", err)
@@ -604,29 +614,17 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	}
 	defer rows.Close()
 
-	// Collect results into a map keyed by bucket timestamp
-	dataMap := make(map[int64]TimeSeriesBucket)
+	var buckets []TimeSeriesBucket
 	for rows.Next() {
 		var bucket TimeSeriesBucket
 		if err = rows.ScanStruct(&bucket); err != nil {
 			return nil, fmt.Errorf("scanning time series row: %w", err)
 		}
-		dataMap[bucket.BucketTimeUnixNano] = bucket
+		buckets = append(buckets, bucket)
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, err
-	}
-
-	// Generate all expected bucket timestamps, filling zeros for periods with no data.
-	// This ensures the caller always receives a complete, evenly-spaced series.
-	var buckets []TimeSeriesBucket
-	for t := alignedStart; t <= arg.TimeEnd; t += intervalNanos {
-		if b, ok := dataMap[t]; ok {
-			buckets = append(buckets, b)
-		} else {
-			buckets = append(buckets, TimeSeriesBucket{BucketTimeUnixNano: t})
-		}
 	}
 
 	return buckets, nil
