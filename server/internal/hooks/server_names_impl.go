@@ -32,10 +32,9 @@ func AttachServerNames(mux goahttp.Muxer, service *Service) {
 // List lists all server name display overrides for the authenticated project
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) ([]*gen.ServerNameOverride, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	// if authCtx == nil || authCtx.ProjectID == nil {
-	// 	return nil, oops.C(oops.CodeUnauthorized)
-	// }
-	println("\n\n\n got auth context", authCtx.ProjectID)
+	if authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
 
 	rows, err := s.repo.ListHooksServerNameOverrides(ctx, *authCtx.ProjectID)
 	if err != nil {
