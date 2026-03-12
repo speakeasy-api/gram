@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
-import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { Button, Column, Table } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
 import { MOCK_MEMBERS, MOCK_ROLES } from "./mock-data";
@@ -69,7 +69,7 @@ export function MembersTab() {
     {
       key: "actions",
       header: "",
-      width: "100px",
+      width: "80px",
       render: (member) => (
         <Button
           variant="tertiary"
@@ -97,16 +97,8 @@ export function MembersTab() {
         columns={columns}
         data={members}
         rowKey={(row) => row.id}
-        className="mt-4 rounded-b-none"
+        className="mt-4"
       />
-      <div className="flex justify-center border border-t-0 border-border rounded-b-lg py-3">
-        <Button variant="tertiary" size="sm">
-          <Button.LeftIcon>
-            <Icon name="plus" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Invite Team Members</Button.Text>
-        </Button>
-      </div>
 
       <ChangeRoleDialog
         member={changingMember}

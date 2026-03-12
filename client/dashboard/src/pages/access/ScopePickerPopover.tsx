@@ -22,6 +22,15 @@ export function ScopePickerPopover({
   resources,
   onChangeResources,
 }: ScopePickerPopoverProps) {
+  // Org-scoped permissions have no resource picker — they're always org-wide
+  if (resourceType === "org") {
+    return (
+      <span className="inline-flex items-center rounded-md border border-input bg-transparent px-2 py-1 text-xs text-muted-foreground h-7">
+        All
+      </span>
+    );
+  }
+
   const isUnrestricted = resources === null;
   const resourceList =
     resourceType === "project" ? MOCK_PROJECTS : MOCK_MCP_SERVERS;
