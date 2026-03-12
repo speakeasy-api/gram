@@ -30,85 +30,16 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
 })
 
-// OTEL attribute value supporting string and int types
-var OTELAttributeValue = Type("OTELAttributeValue", func() {
-	Description("OTEL attribute value - supports stringValue or intValue")
-	Attribute("stringValue", String, "String value")
-	Attribute("intValue", Int64, "Integer value")
-})
-
-// OTEL attribute with key-value pair
-var OTELAttribute = Type("OTELAttribute", func() {
-	Description("OTEL log attribute with key and typed value")
-	Required("key", "value")
-	Attribute("key", String, "Attribute key")
-	Attribute("value", OTELAttributeValue, "Attribute value")
-})
-
-// OTEL log body
-var OTELLogBody = Type("OTELLogBody", func() {
-	Description("OTEL log body")
-	Attribute("stringValue", String, "String body value")
-})
-
-// OTEL log record
-var OTELLogRecord = Type("OTELLogRecord", func() {
-	Description("Individual OTEL log record")
-	Required("timeUnixNano", "observedTimeUnixNano", "body", "attributes")
-	Attribute("timeUnixNano", String, "Timestamp in nanoseconds since Unix epoch")
-	Attribute("observedTimeUnixNano", String, "Observed timestamp in nanoseconds")
-	Attribute("body", OTELLogBody, "Log body content")
-	Attribute("attributes", ArrayOf(OTELAttribute), "Log attributes")
-	Attribute("droppedAttributesCount", Int, "Number of dropped attributes")
-})
-
-// OTEL scope
-var OTELScope = Type("OTELScope", func() {
-	Description("OTEL instrumentation scope")
-	Attribute("name", String, "Scope name")
-	Attribute("version", String, "Scope version")
-})
-
-// OTEL scope logs
-var OTELScopeLog = Type("OTELScopeLog", func() {
-	Description("OTEL scope logs container")
-	Required("logRecords")
-	Attribute("scope", OTELScope, "Instrumentation scope information")
-	Attribute("logRecords", ArrayOf(OTELLogRecord), "Array of log records")
-})
-
-// OTEL resource attribute
-var OTELResourceAttribute = Type("OTELResourceAttribute", func() {
-	Description("OTEL resource attribute")
-	Required("key", "value")
-	Attribute("key", String, "Resource attribute key")
-	Attribute("value", OTELAttributeValue, "Resource attribute value")
-})
-
-// OTEL resource
-var OTELResource = Type("OTELResource", func() {
-	Description("OTEL resource information")
-	Attribute("attributes", ArrayOf(OTELResourceAttribute), "Resource attributes")
-	Attribute("droppedAttributesCount", Int, "Number of dropped attributes")
-})
-
-// OTEL resource logs
-var OTELResourceLog = Type("OTELResourceLog", func() {
-	Description("OTEL resource logs container")
-	Required("scopeLogs")
-	Attribute("resource", OTELResource, "Resource information")
-	Attribute("scopeLogs", ArrayOf(OTELScopeLog), "Array of scope logs")
-})
-
-// OTEL logs payload
-var OTELLogsPayload = Type("OTELLogsPayload", func() {
-	Description("OTEL logs export payload")
-	Required("resourceLogs")
-	Attribute("resourceLogs", ArrayOf(OTELResourceLog), "Array of resource logs")
+// Server name override types
+var ServerNameOverride = Type("ServerNameOverride", func() {
+	Description("User-defined display name for a hooks server")
+	Required("id", "raw_server_name", "display_name")
+	Attribute("id", String, "Override ID")
+	Attribute("raw_server_name", String, "Original server name from hooks")
+	Attribute("display_name", String, "User-friendly display name")
 })
 
 var _ = Service("hooks", func() {
-	Meta("openapi:generate", "false")
 	Description("Receives Claude Code hook events for tool usage observability.")
 
 	shared.DeclareErrorResponses()
@@ -127,7 +58,7 @@ var _ = Service("hooks", func() {
 		Description("Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("hooks")
+			Scope("hooks") // NOTE: This is the ONLY endpoint that should allow the hooks scope
 		})
 
 		Payload(func() {
@@ -144,5 +75,84 @@ var _ = Service("hooks", func() {
 			security.ProjectHeader()
 			Response(StatusAccepted)
 		})
+	})
+})
+
+var _ = Service("hooksServerNames", func() {
+	Description("Manages display name overrides for hooks servers.")
+
+	Security(security.Session, security.ProjectSlug)
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("producer")
+	})
+
+	shared.DeclareErrorResponses()
+
+	Method("list", func() {
+		Description("List all server name display overrides for a project")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ArrayOf(ServerNameOverride))
+
+		HTTP(func() {
+			GET("/rpc/hooks.listServerNameOverrides")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "listServerNameOverrides")
+	})
+
+	Method("upsert", func() {
+		Description("Create or update a server name display override")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("raw_server_name", String, "Original server name from hooks")
+			Attribute("display_name", String, "User-friendly display name")
+			Required("raw_server_name", "display_name")
+		})
+
+		Result(ServerNameOverride)
+
+		HTTP(func() {
+			POST("/rpc/hooks.upsertServerNameOverride")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "upsertServerNameOverride")
+	})
+
+	Method("delete", func() {
+		Description("Delete a server name display override")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("override_id", String, "Override ID to delete")
+			Required("override_id")
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/hooks.deleteServerNameOverride")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "deleteServerNameOverride")
 	})
 })

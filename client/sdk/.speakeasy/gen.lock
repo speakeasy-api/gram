@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: be1715c254b4af107683e0e37e716fd5
+  docChecksum: 925dc5b18219b8e2ea6b5cc4e004c030
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.25
-  configChecksum: 83173fa0dbf7665bbfa3dba7dc09431a
+  releaseVersion: 0.27.32
+  configChecksum: 2840a123f9ecec40d4f8728ee1291bcf
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -108,6 +108,10 @@ trackedFiles:
     last_write_checksum: sha1:19859afeae623790ebc81cfd539c4622cda98255
   docs/models/components/chatsummarystatus.md:
     last_write_checksum: sha1:543bad7e7c81392fa16e4f5616d9b8f95dfb3f99
+  docs/models/components/claudehookpayload.md:
+    last_write_checksum: sha1:e7dcc3b4427c8d965f081d6271d4bc66e32c6739
+  docs/models/components/claudehookresult.md:
+    last_write_checksum: sha1:654b2e17e370fbb8c75ad4288989e56cf103af4f
   docs/models/components/configureslackapprequestbody.md:
     last_write_checksum: sha1:028d8866b4e7924ecf4569eba1335fa533fb7f9c
   docs/models/components/confirm.md:
@@ -158,6 +162,8 @@ trackedFiles:
     last_write_checksum: sha1:408cf80dec9f85399ba97808d4742548dc857798
   docs/models/components/deleteglobaltoolvariationresult.md:
     last_write_checksum: sha1:04dce9a78844146d01af0010e5af8cd64c155a00
+  docs/models/components/deleterequestbody.md:
+    last_write_checksum: sha1:1a2f33568facc0bb5fa16b8080d113b493acc3e2
   docs/models/components/deployment.md:
     last_write_checksum: sha1:c05444112c4ac42b41636bf63e232a8773a21d31
   docs/models/components/deploymentexternalmcp.md:
@@ -254,6 +260,8 @@ trackedFiles:
     last_write_checksum: sha1:ac240bdca58bda277c914ab6c834110171a5050f
   docs/models/components/gramproductfeatures.md:
     last_write_checksum: sha1:e13a3260b468b705a4d29c806220a5dc2fce7677
+  docs/models/components/hookeventname.md:
+    last_write_checksum: sha1:a65f76212e9e7d2ead94207d68b46748b276497a
   docs/models/components/hooksserversummary.md:
     last_write_checksum: sha1:65f741f7c4c0dd72b7fcc482bdc7b586b2419629
   docs/models/components/hooksusersummary.md:
@@ -360,6 +368,26 @@ trackedFiles:
     last_write_checksum: sha1:a278250c76553362effdfb720017a38808eb6283
   docs/models/components/organizationentry.md:
     last_write_checksum: sha1:69a03a891f0032a56e074a49b7e8447f40aabc9f
+  docs/models/components/otelattribute.md:
+    last_write_checksum: sha1:a893f2d5835427f5e9750589b9d8703c2a9d30c1
+  docs/models/components/otelattributevalue.md:
+    last_write_checksum: sha1:476055b181686ddf4749ba6124d53ad9e2000fc5
+  docs/models/components/otellogbody.md:
+    last_write_checksum: sha1:eedd08e6ed59982d620c3cd20a0717f662727c1e
+  docs/models/components/otellogrecord.md:
+    last_write_checksum: sha1:f646e5cf80b819166314b6e1baff0a531a918707
+  docs/models/components/otellogspayload.md:
+    last_write_checksum: sha1:2eef6e693a53b230c466f01b523d9f2d576bc75d
+  docs/models/components/otelresource.md:
+    last_write_checksum: sha1:0dbb9731748efe970627e896732f84d9a34de6c2
+  docs/models/components/otelresourceattribute.md:
+    last_write_checksum: sha1:3ead622223358531bfbcebb638b1f8322cbaa7a0
+  docs/models/components/otelresourcelog.md:
+    last_write_checksum: sha1:fea4ef016bbaa7093d5a90d2c9d491a66ad5bc24
+  docs/models/components/otelscope.md:
+    last_write_checksum: sha1:907cfaa07475440bc7b56fe0ccb5a74c47d97386
+  docs/models/components/otelscopelog.md:
+    last_write_checksum: sha1:8d8f556c9893d274b97efed2ce8a96335df96b6e
   docs/models/components/package.md:
     last_write_checksum: sha1:5bbd5b42dd8419bd85112919ea8016b1a10843ff
   docs/models/components/packageversion.md:
@@ -440,6 +468,8 @@ trackedFiles:
     last_write_checksum: sha1:c9440e44db862ae2ab790d1f490d7a145a23cd9d
   docs/models/components/serveimageform.md:
     last_write_checksum: sha1:530060f0cc468c392b1fd32052fc990c4a5c17c5
+  docs/models/components/servernameoverride.md:
+    last_write_checksum: sha1:9283a4e62c88adf744657c62452b7f7c14c9a851
   docs/models/components/servervariable.md:
     last_write_checksum: sha1:6ecac353995c50a24db6ab322a388576dfa91fd9
   docs/models/components/serviceinfo.md:
@@ -538,6 +568,8 @@ trackedFiles:
     last_write_checksum: sha1:dbc2f90b2e889c10e3377a2cdb711d68db82683d
   docs/models/components/upsertglobaltoolvariationresult.md:
     last_write_checksum: sha1:a149a67059894f2c29a2653cd9fa5a66d7bbf31e
+  docs/models/components/upsertrequestbody.md:
+    last_write_checksum: sha1:bbf2bdd2d8c070dafc9b41534f9168ac40d6aa1a
   docs/models/components/usagetiers.md:
     last_write_checksum: sha1:553cc30b96228fae92cf299def7363c5902011ae
   docs/models/components/usersummary.md:
@@ -740,6 +772,10 @@ trackedFiles:
     last_write_checksum: sha1:34756745bdc0df626f61a0b5e74d6ddca87781cb
   docs/models/operations/deleteresponsesecurity.md:
     last_write_checksum: sha1:a51be06a42eb748ac7c07f1d58bfa95926e48332
+  docs/models/operations/deleteservernameoverriderequest.md:
+    last_write_checksum: sha1:866b50342f7bceb99b36d6d515f1f4008ae8dbc8
+  docs/models/operations/deleteservernameoverridesecurity.md:
+    last_write_checksum: sha1:707f905a9c32af2f456c1780c8759e450e479d6e
   docs/models/operations/deleteslackapprequest.md:
     last_write_checksum: sha1:7b0a46f84b3070f65d0e54609f595b2bd7db2969
   docs/models/operations/deleteslackappsecurity.md:
@@ -942,6 +978,10 @@ trackedFiles:
     last_write_checksum: sha1:d4dc1f5cd35b48ee47957f682f1ad657f0cdcad1
   docs/models/operations/getusermetricssummarysecurityoption2.md:
     last_write_checksum: sha1:b15a0cb73ae463e5e0a6d861957fc2874cd1c855
+  docs/models/operations/hooksnumberlogsrequest.md:
+    last_write_checksum: sha1:5f3ffbef78d03e1b5fa564832dd104b4a1888798
+  docs/models/operations/hooksnumberlogssecurity.md:
+    last_write_checksum: sha1:1e492c0a57623b6ab3b5a78dec2c0119119a21ba
   docs/models/operations/integrationsnumbergetrequest.md:
     last_write_checksum: sha1:de50d4e9156da656b78521f23055725545f45bf5
   docs/models/operations/integrationsnumbergetsecurity.md:
@@ -1054,6 +1094,10 @@ trackedFiles:
     last_write_checksum: sha1:d21b421dcdb3a6241a13edef03b991e7030b63f6
   docs/models/operations/listresourcessecurity.md:
     last_write_checksum: sha1:cf8b54d391f1bb30b369d2657ea73d8a5cff5042
+  docs/models/operations/listservernameoverridesrequest.md:
+    last_write_checksum: sha1:6eb10ad29220a750398b4bdbb80606014977bf2e
+  docs/models/operations/listservernameoverridessecurity.md:
+    last_write_checksum: sha1:60e7cb0f8ebaf5b0cb4fcdbb9f91af674af07988
   docs/models/operations/listslackappsrequest.md:
     last_write_checksum: sha1:14dde349ba1c7493ea63341bd6e91d0a89cb2fe0
   docs/models/operations/listslackappssecurity.md:
@@ -1362,6 +1406,10 @@ trackedFiles:
     last_write_checksum: sha1:dd0f1a14322f4421b7f387c5048897443ccd93e8
   docs/models/operations/upsertglobalvariationsecurityoption2.md:
     last_write_checksum: sha1:804fdcf23b07e58cfc27080a650e5ef375e74276
+  docs/models/operations/upsertservernameoverriderequest.md:
+    last_write_checksum: sha1:d71fbac3db6e5c112275268033bbd7eae8c48bf5
+  docs/models/operations/upsertservernameoverridesecurity.md:
+    last_write_checksum: sha1:ef420bb019eee15166e7e49ee37c794658138dd5
   docs/models/operations/validateapikeyrequest.md:
     last_write_checksum: sha1:69bb44cbe3a53ab8c66a24b69a732c0835bed205
   docs/models/operations/validateapikeysecurity.md:
@@ -1384,6 +1432,10 @@ trackedFiles:
     last_write_checksum: sha1:321054972213d5ae222b3e3bd6c72915ee143caf
   docs/sdks/features/README.md:
     last_write_checksum: sha1:79ab0259791f46a8d2ecd959a4ee69dd4551bea5
+  docs/sdks/hooks/README.md:
+    last_write_checksum: sha1:8cb24d8ace458ded17f66d1588f19b0afe0ada8a
+  docs/sdks/hooksservernames/README.md:
+    last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
     last_write_checksum: sha1:1412708432e81da35ec547fe2a0d33f4fb1bbfe1
   docs/sdks/integrations/README.md:
@@ -1434,11 +1486,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:956c670fcdf8a2996a1e2d84dc434648f37264a1
+    last_write_checksum: sha1:64cd6d065aa1f8c1c9b8deb44c4aea2db18028a6
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:d66fbb76d1948185e3781554feb21dbfffd04ef3
+    last_write_checksum: sha1:fa761f9d59eb9a1c5a878c32493d85f136d7fe45
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1640,6 +1692,16 @@ trackedFiles:
     id: ce52f5f30550
     last_write_checksum: sha1:21800ae76e8d43dd524a11903c5f814d6b19d341
     pristine_git_object: 680533ea7917230ef71927dfe370d54d02598082
+  src/funcs/hooksHooksNumberClaude.ts:
+    last_write_checksum: sha1:d2a72cb590c74f9878eee245be17ec020f991dd2
+  src/funcs/hooksHooksNumberLogs.ts:
+    last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
+  src/funcs/hooksServerNamesDeleteServerNameOverride.ts:
+    last_write_checksum: sha1:e5024a858bd7c332e6ccfa34ee95117deeed9031
+  src/funcs/hooksServerNamesListServerNameOverrides.ts:
+    last_write_checksum: sha1:c3517d57d84ad346bb64eaf504481de42053c385
+  src/funcs/hooksServerNamesUpsertServerNameOverride.ts:
+    last_write_checksum: sha1:4dd548aa3728d5d623754f715099087f0bdb02f7
   src/funcs/instancesGetBySlug.ts:
     id: f05f1e175cc0
     last_write_checksum: sha1:4a57eddae8c5cbe2d2add36978c6388e26784711
@@ -1902,7 +1964,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:943dc44245d614c5aa36a125f61a86ecc3287dfa
+    last_write_checksum: sha1:33ccf617d96ccc192681b977d22507a51ef5e465
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2026,6 +2088,10 @@ trackedFiles:
     last_write_checksum: sha1:9084f3031124e2ab8ef5698a96e7a5a5f43bf71b
   src/models/components/chatsummary.ts:
     last_write_checksum: sha1:aff9564e3cb1d2ecaa44e06c99bc75b4fc5d7115
+  src/models/components/claudehookpayload.ts:
+    last_write_checksum: sha1:c47f73b199d55ead56b6070bb499b50467087684
+  src/models/components/claudehookresult.ts:
+    last_write_checksum: sha1:53b102e44e8fd791d36b94d52af7aa4b6885ed49
   src/models/components/configureslackapprequestbody.ts:
     last_write_checksum: sha1:62c8dae3e65243772f909cb6862a7c4e768fe912
   src/models/components/createdeploymentrequestbody.ts:
@@ -2108,6 +2174,8 @@ trackedFiles:
     id: 3156d841fa22
     last_write_checksum: sha1:b1b651c14d4f90bf88183b9936c52d9e01bf42c8
     pristine_git_object: 0c185e97b50dac05d7dc8374bf7fc18862e41827
+  src/models/components/deleterequestbody.ts:
+    last_write_checksum: sha1:d043311bd57a1bb95c92c0ab9f62832eb1c573e5
   src/models/components/deployment.ts:
     id: 73b9af3ba286
     last_write_checksum: sha1:d8ead7f1765ca6e06c8e7ad181c53d8bd6c8e6b9
@@ -2264,7 +2332,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:1b2dba050aa1d5a1cf2097d4851f7a839b3c8c90
+    last_write_checksum: sha1:100363dee063cf608df3bb7b44875d983e6206a0
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -2418,6 +2486,26 @@ trackedFiles:
     id: aa6032ffcddc
     last_write_checksum: sha1:80ae8c75259b4645abcc14af57a495f6e6ab77c5
     pristine_git_object: f2f7295b4ead4d4db3f38f721e08e3aa294ddafd
+  src/models/components/otelattribute.ts:
+    last_write_checksum: sha1:73d5182c8e167121b1b0993f33c638df9d5a1f46
+  src/models/components/otelattributevalue.ts:
+    last_write_checksum: sha1:10fa28ee024a641e496533ea9af8036b2b2d1ccb
+  src/models/components/otellogbody.ts:
+    last_write_checksum: sha1:cb8d00884573f1ce6609987aeac27d8434edabb0
+  src/models/components/otellogrecord.ts:
+    last_write_checksum: sha1:ddb831573cb89abdc9a1c27e2e24d5d816aa08f2
+  src/models/components/otellogspayload.ts:
+    last_write_checksum: sha1:0c4f279e6fb83cf353d5c6703dc264182b000314
+  src/models/components/otelresource.ts:
+    last_write_checksum: sha1:e0f4f713f4aa854c5784f7580b0bba0757a42c6a
+  src/models/components/otelresourceattribute.ts:
+    last_write_checksum: sha1:5c700171a4de0c7615662d63006b8cf92f118169
+  src/models/components/otelresourcelog.ts:
+    last_write_checksum: sha1:225755f3586883ab2c387b1fc7834aeb195b0d00
+  src/models/components/otelscope.ts:
+    last_write_checksum: sha1:fcfc339629977baab982e39bb8133722a7b81059
+  src/models/components/otelscopelog.ts:
+    last_write_checksum: sha1:0c7448ee5ea2df2c33ea691a4a75c0a4be9ff3fc
   src/models/components/package.ts:
     id: "625237810132"
     last_write_checksum: sha1:df14d9743fa782e8c08a284516886dc3e0c80965
@@ -2536,6 +2624,8 @@ trackedFiles:
     id: 220ace29ab1d
     last_write_checksum: sha1:02556f1de78b6d7b643c4bee99807bd701536d2a
     pristine_git_object: 1bbfecda5d032fd00519af3c35fe46065a90d311
+  src/models/components/servernameoverride.ts:
+    last_write_checksum: sha1:462812814e6981fa6943f7543755715db2888382
   src/models/components/servervariable.ts:
     id: 7ed1d1e8366a
     last_write_checksum: sha1:4ef751b48929017da7cd05db188ad83cff1edcf2
@@ -2674,6 +2764,8 @@ trackedFiles:
     id: 9ecefd4e7ace
     last_write_checksum: sha1:e3c5f7017c05f7ae3a4de1a7106f8bf4f3e8f769
     pristine_git_object: 62ed75b93a4a67f700b56da8790f23a2bea70f3a
+  src/models/components/upsertrequestbody.ts:
+    last_write_checksum: sha1:9a02a7dff6a8252dc973ecbfa0cf796453f42efa
   src/models/components/usagetiers.ts:
     id: e5ccf3f48285
     last_write_checksum: sha1:483d46bc3c6943050d687177cb389b5c8cf40a4e
@@ -2834,6 +2926,8 @@ trackedFiles:
     pristine_git_object: d10f98d23386fbc55de22ca6f88921cdf66b5136
   src/models/operations/deleteresponse.ts:
     last_write_checksum: sha1:2d0940821e565f452b092ba9e6b5c2cd822522e0
+  src/models/operations/deleteservernameoverride.ts:
+    last_write_checksum: sha1:b52bf9ad353390e81b43e0838eef755f34442220
   src/models/operations/deleteslackapp.ts:
     last_write_checksum: sha1:e35162bdf81f44859b3f21fa646696b43c58eebb
   src/models/operations/deletesourceenvironmentlink.ts:
@@ -2934,9 +3028,11 @@ trackedFiles:
     pristine_git_object: c847d55d0e1a60c6f2aafe8e29c62fe699a75588
   src/models/operations/getusermetricssummary.ts:
     last_write_checksum: sha1:ce121229f9e0be0fe1eeba1361ab61bf384d3785
+  src/models/operations/hooksnumberlogs.ts:
+    last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:678c11093956b91301c876f62c18bdafa9d90c4a
+    last_write_checksum: sha1:ee578b5ef8e14b8f420e1134891a097c43741a96
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -2998,6 +3094,8 @@ trackedFiles:
     id: 4fe7b46e911f
     last_write_checksum: sha1:21c3d13bb096e5d799797de84857bf115f2061d4
     pristine_git_object: 9da95dab09d4e1d0c08ee95c4de06840b1d26462
+  src/models/operations/listservernameoverrides.ts:
+    last_write_checksum: sha1:f1bdf2134d9bc3e978363e108bef3fdb80f3ebee
   src/models/operations/listslackapps.ts:
     last_write_checksum: sha1:b7677375119ac6cf5e631fd8a701b2b6ad93d1ea
   src/models/operations/listtemplates.ts:
@@ -3164,6 +3262,8 @@ trackedFiles:
     id: 71b688a8a189
     last_write_checksum: sha1:e314995a441474665de807eba706ee2d29fe942f
     pristine_git_object: 005a793681df8849f9d50d6fa0d1ef3d1204c519
+  src/models/operations/upsertservernameoverride.ts:
+    last_write_checksum: sha1:456fa309ca52a1016dde980b79ce68f5a54135bb
   src/models/operations/validateapikey.ts:
     id: 6f8c1effe5f1
     last_write_checksum: sha1:3abc74c8bf0f4c1c49ba1d402b8694aca6eb3e9d
@@ -3422,9 +3522,21 @@ trackedFiles:
     id: e1ea33820150
     last_write_checksum: sha1:8dc751424dbf34416f2237693cc8931bddc2ad4d
     pristine_git_object: 48f56cd5f501f734c3428170db837bbe2568246f
+  src/react-query/hooksHooksNumberClaude.ts:
+    last_write_checksum: sha1:65daa7cbd33c503edad39c7ca638137b35727049
+  src/react-query/hooksHooksNumberLogs.ts:
+    last_write_checksum: sha1:71f93fe368921c0b23f8da768c8d6b424852bb96
+  src/react-query/hooksServerNamesDeleteServerNameOverride.ts:
+    last_write_checksum: sha1:c89f1282ecb009da43be140dda218565f8ccd993
+  src/react-query/hooksServerNamesListServerNameOverrides.core.ts:
+    last_write_checksum: sha1:1b17e296c8b4f5cfdeb81d2ef893a264ec9d6778
+  src/react-query/hooksServerNamesListServerNameOverrides.ts:
+    last_write_checksum: sha1:6c9a159632261392e42e85107284df66439c3066
+  src/react-query/hooksServerNamesUpsertServerNameOverride.ts:
+    last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:4315102492846c3606fb12741b3c0c537f77363c
+    last_write_checksum: sha1:3ea59e49088c8708eac291076b4873fd4b3cf46d
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -3844,6 +3956,10 @@ trackedFiles:
     id: 566b32de367f
     last_write_checksum: sha1:f9453df020a022530a0fb97a2e7099343c930b13
     pristine_git_object: 3b4e49a565f809818b5f48673f81835a7d83f884
+  src/sdk/hooks.ts:
+    last_write_checksum: sha1:10d8205f23245a643949abb21b313f55d21f163d
+  src/sdk/hooksservernames.ts:
+    last_write_checksum: sha1:46e1603a1bda6de118b0cfbf7ce1590e01a38c42
   src/sdk/index.ts:
     id: a857902a703f
     last_write_checksum: sha1:ed6d64f2a6135349aa8498b8d8cff9ba85c7fb8f
@@ -3882,7 +3998,7 @@ trackedFiles:
     pristine_git_object: 35d99232a58259bee5d74ed936ddbd70301bf0ee
   src/sdk/sdk.ts:
     id: 784571af2f69
-    last_write_checksum: sha1:bb306bfa3d71f04b7ca11be69e16571572271b2d
+    last_write_checksum: sha1:e2ba5595eff6dbb9464299979073608b66bcabd1
     pristine_git_object: 02357477f876788c1d5316789aca538a95c1070a
   src/sdk/slack.ts:
     id: bbd98c55f3c0
@@ -5439,6 +5555,113 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  hooks#claude:
+    speakeasy-default-hooks#claude:
+      requestBody:
+        application/json: {"hook_event_name": "PostToolUseFailure"}
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  hooks#deleteServerNameOverride:
+    speakeasy-default-hooks#delete-server-name-override:
+      requestBody:
+        application/json: {"override_id": "<id>"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  hooks#listServerNameOverrides:
+    speakeasy-default-hooks#list-server-name-overrides:
+      responses:
+        "200":
+          application/json: [{"display_name": "Elouise_Braun", "id": "<id>", "raw_server_name": "<value>"}]
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  hooks#logs:
+    speakeasy-default-hooks#logs:
+      requestBody:
+        application/json: {"resourceLogs": [{"scopeLogs": [{"logRecords": []}]}]}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  hooks#upsertServerNameOverride:
+    speakeasy-default-hooks#upsert-server-name-override:
+      requestBody:
+        application/json: {"display_name": "Catherine15", "raw_server_name": "<value>"}
+      responses:
+        "200":
+          application/json: {"display_name": "Lina_Jast", "id": "<id>", "raw_server_name": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  hooksServerNames#delete:
+    speakeasy-default-hooks-server-names#delete:
+      requestBody:
+        application/json: {"override_id": "<id>"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  hooksServerNames#list:
+    speakeasy-default-hooks-server-names#list:
+      responses:
+        "200":
+          application/json: [{"display_name": "Scotty_Hane", "id": "<id>", "raw_server_name": "<value>"}]
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  hooksServerNames#upsert:
+    speakeasy-default-hooks-server-names#upsert:
+      requestBody:
+        application/json: {"display_name": "Rafael.Barrows41", "raw_server_name": "<value>"}
+      responses:
+        "200":
+          application/json: {"display_name": "Demario_Considine2", "id": "<id>", "raw_server_name": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteServerNameOverride:
+    speakeasy-default-delete-server-name-override:
+      requestBody:
+        application/json: {"override_id": "<id>"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listServerNameOverrides:
+    speakeasy-default-list-server-name-overrides:
+      responses:
+        "200":
+          application/json: [{"display_name": "Eleonore.Sauer", "id": "<id>", "raw_server_name": "<value>"}]
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  upsertServerNameOverride:
+    speakeasy-default-upsert-server-name-override:
+      requestBody:
+        application/json: {"display_name": "Jerad.Schiller10", "raw_server_name": "<value>"}
+      responses:
+        "200":
+          application/json: {"display_name": "Jason.Bradtke80", "id": "<id>", "raw_server_name": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
