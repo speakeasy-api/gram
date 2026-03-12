@@ -1,3 +1,4 @@
+import { CopyButton } from "@/components/ui/copy-button";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
@@ -5,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
+import { Link2 } from "lucide-react";
 import { useMemo } from "react";
 import { useCatalogIconMap } from "../sources/Sources";
 import {
@@ -15,7 +17,7 @@ import { ToolCollectionBadge } from "../tool-collection-badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
-  const { url: _mcpUrl } = useMcpUrl(toolset);
+  const { url: _mcpUrl, installPageUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
 
@@ -118,7 +120,17 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
           >
             {toolset.name}
           </Type>
-          <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+          <div className="flex items-center gap-1">
+            {installPageUrl && (
+              <CopyButton
+                text={installPageUrl}
+                size="icon-sm"
+                icon={Link2}
+                tooltip="Copy install page URL"
+              />
+            )}
+            <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+          </div>
         </div>
 
         {/* Footer row with status indicator and updated time */}
