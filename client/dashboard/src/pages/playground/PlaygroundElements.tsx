@@ -29,7 +29,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
-  getExternalMcpOAuthConfig,
+  getToolsetOAuthMode,
   useExternalMcpOAuthStatus,
 } from "./PlaygroundAuth";
 import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
@@ -93,17 +93,16 @@ export function PlaygroundElements({
     mcpMetadata,
   );
 
-  // Check if this toolset requires external MCP OAuth
-  const mcpOAuthConfig = useMemo(
-    () =>
-      toolset?.tools ? getExternalMcpOAuthConfig(toolset.tools) : undefined,
-    [toolset?.tools],
+  // Check if this toolset requires OAuth at the toolset level
+  const oauthMode = useMemo(
+    () => (toolset ? getToolsetOAuthMode(toolset) : "none"),
+    [toolset],
   );
+  const hasOAuth = oauthMode !== "none";
 
   const { data: oauthStatus, isLoading: oauthStatusLoading } =
     useExternalMcpOAuthStatus(toolset?.id, {
-      slug: mcpOAuthConfig?.slug,
-      enabled: !!mcpOAuthConfig,
+      enabled: hasOAuth,
     });
 
   // Create getSession function using SDK mutation with session auth
@@ -149,15 +148,16 @@ export function PlaygroundElements({
 
   // Block rendering if OAuth is required but user is not authenticated
   if (
-    mcpOAuthConfig &&
+    hasOAuth &&
     !oauthStatusLoading &&
     oauthStatus?.status !== "authenticated"
   ) {
-    return (
-      <OAuthRequiredNotice
-        providerName={mcpOAuthConfig.name || mcpOAuthConfig.slug}
-      />
-    );
+    const providerName =
+      toolset?.oauthProxyServer?.oauthProxyProviders?.[0]?.slug ??
+      toolset?.externalOauthServer?.slug ??
+      toolset?.name ??
+      "provider";
+    return <OAuthRequiredNotice providerName={providerName} />;
   }
 
   return (
