@@ -63,7 +63,7 @@ jobs:
         run: git fetch origin ${{ github.base_ref }} && git checkout ${{ github.base_ref }}
       - name: Checkout head ref
         if: ${{ steps.check.outputs.lint == 'true' }}
-        run: git fetch origin ${{ github.head_ref }} && git checkout ${{ github.head_ref }}
+        run: git fetch origin pull/${{ github.event.pull_request.number }}/head:${{ github.head_ref }} && git checkout ${{ github.head_ref }}
 
       - name: Setup Mise
         if: ${{ steps.check.outputs.lint == 'true' }}
