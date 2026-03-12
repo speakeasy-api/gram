@@ -35,7 +35,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       routes.chatSessions,
       routes.hooks,
     ],
-    settings: [routes.settings] as AppRoute[],
+    settings: [routes.settings, routes.access, routes.billing] as AppRoute[],
   };
 
   return (
