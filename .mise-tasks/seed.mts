@@ -75,8 +75,8 @@ async function authenticateViaMockIDP(serverURL: string): Promise<string> {
   let loginRes: Response;
   try {
     loginRes = await fetch(loginURL, { redirect: "manual" });
-  } catch (err: unknown) {
-    if ((err as any).cause && (err as any).cause.code === "ECONNREFUSED") {
+  } catch (err: any) {
+    if (err.cause && err.cause.code === "ECONNREFUSED") {
       throw new Error(
         `The dev server does not seem to be running. Start the dev server with \`mise run start\``,
       );
