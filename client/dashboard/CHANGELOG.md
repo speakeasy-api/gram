@@ -1,5 +1,25 @@
 # dashboard
 
+## 0.33.0
+
+### Minor Changes
+
+- 8c72d8c: Renames attribute_filters to filters in searchLogs, and introduces "in" operator.
+
+### Patch Changes
+
+- 110f5b1: Replace Claude Desktop mcpb download with Connections instructions on MCP install page
+- d8133af: Suite of hooks improvements
+- 5c7aa32: Rename MCP environment tab labels for clarity. `Project` tab renamed to `default` to match environment name.
+- 76b411d: Update hooks UI to better accomodate many servers/users
+- 686fee5: Add gpt-5.4 support in playground.
+- Updated dependencies [d8133af]
+- Updated dependencies [6108c5a]
+- Updated dependencies [686fee5]
+- Updated dependencies [8c72d8c]
+  - @gram/client@0.28.0
+  - @gram-ai/elements@1.27.5
+
 ## 0.32.1
 
 ### Patch Changes

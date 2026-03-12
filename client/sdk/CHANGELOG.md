@@ -1,5 +1,15 @@
 # @gram/client
 
+## 0.28.0
+
+### Minor Changes
+
+- 8c72d8c: Renames attribute_filters to filters in searchLogs, and introduces "in" operator.
+
+### Patch Changes
+
+- d8133af: Suite of hooks improvements
+
 ## 0.27.20
 
 ### Patch Changes
