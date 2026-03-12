@@ -172,9 +172,9 @@ export const ChoiceCard = ({
   return (
     <button
       onClick={onClick}
-      className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
+      className="p-5 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
     >
-      <Icon className="w-8 h-8 text-primary mb-3 shrink-0" strokeWidth={1.5} />
+      <Icon className="w-6 h-6 text-primary mb-2 shrink-0" strokeWidth={1.5} />
       <div className="flex flex-col gap-1">
         <Type className="text-heading-sm">{title}</Type>
         <Type small className="text-muted">
