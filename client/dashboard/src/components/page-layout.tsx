@@ -195,7 +195,7 @@ export function EmptyState({
   // For empty projects, show the onboarding choice cards
   if (isEmpty && !isLoading) {
     return (
-      <Stack gap={6} className="w-full max-w-xl">
+      <Stack gap={8} className="w-full max-w-xl m-8">
         <InitialChoiceStep
           routes={routes}
           isFunctionsEnabled={isFunctionsEnabled}
