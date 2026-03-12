@@ -1813,6 +1813,16 @@ function OAuthDetailsModal({
                       {toolset.oauthProxyServer.slug}
                     </CodeBlock>
                   </div>
+                  {toolset.oauthProxyServer.audience && (
+                    <div>
+                      <Type small className="font-medium text-muted-foreground">
+                        Audience:
+                      </Type>
+                      <CodeBlock className="mt-1">
+                        {toolset.oauthProxyServer.audience}
+                      </CodeBlock>
+                    </div>
+                  )}
                 </Stack>
               </>
             )}
