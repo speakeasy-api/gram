@@ -744,7 +744,7 @@ function LogsInnerContent({
                     )}
 
                     {/* Header */}
-                    <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+                    <div className="flex items-center gap-3 px-8 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
                       <div className="shrink-0 w-[150px]">Timestamp</div>
                       <div className="shrink-0 w-5" />
                       <div className="flex-1">Source / Tool</div>
@@ -772,7 +772,7 @@ function LogsInnerContent({
 
                     {/* Footer */}
                     {allTraces.length > 0 && (
-                      <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                      <div className="flex items-center gap-4 px-8 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
                         <span>
                           {allTraces.length}{" "}
                           {allTraces.length === 1 ? "trace" : "traces"}

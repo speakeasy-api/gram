@@ -246,7 +246,7 @@ export default function Sources() {
     <>
       <Page.Section>
         <Page.Section.Title>Sources</Page.Section.Title>
-        <Page.Section.Description>
+        <Page.Section.Description className="max-w-2xl">
           {isFunctionsEnabled
             ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
             : "OpenAPI documents and third-party MCP servers providing tools for your project"}

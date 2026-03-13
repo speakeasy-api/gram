@@ -776,7 +776,7 @@ function HooksInnerContent({
             )}
 
             {/* Header */}
-            <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+            <div className="flex items-center gap-3 px-8 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
               <div className="shrink-0 w-[150px]">Timestamp</div>
               <div className="shrink-0 w-5" />
               <div className="flex-1 min-w-0">Server / Tool</div>
@@ -806,7 +806,7 @@ function HooksInnerContent({
 
             {/* Footer */}
             {groupedTraces.length > 0 && (
-              <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+              <div className="flex items-center gap-4 px-8 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
                 <span>
                   {groupedTraces.length}{" "}
                   {groupedTraces.length === 1 ? "trace" : "traces"}
@@ -1221,7 +1221,7 @@ function HookTraceRow({
       {/* Parent trace row */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-muted/50 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-8 py-2.5 hover:bg-muted/50 transition-colors text-left"
       >
         {/* Timestamp */}
         <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono">

@@ -496,7 +496,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
             Your server is private. To share with external users, you must make
-            it public.
+            it public in the server settings.
           </Type>
         )}
         <Stack className="mt-2" gap={1}>

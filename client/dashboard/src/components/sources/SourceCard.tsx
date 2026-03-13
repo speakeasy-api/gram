@@ -6,14 +6,13 @@ import {
 import { DotCard } from "@/components/ui/dot-card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
-import { UpdatedAt } from "@/components/updated-at";
 import { sourceTypeToUrnKind } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@speakeasy-api/moonshine";
-import { CircleAlertIcon, FileCode, Network } from "lucide-react";
+import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
 
 export type NamedAsset =
   | (Asset & {
@@ -97,20 +96,6 @@ export function SourceCard({
   ];
 
   const displayName = asset.name;
-  let subtitle: React.ReactNode = null;
-
-  if (asset.type === "externalmcp") {
-    subtitle = asset.slug;
-  } else if ("updatedAt" in asset && asset.updatedAt) {
-    subtitle = (
-      <UpdatedAt
-        date={new Date(asset.updatedAt)}
-        italic={false}
-        className="text-xs"
-        showRecentness
-      />
-    );
-  }
 
   const iconContent = (() => {
     if (asset.type === "externalmcp" && asset.iconUrl) {
@@ -153,12 +138,13 @@ export function SourceCard({
           </div>
         </div>
 
-        {/* Footer row with type badge and metadata */}
+        {/* Footer row with type badge and open link */}
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
           <Badge variant="neutral">{config.label}</Badge>
-          <Type small muted as="span">
-            {subtitle}
-          </Type>
+          <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+            <span>Open</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
         </div>
       </DotCard>
     </routes.sources.source.Link>
