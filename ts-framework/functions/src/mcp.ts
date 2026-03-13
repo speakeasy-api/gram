@@ -259,6 +259,7 @@ export function fromGram(
                 data: await responseToBase64(resp),
               },
             ],
+            isError: !resp.ok,
           };
         }
         case audioLike.test(ctype): {
@@ -270,6 +271,7 @@ export function fromGram(
                 data: await responseToBase64(resp),
               },
             ],
+            isError: !resp.ok,
           };
         }
         default: {
