@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 
@@ -78,7 +79,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	registryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, registryClient)
+	testServerURL, _ := url.Parse("http://localhost:8080")
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, registryClient, testServerURL)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -124,7 +126,8 @@ func newNonAdminTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = initAuthContext(t, ctx, conn, sessionManager)
 
 	registryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, registryClient)
+	testServerURL, _ := url.Parse("http://localhost:8080")
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, registryClient, testServerURL)
 
 	return ctx, &testInstance{
 		service:        svc,
