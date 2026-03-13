@@ -46,9 +46,13 @@ export default function OrgHome() {
           placeholder="Search projects..."
           className="mb-4"
         />
-        {projects.length === 0 ? (
+        {projects.length === 0 && search ? (
           <Type muted className="py-8 text-center">
             No projects matching &ldquo;{search}&rdquo;
+          </Type>
+        ) : projects.length === 0 ? (
+          <Type muted className="py-8 text-center">
+            No projects yet.
           </Type>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
