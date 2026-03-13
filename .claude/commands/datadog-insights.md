@@ -1,82 +1,198 @@
 ---
-description: Investigate Datadog for the last 24h and post a digest of production insights to Slack
+description: Investigate Gram production health and post a digest to Slack
 ---
 
-# Daily Log Digest
+# Gram Production Health Digest
 
-You are performing a daily log investigation for the Gram production service.
+You are producing a health report for Gram's production services. The report should be **actionable** — critical issues must stand out immediately, while healthy metrics should be concise.
 
-**Before starting**: activate the `datadog` skill — it defines the Gram service names, available MCP tools, and query guidelines you must follow throughout this task.
+**Before starting**: activate the `datadog` skill for Gram service names, MCP tools, and query guidelines.
 
-## Step 1: Investigate the last 24 hours
+## Step 1: Check for critical issues first
 
-Using the datadog skill, investigate `env:prod` for the **last 24 hours**. The goal is to surface the top problems affecting Gram in production — errors, warnings, timeouts, and any open incidents.
+These take priority over everything else. If any exist, they become the top of the digest.
 
-## Step 2: Analyze and identify problem areas
+1. **Open incidents** — `search_datadog_incidents` for `state:(active OR stable)` in the last 24h
+2. **Monitors in alert** — `search_datadog_monitors` for `status:alert`
+3. **Error spikes** — Use `analyze_datadog_logs` with SQL:
+   ```sql
+   SELECT service, status, count(*) FROM logs GROUP BY service, status ORDER BY count(*) DESC
+   ```
+   Filter: `env:prod status:(error OR critical OR alert OR emergency)`, last 24h.
+   Compare the last 6h vs. the previous 18h to detect spikes.
 
-- **Group by pattern** — top 3–5 distinct problems by volume
-- **Find the code** — for each problem, `Grep` in `server/internal/` for the error message or identifier to pinpoint the source file and function
-- **Assess severity** — new regression, known/expected noise, or ongoing issue?
+If there are critical issues, investigate each one:
 
-## Step 3: Compose the Slack message
+- Get a sample of the actual error logs (`search_datadog_logs`)
+- Follow trace IDs with `get_datadog_trace` to find root causes
+- `Grep` in `server/internal/` for the error message to find the source code location
 
-Build a Slack Block Kit payload. Use this structure:
+## Step 2: Top endpoints by traffic
+
+Use `analyze_datadog_logs` or spans to identify the **top 10 endpoints** by request volume.
+
+Query spans with `search_datadog_spans` for `service:gram-server env:prod` over the last 24h, or use the metrics:
+
+```
+sum:trace.http.server.request.hits{service:gram-server,env:prod} by {resource_name}.rollup(sum, 86400)
+```
+
+For each top endpoint, note:
+
+- Request count
+- Error rate (% of requests returning 4xx/5xx)
+- Flag any endpoint with error rate > 5% as notable
+
+## Step 3: Traffic volume and trends
+
+Compare traffic between two 12h windows to detect changes:
+
+1. **Current 12h**: `from: now-12h, to: now`
+2. **Previous 12h**: `from: now-24h, to: now-12h`
+
+Use `get_datadog_metric` with:
+
+```
+sum:trace.http.server.request.hits{service:gram-server,env:prod}.rollup(sum, 43200)
+```
+
+Report:
+
+- Total requests in the last 24h
+- % change between the two 12h periods (flag if > 30% change)
+- Per-service breakdown (`gram-server`, `gram-worker`, `gram-dashboard`)
+
+## Step 4: Latency analysis
+
+Use the distribution metric (percentiles are enabled):
+
+```
+p50:trace.http.server.request{service:gram-server,env:prod} by {resource_name}
+p95:trace.http.server.request{service:gram-server,env:prod} by {resource_name}
+p99:trace.http.server.request{service:gram-server,env:prod} by {resource_name}
+```
+
+Over the last 24h with `.rollup(avg, 86400)`.
+
+Report:
+
+- **Global latency**: p50, p95, p99 across all endpoints
+- **Slowest 5 endpoints** by p95 latency (with their p50 for comparison)
+- Flag any endpoint where p95 > 2s or p99 > 5s
+
+## Step 5: Compose the Slack message
+
+Build a Slack Block Kit payload. **Structure it so critical items are at the top and impossible to miss.**
 
 ```json
 {
   "channel": "C0AKLE930BX",
-  "text": "<plain text fallback summary>",
+  "text": "<plain text fallback>",
   "blocks": [
     {
       "type": "header",
-      "text": {
-        "type": "plain_text",
-        "text": "🔍 Daily Log Digest — <DATE>"
-      }
+      "text": { "type": "plain_text", "text": "Gram Health Digest — <DATE>" }
     },
     {
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "<one-sentence overall health assessment — e.g. '⚠️ A few recurring auth issues, otherwise stable.' or '✅ Production looks healthy.'>"
+        "text": "<VERDICT_EMOJI> *<One-line overall verdict>*\n<e.g. '🔴 2 active incidents. MCP proxy errors spiking.' or '🟢 All systems healthy. Traffic up 12% vs yesterday.'>"
       }
-    },
-    { "type": "divider" },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "<SEVERITY_EMOJI> *<Issue title>* — ~<N> occurrences\n<1-2 sentence description of what's happening and who's affected>\n*Code*: `server/internal/<path>:<function>`"
-      }
-    },
-    ... repeat section block per issue (max 5) ...
-    { "type": "divider" },
-    {
-      "type": "context",
-      "elements": [
-        {
-          "type": "mrkdwn",
-          "text": "Severity: 🔴 High  🟡 Medium  🟢 Low | Generated by Claude Code + Datadog MCP"
-        }
-      ]
     }
   ]
 }
 ```
 
-Rules:
+Then append sections in this order:
 
-- Max 5 issues. Lead with the highest severity.
-- Severity emoji: 🔴 High (user-facing impact), 🟡 Medium (degraded behaviour), 🟢 Low (noise/expected)
-- If production is healthy with no notable issues, say so clearly in the summary section and skip the issue blocks.
-- Keep each issue description to 2 lines max — skimmable, not a wall of text.
+### A. Critical issues (only if they exist)
 
-## Step 4: Post to Slack
+```json
+{ "type": "divider" },
+{
+  "type": "section",
+  "text": {
+    "type": "mrkdwn",
+    "text": "🚨 *CRITICAL ISSUES*"
+  }
+},
+{
+  "type": "section",
+  "text": {
+    "type": "mrkdwn",
+    "text": "🔴 *<Issue title>* — ~<N> occurrences\n<What's happening, who's affected>\n*Source*: `server/internal/<path>:<function>`"
+  }
+}
+```
+
+### B. Traffic summary
+
+```json
+{ "type": "divider" },
+{
+  "type": "section",
+  "text": {
+    "type": "mrkdwn",
+    "text": "📊 *Traffic (24h)*\n• Total: <N> requests\n• Trend: <↑/↓ X%> vs previous 12h\n• Error rate: <X%> overall"
+  }
+}
+```
+
+### C. Top endpoints (compact table)
+
+````json
+{
+  "type": "section",
+  "text": {
+    "type": "mrkdwn",
+    "text": "🔝 *Top Endpoints*\n```\nEndpoint                        Reqs    Err%   p95\n/rpc/tools.list                 12.3k   0.1%   45ms\n/mcp/{slug}                      8.1k   2.3%  120ms\n...```"
+  }
+}
+````
+
+### D. Latency (only notable items)
+
+```json
+{
+  "type": "section",
+  "text": {
+    "type": "mrkdwn",
+    "text": "🐢 *Slow Endpoints (p95 > 1s)*\n• `post /chat/completions` — p50: 800ms, p95: 3.2s, p99: 8.1s\n• `post /rpc/deployments.evolve` — p50: 400ms, p95: 1.8s"
+  }
+}
+```
+
+If all endpoints are fast, say so in one line and skip the detail.
+
+### E. Footer
+
+```json
+{ "type": "divider" },
+{
+  "type": "context",
+  "elements": [
+    {
+      "type": "mrkdwn",
+      "text": "🔴 Critical  🟡 Warning  🟢 Healthy | Generated by Claude Code + Datadog MCP"
+    }
+  ]
+}
+```
+
+### Formatting rules
+
+- **Overall verdict emoji**: 🔴 if any critical issues or incidents, 🟡 if elevated error rates or notable latency, 🟢 if everything looks healthy
+- Max 5 critical issues, max 10 endpoints in the table, max 5 slow endpoints
+- Keep each section tight — the whole message should be scannable in 10 seconds
+- Omit sections that have nothing notable (e.g., skip "Slow Endpoints" if everything is fast)
+- Use human-readable numbers: `12.3k` not `12345`, `1.2s` not `1200ms` (except when < 1s, use `ms`)
+
+## Step 6: Post to Slack
 
 Write the JSON payload to a temp file using Python (handles escaping correctly), then post it:
 
 ```bash
-# Write payload to temp file via Python to avoid shell escaping issues
 python3 << 'PYEOF'
 import json
 # ... build your payload dict here ...
@@ -84,7 +200,6 @@ with open("/tmp/slack-digest.json", "w") as f:
     json.dump(payload, f)
 PYEOF
 
-# Post using the Slack Web API (mise exec loads env vars)
 mise exec -- bash -c 'curl -s -X POST https://slack.com/api/chat.postMessage \
   -H "Authorization: Bearer $DATADOG_DIGEST_BOT_TOKEN" \
   -H "Content-Type: application/json" \
