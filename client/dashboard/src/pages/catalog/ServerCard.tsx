@@ -1,5 +1,6 @@
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
+import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
@@ -66,49 +67,34 @@ export function ServerCard({
           onToggleSelect?.();
         }
       }}
-      className={cn(
-        "server-card group bg-card text-card-foreground flex flex-row rounded-xl border !border-foreground/10 overflow-hidden",
-        "hover:!border-foreground/30 hover:shadow-md transition-all cursor-pointer h-full",
-        isAdded && "border-success/50 ring-1 ring-success/20",
-      )}
     >
-      {/* Illustration sidebar with dot pattern */}
-      <div className="w-40 shrink-0 overflow-hidden border-r relative bg-muted/30 text-muted-foreground/20">
-        <div
-          className="absolute inset-0 scroll-dots-target"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, currentColor 1px, transparent 1px)",
-            backgroundSize: "16px 16px",
-          }}
-        />
-        {/* Logo */}
-        {server.iconUrl && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
-              <img
-                src={server.iconUrl}
-                alt={displayName}
-                className="w-12 h-12 object-contain"
-              />
+      <DotCard
+        className={cn(
+          "cursor-pointer",
+          isAdded && "border-success/50 ring-1 ring-success/20",
+        )}
+        icon={
+          server.iconUrl ? (
+            <img
+              src={server.iconUrl}
+              alt={displayName}
+              className="w-12 h-12 object-contain"
+            />
+          ) : undefined
+        }
+        overlay={
+          isAdded ? (
+            <div className="absolute top-3.5 left-3.5 z-10">
+              <Badge
+                variant="outline"
+                className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
+              >
+                Added
+              </Badge>
             </div>
-          </div>
-        )}
-        {/* Added indicator overlay */}
-        {isAdded && (
-          <div className="absolute top-3.5 left-3.5 z-10">
-            <Badge
-              variant="outline"
-              className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
-            >
-              Added
-            </Badge>
-          </div>
-        )}
-      </div>
-
-      {/* Content area */}
-      <div className="p-4 flex flex-col flex-1">
+          ) : undefined
+        }
+      >
         {/* Header row with name and tool badge */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0 flex-1">
@@ -164,7 +150,7 @@ export function ServerCard({
             </Button>
           </Link>
         </div>
-      </div>
+      </DotCard>
     </div>
   );
 }

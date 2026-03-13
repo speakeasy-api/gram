@@ -96,7 +96,8 @@
   }
 }
 
-.server-card:hover .scroll-dots-target {
+.server-card:hover .scroll-dots-target,
+.dot-card:hover .scroll-dots-target {
   animation: scroll-dots 3s linear infinite;
   color: oklch(0.553 0.013 58.071 / 0.4);
 }

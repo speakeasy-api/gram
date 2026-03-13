@@ -99,7 +99,7 @@ export function TopHeader() {
           {/* Org link */}
           <Link
             to={`/${organization.slug}`}
-            className="text-base font-medium text-foreground/80 hover:text-foreground hover:bg-accent hover:no-underline transition-colors rounded-md px-2 py-1"
+            className="text-base font-medium text-foreground/80 hover:text-foreground hover:bg-accent hover:no-underline transition-colors rounded-md px-2 py-1 whitespace-nowrap"
           >
             {organization.slug}
           </Link>
@@ -174,7 +174,7 @@ export function TopHeader() {
 
         {/* Right side - Nav links, Theme toggle & User menu */}
         <div className="ml-auto flex items-center gap-4">
-          <nav className="flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-1">
             <Button
               variant="outline"
               size="sm"

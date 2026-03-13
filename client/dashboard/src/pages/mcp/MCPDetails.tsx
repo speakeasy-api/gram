@@ -9,7 +9,6 @@ import {
 import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
-import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
 import { ToolList } from "@/components/tool-list";
 import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
@@ -243,26 +242,26 @@ export function MCPDetailPage() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body fullWidth noPadding>
-        {/* Hero Header with Animation - full width */}
+        {/* Hero Header - full width */}
         <div className="relative w-full h-64 overflow-hidden">
-          <MCPHeroIllustration
-            toolsetSlug={toolset.slug}
-            className="saturate-[.3]"
+          <div
+            className="absolute inset-0 bg-muted/30 text-muted-foreground/20"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle, currentColor 1px, transparent 1px)",
+              backgroundSize: "16px 16px",
+            }}
           />
 
-          {/* Overlay for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/20 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
             <div className="flex items-end justify-between">
               <Stack gap={2}>
                 <div className="flex items-center gap-3 ml-1">
-                  <Heading variant="h1" className="text-background">
-                    {toolset.name}
-                  </Heading>
+                  <Heading variant="h1">{toolset.name}</Heading>
                   {statusBadge}
                 </div>
                 <div className="flex items-center gap-2 ml-1">
-                  <Type className="max-w-2xl truncate !text-background/70">
+                  <Type className="max-w-2xl truncate text-muted-foreground">
                     {mcpUrl}
                   </Type>
                   <Button
@@ -274,7 +273,7 @@ export function MCPDetailPage() {
                         toast.success("URL copied to clipboard");
                       }
                     }}
-                    className="shrink-0 text-background/70 hover:text-background"
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
                   >
                     <Button.LeftIcon>
                       <svg
@@ -313,7 +312,7 @@ export function MCPDetailPage() {
                 <Button
                   variant="secondary"
                   size="md"
-                  className="bg-background/10 hover:bg-background/20 text-background hover:text-background border-background/20"
+                  className="bg-background hover:bg-accent border-border"
                 >
                   <Button.LeftIcon>
                     <Play className="w-4 h-4" />

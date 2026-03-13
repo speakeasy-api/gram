@@ -1,7 +1,12 @@
+import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { Badge } from "@speakeasy-api/moonshine";
-import { MCPPatternIllustration } from "../sources/SourceCardIllustrations";
+import { Network, ScrollText } from "lucide-react";
+
+const BUILT_IN_ICONS: Record<string, React.ReactNode> = {
+  logs: <ScrollText className="w-8 h-8 text-muted-foreground" />,
+};
 
 interface BuiltInMCPCardProps {
   name: string;
@@ -17,40 +22,34 @@ export function BuiltInMCPCard({
   const routes = useRoutes();
 
   return (
-    <div
-      className="group bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden hover:border-foreground/20 hover:shadow-md transition-all cursor-pointer"
+    <DotCard
+      className="cursor-pointer"
       onClick={() => routes.mcp.builtIn.goTo(slug)}
+      icon={
+        BUILT_IN_ICONS[slug] ?? (
+          <Network className="w-8 h-8 text-muted-foreground" />
+        )
+      }
     >
-      {/* Illustration header */}
-      <div className="h-36 w-full overflow-hidden border-b">
-        <MCPPatternIllustration
-          toolsetSlug={`built-in-${slug}`}
-          className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
-        />
-      </div>
-
-      {/* Content area */}
-      <div className="p-4 flex flex-col flex-1">
-        {/* Header row with name and badge */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <Type
-            variant="subheading"
-            as="div"
-            className="truncate flex-1 text-md group-hover:text-primary transition-colors"
-            title={name}
-          >
-            {name}
-          </Type>
-          <Badge variant="information">
-            <Badge.Text>Built-in</Badge.Text>
-          </Badge>
-        </div>
-
-        {/* Description */}
-        <Type variant="small" muted className="line-clamp-2">
-          {description}
+      {/* Header row with name and badge */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <Type
+          variant="subheading"
+          as="div"
+          className="truncate flex-1 text-md group-hover:text-primary transition-colors"
+          title={name}
+        >
+          {name}
         </Type>
+        <Badge variant="information">
+          <Badge.Text>Built-in</Badge.Text>
+        </Badge>
       </div>
-    </div>
+
+      {/* Description */}
+      <Type variant="small" muted className="line-clamp-2">
+        {description}
+      </Type>
+    </DotCard>
   );
 }
