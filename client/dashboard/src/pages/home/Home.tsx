@@ -1,5 +1,5 @@
+import { MCPCard } from "@/components/mcp/MCPCard";
 import { Page } from "@/components/page-layout";
-import { DotCard } from "@/components/ui/dot-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -14,7 +14,6 @@ import {
   CheckCircle,
   Code,
   MessageCircleIcon,
-  Network,
   ServerIcon,
 } from "lucide-react";
 import { useMemo } from "react";
@@ -107,61 +106,7 @@ export default function Home() {
                 ))}
               {!isToolsetsLoading &&
                 recentMcpServers.map((toolset) => (
-                  <Link
-                    key={toolset.id}
-                    to={routes.mcp.details.href(toolset.slug)}
-                    className="hover:no-underline"
-                  >
-                    <DotCard
-                      icon={
-                        <Network className="w-8 h-8 text-muted-foreground" />
-                      }
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <Type
-                          variant="subheading"
-                          as="div"
-                          className="truncate text-md group-hover:text-primary transition-colors"
-                        >
-                          {toolset.name}
-                        </Type>
-                        <Badge className="shrink-0">
-                          {`${toolset.toolUrns.length} tool${toolset.toolUrns.length !== 1 ? "s" : ""}`}
-                        </Badge>
-                      </div>
-                      <Type small muted className="truncate">
-                        {toolset.slug}
-                      </Type>
-                      {toolset.description && (
-                        <Type small muted className="line-clamp-2 mt-2">
-                          {toolset.description}
-                        </Type>
-                      )}
-                      <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex h-2.5 w-2.5">
-                            {toolset.mcpEnabled && (
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400" />
-                            )}
-                            <span
-                              className={`relative inline-flex rounded-full h-2.5 w-2.5 ${toolset.mcpEnabled ? "bg-green-500" : "bg-red-500"}`}
-                            />
-                          </div>
-                          <Type variant="small" muted>
-                            {toolset.mcpEnabled
-                              ? toolset.mcpIsPublic
-                                ? "Public"
-                                : "Private"
-                              : "Disabled"}
-                          </Type>
-                        </div>
-                        <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
-                          <span>Open</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </div>
-                      </div>
-                    </DotCard>
-                  </Link>
+                  <MCPCard key={toolset.id} toolset={toolset} />
                 ))}
             </div>
           </div>
