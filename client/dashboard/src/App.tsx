@@ -216,21 +216,24 @@ const RouteProvider = () => {
     };
   }, [routes, orgRoutes, projectSlug, addActions, removeActions]);
 
-  const unauthenticatedRoutes = Object.values(routes).filter(
-    (route) => route.unauthenticated,
-  );
+  const routeElements = useMemo(() => {
+    const allRoutes = Object.values(routes);
+    const unauthenticatedRoutes = allRoutes.filter(
+      (route) => route.unauthenticated,
+    );
+    const outsideStructureRoutes = allRoutes.filter(
+      (route) => route.outsideMainLayout,
+    );
+    const authenticatedRoutes = allRoutes.filter(
+      (route) =>
+        !outsideStructureRoutes.includes(route) && !route.unauthenticated,
+    );
 
-  const outsideStructureRoutes = Object.values(routes).filter(
-    (route) => route.outsideMainLayout,
-  );
+    const orgRouteValues = Object.values(orgRoutes);
+    const orgHomeRoute = orgRouteValues.find((r) => r.url === "");
+    const otherOrgRoutes = orgRouteValues.filter((r) => r.url !== "");
 
-  const authenticatedRoutes = Object.values(routes).filter(
-    (route) =>
-      !outsideStructureRoutes.includes(route) && !route.unauthenticated,
-  );
-
-  const routeElements = useMemo(
-    () => (
+    return (
       <Routes>
         {/* Register these unauthenticated paths outside of root layout */}
         {routesWithSubroutes(unauthenticatedRoutes)}
@@ -245,13 +248,15 @@ const RouteProvider = () => {
             {routesWithSubroutes(authenticatedRoutes)}
           </Route>
           <Route path=":orgSlug" element={<OrgLayout />}>
-            {routesWithSubroutes(Object.values(orgRoutes))}
+            {orgHomeRoute?.component && (
+              <Route index element={<orgHomeRoute.component />} />
+            )}
+            {routesWithSubroutes(otherOrgRoutes)}
           </Route>
         </Route>
       </Routes>
-    ),
-    [routes, orgRoutes],
-  );
+    );
+  }, [routes, orgRoutes]);
 
   return routeElements;
 };
