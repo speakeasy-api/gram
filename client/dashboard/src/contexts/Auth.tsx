@@ -252,7 +252,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   ) {
     const rest = pathParts.slice(2).join("/");
     const newPath = `/${pathParts[0]}/projects/${pathParts[1]}${rest ? `/${rest}` : ""}`;
-    return <Navigate to={newPath + location.search} replace />;
+    return <Navigate to={newPath + location.search + location.hash} replace />;
   }
 
   // Handle initial navigation

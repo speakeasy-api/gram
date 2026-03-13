@@ -23,7 +23,7 @@ import {
   CommandPaletteProvider,
   useCommandPalette,
 } from "./contexts/CommandPalette";
-import { SdkProvider } from "./contexts/Sdk.tsx";
+import { SdkProvider, useSlugs } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { usePageTitle } from "./hooks/use-page-title";
 import CliCallback from "./pages/cli/CliCallback";
@@ -142,56 +142,79 @@ const RouteProvider = () => {
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
   const { addActions, removeActions } = useCommandPalette();
+  const { projectSlug } = useSlugs();
 
   // Update document title based on active route
   usePageTitle(routes);
 
   // Register global command palette actions
   useEffect(() => {
-    const globalActions = [
+    // Only register project-scoped navigation actions when a project is selected
+    const globalActions = projectSlug
+      ? [
+          {
+            id: "go-home",
+            label: "Go to Home",
+            icon: "home",
+            onSelect: () => routes.home.goTo(),
+            group: "Navigation",
+          },
+          {
+            id: "go-sources",
+            label: "Go to Sources",
+            icon: "file-code",
+            onSelect: () => routes.sources.goTo(),
+            group: "Navigation",
+          },
+          {
+            id: "go-mcp-servers",
+            label: "Go to MCP Servers",
+            icon: "network",
+            onSelect: () => routes.mcp.goTo(),
+            group: "Navigation",
+          },
+          {
+            id: "go-playground",
+            label: "Go to Playground",
+            icon: "message-square",
+            onSelect: () => routes.playground.goTo(),
+            group: "Navigation",
+          },
+          {
+            id: "go-insights",
+            label: "Go to Insights",
+            icon: "layout-dashboard",
+            onSelect: () => routes.observability.goTo(),
+            group: "Navigation",
+          },
+        ]
+      : [];
+
+    // Always register org-level navigation actions
+    const orgActions = [
       {
-        id: "go-home",
-        label: "Go to Home",
-        icon: "home",
-        onSelect: () => routes.home.goTo(),
+        id: "go-billing",
+        label: "Go to Billing",
+        icon: "credit-card",
+        onSelect: () => orgRoutes.billing.goTo(),
         group: "Navigation",
       },
       {
-        id: "go-sources",
-        label: "Go to Sources",
-        icon: "file-code",
-        onSelect: () => routes.sources.goTo(),
-        group: "Navigation",
-      },
-      {
-        id: "go-mcp-servers",
-        label: "Go to MCP Servers",
-        icon: "network",
-        onSelect: () => routes.mcp.goTo(),
-        group: "Navigation",
-      },
-      {
-        id: "go-playground",
-        label: "Go to Playground",
-        icon: "message-square",
-        onSelect: () => routes.playground.goTo(),
-        group: "Navigation",
-      },
-      {
-        id: "go-insights",
-        label: "Go to Insights",
-        icon: "layout-dashboard",
-        onSelect: () => routes.observability.goTo(),
+        id: "go-api-keys",
+        label: "Go to API Keys",
+        icon: "key-round",
+        onSelect: () => orgRoutes.apiKeys.goTo(),
         group: "Navigation",
       },
     ];
 
-    addActions(globalActions);
+    const allActions = [...globalActions, ...orgActions];
+    addActions(allActions);
 
     return () => {
-      removeActions(globalActions.map((a) => a.id));
+      removeActions(allActions.map((a) => a.id));
     };
-  }, [routes, addActions, removeActions]);
+  }, [routes, orgRoutes, projectSlug, addActions, removeActions]);
 
   const unauthenticatedRoutes = Object.values(routes).filter(
     (route) => route.unauthenticated,
