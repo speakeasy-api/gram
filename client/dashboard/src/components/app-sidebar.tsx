@@ -9,6 +9,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useOrganization } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
@@ -23,6 +24,8 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const organization = useOrganization();
+  const telemetry = useTelemetry();
+  const isCatalogsEnabled = telemetry.isFeatureEnabled("catalogs") ?? false;
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -32,9 +35,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
       : "https://app.speakeasy.com";
 
+  const buildItems = [routes.elements, routes.mcp, routes.slackApps];
+  if (isCatalogsEnabled) {
+    buildItems.push(routes.catalogs);
+  }
+
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
-    build: [routes.elements, routes.mcp, routes.catalogs, routes.slackApps],
+    build: buildItems,
     observe: [
       routes.observability,
       routes.logs,

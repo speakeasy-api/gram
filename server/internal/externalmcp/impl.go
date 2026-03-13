@@ -609,13 +609,34 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
 	}
 
-	// Fetch all server details in a single HTTP call
+	// Authorization: registry must be public, owned by caller's org, or have a grant
+	if registry.Visibility != string(repoTypes.VisibilityPublic) {
+		if !registry.OrganizationID.Valid || registry.OrganizationID.String != authCtx.ActiveOrganizationID {
+			hasGrant, err := s.repo.CheckRegistryGrant(ctx, repo.CheckRegistryGrantParams{
+				RegistryID:     registry.ID,
+				OrganizationID: authCtx.ActiveOrganizationID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "check registry grant").Log(ctx, s.logger)
+			}
+			if !hasGrant {
+				return nil, oops.C(oops.CodeForbidden)
+			}
+		}
+	}
+
+	// Branch on source type
+	if registry.Source.Valid && registry.Source.String == string(repoTypes.RegistrySourceInternal) {
+		return s.getInternalServerDetails(ctx, registry, payload.ServerSpecifier)
+	}
+
+	// External registry: fetch from remote
 	details, err := s.fetchServerDetails(ctx, registry, payload.ServerSpecifier)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch server details from registry").Log(ctx, s.logger)
 	}
 
 	return &types.ExternalMCPServer{
@@ -623,11 +644,99 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		Version:           details.Version,
 		Description:       details.Description,
 		RegistryID:        registryID.String(),
-		Title:             nil, // Not available from details endpoint
-		IconURL:           nil, // Not available from details endpoint
-		Meta:              nil, // Not available from details endpoint
+		Title:             nil,
+		IconURL:           nil,
+		Meta:              nil,
 		Tools:             details.Tools,
 		Remotes:           details.Remotes,
+	}, nil
+}
+
+func (s *Service) getInternalServerDetails(ctx context.Context, registry repo.GetMCPRegistryByIDRow, serverSpecifier string) (*types.ExternalMCPServer, error) {
+	toolset, err := s.repo.GetRegistryToolsetByMCPSlug(ctx, repo.GetRegistryToolsetByMCPSlugParams{
+		RegistryID: registry.ID,
+		McpSlug:    conv.ToPGText(serverSpecifier),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get registry toolset by slug").Log(ctx, s.logger)
+	}
+
+	if !toolset.McpSlug.Valid {
+		return nil, oops.E(oops.CodeUnexpected, nil, "toolset %s missing mcp_slug", toolset.Slug).Log(ctx, s.logger)
+	}
+
+	description := ""
+	if toolset.Description.Valid {
+		description = toolset.Description.String
+	}
+
+	described, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "describe toolset %s", toolset.Slug).Log(ctx, s.logger)
+	}
+
+	metaTools := make([]map[string]any, 0, len(described.Tools))
+	mcpTools := make([]*types.ExternalMCPTool, 0, len(described.Tools))
+	for _, tool := range described.Tools {
+		name, desc, schema, annotations := extractToolFields(tool)
+		metaTools = append(metaTools, map[string]any{
+			"name":        name,
+			"description": desc,
+			"inputSchema": json.RawMessage(schema),
+			"annotations": annotations,
+		})
+		mcpTools = append(mcpTools, &types.ExternalMCPTool{
+			Name:        &name,
+			Description: &desc,
+			InputSchema: []byte(schema),
+			Annotations: annotations,
+		})
+	}
+
+	var remotes []*types.ExternalMCPRemote
+	if toolset.McpEnabled {
+		remoteURL := fmt.Sprintf("%s/mcp/%s", s.serverURL.String(), toolset.McpSlug.String)
+		remotes = []*types.ExternalMCPRemote{
+			{
+				URL:           remoteURL,
+				TransportType: "streamable-http",
+			},
+		}
+	}
+
+	meta := map[string]any{
+		"ai.getgram/server": map[string]any{
+			"visitorsEstimateMostRecentWeek": 0,
+			"visitorsEstimateLastFourWeeks":  0,
+			"visitorsEstimateTotal":          0,
+			"isOfficial":                     false,
+		},
+		"ai.getgram/server-version": map[string]any{
+			"source":      string(repoTypes.RegistrySourceInternal),
+			"status":      "active",
+			"publishedAt": described.CreatedAt,
+			"updatedAt":   described.UpdatedAt,
+			"isLatest":    true,
+			"remotes[0]": map[string]any{
+				"auth":  nil,
+				"tools": metaTools,
+			},
+		},
+	}
+
+	return &types.ExternalMCPServer{
+		RegistrySpecifier: toolset.McpSlug.String,
+		Version:           "1.0.0",
+		Description:       description,
+		RegistryID:        registry.ID.String(),
+		Title:             &toolset.Name,
+		IconURL:           nil,
+		Meta:              meta,
+		Tools:             mcpTools,
+		Remotes:           remotes,
 	}, nil
 }
 

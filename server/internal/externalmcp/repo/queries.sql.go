@@ -632,7 +632,7 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 }
 
 const getMCPRegistryBySlug = `-- name: GetMCPRegistryBySlug :one
-SELECT id, name, url, slug, source, visibility, organization_id, created_at, updated_at
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
 WHERE slug = $1 AND deleted IS FALSE
 `
@@ -645,6 +645,7 @@ type GetMCPRegistryBySlugRow struct {
 	Source         pgtype.Text
 	Visibility     string
 	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -660,25 +661,26 @@ func (q *Queries) GetMCPRegistryBySlug(ctx context.Context, slug pgtype.Text) (G
 		&i.Source,
 		&i.Visibility,
 		&i.OrganizationID,
+		&i.ProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const getRegistryToolsetBySlug = `-- name: GetRegistryToolsetBySlug :one
+const getRegistryToolsetByMCPSlug = `-- name: GetRegistryToolsetByMCPSlug :one
 SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
 FROM toolsets t
 JOIN mcp_registry_toolset_links l ON l.toolset_id = t.id
-WHERE l.registry_id = $1 AND t.slug = $2 AND t.deleted IS FALSE
+WHERE l.registry_id = $1 AND t.mcp_slug = $2 AND t.deleted IS FALSE
 `
 
-type GetRegistryToolsetBySlugParams struct {
+type GetRegistryToolsetByMCPSlugParams struct {
 	RegistryID uuid.UUID
-	Slug       string
+	McpSlug    pgtype.Text
 }
 
-type GetRegistryToolsetBySlugRow struct {
+type GetRegistryToolsetByMCPSlugRow struct {
 	ID             uuid.UUID
 	Name           string
 	Slug           string
@@ -689,9 +691,9 @@ type GetRegistryToolsetBySlugRow struct {
 	ProjectID      uuid.UUID
 }
 
-func (q *Queries) GetRegistryToolsetBySlug(ctx context.Context, arg GetRegistryToolsetBySlugParams) (GetRegistryToolsetBySlugRow, error) {
-	row := q.db.QueryRow(ctx, getRegistryToolsetBySlug, arg.RegistryID, arg.Slug)
-	var i GetRegistryToolsetBySlugRow
+func (q *Queries) GetRegistryToolsetByMCPSlug(ctx context.Context, arg GetRegistryToolsetByMCPSlugParams) (GetRegistryToolsetByMCPSlugRow, error) {
+	row := q.db.QueryRow(ctx, getRegistryToolsetByMCPSlug, arg.RegistryID, arg.McpSlug)
+	var i GetRegistryToolsetByMCPSlugRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -1020,7 +1022,7 @@ func (q *Queries) ListPeers(ctx context.Context, superOrganizationID string) ([]
 }
 
 const listRegistriesForOrganization = `-- name: ListRegistriesForOrganization :many
-SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.created_at, r.updated_at
+SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.project_id, r.created_at, r.updated_at
 FROM mcp_registries r
 WHERE r.deleted IS FALSE
   AND (
@@ -1042,6 +1044,7 @@ type ListRegistriesForOrganizationRow struct {
 	Source         pgtype.Text
 	Visibility     string
 	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -1063,6 +1066,7 @@ func (q *Queries) ListRegistriesForOrganization(ctx context.Context, organizatio
 			&i.Source,
 			&i.Visibility,
 			&i.OrganizationID,
+			&i.ProjectID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
