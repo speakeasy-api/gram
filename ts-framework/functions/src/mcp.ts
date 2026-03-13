@@ -247,6 +247,7 @@ export function fromGram(
           const text = await resp.text();
           return {
             content: [{ type: "text", text }],
+            isError: !resp.ok,
           };
         }
         case imageLike.test(ctype): {
