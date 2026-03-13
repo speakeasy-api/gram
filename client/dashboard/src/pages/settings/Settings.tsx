@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization, useProject } from "@/contexts/Auth";
 import { ShieldAlert } from "lucide-react";
 import { Stack } from "@speakeasy-api/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
@@ -9,6 +9,8 @@ import { RegistryCacheSection } from "./RegistryCacheSection";
 
 export default function Settings() {
   const isAdmin = useIsAdmin();
+  const organization = useOrganization();
+  const project = useProject();
 
   return (
     <Page>
@@ -37,6 +39,12 @@ export default function Settings() {
                 Admin Only
               </Heading>
             </Stack>
+            <dl className="grid grid-cols-[max-content_auto] gap-x-6 gap-y-2 mb-4">
+              <dt className="text-end">Organization ID</dt>
+              <dd className="font-mono text-sm">{organization.id}</dd>
+              <dt className="text-end">Project ID</dt>
+              <dd className="font-mono text-sm">{project.id}</dd>
+            </dl>
             <RegistryCacheSection />
           </div>
         )}
