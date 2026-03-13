@@ -78,182 +78,6 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) CreatePeer(ctx context.Context, payload *gen.CreatePeerPayload) (*types.PeeredOrganization, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
-	}
-	if userInfo == nil || !userInfo.Admin {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-
-	if authCtx.ActiveOrganizationID == payload.SubOrganizationID {
-		return nil, oops.E(oops.CodeBadRequest, nil, "cannot peer an organization with itself").Log(ctx, s.logger)
-	}
-
-	peer, err := s.repo.CreatePeer(ctx, repo.CreatePeerParams{
-		SuperOrganizationID: authCtx.ActiveOrganizationID,
-		SubOrganizationID:   payload.SubOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create peer").Log(ctx, s.logger)
-	}
-
-	return &types.PeeredOrganization{
-		ID:                  peer.ID.String(),
-		SuperOrganizationID: peer.SuperOrganizationID,
-		SubOrganizationID:   peer.SubOrganizationID,
-		SubOrganizationName: nil,
-		SubOrganizationSlug: nil,
-		CreatedAt:           peer.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
-	}, nil
-}
-
-func (s *Service) ListPeers(ctx context.Context, payload *gen.ListPeersPayload) (*gen.ListPeersResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
-	}
-	if userInfo == nil || !userInfo.Admin {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-
-	peers, err := s.repo.ListPeers(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list peers").Log(ctx, s.logger)
-	}
-
-	result := make([]*types.PeeredOrganization, 0, len(peers))
-	for _, p := range peers {
-		result = append(result, &types.PeeredOrganization{
-			ID:                  p.ID.String(),
-			SuperOrganizationID: p.SuperOrganizationID,
-			SubOrganizationID:   p.SubOrganizationID,
-			SubOrganizationName: &p.SubOrganizationName,
-			SubOrganizationSlug: &p.SubOrganizationSlug,
-			CreatedAt:           p.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
-		})
-	}
-
-	return &gen.ListPeersResult{
-		Peers: result,
-	}, nil
-}
-
-func (s *Service) DeletePeer(ctx context.Context, payload *gen.DeletePeerPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
-	}
-	if userInfo == nil || !userInfo.Admin {
-		return oops.C(oops.CodeForbidden)
-	}
-
-	if err := s.repo.DeletePeer(ctx, repo.DeletePeerParams{
-		SuperOrganizationID: authCtx.ActiveOrganizationID,
-		SubOrganizationID:   payload.SubOrganizationID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete peer").Log(ctx, s.logger)
-	}
-
-	return nil
-}
-
-func (s *Service) Grant(ctx context.Context, payload *gen.GrantPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	registryID, err := uuid.Parse(payload.RegistryID)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
-	}
-
-	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.C(oops.CodeNotFound)
-		}
-		return oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
-	}
-
-	// Verify the caller's project owns this registry
-	if authCtx.ProjectID == nil || !registry.ProjectID.Valid || registry.ProjectID.UUID != *authCtx.ProjectID {
-		return oops.C(oops.CodeForbidden)
-	}
-
-	// Verify the target org is a peered sub of the caller's org
-	isPeer, err := s.repo.IsPeer(ctx, repo.IsPeerParams{
-		SuperOrganizationID: authCtx.ActiveOrganizationID,
-		SubOrganizationID:   payload.OrganizationID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check peer").Log(ctx, s.logger)
-	}
-	if !isPeer {
-		return oops.E(oops.CodeForbidden, nil, "target organization is not a peered sub-organization").Log(ctx, s.logger)
-	}
-
-	if _, err := s.repo.CreateRegistryGrant(ctx, repo.CreateRegistryGrantParams{
-		RegistryID:     registryID,
-		OrganizationID: payload.OrganizationID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "create registry grant").Log(ctx, s.logger)
-	}
-
-	return nil
-}
-
-func (s *Service) RevokeGrant(ctx context.Context, payload *gen.RevokeGrantPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	registryID, err := uuid.Parse(payload.RegistryID)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
-	}
-
-	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.C(oops.CodeNotFound)
-		}
-		return oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
-	}
-
-	// Verify the caller's project owns this registry
-	if authCtx.ProjectID == nil || !registry.ProjectID.Valid || registry.ProjectID.UUID != *authCtx.ProjectID {
-		return oops.C(oops.CodeForbidden)
-	}
-
-	if err := s.repo.DeleteRegistryGrant(ctx, repo.DeleteRegistryGrantParams{
-		RegistryID:     registryID,
-		OrganizationID: payload.OrganizationID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete registry grant").Log(ctx, s.logger)
-	}
-
-	return nil
-}
-
 func (s *Service) Publish(ctx context.Context, payload *gen.PublishPayload) (*types.MCPRegistry, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -386,19 +210,10 @@ func (s *Service) Serve(ctx context.Context, payload *gen.ServePayload) (*gen.Se
 		return nil, oops.E(oops.CodeUnexpected, err, "get registry by slug").Log(ctx, s.logger)
 	}
 
-	// Authorization: registry must be public, owned by caller's org, or have a grant
+	// Authorization: registry must be public or owned by caller's org
 	if registry.Visibility != string(repoTypes.VisibilityPublic) {
 		if !registry.OrganizationID.Valid || registry.OrganizationID.String != authCtx.ActiveOrganizationID {
-			hasGrant, err := s.repo.CheckRegistryGrant(ctx, repo.CheckRegistryGrantParams{
-				RegistryID:     registry.ID,
-				OrganizationID: authCtx.ActiveOrganizationID,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "check registry grant").Log(ctx, s.logger)
-			}
-			if !hasGrant {
-				return nil, oops.C(oops.CodeForbidden)
-			}
+			return nil, oops.C(oops.CodeForbidden)
 		}
 	}
 
@@ -437,7 +252,7 @@ func (s *Service) serveInternalRegistry(ctx context.Context, registry repo.GetMC
 		return nil, oops.E(oops.CodeUnexpected, err, "list registry toolset links").Log(ctx, s.logger)
 	}
 
-	var servers []*types.ExternalMCPServer
+	servers := make([]*types.ExternalMCPServer, 0, len(links))
 	for _, link := range links {
 		toolset, err := s.repo.GetToolsetForServe(ctx, link.ToolsetID)
 		if err != nil {
@@ -573,6 +388,10 @@ func extractToolFields(tool *types.Tool) (name, description, schema string, anno
 		schema = t.Schema
 	}
 
+	if schema == "" {
+		schema = "{}"
+	}
+
 	return name, description, schema, annotations
 }
 
@@ -612,19 +431,10 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
 	}
 
-	// Authorization: registry must be public, owned by caller's org, or have a grant
+	// Authorization: registry must be public or owned by caller's org
 	if registry.Visibility != string(repoTypes.VisibilityPublic) {
 		if !registry.OrganizationID.Valid || registry.OrganizationID.String != authCtx.ActiveOrganizationID {
-			hasGrant, err := s.repo.CheckRegistryGrant(ctx, repo.CheckRegistryGrantParams{
-				RegistryID:     registry.ID,
-				OrganizationID: authCtx.ActiveOrganizationID,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "check registry grant").Log(ctx, s.logger)
-			}
-			if !hasGrant {
-				return nil, oops.C(oops.CodeForbidden)
-			}
+			return nil, oops.C(oops.CodeForbidden)
 		}
 	}
 

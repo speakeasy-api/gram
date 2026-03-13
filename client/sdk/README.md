@@ -241,14 +241,9 @@ run();
 ### [McpRegistries](docs/sdks/mcpregistries/README.md)
 
 * [clearCache](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
-* [createPeer](docs/sdks/mcpregistries/README.md#createpeer) - createPeer mcpRegistries
-* [deletePeer](docs/sdks/mcpregistries/README.md#deletepeer) - deletePeer mcpRegistries
 * [getServerDetails](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
-* [grant](docs/sdks/mcpregistries/README.md#grant) - grant mcpRegistries
-* [listPeers](docs/sdks/mcpregistries/README.md#listpeers) - listPeers mcpRegistries
 * [listRegistries](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 * [publish](docs/sdks/mcpregistries/README.md#publish) - publish mcpRegistries
-* [revokeGrant](docs/sdks/mcpregistries/README.md#revokegrant) - revokeGrant mcpRegistries
 * [serve](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
 
 ### [Packages](docs/sdks/packages/README.md)
@@ -422,14 +417,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`mcpRegistriesClearCache`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
-- [`mcpRegistriesCreatePeer`](docs/sdks/mcpregistries/README.md#createpeer) - createPeer mcpRegistries
-- [`mcpRegistriesDeletePeer`](docs/sdks/mcpregistries/README.md#deletepeer) - deletePeer mcpRegistries
 - [`mcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
-- [`mcpRegistriesGrant`](docs/sdks/mcpregistries/README.md#grant) - grant mcpRegistries
-- [`mcpRegistriesListPeers`](docs/sdks/mcpregistries/README.md#listpeers) - listPeers mcpRegistries
 - [`mcpRegistriesListRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 - [`mcpRegistriesPublish`](docs/sdks/mcpregistries/README.md#publish) - publish mcpRegistries
-- [`mcpRegistriesRevokeGrant`](docs/sdks/mcpregistries/README.md#revokegrant) - revokeGrant mcpRegistries
 - [`mcpRegistriesServe`](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
@@ -595,13 +585,8 @@ To learn about this feature and how to get started, check
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
-- [`useMcpRegistriesCreatePeerMutation`](docs/sdks/mcpregistries/README.md#createpeer) - createPeer mcpRegistries
-- [`useMcpRegistriesDeletePeerMutation`](docs/sdks/mcpregistries/README.md#deletepeer) - deletePeer mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
-- [`useMcpRegistriesGrantMutation`](docs/sdks/mcpregistries/README.md#grant) - grant mcpRegistries
-- [`useMcpRegistriesListPeers`](docs/sdks/mcpregistries/README.md#listpeers) - listPeers mcpRegistries
 - [`useMcpRegistriesPublishMutation`](docs/sdks/mcpregistries/README.md#publish) - publish mcpRegistries
-- [`useMcpRegistriesRevokeGrantMutation`](docs/sdks/mcpregistries/README.md#revokegrant) - revokeGrant mcpRegistries
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments

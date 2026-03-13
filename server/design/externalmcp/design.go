@@ -15,83 +15,6 @@ var _ = Service("mcpRegistries", func() {
 	})
 	shared.DeclareErrorResponses()
 
-	Method("createPeer", func() {
-		Description("Create a peered organization relationship (super org grants sub org access)")
-
-		Payload(func() {
-			Attribute("sub_organization_id", String, "ID of the sub organization to peer with")
-			Required("sub_organization_id")
-
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		Result(PeeredOrganization)
-
-		HTTP(func() {
-			POST("/rpc/mcpRegistries.createPeer")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusCreated)
-		})
-
-		Meta("openapi:operationId", "createMCPPeer")
-		Meta("openapi:extension:x-speakeasy-name-override", "createPeer")
-	})
-
-	Method("listPeers", func() {
-		Description("List peered organizations for the current organization")
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		Result(func() {
-			Attribute("peers", ArrayOf(PeeredOrganization), "List of peered organizations")
-			Required("peers")
-		})
-
-		HTTP(func() {
-			GET("/rpc/mcpRegistries.listPeers")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "listMCPPeers")
-		Meta("openapi:extension:x-speakeasy-name-override", "listPeers")
-	})
-
-	Method("deletePeer", func() {
-		Description("Remove a peered organization relationship")
-
-		Payload(func() {
-			Attribute("sub_organization_id", String, "ID of the sub organization to remove")
-			Required("sub_organization_id")
-
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		HTTP(func() {
-			DELETE("/rpc/mcpRegistries.deletePeer")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Param("sub_organization_id")
-			Response(StatusNoContent)
-		})
-
-		Meta("openapi:operationId", "deleteMCPPeer")
-		Meta("openapi:extension:x-speakeasy-name-override", "deletePeer")
-	})
-
 	Method("publish", func() {
 		Description("Publish toolsets as an internal MCP registry catalog")
 
@@ -130,62 +53,6 @@ var _ = Service("mcpRegistries", func() {
 
 		Meta("openapi:operationId", "publishMCPRegistry")
 		Meta("openapi:extension:x-speakeasy-name-override", "publish")
-	})
-
-	Method("grant", func() {
-		Description("Grant an organization access to a private registry")
-
-		Payload(func() {
-			Attribute("registry_id", String, "ID of the registry to grant access to", func() {
-				Format(FormatUUID)
-			})
-			Attribute("organization_id", String, "ID of the organization to grant access to")
-			Required("registry_id", "organization_id")
-
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		HTTP(func() {
-			POST("/rpc/mcpRegistries.grant")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusNoContent)
-		})
-
-		Meta("openapi:operationId", "grantMCPRegistryAccess")
-		Meta("openapi:extension:x-speakeasy-name-override", "grant")
-	})
-
-	Method("revokeGrant", func() {
-		Description("Revoke an organization's access to a private registry")
-
-		Payload(func() {
-			Attribute("registry_id", String, "ID of the registry to revoke access to", func() {
-				Format(FormatUUID)
-			})
-			Attribute("organization_id", String, "ID of the organization to revoke access from")
-			Required("registry_id", "organization_id")
-
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		HTTP(func() {
-			DELETE("/rpc/mcpRegistries.revokeGrant")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Param("registry_id")
-			Param("organization_id")
-			Response(StatusNoContent)
-		})
-
-		Meta("openapi:operationId", "revokeMCPRegistryAccess")
-		Meta("openapi:extension:x-speakeasy-name-override", "revokeGrant")
 	})
 
 	Method("clearCache", func() {
@@ -366,23 +233,6 @@ var ExternalMCPTool = Type("ExternalMCPTool", func() {
 	Attribute("description", String, "Description of the tool")
 	Attribute("input_schema", Any, "Input schema for the tool")
 	Attribute("annotations", Any, "Annotations for the tool")
-})
-
-var PeeredOrganization = Type("PeeredOrganization", func() {
-	Meta("struct:pkg:path", "types")
-
-	Description("A peered organization relationship")
-
-	Attribute("id", String, "Peer relationship ID", func() {
-		Format(FormatUUID)
-	})
-	Attribute("super_organization_id", String, "ID of the super (granting) organization")
-	Attribute("sub_organization_id", String, "ID of the sub (granted) organization")
-	Attribute("sub_organization_name", String, "Name of the sub organization")
-	Attribute("sub_organization_slug", String, "Slug of the sub organization")
-	Attribute("created_at", String, "When the peer relationship was created")
-
-	Required("id", "super_organization_id", "sub_organization_id", "created_at")
 })
 
 var ExternalMCPRemote = Type("ExternalMCPRemote", func() {

@@ -17,18 +17,8 @@ import (
 
 // External MCP registry operations
 type Service interface {
-	// Create a peered organization relationship (super org grants sub org access)
-	CreatePeer(context.Context, *CreatePeerPayload) (res *types.PeeredOrganization, err error)
-	// List peered organizations for the current organization
-	ListPeers(context.Context, *ListPeersPayload) (res *ListPeersResult, err error)
-	// Remove a peered organization relationship
-	DeletePeer(context.Context, *DeletePeerPayload) (err error)
 	// Publish toolsets as an internal MCP registry catalog
 	Publish(context.Context, *PublishPayload) (res *types.MCPRegistry, err error)
-	// Grant an organization access to a private registry
-	Grant(context.Context, *GrantPayload) (err error)
-	// Revoke an organization's access to a private registry
-	RevokeGrant(context.Context, *RevokeGrantPayload) (err error)
 	// Clear the registry cache for a specific registry (admin only)
 	ClearCache(context.Context, *ClearCachePayload) (err error)
 	// List MCP registries accessible to the current organization
@@ -59,7 +49,7 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createPeer", "listPeers", "deletePeer", "publish", "grant", "revokeGrant", "clearCache", "listRegistries", "serve", "getServerDetails"}
+var MethodNames = [5]string{"publish", "clearCache", "listRegistries", "serve", "getServerDetails"}
 
 // ClearCachePayload is the payload type of the mcpRegistries service
 // clearCache method.
@@ -69,26 +59,6 @@ type ClearCachePayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-}
-
-// CreatePeerPayload is the payload type of the mcpRegistries service
-// createPeer method.
-type CreatePeerPayload struct {
-	// ID of the sub organization to peer with
-	SubOrganizationID string
-	SessionToken      *string
-	ApikeyToken       *string
-	ProjectSlugInput  *string
-}
-
-// DeletePeerPayload is the payload type of the mcpRegistries service
-// deletePeer method.
-type DeletePeerPayload struct {
-	// ID of the sub organization to remove
-	SubOrganizationID string
-	SessionToken      *string
-	ApikeyToken       *string
-	ProjectSlugInput  *string
 }
 
 // GetServerDetailsPayload is the payload type of the mcpRegistries service
@@ -101,32 +71,6 @@ type GetServerDetailsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-}
-
-// GrantPayload is the payload type of the mcpRegistries service grant method.
-type GrantPayload struct {
-	// ID of the registry to grant access to
-	RegistryID string
-	// ID of the organization to grant access to
-	OrganizationID   string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-}
-
-// ListPeersPayload is the payload type of the mcpRegistries service listPeers
-// method.
-type ListPeersPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-}
-
-// ListPeersResult is the result type of the mcpRegistries service listPeers
-// method.
-type ListPeersResult struct {
-	// List of peered organizations
-	Peers []*types.PeeredOrganization
 }
 
 // ListRegistriesPayload is the payload type of the mcpRegistries service
@@ -155,18 +99,6 @@ type PublishPayload struct {
 	ToolsetIds []string
 	// Visibility of the catalog
 	Visibility       string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-}
-
-// RevokeGrantPayload is the payload type of the mcpRegistries service
-// revokeGrant method.
-type RevokeGrantPayload struct {
-	// ID of the registry to revoke access to
-	RegistryID string
-	// ID of the organization to revoke access from
-	OrganizationID   string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

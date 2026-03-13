@@ -27,6 +27,32 @@ func publishRegistry(t *testing.T, ctx context.Context, ti *testInstance, name, 
 	return registry.ID
 }
 
+// createForeignRegistry creates an org that is not the test user's org and
+// inserts an internal registry owned by that org. Returns the registry ID.
+func createForeignRegistry(t *testing.T, ctx context.Context, ti *testInstance, orgID, orgName, orgSlug, registryName, registrySlug, visibility string) string {
+	t.Helper()
+
+	orgQueries := orgRepo.New(ti.conn)
+	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:              orgID,
+		Name:            orgName,
+		Slug:            orgSlug,
+		SsoConnectionID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	registry, err := ti.repo.CreateInternalRegistry(ctx, repo.CreateInternalRegistryParams{
+		Name:           registryName,
+		Slug:           conv.ToPGText(registrySlug),
+		Visibility:     visibility,
+		OrganizationID: conv.ToPGText(orgID),
+		ProjectID:      uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+
+	return registry.ID.String()
+}
+
 func TestServeOwnPrivateRegistry(t *testing.T) {
 	t.Parallel()
 
@@ -56,78 +82,120 @@ func TestServePublicRegistry(t *testing.T) {
 	require.NotNil(t, result)
 }
 
-func TestServePrivateRegistryForbiddenWithoutGrant(t *testing.T) {
+func TestServeForeignPrivateRegistryForbidden(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	// Create a foreign org that owns a private registry
-	foreignOrgID := "serve-foreign-org"
-	orgQueries := orgRepo.New(ti.conn)
-	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              foreignOrgID,
-		Name:            "Foreign Org",
-		Slug:            "foreign-org",
-		SsoConnectionID: pgtype.Text{},
-	})
-	require.NoError(t, err)
+	createForeignRegistry(t, ctx, ti,
+		"serve-foreign-org", "Foreign Org", "foreign-org",
+		"Foreign Private", "serve-forbidden", "private",
+	)
 
-	// Insert a private registry owned by the foreign org directly via SQL
-	_, err = ti.repo.CreateInternalRegistry(ctx, repo.CreateInternalRegistryParams{
-		Name:           "Foreign Private",
-		Slug:           conv.ToPGText("serve-forbidden"),
-		Visibility:     "private",
-		OrganizationID: conv.ToPGText(foreignOrgID),
-		ProjectID:      uuid.NullUUID{},
-	})
-	require.NoError(t, err)
-
-	// Our test user (different org) should be forbidden
-	_, err = ti.service.Serve(ctx, &gen.ServePayload{
+	_, err := ti.service.Serve(ctx, &gen.ServePayload{
 		RegistrySlug: "serve-forbidden",
 	})
 	require.Error(t, err)
 }
 
-func TestServePrivateRegistryWithGrant(t *testing.T) {
+func TestServeForeignPublicRegistryAllowed(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	// Create a sub org and peer it
-	subOrgID := "serve-grant-sub-1"
-	orgQueries := orgRepo.New(ti.conn)
-	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              subOrgID,
-		Name:            "Serve Grant Sub",
-		Slug:            "serve-grant-sub",
-		SsoConnectionID: pgtype.Text{},
+	createForeignRegistry(t, ctx, ti,
+		"serve-foreign-pub-org", "Foreign Pub Org", "foreign-pub-org",
+		"Foreign Public", "serve-foreign-public", "public",
+	)
+
+	result, err := ti.service.Serve(ctx, &gen.ServePayload{
+		RegistrySlug: "serve-foreign-public",
 	})
 	require.NoError(t, err)
+	require.NotNil(t, result)
+}
 
-	_, err = ti.service.CreatePeer(ctx, &gen.CreatePeerPayload{
-		SubOrganizationID: subOrgID,
+func TestGetServerDetailsForeignPrivateRegistryForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	registryID := createForeignRegistry(t, ctx, ti,
+		"details-foreign-org", "Details Foreign Org", "details-foreign-org",
+		"Details Foreign Private", "details-forbidden", "private",
+	)
+
+	_, err := ti.service.GetServerDetails(ctx, &gen.GetServerDetailsPayload{
+		RegistryID:      registryID,
+		ServerSpecifier: "anything",
 	})
+	require.Error(t, err)
+}
+
+func TestGetServerDetailsForeignPublicRegistryAllowed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	registryID := createForeignRegistry(t, ctx, ti,
+		"details-foreign-pub-org", "Details Foreign Pub Org", "details-foreign-pub-org",
+		"Details Foreign Public", "details-foreign-public", "public",
+	)
+
+	// The call will fail because there's no matching toolset, but it should
+	// get past the authorization check (not return forbidden).
+	_, err := ti.service.GetServerDetails(ctx, &gen.GetServerDetailsPayload{
+		RegistryID:      registryID,
+		ServerSpecifier: "nonexistent-server",
+	})
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "forbidden")
+}
+
+func TestListRegistriesExcludesForeignPrivate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// Publish an own registry so we have at least one result
+	publishRegistry(t, ctx, ti, "Own Catalog", "list-own", "private")
+
+	// Create a foreign private registry — should NOT appear in listing
+	createForeignRegistry(t, ctx, ti,
+		"list-foreign-org", "List Foreign Org", "list-foreign-org",
+		"Foreign Hidden", "list-foreign-hidden", "private",
+	)
+
+	result, err := ti.service.ListRegistries(ctx, &gen.ListRegistriesPayload{})
 	require.NoError(t, err)
 
-	registryID := publishRegistry(t, ctx, ti, "Granted Catalog", "serve-granted", "private")
+	for _, r := range result.Registries {
+		require.NotEqual(t, "list-foreign-hidden", *r.Slug,
+			"foreign private registry should not appear in listing")
+	}
+}
 
-	// Grant access to the sub org
-	err = ti.service.Grant(ctx, &gen.GrantPayload{
-		RegistryID:     registryID,
-		OrganizationID: subOrgID,
-	})
+func TestListRegistriesIncludesForeignPublic(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	createForeignRegistry(t, ctx, ti,
+		"list-foreign-pub-org", "List Foreign Pub Org", "list-foreign-pub-org",
+		"Foreign Visible", "list-foreign-visible", "public",
+	)
+
+	result, err := ti.service.ListRegistries(ctx, &gen.ListRegistriesPayload{})
 	require.NoError(t, err)
 
-	// Now create a service context for the sub org and verify they can serve
-	// Note: since newTestService always creates the same mock user/org,
-	// we verify the grant exists at the DB level instead
-	hasGrant, err := ti.repo.CheckRegistryGrant(ctx, repo.CheckRegistryGrantParams{
-		RegistryID:     uuid.MustParse(registryID),
-		OrganizationID: subOrgID,
-	})
-	require.NoError(t, err)
-	require.True(t, hasGrant)
+	found := false
+	for _, r := range result.Registries {
+		if r.Slug != nil && *r.Slug == "list-foreign-visible" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "foreign public registry should appear in listing")
 }
 
 func TestServeNonexistentRegistry(t *testing.T) {

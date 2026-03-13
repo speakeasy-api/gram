@@ -13,25 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 )
 
-const checkRegistryGrant = `-- name: CheckRegistryGrant :one
-SELECT EXISTS (
-  SELECT 1 FROM mcp_registry_grants
-  WHERE registry_id = $1 AND organization_id = $2
-) AS has_grant
-`
-
-type CheckRegistryGrantParams struct {
-	RegistryID     uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) CheckRegistryGrant(ctx context.Context, arg CheckRegistryGrantParams) (bool, error) {
-	row := q.db.QueryRow(ctx, checkRegistryGrant, arg.RegistryID, arg.OrganizationID)
-	var has_grant bool
-	err := row.Scan(&has_grant)
-	return has_grant, err
-}
-
 const createExternalMCPAttachment = `-- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
 VALUES ($1, $2, $3, $4, $5)
@@ -279,85 +260,6 @@ func (q *Queries) CreateInternalRegistry(ctx context.Context, arg CreateInternal
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const createPeer = `-- name: CreatePeer :one
-INSERT INTO peered_organizations (super_organization_id, sub_organization_id)
-VALUES ($1, $2)
-ON CONFLICT (super_organization_id, sub_organization_id) DO NOTHING
-RETURNING id, super_organization_id, sub_organization_id, created_at
-`
-
-type CreatePeerParams struct {
-	SuperOrganizationID string
-	SubOrganizationID   string
-}
-
-func (q *Queries) CreatePeer(ctx context.Context, arg CreatePeerParams) (PeeredOrganization, error) {
-	row := q.db.QueryRow(ctx, createPeer, arg.SuperOrganizationID, arg.SubOrganizationID)
-	var i PeeredOrganization
-	err := row.Scan(
-		&i.ID,
-		&i.SuperOrganizationID,
-		&i.SubOrganizationID,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const createRegistryGrant = `-- name: CreateRegistryGrant :one
-INSERT INTO mcp_registry_grants (registry_id, organization_id)
-VALUES ($1, $2)
-ON CONFLICT (registry_id, organization_id) DO NOTHING
-RETURNING id, registry_id, organization_id, created_at
-`
-
-type CreateRegistryGrantParams struct {
-	RegistryID     uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) CreateRegistryGrant(ctx context.Context, arg CreateRegistryGrantParams) (McpRegistryGrant, error) {
-	row := q.db.QueryRow(ctx, createRegistryGrant, arg.RegistryID, arg.OrganizationID)
-	var i McpRegistryGrant
-	err := row.Scan(
-		&i.ID,
-		&i.RegistryID,
-		&i.OrganizationID,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const deletePeer = `-- name: DeletePeer :exec
-DELETE FROM peered_organizations
-WHERE super_organization_id = $1
-  AND sub_organization_id = $2
-`
-
-type DeletePeerParams struct {
-	SuperOrganizationID string
-	SubOrganizationID   string
-}
-
-func (q *Queries) DeletePeer(ctx context.Context, arg DeletePeerParams) error {
-	_, err := q.db.Exec(ctx, deletePeer, arg.SuperOrganizationID, arg.SubOrganizationID)
-	return err
-}
-
-const deleteRegistryGrant = `-- name: DeleteRegistryGrant :exec
-DELETE FROM mcp_registry_grants
-WHERE registry_id = $1 AND organization_id = $2
-`
-
-type DeleteRegistryGrantParams struct {
-	RegistryID     uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) DeleteRegistryGrant(ctx context.Context, arg DeleteRegistryGrantParams) error {
-	_, err := q.db.Exec(ctx, deleteRegistryGrant, arg.RegistryID, arg.OrganizationID)
-	return err
 }
 
 const getExternalMCPToolDefinitionByURN = `-- name: GetExternalMCPToolDefinitionByURN :one
@@ -740,26 +642,6 @@ func (q *Queries) GetToolsetForServe(ctx context.Context, id uuid.UUID) (GetTool
 	return i, err
 }
 
-const isPeer = `-- name: IsPeer :one
-SELECT EXISTS (
-  SELECT 1 FROM peered_organizations
-  WHERE super_organization_id = $1
-    AND sub_organization_id = $2
-) AS is_peer
-`
-
-type IsPeerParams struct {
-	SuperOrganizationID string
-	SubOrganizationID   string
-}
-
-func (q *Queries) IsPeer(ctx context.Context, arg IsPeerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isPeer, arg.SuperOrganizationID, arg.SubOrganizationID)
-	var is_peer bool
-	err := row.Scan(&is_peer)
-	return is_peer, err
-}
-
 const listExternalMCPAttachments = `-- name: ListExternalMCPAttachments :many
 SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
 FROM external_mcp_attachments
@@ -976,63 +858,11 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 	return items, nil
 }
 
-const listPeers = `-- name: ListPeers :many
-SELECT p.id, p.super_organization_id, p.sub_organization_id, p.created_at,
-       o.name as sub_organization_name, o.slug as sub_organization_slug
-FROM peered_organizations p
-JOIN organization_metadata o ON p.sub_organization_id = o.id
-WHERE p.super_organization_id = $1
-ORDER BY p.created_at ASC
-`
-
-type ListPeersRow struct {
-	ID                  uuid.UUID
-	SuperOrganizationID string
-	SubOrganizationID   string
-	CreatedAt           pgtype.Timestamptz
-	SubOrganizationName string
-	SubOrganizationSlug string
-}
-
-func (q *Queries) ListPeers(ctx context.Context, superOrganizationID string) ([]ListPeersRow, error) {
-	rows, err := q.db.Query(ctx, listPeers, superOrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPeersRow
-	for rows.Next() {
-		var i ListPeersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.SuperOrganizationID,
-			&i.SubOrganizationID,
-			&i.CreatedAt,
-			&i.SubOrganizationName,
-			&i.SubOrganizationSlug,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRegistriesForOrganization = `-- name: ListRegistriesForOrganization :many
 SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.project_id, r.created_at, r.updated_at
 FROM mcp_registries r
 WHERE r.deleted IS FALSE
-  AND (
-    r.visibility = 'public'
-    OR r.organization_id = $1
-    OR EXISTS (
-      SELECT 1 FROM mcp_registry_grants g
-      WHERE g.registry_id = r.id AND g.organization_id = $1
-    )
-  )
+  AND (r.visibility = 'public' OR r.organization_id = $1)
 ORDER BY r.name ASC
 `
 

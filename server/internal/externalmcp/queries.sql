@@ -1,29 +1,3 @@
--- name: CreatePeer :one
-INSERT INTO peered_organizations (super_organization_id, sub_organization_id)
-VALUES (@super_organization_id, @sub_organization_id)
-ON CONFLICT (super_organization_id, sub_organization_id) DO NOTHING
-RETURNING id, super_organization_id, sub_organization_id, created_at;
-
--- name: ListPeers :many
-SELECT p.id, p.super_organization_id, p.sub_organization_id, p.created_at,
-       o.name as sub_organization_name, o.slug as sub_organization_slug
-FROM peered_organizations p
-JOIN organization_metadata o ON p.sub_organization_id = o.id
-WHERE p.super_organization_id = @super_organization_id
-ORDER BY p.created_at ASC;
-
--- name: DeletePeer :exec
-DELETE FROM peered_organizations
-WHERE super_organization_id = @super_organization_id
-  AND sub_organization_id = @sub_organization_id;
-
--- name: IsPeer :one
-SELECT EXISTS (
-  SELECT 1 FROM peered_organizations
-  WHERE super_organization_id = @super_organization_id
-    AND sub_organization_id = @sub_organization_id
-) AS is_peer;
-
 -- name: ListMCPRegistries :many
 SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
@@ -58,34 +32,11 @@ FROM mcp_registry_toolset_links
 WHERE registry_id = @registry_id
 ORDER BY created_at ASC;
 
--- name: CreateRegistryGrant :one
-INSERT INTO mcp_registry_grants (registry_id, organization_id)
-VALUES (@registry_id, @organization_id)
-ON CONFLICT (registry_id, organization_id) DO NOTHING
-RETURNING id, registry_id, organization_id, created_at;
-
--- name: DeleteRegistryGrant :exec
-DELETE FROM mcp_registry_grants
-WHERE registry_id = @registry_id AND organization_id = @organization_id;
-
--- name: CheckRegistryGrant :one
-SELECT EXISTS (
-  SELECT 1 FROM mcp_registry_grants
-  WHERE registry_id = @registry_id AND organization_id = @organization_id
-) AS has_grant;
-
 -- name: ListRegistriesForOrganization :many
 SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.project_id, r.created_at, r.updated_at
 FROM mcp_registries r
 WHERE r.deleted IS FALSE
-  AND (
-    r.visibility = 'public'
-    OR r.organization_id = @organization_id
-    OR EXISTS (
-      SELECT 1 FROM mcp_registry_grants g
-      WHERE g.registry_id = r.id AND g.organization_id = @organization_id
-    )
-  )
+  AND (r.visibility = 'public' OR r.organization_id = @organization_id)
 ORDER BY r.name ASC;
 
 -- name: GetToolsetForServe :one

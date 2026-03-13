@@ -59,7 +59,7 @@ func UsageCommands() []string {
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
-		"mcp-registries (create-peer|list-peers|delete-peer|publish|grant|revoke-grant|clear-cache|list-registries|serve|get-server-details)",
+		"mcp-registries (publish|clear-cache|list-registries|serve|get-server-details)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|logs)",
@@ -400,41 +400,11 @@ func ParseEndpoint(
 
 		mcpRegistriesFlags = flag.NewFlagSet("mcp-registries", flag.ContinueOnError)
 
-		mcpRegistriesCreatePeerFlags                = flag.NewFlagSet("create-peer", flag.ExitOnError)
-		mcpRegistriesCreatePeerBodyFlag             = mcpRegistriesCreatePeerFlags.String("body", "REQUIRED", "")
-		mcpRegistriesCreatePeerSessionTokenFlag     = mcpRegistriesCreatePeerFlags.String("session-token", "", "")
-		mcpRegistriesCreatePeerApikeyTokenFlag      = mcpRegistriesCreatePeerFlags.String("apikey-token", "", "")
-		mcpRegistriesCreatePeerProjectSlugInputFlag = mcpRegistriesCreatePeerFlags.String("project-slug-input", "", "")
-
-		mcpRegistriesListPeersFlags                = flag.NewFlagSet("list-peers", flag.ExitOnError)
-		mcpRegistriesListPeersSessionTokenFlag     = mcpRegistriesListPeersFlags.String("session-token", "", "")
-		mcpRegistriesListPeersApikeyTokenFlag      = mcpRegistriesListPeersFlags.String("apikey-token", "", "")
-		mcpRegistriesListPeersProjectSlugInputFlag = mcpRegistriesListPeersFlags.String("project-slug-input", "", "")
-
-		mcpRegistriesDeletePeerFlags                 = flag.NewFlagSet("delete-peer", flag.ExitOnError)
-		mcpRegistriesDeletePeerSubOrganizationIDFlag = mcpRegistriesDeletePeerFlags.String("sub-organization-id", "REQUIRED", "")
-		mcpRegistriesDeletePeerSessionTokenFlag      = mcpRegistriesDeletePeerFlags.String("session-token", "", "")
-		mcpRegistriesDeletePeerApikeyTokenFlag       = mcpRegistriesDeletePeerFlags.String("apikey-token", "", "")
-		mcpRegistriesDeletePeerProjectSlugInputFlag  = mcpRegistriesDeletePeerFlags.String("project-slug-input", "", "")
-
 		mcpRegistriesPublishFlags                = flag.NewFlagSet("publish", flag.ExitOnError)
 		mcpRegistriesPublishBodyFlag             = mcpRegistriesPublishFlags.String("body", "REQUIRED", "")
 		mcpRegistriesPublishSessionTokenFlag     = mcpRegistriesPublishFlags.String("session-token", "", "")
 		mcpRegistriesPublishApikeyTokenFlag      = mcpRegistriesPublishFlags.String("apikey-token", "", "")
 		mcpRegistriesPublishProjectSlugInputFlag = mcpRegistriesPublishFlags.String("project-slug-input", "", "")
-
-		mcpRegistriesGrantFlags                = flag.NewFlagSet("grant", flag.ExitOnError)
-		mcpRegistriesGrantBodyFlag             = mcpRegistriesGrantFlags.String("body", "REQUIRED", "")
-		mcpRegistriesGrantSessionTokenFlag     = mcpRegistriesGrantFlags.String("session-token", "", "")
-		mcpRegistriesGrantApikeyTokenFlag      = mcpRegistriesGrantFlags.String("apikey-token", "", "")
-		mcpRegistriesGrantProjectSlugInputFlag = mcpRegistriesGrantFlags.String("project-slug-input", "", "")
-
-		mcpRegistriesRevokeGrantFlags                = flag.NewFlagSet("revoke-grant", flag.ExitOnError)
-		mcpRegistriesRevokeGrantRegistryIDFlag       = mcpRegistriesRevokeGrantFlags.String("registry-id", "REQUIRED", "")
-		mcpRegistriesRevokeGrantOrganizationIDFlag   = mcpRegistriesRevokeGrantFlags.String("organization-id", "REQUIRED", "")
-		mcpRegistriesRevokeGrantSessionTokenFlag     = mcpRegistriesRevokeGrantFlags.String("session-token", "", "")
-		mcpRegistriesRevokeGrantApikeyTokenFlag      = mcpRegistriesRevokeGrantFlags.String("apikey-token", "", "")
-		mcpRegistriesRevokeGrantProjectSlugInputFlag = mcpRegistriesRevokeGrantFlags.String("project-slug-input", "", "")
 
 		mcpRegistriesClearCacheFlags                = flag.NewFlagSet("clear-cache", flag.ExitOnError)
 		mcpRegistriesClearCacheRegistryIDFlag       = mcpRegistriesClearCacheFlags.String("registry-id", "REQUIRED", "")
@@ -965,12 +935,7 @@ func ParseEndpoint(
 	environmentsGetToolsetEnvironmentFlags.Usage = environmentsGetToolsetEnvironmentUsage
 
 	mcpRegistriesFlags.Usage = mcpRegistriesUsage
-	mcpRegistriesCreatePeerFlags.Usage = mcpRegistriesCreatePeerUsage
-	mcpRegistriesListPeersFlags.Usage = mcpRegistriesListPeersUsage
-	mcpRegistriesDeletePeerFlags.Usage = mcpRegistriesDeletePeerUsage
 	mcpRegistriesPublishFlags.Usage = mcpRegistriesPublishUsage
-	mcpRegistriesGrantFlags.Usage = mcpRegistriesGrantUsage
-	mcpRegistriesRevokeGrantFlags.Usage = mcpRegistriesRevokeGrantUsage
 	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
 	mcpRegistriesServeFlags.Usage = mcpRegistriesServeUsage
@@ -1362,23 +1327,8 @@ func ParseEndpoint(
 
 		case "mcp-registries":
 			switch epn {
-			case "create-peer":
-				epf = mcpRegistriesCreatePeerFlags
-
-			case "list-peers":
-				epf = mcpRegistriesListPeersFlags
-
-			case "delete-peer":
-				epf = mcpRegistriesDeletePeerFlags
-
 			case "publish":
 				epf = mcpRegistriesPublishFlags
-
-			case "grant":
-				epf = mcpRegistriesGrantFlags
-
-			case "revoke-grant":
-				epf = mcpRegistriesRevokeGrantFlags
 
 			case "clear-cache":
 				epf = mcpRegistriesClearCacheFlags
@@ -1908,24 +1858,9 @@ func ParseEndpoint(
 		case "mcp-registries":
 			c := mcpregistriesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "create-peer":
-				endpoint = c.CreatePeer()
-				data, err = mcpregistriesc.BuildCreatePeerPayload(*mcpRegistriesCreatePeerBodyFlag, *mcpRegistriesCreatePeerSessionTokenFlag, *mcpRegistriesCreatePeerApikeyTokenFlag, *mcpRegistriesCreatePeerProjectSlugInputFlag)
-			case "list-peers":
-				endpoint = c.ListPeers()
-				data, err = mcpregistriesc.BuildListPeersPayload(*mcpRegistriesListPeersSessionTokenFlag, *mcpRegistriesListPeersApikeyTokenFlag, *mcpRegistriesListPeersProjectSlugInputFlag)
-			case "delete-peer":
-				endpoint = c.DeletePeer()
-				data, err = mcpregistriesc.BuildDeletePeerPayload(*mcpRegistriesDeletePeerSubOrganizationIDFlag, *mcpRegistriesDeletePeerSessionTokenFlag, *mcpRegistriesDeletePeerApikeyTokenFlag, *mcpRegistriesDeletePeerProjectSlugInputFlag)
 			case "publish":
 				endpoint = c.Publish()
 				data, err = mcpregistriesc.BuildPublishPayload(*mcpRegistriesPublishBodyFlag, *mcpRegistriesPublishSessionTokenFlag, *mcpRegistriesPublishApikeyTokenFlag, *mcpRegistriesPublishProjectSlugInputFlag)
-			case "grant":
-				endpoint = c.Grant()
-				data, err = mcpregistriesc.BuildGrantPayload(*mcpRegistriesGrantBodyFlag, *mcpRegistriesGrantSessionTokenFlag, *mcpRegistriesGrantApikeyTokenFlag, *mcpRegistriesGrantProjectSlugInputFlag)
-			case "revoke-grant":
-				endpoint = c.RevokeGrant()
-				data, err = mcpregistriesc.BuildRevokeGrantPayload(*mcpRegistriesRevokeGrantRegistryIDFlag, *mcpRegistriesRevokeGrantOrganizationIDFlag, *mcpRegistriesRevokeGrantSessionTokenFlag, *mcpRegistriesRevokeGrantApikeyTokenFlag, *mcpRegistriesRevokeGrantProjectSlugInputFlag)
 			case "clear-cache":
 				endpoint = c.ClearCache()
 				data, err = mcpregistriesc.BuildClearCachePayload(*mcpRegistriesClearCacheRegistryIDFlag, *mcpRegistriesClearCacheSessionTokenFlag, *mcpRegistriesClearCacheApikeyTokenFlag, *mcpRegistriesClearCacheProjectSlugInputFlag)
@@ -3550,12 +3485,7 @@ func mcpRegistriesUsage() {
 	fmt.Fprintln(os.Stderr, `External MCP registry operations`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-registries COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create-peer: Create a peered organization relationship (super org grants sub org access)`)
-	fmt.Fprintln(os.Stderr, `    list-peers: List peered organizations for the current organization`)
-	fmt.Fprintln(os.Stderr, `    delete-peer: Remove a peered organization relationship`)
 	fmt.Fprintln(os.Stderr, `    publish: Publish toolsets as an internal MCP registry catalog`)
-	fmt.Fprintln(os.Stderr, `    grant: Grant an organization access to a private registry`)
-	fmt.Fprintln(os.Stderr, `    revoke-grant: Revoke an organization's access to a private registry`)
 	fmt.Fprintln(os.Stderr, `    clear-cache: Clear the registry cache for a specific registry (admin only)`)
 	fmt.Fprintln(os.Stderr, `    list-registries: List MCP registries accessible to the current organization`)
 	fmt.Fprintln(os.Stderr, `    serve: Serve MCP servers from a specific registry by slug`)
@@ -3564,76 +3494,6 @@ func mcpRegistriesUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-registries COMMAND --help\n", os.Args[0])
 }
-func mcpRegistriesCreatePeerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries create-peer", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a peered organization relationship (super org grants sub org access)`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries create-peer --body '{\n      \"sub_organization_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func mcpRegistriesListPeersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries list-peers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List peered organizations for the current organization`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries list-peers --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func mcpRegistriesDeletePeerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries delete-peer", os.Args[0])
-	fmt.Fprint(os.Stderr, " -sub-organization-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a peered organization relationship`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -sub-organization-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries delete-peer --sub-organization-id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
 func mcpRegistriesPublishUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries publish", os.Args[0])
@@ -3656,56 +3516,6 @@ func mcpRegistriesPublishUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries publish --body '{\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func mcpRegistriesGrantUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries grant", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Grant an organization access to a private registry`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries grant --body '{\n      \"organization_id\": \"abc123\",\n      \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func mcpRegistriesRevokeGrantUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries revoke-grant", os.Args[0])
-	fmt.Fprint(os.Stderr, " -registry-id STRING")
-	fmt.Fprint(os.Stderr, " -organization-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke an organization's access to a private registry`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -registry-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries revoke-grant --registry-id \"550e8400-e29b-41d4-a716-446655440000\" --organization-id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpRegistriesClearCacheUsage() {

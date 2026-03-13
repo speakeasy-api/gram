@@ -3,6 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useRoutes } from "@/routes";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { Plus, Store } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +18,7 @@ export function CatalogsRoot() {
 export default function Catalogs() {
   const client = useSdkClient();
   const telemetry = useTelemetry();
+  const routes = useRoutes();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const isEnabled = telemetry.isFeatureEnabled("catalogs");
@@ -44,7 +46,7 @@ export default function Catalogs() {
           <Page.Section.Title>Catalogs</Page.Section.Title>
           <Page.Section.Description>
             Manage your internal MCP server catalogs. Publish collections of
-            toolsets and grant access to partner organizations.
+            toolsets as discoverable MCP servers.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="vertical" gap={6}>
@@ -77,8 +79,8 @@ export default function Catalogs() {
                   <Store className="w-12 h-12 text-muted-foreground mb-4" />
                   <Type className="font-medium mb-1">No catalogs yet</Type>
                   <Type small muted className="mb-4">
-                    Create a catalog to publish your toolsets for partner
-                    organizations.
+                    Create a catalog to publish your toolsets as discoverable
+                    MCP servers.
                   </Type>
                   <Button onClick={() => setIsCreateOpen(true)} size="sm">
                     <Plus className="w-4 h-4 mr-1" />
@@ -90,9 +92,15 @@ export default function Catalogs() {
               {!isLoading && internalRegistries.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {internalRegistries.map((registry) => (
-                    <div
+                    <button
+                      type="button"
                       key={registry.id}
-                      className="border rounded-lg p-4 bg-background hover:border-foreground/20 transition-colors"
+                      className="border rounded-lg p-4 bg-background hover:border-foreground/20 transition-colors text-left cursor-pointer"
+                      onClick={() => {
+                        if (registry.slug) {
+                          routes.catalogs.detail.goTo(registry.slug);
+                        }
+                      }}
                     >
                       <Stack direction="vertical" gap={2}>
                         <Stack direction="horizontal" gap={2} align="center">
@@ -114,7 +122,7 @@ export default function Catalogs() {
                           </Type>
                         )}
                       </Stack>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}

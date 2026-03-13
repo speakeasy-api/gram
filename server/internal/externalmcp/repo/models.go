@@ -9,23 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type McpRegistryGrant struct {
-	ID             uuid.UUID
-	RegistryID     uuid.UUID
-	OrganizationID string
-	CreatedAt      pgtype.Timestamptz
-}
-
 type McpRegistryToolsetLink struct {
 	ID         uuid.UUID
 	RegistryID uuid.UUID
 	ToolsetID  uuid.UUID
 	CreatedAt  pgtype.Timestamptz
-}
-
-type PeeredOrganization struct {
-	ID                  uuid.UUID
-	SuperOrganizationID string
-	SubOrganizationID   string
-	CreatedAt           pgtype.Timestamptz
 }

@@ -16,12 +16,7 @@ import (
 
 // Client is the "mcpRegistries" service client.
 type Client struct {
-	CreatePeerEndpoint       goa.Endpoint
-	ListPeersEndpoint        goa.Endpoint
-	DeletePeerEndpoint       goa.Endpoint
 	PublishEndpoint          goa.Endpoint
-	GrantEndpoint            goa.Endpoint
-	RevokeGrantEndpoint      goa.Endpoint
 	ClearCacheEndpoint       goa.Endpoint
 	ListRegistriesEndpoint   goa.Endpoint
 	ServeEndpoint            goa.Endpoint
@@ -29,81 +24,14 @@ type Client struct {
 }
 
 // NewClient initializes a "mcpRegistries" service client given the endpoints.
-func NewClient(createPeer, listPeers, deletePeer, publish, grant, revokeGrant, clearCache, listRegistries, serve, getServerDetails goa.Endpoint) *Client {
+func NewClient(publish, clearCache, listRegistries, serve, getServerDetails goa.Endpoint) *Client {
 	return &Client{
-		CreatePeerEndpoint:       createPeer,
-		ListPeersEndpoint:        listPeers,
-		DeletePeerEndpoint:       deletePeer,
 		PublishEndpoint:          publish,
-		GrantEndpoint:            grant,
-		RevokeGrantEndpoint:      revokeGrant,
 		ClearCacheEndpoint:       clearCache,
 		ListRegistriesEndpoint:   listRegistries,
 		ServeEndpoint:            serve,
 		GetServerDetailsEndpoint: getServerDetails,
 	}
-}
-
-// CreatePeer calls the "createPeer" endpoint of the "mcpRegistries" service.
-// CreatePeer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) CreatePeer(ctx context.Context, p *CreatePeerPayload) (res *types.PeeredOrganization, err error) {
-	var ires any
-	ires, err = c.CreatePeerEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*types.PeeredOrganization), nil
-}
-
-// ListPeers calls the "listPeers" endpoint of the "mcpRegistries" service.
-// ListPeers may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) ListPeers(ctx context.Context, p *ListPeersPayload) (res *ListPeersResult, err error) {
-	var ires any
-	ires, err = c.ListPeersEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ListPeersResult), nil
-}
-
-// DeletePeer calls the "deletePeer" endpoint of the "mcpRegistries" service.
-// DeletePeer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DeletePeer(ctx context.Context, p *DeletePeerPayload) (err error) {
-	_, err = c.DeletePeerEndpoint(ctx, p)
-	return
 }
 
 // Publish calls the "publish" endpoint of the "mcpRegistries" service.
@@ -126,42 +54,6 @@ func (c *Client) Publish(ctx context.Context, p *PublishPayload) (res *types.MCP
 		return
 	}
 	return ires.(*types.MCPRegistry), nil
-}
-
-// Grant calls the "grant" endpoint of the "mcpRegistries" service.
-// Grant may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) Grant(ctx context.Context, p *GrantPayload) (err error) {
-	_, err = c.GrantEndpoint(ctx, p)
-	return
-}
-
-// RevokeGrant calls the "revokeGrant" endpoint of the "mcpRegistries" service.
-// RevokeGrant may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) RevokeGrant(ctx context.Context, p *RevokeGrantPayload) (err error) {
-	_, err = c.RevokeGrantEndpoint(ctx, p)
-	return
 }
 
 // ClearCache calls the "clearCache" endpoint of the "mcpRegistries" service.
