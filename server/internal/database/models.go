@@ -628,7 +628,7 @@ type PrincipalGrant struct {
 	// The organization this grant belongs to. Grants are always org-scoped.
 	OrganizationID string
 	// URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.
-	PrincipalUrn string
+	PrincipalUrn urn.Principal
 	// Derived from principal_urn. The type prefix, e.g. "user", "role".
 	PrincipalType string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
