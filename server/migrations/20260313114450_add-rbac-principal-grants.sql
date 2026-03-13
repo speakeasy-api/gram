@@ -9,7 +9,7 @@ CREATE TABLE "principal_grants" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "principal_grants_organization_id_principal_urn_scope_resource_k" UNIQUE ("organization_id", "principal_urn", "scope", "resource"),
+  CONSTRAINT "principal_grants_org_principal_scope_resource_key" UNIQUE ("organization_id", "principal_urn", "scope", "resource"),
   CONSTRAINT "principal_grants_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Set comment to table: "principal_grants"
