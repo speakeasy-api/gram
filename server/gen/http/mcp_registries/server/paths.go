@@ -47,9 +47,9 @@ func ListRegistriesMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.listRegistries"
 }
 
-// ListCatalogMcpRegistriesPath returns the URL path to the mcpRegistries service listCatalog HTTP endpoint.
-func ListCatalogMcpRegistriesPath() string {
-	return "/rpc/mcpRegistries.listCatalog"
+// ServeMcpRegistriesPath returns the URL path to the mcpRegistries service serve HTTP endpoint.
+func ServeMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.serve"
 }
 
 // GetServerDetailsMcpRegistriesPath returns the URL path to the mcpRegistries service getServerDetails HTTP endpoint.

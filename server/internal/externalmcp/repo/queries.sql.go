@@ -631,6 +631,113 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 	return i, err
 }
 
+const getMCPRegistryBySlug = `-- name: GetMCPRegistryBySlug :one
+SELECT id, name, url, slug, source, visibility, organization_id, created_at, updated_at
+FROM mcp_registries
+WHERE slug = $1 AND deleted IS FALSE
+`
+
+type GetMCPRegistryBySlugRow struct {
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetMCPRegistryBySlug(ctx context.Context, slug pgtype.Text) (GetMCPRegistryBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getMCPRegistryBySlug, slug)
+	var i GetMCPRegistryBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.Slug,
+		&i.Source,
+		&i.Visibility,
+		&i.OrganizationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRegistryToolsetBySlug = `-- name: GetRegistryToolsetBySlug :one
+SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
+FROM toolsets t
+JOIN mcp_registry_toolset_links l ON l.toolset_id = t.id
+WHERE l.registry_id = $1 AND t.slug = $2 AND t.deleted IS FALSE
+`
+
+type GetRegistryToolsetBySlugParams struct {
+	RegistryID uuid.UUID
+	Slug       string
+}
+
+type GetRegistryToolsetBySlugRow struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	McpSlug        pgtype.Text
+	McpEnabled     bool
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetRegistryToolsetBySlug(ctx context.Context, arg GetRegistryToolsetBySlugParams) (GetRegistryToolsetBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getRegistryToolsetBySlug, arg.RegistryID, arg.Slug)
+	var i GetRegistryToolsetBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.McpSlug,
+		&i.McpEnabled,
+		&i.OrganizationID,
+		&i.ProjectID,
+	)
+	return i, err
+}
+
+const getToolsetForServe = `-- name: GetToolsetForServe :one
+SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
+FROM toolsets t
+WHERE t.id = $1 AND t.deleted IS FALSE
+`
+
+type GetToolsetForServeRow struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	McpSlug        pgtype.Text
+	McpEnabled     bool
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetToolsetForServe(ctx context.Context, id uuid.UUID) (GetToolsetForServeRow, error) {
+	row := q.db.QueryRow(ctx, getToolsetForServe, id)
+	var i GetToolsetForServeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.McpSlug,
+		&i.McpEnabled,
+		&i.OrganizationID,
+		&i.ProjectID,
+	)
+	return i, err
+}
+
 const isPeer = `-- name: IsPeer :one
 SELECT EXISTS (
   SELECT 1 FROM peered_organizations
@@ -901,6 +1008,63 @@ func (q *Queries) ListPeers(ctx context.Context, superOrganizationID string) ([]
 			&i.CreatedAt,
 			&i.SubOrganizationName,
 			&i.SubOrganizationSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRegistriesForOrganization = `-- name: ListRegistriesForOrganization :many
+SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.created_at, r.updated_at
+FROM mcp_registries r
+WHERE r.deleted IS FALSE
+  AND (
+    r.visibility = 'public'
+    OR r.organization_id = $1
+    OR EXISTS (
+      SELECT 1 FROM mcp_registry_grants g
+      WHERE g.registry_id = r.id AND g.organization_id = $1
+    )
+  )
+ORDER BY r.name ASC
+`
+
+type ListRegistriesForOrganizationRow struct {
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListRegistriesForOrganization(ctx context.Context, organizationID pgtype.Text) ([]ListRegistriesForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listRegistriesForOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRegistriesForOrganizationRow
+	for rows.Next() {
+		var i ListRegistriesForOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Url,
+			&i.Slug,
+			&i.Source,
+			&i.Visibility,
+			&i.OrganizationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

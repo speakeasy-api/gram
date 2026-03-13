@@ -216,7 +216,7 @@ var _ = Service("mcpRegistries", func() {
 	})
 
 	Method("listRegistries", func() {
-		Description("List all MCP registries (admin only)")
+		Description("List MCP registries accessible to the current organization")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -242,15 +242,14 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPRegistries"}`)
 	})
 
-	Method("listCatalog", func() {
-		Description("List available MCP servers from configured registries")
+	Method("serve", func() {
+		Description("Serve MCP servers from a specific registry by slug")
 
 		Payload(func() {
-			Attribute("registry_id", String, "Filter to a specific registry", func() {
-				Format(FormatUUID)
-			})
+			Attribute("registry_slug", String, "Slug of the registry to serve")
 			Attribute("search", String, "Search query to filter servers by name")
 			Attribute("cursor", String, "Pagination cursor")
+			Required("registry_slug")
 
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -264,19 +263,19 @@ var _ = Service("mcpRegistries", func() {
 		})
 
 		HTTP(func() {
-			GET("/rpc/mcpRegistries.listCatalog")
+			GET("/rpc/mcpRegistries.serve")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
-			Param("registry_id")
+			Param("registry_slug")
 			Param("search")
 			Param("cursor")
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "listMCPCatalog")
-		Meta("openapi:extension:x-speakeasy-name-override", "listCatalog")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPCatalog"}`)
+		Meta("openapi:operationId", "serveMCPRegistry")
+		Meta("openapi:extension:x-speakeasy-name-override", "serve")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ServeMCPRegistry"}`)
 	})
 
 	Method("getServerDetails", func() {

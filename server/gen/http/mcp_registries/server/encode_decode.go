@@ -1839,25 +1839,25 @@ func EncodeListRegistriesError(encoder func(context.Context, http.ResponseWriter
 	}
 }
 
-// EncodeListCatalogResponse returns an encoder for responses returned by the
-// mcpRegistries listCatalog endpoint.
-func EncodeListCatalogResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeServeResponse returns an encoder for responses returned by the
+// mcpRegistries serve endpoint.
+func EncodeServeResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpregistries.ListCatalogResult)
+		res, _ := v.(*mcpregistries.ServeResult)
 		enc := encoder(ctx, w)
-		body := NewListCatalogResponseBody(res)
+		body := NewServeResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListCatalogRequest returns a decoder for requests sent to the
-// mcpRegistries listCatalog endpoint.
-func DecodeListCatalogRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpregistries.ListCatalogPayload, error) {
-	return func(r *http.Request) (*mcpregistries.ListCatalogPayload, error) {
-		var payload *mcpregistries.ListCatalogPayload
+// DecodeServeRequest returns a decoder for requests sent to the mcpRegistries
+// serve endpoint.
+func DecodeServeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpregistries.ServePayload, error) {
+	return func(r *http.Request) (*mcpregistries.ServePayload, error) {
+		var payload *mcpregistries.ServePayload
 		var (
-			registryID       *string
+			registrySlug     string
 			search           *string
 			cursor           *string
 			sessionToken     *string
@@ -1866,12 +1866,9 @@ func DecodeListCatalogRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 			err              error
 		)
 		qp := r.URL.Query()
-		registryIDRaw := qp.Get("registry_id")
-		if registryIDRaw != "" {
-			registryID = &registryIDRaw
-		}
-		if registryID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("registry_id", *registryID, goa.FormatUUID))
+		registrySlug = qp.Get("registry_slug")
+		if registrySlug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("registry_slug", "query string"))
 		}
 		searchRaw := qp.Get("search")
 		if searchRaw != "" {
@@ -1896,7 +1893,7 @@ func DecodeListCatalogRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListCatalogPayload(registryID, search, cursor, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewServePayload(registrySlug, search, cursor, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1923,9 +1920,9 @@ func DecodeListCatalogRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	}
 }
 
-// EncodeListCatalogError returns an encoder for errors returned by the
-// listCatalog mcpRegistries endpoint.
-func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeServeError returns an encoder for errors returned by the serve
+// mcpRegistries endpoint.
+func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -1942,7 +1939,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogUnauthorizedResponseBody(res)
+				body = NewServeUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -1956,7 +1953,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogForbiddenResponseBody(res)
+				body = NewServeForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -1970,7 +1967,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogBadRequestResponseBody(res)
+				body = NewServeBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -1984,7 +1981,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogNotFoundResponseBody(res)
+				body = NewServeNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -1998,7 +1995,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogConflictResponseBody(res)
+				body = NewServeConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2012,7 +2009,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogUnsupportedMediaResponseBody(res)
+				body = NewServeUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2026,7 +2023,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogInvalidResponseBody(res)
+				body = NewServeInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2040,7 +2037,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogInvariantViolationResponseBody(res)
+				body = NewServeInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2054,7 +2051,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogUnexpectedResponseBody(res)
+				body = NewServeUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2068,7 +2065,7 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListCatalogGatewayErrorResponseBody(res)
+				body = NewServeGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

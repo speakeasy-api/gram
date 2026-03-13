@@ -6742,126 +6742,6 @@ paths:
             tags:
                 - mcpRegistries
             x-speakeasy-name-override: grant
-    /rpc/mcpRegistries.listCatalog:
-        get:
-            description: List available MCP servers from configured registries
-            operationId: listMCPCatalog
-            parameters:
-                - allowEmptyValue: true
-                  description: Filter to a specific registry
-                  in: query
-                  name: registry_id
-                  schema:
-                    description: Filter to a specific registry
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Search query to filter servers by name
-                  in: query
-                  name: search
-                  schema:
-                    description: Search query to filter servers by name
-                    type: string
-                - allowEmptyValue: true
-                  description: Pagination cursor
-                  in: query
-                  name: cursor
-                  schema:
-                    description: Pagination cursor
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListCatalogResponseBody'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-            summary: listCatalog mcpRegistries
-            tags:
-                - mcpRegistries
-            x-speakeasy-name-override: listCatalog
-            x-speakeasy-react-hook:
-                name: ListMCPCatalog
     /rpc/mcpRegistries.listPeers:
         get:
             description: List peered organizations for the current organization
@@ -6960,7 +6840,7 @@ paths:
             x-speakeasy-name-override: listPeers
     /rpc/mcpRegistries.listRegistries:
         get:
-            description: List all MCP registries (admin only)
+            description: List MCP registries accessible to the current organization
             operationId: listMCPRegistries
             parameters:
                 - allowEmptyValue: true
@@ -7267,6 +7147,126 @@ paths:
             tags:
                 - mcpRegistries
             x-speakeasy-name-override: revokeGrant
+    /rpc/mcpRegistries.serve:
+        get:
+            description: Serve MCP servers from a specific registry by slug
+            operationId: serveMCPRegistry
+            parameters:
+                - allowEmptyValue: true
+                  description: Slug of the registry to serve
+                  in: query
+                  name: registry_slug
+                  required: true
+                  schema:
+                    description: Slug of the registry to serve
+                    type: string
+                - allowEmptyValue: true
+                  description: Search query to filter servers by name
+                  in: query
+                  name: search
+                  schema:
+                    description: Search query to filter servers by name
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ServeResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: serve mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: serve
+            x-speakeasy-react-hook:
+                name: ServeMCPRegistry
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -16328,19 +16328,6 @@ components:
             description: Result of listing distinct attribute keys
             required:
                 - keys
-        ListCatalogResponseBody:
-            type: object
-            properties:
-                next_cursor:
-                    type: string
-                    description: Pagination cursor for the next page
-                servers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/ExternalMCPServer'
-                    description: List of available MCP servers
-            required:
-                - servers
         ListChatsResult:
             type: object
             properties:
@@ -18364,6 +18351,19 @@ components:
                 - content_type
                 - content_length
                 - last_modified
+        ServeResponseBody:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Pagination cursor for the next page
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPServer'
+                    description: List of available MCP servers
+            required:
+                - servers
         ServerNameOverride:
             type: object
             properties:

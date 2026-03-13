@@ -35,6 +35,11 @@ SELECT id, name, url, slug, source, visibility, organization_id, project_id, cre
 FROM mcp_registries
 WHERE id = @id AND deleted IS FALSE;
 
+-- name: GetMCPRegistryBySlug :one
+SELECT id, name, url, slug, source, visibility, organization_id, created_at, updated_at
+FROM mcp_registries
+WHERE slug = @slug AND deleted IS FALSE;
+
 -- name: CreateInternalRegistry :one
 INSERT INTO mcp_registries (name, slug, source, visibility, organization_id, project_id)
 VALUES (@name, @slug, 'internal', @visibility, @organization_id, @project_id)
@@ -68,6 +73,31 @@ SELECT EXISTS (
   SELECT 1 FROM mcp_registry_grants
   WHERE registry_id = @registry_id AND organization_id = @organization_id
 ) AS has_grant;
+
+-- name: ListRegistriesForOrganization :many
+SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.created_at, r.updated_at
+FROM mcp_registries r
+WHERE r.deleted IS FALSE
+  AND (
+    r.visibility = 'public'
+    OR r.organization_id = @organization_id
+    OR EXISTS (
+      SELECT 1 FROM mcp_registry_grants g
+      WHERE g.registry_id = r.id AND g.organization_id = @organization_id
+    )
+  )
+ORDER BY r.name ASC;
+
+-- name: GetToolsetForServe :one
+SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
+FROM toolsets t
+WHERE t.id = @id AND t.deleted IS FALSE;
+
+-- name: GetRegistryToolsetBySlug :one
+SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
+FROM toolsets t
+JOIN mcp_registry_toolset_links l ON l.toolset_id = t.id
+WHERE l.registry_id = @registry_id AND t.slug = @slug AND t.deleted IS FALSE;
 
 -- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)

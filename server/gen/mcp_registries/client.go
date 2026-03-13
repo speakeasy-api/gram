@@ -24,12 +24,12 @@ type Client struct {
 	RevokeGrantEndpoint      goa.Endpoint
 	ClearCacheEndpoint       goa.Endpoint
 	ListRegistriesEndpoint   goa.Endpoint
-	ListCatalogEndpoint      goa.Endpoint
+	ServeEndpoint            goa.Endpoint
 	GetServerDetailsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "mcpRegistries" service client given the endpoints.
-func NewClient(createPeer, listPeers, deletePeer, publish, grant, revokeGrant, clearCache, listRegistries, listCatalog, getServerDetails goa.Endpoint) *Client {
+func NewClient(createPeer, listPeers, deletePeer, publish, grant, revokeGrant, clearCache, listRegistries, serve, getServerDetails goa.Endpoint) *Client {
 	return &Client{
 		CreatePeerEndpoint:       createPeer,
 		ListPeersEndpoint:        listPeers,
@@ -39,7 +39,7 @@ func NewClient(createPeer, listPeers, deletePeer, publish, grant, revokeGrant, c
 		RevokeGrantEndpoint:      revokeGrant,
 		ClearCacheEndpoint:       clearCache,
 		ListRegistriesEndpoint:   listRegistries,
-		ListCatalogEndpoint:      listCatalog,
+		ServeEndpoint:            serve,
 		GetServerDetailsEndpoint: getServerDetails,
 	}
 }
@@ -205,8 +205,8 @@ func (c *Client) ListRegistries(ctx context.Context, p *ListRegistriesPayload) (
 	return ires.(*ListRegistriesResult), nil
 }
 
-// ListCatalog calls the "listCatalog" endpoint of the "mcpRegistries" service.
-// ListCatalog may return the following errors:
+// Serve calls the "serve" endpoint of the "mcpRegistries" service.
+// Serve may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -218,13 +218,13 @@ func (c *Client) ListRegistries(ctx context.Context, p *ListRegistriesPayload) (
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListCatalog(ctx context.Context, p *ListCatalogPayload) (res *ListCatalogResult, err error) {
+func (c *Client) Serve(ctx context.Context, p *ServePayload) (res *ServeResult, err error) {
 	var ires any
-	ires, err = c.ListCatalogEndpoint(ctx, p)
+	ires, err = c.ServeEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListCatalogResult), nil
+	return ires.(*ServeResult), nil
 }
 
 // GetServerDetails calls the "getServerDetails" endpoint of the

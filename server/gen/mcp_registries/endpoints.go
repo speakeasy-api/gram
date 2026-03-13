@@ -24,7 +24,7 @@ type Endpoints struct {
 	RevokeGrant      goa.Endpoint
 	ClearCache       goa.Endpoint
 	ListRegistries   goa.Endpoint
-	ListCatalog      goa.Endpoint
+	Serve            goa.Endpoint
 	GetServerDetails goa.Endpoint
 }
 
@@ -41,7 +41,7 @@ func NewEndpoints(s Service) *Endpoints {
 		RevokeGrant:      NewRevokeGrantEndpoint(s, a.APIKeyAuth),
 		ClearCache:       NewClearCacheEndpoint(s, a.APIKeyAuth),
 		ListRegistries:   NewListRegistriesEndpoint(s, a.APIKeyAuth),
-		ListCatalog:      NewListCatalogEndpoint(s, a.APIKeyAuth),
+		Serve:            NewServeEndpoint(s, a.APIKeyAuth),
 		GetServerDetails: NewGetServerDetailsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -57,7 +57,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RevokeGrant = m(e.RevokeGrant)
 	e.ClearCache = m(e.ClearCache)
 	e.ListRegistries = m(e.ListRegistries)
-	e.ListCatalog = m(e.ListCatalog)
+	e.Serve = m(e.Serve)
 	e.GetServerDetails = m(e.GetServerDetails)
 }
 
@@ -533,11 +533,11 @@ func NewListRegistriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 	}
 }
 
-// NewListCatalogEndpoint returns an endpoint function that calls the method
-// "listCatalog" of service "mcpRegistries".
-func NewListCatalogEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewServeEndpoint returns an endpoint function that calls the method "serve"
+// of service "mcpRegistries".
+func NewServeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListCatalogPayload)
+		p := req.(*ServePayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -588,7 +588,7 @@ func NewListCatalogEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			return nil, err
 		}
-		return s.ListCatalog(ctx, p)
+		return s.Serve(ctx, p)
 	}
 }
 

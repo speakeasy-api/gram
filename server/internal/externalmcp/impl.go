@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -27,7 +28,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	repoTypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -40,12 +43,13 @@ type Service struct {
 	auth           *auth.Auth
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
+	serverURL      *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("externalmcp"))
 
 	return &Service{
@@ -56,6 +60,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:           auth.New(logger, db, sessions),
 		sessions:       sessions,
 		registryClient: registryClient,
+		serverURL:      serverURL,
 	}
 }
 
@@ -71,6 +76,102 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) CreatePeer(ctx context.Context, payload *gen.CreatePeerPayload) (*types.PeeredOrganization, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	if authCtx.ActiveOrganizationID == payload.SubOrganizationID {
+		return nil, oops.E(oops.CodeBadRequest, nil, "cannot peer an organization with itself").Log(ctx, s.logger)
+	}
+
+	peer, err := s.repo.CreatePeer(ctx, repo.CreatePeerParams{
+		SuperOrganizationID: authCtx.ActiveOrganizationID,
+		SubOrganizationID:   payload.SubOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create peer").Log(ctx, s.logger)
+	}
+
+	return &types.PeeredOrganization{
+		ID:                  peer.ID.String(),
+		SuperOrganizationID: peer.SuperOrganizationID,
+		SubOrganizationID:   peer.SubOrganizationID,
+		SubOrganizationName: nil,
+		SubOrganizationSlug: nil,
+		CreatedAt:           peer.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
+	}, nil
+}
+
+func (s *Service) ListPeers(ctx context.Context, payload *gen.ListPeersPayload) (*gen.ListPeersResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	peers, err := s.repo.ListPeers(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list peers").Log(ctx, s.logger)
+	}
+
+	result := make([]*types.PeeredOrganization, 0, len(peers))
+	for _, p := range peers {
+		result = append(result, &types.PeeredOrganization{
+			ID:                  p.ID.String(),
+			SuperOrganizationID: p.SuperOrganizationID,
+			SubOrganizationID:   p.SubOrganizationID,
+			SubOrganizationName: &p.SubOrganizationName,
+			SubOrganizationSlug: &p.SubOrganizationSlug,
+			CreatedAt:           p.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+
+	return &gen.ListPeersResult{
+		Peers: result,
+	}, nil
+}
+
+func (s *Service) DeletePeer(ctx context.Context, payload *gen.DeletePeerPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return oops.C(oops.CodeForbidden)
+	}
+
+	if err := s.repo.DeletePeer(ctx, repo.DeletePeerParams{
+		SuperOrganizationID: authCtx.ActiveOrganizationID,
+		SubOrganizationID:   payload.SubOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete peer").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) Grant(ctx context.Context, payload *gen.GrantPayload) error {
@@ -250,111 +351,15 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 	return nil
 }
 
-func (s *Service) CreatePeer(ctx context.Context, payload *gen.CreatePeerPayload) (*types.PeeredOrganization, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
-	}
-	if userInfo == nil || !userInfo.Admin {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-
-	if authCtx.ActiveOrganizationID == payload.SubOrganizationID {
-		return nil, oops.E(oops.CodeBadRequest, nil, "cannot peer an organization with itself").Log(ctx, s.logger)
-	}
-
-	peer, err := s.repo.CreatePeer(ctx, repo.CreatePeerParams{
-		SuperOrganizationID: authCtx.ActiveOrganizationID,
-		SubOrganizationID:   payload.SubOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create peer").Log(ctx, s.logger)
-	}
-
-	return &types.PeeredOrganization{
-		ID:                  peer.ID.String(),
-		SuperOrganizationID: peer.SuperOrganizationID,
-		SubOrganizationID:   peer.SubOrganizationID,
-		SubOrganizationName: nil,
-		SubOrganizationSlug: nil,
-		CreatedAt:           peer.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
-	}, nil
-}
-
-func (s *Service) ListPeers(ctx context.Context, payload *gen.ListPeersPayload) (*gen.ListPeersResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	peers, err := s.repo.ListPeers(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list peers").Log(ctx, s.logger)
-	}
-
-	result := make([]*types.PeeredOrganization, 0, len(peers))
-	for _, p := range peers {
-		result = append(result, &types.PeeredOrganization{
-			ID:                  p.ID.String(),
-			SuperOrganizationID: p.SuperOrganizationID,
-			SubOrganizationID:   p.SubOrganizationID,
-			SubOrganizationName: &p.SubOrganizationName,
-			SubOrganizationSlug: &p.SubOrganizationSlug,
-			CreatedAt:           p.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
-		})
-	}
-
-	return &gen.ListPeersResult{
-		Peers: result,
-	}, nil
-}
-
-func (s *Service) DeletePeer(ctx context.Context, payload *gen.DeletePeerPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
-	}
-	if userInfo == nil || !userInfo.Admin {
-		return oops.C(oops.CodeForbidden)
-	}
-
-	if err := s.repo.DeletePeer(ctx, repo.DeletePeerParams{
-		SuperOrganizationID: authCtx.ActiveOrganizationID,
-		SubOrganizationID:   payload.SubOrganizationID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete peer").Log(ctx, s.logger)
-	}
-
-	return nil
-}
-
 func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistriesPayload) (*gen.ListRegistriesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	registries, err := s.repo.ListRegistriesForOrganization(ctx, conv.ToPGText(authCtx.ActiveOrganizationID))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
-	}
-	if userInfo == nil || !userInfo.Admin {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-
-	registries, err := s.repo.ListMCPRegistries(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list registries").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list registries for organization").Log(ctx, s.logger)
 	}
 
 	result := make([]*types.MCPRegistry, 0, len(registries))
@@ -367,80 +372,225 @@ func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistrie
 	}, nil
 }
 
-func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPayload) (*gen.ListCatalogResult, error) {
+func (s *Service) Serve(ctx context.Context, payload *gen.ServePayload) (*gen.ServeResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// If a specific registry is requested, fetch just that one
-	if payload.RegistryID != nil {
-		registryID, err := uuid.Parse(*payload.RegistryID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+	registry, err := s.repo.GetMCPRegistryBySlug(ctx, conv.ToPGText(payload.RegistrySlug))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
 		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get registry by slug").Log(ctx, s.logger)
+	}
 
-		registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
+	// Authorization: registry must be public, owned by caller's org, or have a grant
+	if registry.Visibility != string(repoTypes.VisibilityPublic) {
+		if !registry.OrganizationID.Valid || registry.OrganizationID.String != authCtx.ActiveOrganizationID {
+			hasGrant, err := s.repo.CheckRegistryGrant(ctx, repo.CheckRegistryGrantParams{
+				RegistryID:     registry.ID,
+				OrganizationID: authCtx.ActiveOrganizationID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "check registry grant").Log(ctx, s.logger)
+			}
+			if !hasGrant {
+				return nil, oops.C(oops.CodeForbidden)
+			}
+		}
+	}
+
+	// Branch on source type
+	if registry.Source.Valid && registry.Source.String == string(repoTypes.RegistrySourceInternal) {
+		return s.serveInternalRegistry(ctx, registry, payload)
+	}
+
+	// External registry: use existing RegistryClient flow
+	if !registry.Url.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "registry has no external URL").Log(ctx, s.logger)
+	}
+
+	servers, err := s.registryClient.ListServers(ctx, Registry{
+		ID:  registry.ID,
+		URL: registry.Url.String,
+	}, ListServersParams{
+		Search: payload.Search,
+		Cursor: payload.Cursor,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch servers from registry").Log(ctx, s.logger)
+	}
+
+	return &gen.ServeResult{
+		Servers:    servers,
+		NextCursor: nil,
+	}, nil
+}
+
+// serveInternalRegistry queries linked toolsets and marshals them into the ExternalMCPServer format,
+// matching the structure returned by PulseMCP for external registries.
+func (s *Service) serveInternalRegistry(ctx context.Context, registry repo.GetMCPRegistryBySlugRow, payload *gen.ServePayload) (*gen.ServeResult, error) {
+	links, err := s.repo.ListRegistryToolsetLinks(ctx, registry.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list registry toolset links").Log(ctx, s.logger)
+	}
+
+	var servers []*types.ExternalMCPServer
+	for _, link := range links {
+		toolset, err := s.repo.GetToolsetForServe(ctx, link.ToolsetID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.C(oops.CodeNotFound)
+				continue
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "get toolset for serve").Log(ctx, s.logger)
 		}
 
-		servers, err := s.registryClient.ListServers(ctx, Registry{
-			ID:  registry.ID,
-			URL: registry.Url.String,
-		}, ListServersParams{
-			Search: payload.Search,
-			Cursor: payload.Cursor,
-		})
+		// Apply search filter
+		if payload.Search != nil && *payload.Search != "" {
+			if !strings.Contains(strings.ToLower(toolset.Name), strings.ToLower(*payload.Search)) {
+				continue
+			}
+		}
+
+		description := ""
+		if toolset.Description.Valid {
+			description = toolset.Description.String
+		}
+
+		// Load full toolset details via mv.DescribeToolset
+		described, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), nil)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch servers from registry").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "describe toolset %s", toolset.Slug).Log(ctx, s.logger)
 		}
 
-		return &gen.ListCatalogResult{
-			Servers:    servers,
-			NextCursor: nil, // Pagination not implemented in v0
-		}, nil
-	}
+		// Convert types.Tool into meta tools and ExternalMCPTool
+		metaTools := make([]map[string]any, 0, len(described.Tools))
+		mcpTools := make([]*types.ExternalMCPTool, 0, len(described.Tools))
+		for _, tool := range described.Tools {
+			name, desc, schema, annotations := extractToolFields(tool)
+			metaTools = append(metaTools, map[string]any{
+				"name":        name,
+				"description": desc,
+				"inputSchema": json.RawMessage(schema),
+				"annotations": annotations,
+			})
+			mcpTools = append(mcpTools, &types.ExternalMCPTool{
+				Name:        &name,
+				Description: &desc,
+				InputSchema: []byte(schema),
+				Annotations: annotations,
+			})
+		}
 
-	// Fetch all registries from the database
-	registries, err := s.repo.ListMCPRegistries(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list registries").Log(ctx, s.logger)
-	}
+		// Build remote URL for this toolset's MCP endpoint
+		var remotes []*types.ExternalMCPRemote
+		if toolset.McpSlug.Valid && toolset.McpEnabled {
+			remoteURL := fmt.Sprintf("%s/mcp/%s", s.serverURL.String(), toolset.McpSlug.String)
+			remotes = []*types.ExternalMCPRemote{
+				{
+					URL:           remoteURL,
+					TransportType: "streamable-http",
+				},
+			}
+		}
 
-	// Aggregate servers from all registries
-	var allServers []*types.ExternalMCPServer
-	for _, registry := range registries {
-		servers, err := s.registryClient.ListServers(ctx, Registry{
-			ID:  registry.ID,
-			URL: registry.Url.String,
-		}, ListServersParams{
-			Search: payload.Search,
-			Cursor: payload.Cursor,
+		meta := map[string]any{
+			"ai.getgram/server": map[string]any{
+				"visitorsEstimateMostRecentWeek": 0,
+				"visitorsEstimateLastFourWeeks":  0,
+				"visitorsEstimateTotal":          0,
+				"isOfficial":                     false,
+			},
+			"ai.getgram/server-version": map[string]any{
+				"source":      string(repoTypes.RegistrySourceInternal),
+				"status":      "active",
+				"publishedAt": described.CreatedAt,
+				"updatedAt":   described.UpdatedAt,
+				"isLatest":    true,
+				"remotes[0]": map[string]any{
+					"auth":  nil,
+					"tools": metaTools,
+				},
+			},
+		}
+
+		if !toolset.McpSlug.Valid {
+			return nil, oops.E(oops.CodeUnexpected, nil, "toolset %s missing mcp_slug", toolset.Slug).Log(ctx, s.logger)
+		}
+
+		servers = append(servers, &types.ExternalMCPServer{
+			RegistrySpecifier: toolset.McpSlug.String,
+			Version:           "1.0.0",
+			Description:       description,
+			RegistryID:        registry.ID.String(),
+			Title:             &toolset.Name,
+			IconURL:           nil,
+			Meta:              meta,
+			Tools:             mcpTools,
+			Remotes:           remotes,
 		})
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to fetch servers from registry",
-				attr.SlogMCPRegistryID(registry.ID.String()),
-				attr.SlogMCPRegistryURL(registry.Url.String),
-				attr.SlogError(err),
-			)
-			continue
-		}
-		allServers = append(allServers, servers...)
 	}
 
-	// Cap at 100 servers for v0
-	if len(allServers) > 100 {
-		allServers = allServers[:100]
-	}
-
-	return &gen.ListCatalogResult{
-		Servers:    allServers,
-		NextCursor: nil, // Pagination not implemented in v0
+	return &gen.ServeResult{
+		Servers:    servers,
+		NextCursor: nil,
 	}, nil
+}
+
+// extractToolFields extracts name, description, schema, and annotations from a types.Tool
+// regardless of which variant (HTTP, Function, ExternalMCP) is populated.
+func extractToolFields(tool *types.Tool) (name, description, schema string, annotations map[string]any) {
+	annotations = make(map[string]any)
+
+	switch {
+	case tool.HTTPToolDefinition != nil:
+		t := tool.HTTPToolDefinition
+		name = t.Name
+		description = t.Description
+		schema = t.Schema
+		if t.Annotations != nil {
+			annotations = annotationsToMap(t.Annotations)
+		}
+	case tool.FunctionToolDefinition != nil:
+		t := tool.FunctionToolDefinition
+		name = t.Name
+		description = t.Description
+		schema = t.Schema
+		if t.Annotations != nil {
+			annotations = annotationsToMap(t.Annotations)
+		}
+	case tool.ExternalMcpToolDefinition != nil:
+		t := tool.ExternalMcpToolDefinition
+		name = t.Name
+		description = t.Description
+		schema = t.Schema
+	case tool.PromptTemplate != nil:
+		t := tool.PromptTemplate
+		name = t.Name
+		description = t.Description
+		schema = t.Schema
+	}
+
+	return name, description, schema, annotations
+}
+
+func annotationsToMap(a *types.ToolAnnotations) map[string]any {
+	m := make(map[string]any)
+	if a.ReadOnlyHint != nil {
+		m["readOnlyHint"] = *a.ReadOnlyHint
+	}
+	if a.DestructiveHint != nil {
+		m["destructiveHint"] = *a.DestructiveHint
+	}
+	if a.IdempotentHint != nil {
+		m["idempotentHint"] = *a.IdempotentHint
+	}
+	if a.OpenWorldHint != nil {
+		m["openWorldHint"] = *a.OpenWorldHint
+	}
+	return m
 }
 
 func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDetailsPayload) (*types.ExternalMCPServer, error) {
@@ -492,6 +642,9 @@ type serverDetailsResult struct {
 
 // fetchServerDetails fetches all server details from the registry in a single HTTP call.
 func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRegistryByIDRow, serverName string) (*serverDetailsResult, error) {
+	if !registry.Url.Valid {
+		return nil, fmt.Errorf("registry has no external URL")
+	}
 	reqURL := fmt.Sprintf("%s/v0.1/servers/%s/versions/latest", registry.Url.String, url.PathEscape(serverName))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)

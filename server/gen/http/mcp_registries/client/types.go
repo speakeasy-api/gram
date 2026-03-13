@@ -92,9 +92,9 @@ type ListRegistriesResponseBody struct {
 	Registries []*MCPRegistryResponseBody `form:"registries,omitempty" json:"registries,omitempty" xml:"registries,omitempty"`
 }
 
-// ListCatalogResponseBody is the type of the "mcpRegistries" service
-// "listCatalog" endpoint HTTP response body.
-type ListCatalogResponseBody struct {
+// ServeResponseBody is the type of the "mcpRegistries" service "serve"
+// endpoint HTTP response body.
+type ServeResponseBody struct {
 	// List of available MCP servers
 	Servers []*ExternalMCPServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Pagination cursor for the next page
@@ -1595,10 +1595,136 @@ type ListRegistriesGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListCatalogUnauthorizedResponseBody is the type of the "mcpRegistries"
-// service "listCatalog" endpoint HTTP response body for the "unauthorized"
+// ServeUnauthorizedResponseBody is the type of the "mcpRegistries" service
+// "serve" endpoint HTTP response body for the "unauthorized" error.
+type ServeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeForbiddenResponseBody is the type of the "mcpRegistries" service
+// "serve" endpoint HTTP response body for the "forbidden" error.
+type ServeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeBadRequestResponseBody is the type of the "mcpRegistries" service
+// "serve" endpoint HTTP response body for the "bad_request" error.
+type ServeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeNotFoundResponseBody is the type of the "mcpRegistries" service "serve"
+// endpoint HTTP response body for the "not_found" error.
+type ServeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeConflictResponseBody is the type of the "mcpRegistries" service "serve"
+// endpoint HTTP response body for the "conflict" error.
+type ServeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeUnsupportedMediaResponseBody is the type of the "mcpRegistries" service
+// "serve" endpoint HTTP response body for the "unsupported_media" error.
+type ServeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeInvalidResponseBody is the type of the "mcpRegistries" service "serve"
+// endpoint HTTP response body for the "invalid" error.
+type ServeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeInvariantViolationResponseBody is the type of the "mcpRegistries"
+// service "serve" endpoint HTTP response body for the "invariant_violation"
 // error.
-type ListCatalogUnauthorizedResponseBody struct {
+type ServeInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1614,9 +1740,9 @@ type ListCatalogUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListCatalogForbiddenResponseBody is the type of the "mcpRegistries" service
-// "listCatalog" endpoint HTTP response body for the "forbidden" error.
-type ListCatalogForbiddenResponseBody struct {
+// ServeUnexpectedResponseBody is the type of the "mcpRegistries" service
+// "serve" endpoint HTTP response body for the "unexpected" error.
+type ServeUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1632,138 +1758,9 @@ type ListCatalogForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListCatalogBadRequestResponseBody is the type of the "mcpRegistries" service
-// "listCatalog" endpoint HTTP response body for the "bad_request" error.
-type ListCatalogBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCatalogNotFoundResponseBody is the type of the "mcpRegistries" service
-// "listCatalog" endpoint HTTP response body for the "not_found" error.
-type ListCatalogNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCatalogConflictResponseBody is the type of the "mcpRegistries" service
-// "listCatalog" endpoint HTTP response body for the "conflict" error.
-type ListCatalogConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCatalogUnsupportedMediaResponseBody is the type of the "mcpRegistries"
-// service "listCatalog" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ListCatalogUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCatalogInvalidResponseBody is the type of the "mcpRegistries" service
-// "listCatalog" endpoint HTTP response body for the "invalid" error.
-type ListCatalogInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCatalogInvariantViolationResponseBody is the type of the "mcpRegistries"
-// service "listCatalog" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ListCatalogInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCatalogUnexpectedResponseBody is the type of the "mcpRegistries" service
-// "listCatalog" endpoint HTTP response body for the "unexpected" error.
-type ListCatalogUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCatalogGatewayErrorResponseBody is the type of the "mcpRegistries"
-// service "listCatalog" endpoint HTTP response body for the "gateway_error"
-// error.
-type ListCatalogGatewayErrorResponseBody struct {
+// ServeGatewayErrorResponseBody is the type of the "mcpRegistries" service
+// "serve" endpoint HTTP response body for the "gateway_error" error.
+type ServeGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3355,10 +3352,10 @@ func NewListRegistriesGatewayError(body *ListRegistriesGatewayErrorResponseBody)
 	return v
 }
 
-// NewListCatalogResultOK builds a "mcpRegistries" service "listCatalog"
-// endpoint result from a HTTP "OK" response.
-func NewListCatalogResultOK(body *ListCatalogResponseBody) *mcpregistries.ListCatalogResult {
-	v := &mcpregistries.ListCatalogResult{
+// NewServeResultOK builds a "mcpRegistries" service "serve" endpoint result
+// from a HTTP "OK" response.
+func NewServeResultOK(body *ServeResponseBody) *mcpregistries.ServeResult {
+	v := &mcpregistries.ServeResult{
 		NextCursor: body.NextCursor,
 	}
 	v.Servers = make([]*types.ExternalMCPServer, len(body.Servers))
@@ -3373,9 +3370,9 @@ func NewListCatalogResultOK(body *ListCatalogResponseBody) *mcpregistries.ListCa
 	return v
 }
 
-// NewListCatalogUnauthorized builds a mcpRegistries service listCatalog
-// endpoint unauthorized error.
-func NewListCatalogUnauthorized(body *ListCatalogUnauthorizedResponseBody) *goa.ServiceError {
+// NewServeUnauthorized builds a mcpRegistries service serve endpoint
+// unauthorized error.
+func NewServeUnauthorized(body *ServeUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3388,9 +3385,9 @@ func NewListCatalogUnauthorized(body *ListCatalogUnauthorizedResponseBody) *goa.
 	return v
 }
 
-// NewListCatalogForbidden builds a mcpRegistries service listCatalog endpoint
-// forbidden error.
-func NewListCatalogForbidden(body *ListCatalogForbiddenResponseBody) *goa.ServiceError {
+// NewServeForbidden builds a mcpRegistries service serve endpoint forbidden
+// error.
+func NewServeForbidden(body *ServeForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3403,9 +3400,9 @@ func NewListCatalogForbidden(body *ListCatalogForbiddenResponseBody) *goa.Servic
 	return v
 }
 
-// NewListCatalogBadRequest builds a mcpRegistries service listCatalog endpoint
-// bad_request error.
-func NewListCatalogBadRequest(body *ListCatalogBadRequestResponseBody) *goa.ServiceError {
+// NewServeBadRequest builds a mcpRegistries service serve endpoint bad_request
+// error.
+func NewServeBadRequest(body *ServeBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3418,9 +3415,9 @@ func NewListCatalogBadRequest(body *ListCatalogBadRequestResponseBody) *goa.Serv
 	return v
 }
 
-// NewListCatalogNotFound builds a mcpRegistries service listCatalog endpoint
-// not_found error.
-func NewListCatalogNotFound(body *ListCatalogNotFoundResponseBody) *goa.ServiceError {
+// NewServeNotFound builds a mcpRegistries service serve endpoint not_found
+// error.
+func NewServeNotFound(body *ServeNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3433,9 +3430,9 @@ func NewListCatalogNotFound(body *ListCatalogNotFoundResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewListCatalogConflict builds a mcpRegistries service listCatalog endpoint
-// conflict error.
-func NewListCatalogConflict(body *ListCatalogConflictResponseBody) *goa.ServiceError {
+// NewServeConflict builds a mcpRegistries service serve endpoint conflict
+// error.
+func NewServeConflict(body *ServeConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3448,9 +3445,9 @@ func NewListCatalogConflict(body *ListCatalogConflictResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewListCatalogUnsupportedMedia builds a mcpRegistries service listCatalog
-// endpoint unsupported_media error.
-func NewListCatalogUnsupportedMedia(body *ListCatalogUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewServeUnsupportedMedia builds a mcpRegistries service serve endpoint
+// unsupported_media error.
+func NewServeUnsupportedMedia(body *ServeUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3463,9 +3460,8 @@ func NewListCatalogUnsupportedMedia(body *ListCatalogUnsupportedMediaResponseBod
 	return v
 }
 
-// NewListCatalogInvalid builds a mcpRegistries service listCatalog endpoint
-// invalid error.
-func NewListCatalogInvalid(body *ListCatalogInvalidResponseBody) *goa.ServiceError {
+// NewServeInvalid builds a mcpRegistries service serve endpoint invalid error.
+func NewServeInvalid(body *ServeInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3478,9 +3474,9 @@ func NewListCatalogInvalid(body *ListCatalogInvalidResponseBody) *goa.ServiceErr
 	return v
 }
 
-// NewListCatalogInvariantViolation builds a mcpRegistries service listCatalog
-// endpoint invariant_violation error.
-func NewListCatalogInvariantViolation(body *ListCatalogInvariantViolationResponseBody) *goa.ServiceError {
+// NewServeInvariantViolation builds a mcpRegistries service serve endpoint
+// invariant_violation error.
+func NewServeInvariantViolation(body *ServeInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3493,9 +3489,9 @@ func NewListCatalogInvariantViolation(body *ListCatalogInvariantViolationRespons
 	return v
 }
 
-// NewListCatalogUnexpected builds a mcpRegistries service listCatalog endpoint
-// unexpected error.
-func NewListCatalogUnexpected(body *ListCatalogUnexpectedResponseBody) *goa.ServiceError {
+// NewServeUnexpected builds a mcpRegistries service serve endpoint unexpected
+// error.
+func NewServeUnexpected(body *ServeUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3508,9 +3504,9 @@ func NewListCatalogUnexpected(body *ListCatalogUnexpectedResponseBody) *goa.Serv
 	return v
 }
 
-// NewListCatalogGatewayError builds a mcpRegistries service listCatalog
-// endpoint gateway_error error.
-func NewListCatalogGatewayError(body *ListCatalogGatewayErrorResponseBody) *goa.ServiceError {
+// NewServeGatewayError builds a mcpRegistries service serve endpoint
+// gateway_error error.
+func NewServeGatewayError(body *ServeGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3787,9 +3783,8 @@ func ValidateListRegistriesResponseBody(body *ListRegistriesResponseBody) (err e
 	return
 }
 
-// ValidateListCatalogResponseBody runs the validations defined on
-// ListCatalogResponseBody
-func ValidateListCatalogResponseBody(body *ListCatalogResponseBody) (err error) {
+// ValidateServeResponseBody runs the validations defined on ServeResponseBody
+func ValidateServeResponseBody(body *ServeResponseBody) (err error) {
 	if body.Servers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
 	}
@@ -5754,9 +5749,9 @@ func ValidateListRegistriesGatewayErrorResponseBody(body *ListRegistriesGatewayE
 	return
 }
 
-// ValidateListCatalogUnauthorizedResponseBody runs the validations defined on
-// listCatalog_unauthorized_response_body
-func ValidateListCatalogUnauthorizedResponseBody(body *ListCatalogUnauthorizedResponseBody) (err error) {
+// ValidateServeUnauthorizedResponseBody runs the validations defined on
+// serve_unauthorized_response_body
+func ValidateServeUnauthorizedResponseBody(body *ServeUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5778,9 +5773,9 @@ func ValidateListCatalogUnauthorizedResponseBody(body *ListCatalogUnauthorizedRe
 	return
 }
 
-// ValidateListCatalogForbiddenResponseBody runs the validations defined on
-// listCatalog_forbidden_response_body
-func ValidateListCatalogForbiddenResponseBody(body *ListCatalogForbiddenResponseBody) (err error) {
+// ValidateServeForbiddenResponseBody runs the validations defined on
+// serve_forbidden_response_body
+func ValidateServeForbiddenResponseBody(body *ServeForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5802,9 +5797,9 @@ func ValidateListCatalogForbiddenResponseBody(body *ListCatalogForbiddenResponse
 	return
 }
 
-// ValidateListCatalogBadRequestResponseBody runs the validations defined on
-// listCatalog_bad_request_response_body
-func ValidateListCatalogBadRequestResponseBody(body *ListCatalogBadRequestResponseBody) (err error) {
+// ValidateServeBadRequestResponseBody runs the validations defined on
+// serve_bad_request_response_body
+func ValidateServeBadRequestResponseBody(body *ServeBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5826,9 +5821,9 @@ func ValidateListCatalogBadRequestResponseBody(body *ListCatalogBadRequestRespon
 	return
 }
 
-// ValidateListCatalogNotFoundResponseBody runs the validations defined on
-// listCatalog_not_found_response_body
-func ValidateListCatalogNotFoundResponseBody(body *ListCatalogNotFoundResponseBody) (err error) {
+// ValidateServeNotFoundResponseBody runs the validations defined on
+// serve_not_found_response_body
+func ValidateServeNotFoundResponseBody(body *ServeNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5850,9 +5845,9 @@ func ValidateListCatalogNotFoundResponseBody(body *ListCatalogNotFoundResponseBo
 	return
 }
 
-// ValidateListCatalogConflictResponseBody runs the validations defined on
-// listCatalog_conflict_response_body
-func ValidateListCatalogConflictResponseBody(body *ListCatalogConflictResponseBody) (err error) {
+// ValidateServeConflictResponseBody runs the validations defined on
+// serve_conflict_response_body
+func ValidateServeConflictResponseBody(body *ServeConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5874,9 +5869,9 @@ func ValidateListCatalogConflictResponseBody(body *ListCatalogConflictResponseBo
 	return
 }
 
-// ValidateListCatalogUnsupportedMediaResponseBody runs the validations defined
-// on listCatalog_unsupported_media_response_body
-func ValidateListCatalogUnsupportedMediaResponseBody(body *ListCatalogUnsupportedMediaResponseBody) (err error) {
+// ValidateServeUnsupportedMediaResponseBody runs the validations defined on
+// serve_unsupported_media_response_body
+func ValidateServeUnsupportedMediaResponseBody(body *ServeUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5898,9 +5893,9 @@ func ValidateListCatalogUnsupportedMediaResponseBody(body *ListCatalogUnsupporte
 	return
 }
 
-// ValidateListCatalogInvalidResponseBody runs the validations defined on
-// listCatalog_invalid_response_body
-func ValidateListCatalogInvalidResponseBody(body *ListCatalogInvalidResponseBody) (err error) {
+// ValidateServeInvalidResponseBody runs the validations defined on
+// serve_invalid_response_body
+func ValidateServeInvalidResponseBody(body *ServeInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5922,9 +5917,9 @@ func ValidateListCatalogInvalidResponseBody(body *ListCatalogInvalidResponseBody
 	return
 }
 
-// ValidateListCatalogInvariantViolationResponseBody runs the validations
-// defined on listCatalog_invariant_violation_response_body
-func ValidateListCatalogInvariantViolationResponseBody(body *ListCatalogInvariantViolationResponseBody) (err error) {
+// ValidateServeInvariantViolationResponseBody runs the validations defined on
+// serve_invariant_violation_response_body
+func ValidateServeInvariantViolationResponseBody(body *ServeInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5946,9 +5941,9 @@ func ValidateListCatalogInvariantViolationResponseBody(body *ListCatalogInvarian
 	return
 }
 
-// ValidateListCatalogUnexpectedResponseBody runs the validations defined on
-// listCatalog_unexpected_response_body
-func ValidateListCatalogUnexpectedResponseBody(body *ListCatalogUnexpectedResponseBody) (err error) {
+// ValidateServeUnexpectedResponseBody runs the validations defined on
+// serve_unexpected_response_body
+func ValidateServeUnexpectedResponseBody(body *ServeUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5970,9 +5965,9 @@ func ValidateListCatalogUnexpectedResponseBody(body *ListCatalogUnexpectedRespon
 	return
 }
 
-// ValidateListCatalogGatewayErrorResponseBody runs the validations defined on
-// listCatalog_gateway_error_response_body
-func ValidateListCatalogGatewayErrorResponseBody(body *ListCatalogGatewayErrorResponseBody) (err error) {
+// ValidateServeGatewayErrorResponseBody runs the validations defined on
+// serve_gateway_error_response_body
+func ValidateServeGatewayErrorResponseBody(body *ServeGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
