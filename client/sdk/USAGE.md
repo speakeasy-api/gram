@@ -5,14 +5,9 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
+  await gram.access.delete({
+    id: "8b5418db-b219-4749-bea3-c98a31530d70",
   });
-
-  console.log(result);
 }
 
 run();

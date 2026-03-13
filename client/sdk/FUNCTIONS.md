@@ -20,24 +20,21 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { assetsCreateSignedChatAttachmentURL } from "@gram/client/funcs/assetsCreateSignedChatAttachmentURL.js";
+import { accessDelete } from "@gram/client/funcs/accessDelete.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await assetsCreateSignedChatAttachmentURL(gram, {
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
+  const res = await accessDelete(gram, {
+    id: "8b5418db-b219-4749-bea3-c98a31530d70",
   });
   if (res.ok) {
     const { value: result } = res;
-    console.log(result);
+    
   } else {
-    console.log("assetsCreateSignedChatAttachmentURL failed:", res.error);
+    console.log("accessDelete failed:", res.error);
   }
 }
 

@@ -105,14 +105,9 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
+  await gram.access.delete({
+    id: "8b5418db-b219-4749-bea3-c98a31530d70",
   });
-
-  console.log(result);
 }
 
 run();
@@ -125,6 +120,12 @@ run();
 
 <details open>
 <summary>Available methods</summary>
+
+### [Access](docs/sdks/access/README.md)
+
+* [delete](docs/sdks/access/README.md#delete) - deleteGrant access
+* [list](docs/sdks/access/README.md#list) - listGrants access
+* [upsert](docs/sdks/access/README.md#upsert) - upsertGrant access
 
 ### [Agentworkflows](docs/sdks/agentworkflows/README.md)
 
@@ -348,6 +349,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`accessDelete`](docs/sdks/access/README.md#delete) - deleteGrant access
+- [`accessList`](docs/sdks/access/README.md#list) - listGrants access
+- [`accessUpsert`](docs/sdks/access/README.md#upsert) - upsertGrant access
 - [`agentworkflowsCreateResponse`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`agentworkflowsDeleteResponse`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
 - [`agentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
@@ -527,6 +531,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
+- [`useDeleteGrantMutation`](docs/sdks/access/README.md#delete) - deleteGrant access
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
@@ -570,6 +575,7 @@ To learn about this feature and how to get started, check
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
+- [`useListGrants`](docs/sdks/access/README.md#list) - listGrants access
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
@@ -623,6 +629,7 @@ To learn about this feature and how to get started, check
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
+- [`useUpsertGrantMutation`](docs/sdks/access/README.md#upsert) - upsertGrant access
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
 
 </details>
@@ -674,11 +681,8 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
+  await gram.access.delete({
+    id: "8b5418db-b219-4749-bea3-c98a31530d70",
   }, {
     retries: {
       strategy: "backoff",
@@ -691,8 +695,6 @@ async function run() {
       retryConnectionErrors: false,
     },
   });
-
-  console.log(result);
 }
 
 run();
@@ -717,14 +719,9 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
+  await gram.access.delete({
+    id: "8b5418db-b219-4749-bea3-c98a31530d70",
   });
-
-  console.log(result);
 }
 
 run();
@@ -755,14 +752,9 @@ const gram = new Gram();
 
 async function run() {
   try {
-    const result = await gram.assets.createSignedChatAttachmentURL({
-      createSignedChatAttachmentURLForm2: {
-        id: "<id>",
-        projectId: "<id>",
-      },
+    await gram.access.delete({
+      id: "8b5418db-b219-4749-bea3-c98a31530d70",
     });
-
-    console.log(result);
   } catch (error) {
     // The base class for HTTP error responses
     if (error instanceof errors.GramError) {
@@ -824,14 +816,9 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
+  await gram.access.delete({
+    id: "8b5418db-b219-4749-bea3-c98a31530d70",
   });
-
-  console.log(result);
 }
 
 run();

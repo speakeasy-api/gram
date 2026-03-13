@@ -8,7 +8,7 @@ dotenv.config();
  * Example usage of the @gram/client SDK
  *
  * To run this example from the examples directory:
- * npm run build && npx tsx assetsCreateSignedChatAttachmentURL.example.ts
+ * npm run build && npx tsx accessDelete.example.ts
  */
 
 import { Gram } from "@gram/client";
@@ -16,14 +16,9 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function main() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
+  await gram.access.delete({
+    id: "8b5418db-b219-4749-bea3-c98a31530d70",
   });
-
-  console.log(result);
 }
 
 main().catch(console.error);

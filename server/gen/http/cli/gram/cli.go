@@ -14,6 +14,7 @@ import (
 	"os"
 
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
+	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	agentworkflowsc "github.com/speakeasy-api/gram/server/gen/http/agentworkflows/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
@@ -51,6 +52,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
+		"access (list-grants|upsert-grant|delete-grant)",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
@@ -84,10 +86,10 @@ func UsageCommands() []string {
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
+		os.Args[0] + " " + "access list-grants --principal-urn \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auth callback --code \"abc123\" --state \"abc123\"" + "\n" +
-		os.Args[0] + " " + "chat list-chats --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"" + "\n" +
 		""
 }
 
@@ -104,6 +106,20 @@ func ParseEndpoint(
 		aboutFlags = flag.NewFlagSet("about", flag.ContinueOnError)
 
 		aboutOpenapiFlags = flag.NewFlagSet("openapi", flag.ExitOnError)
+
+		accessFlags = flag.NewFlagSet("access", flag.ContinueOnError)
+
+		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
+		accessListGrantsPrincipalUrnFlag = accessListGrantsFlags.String("principal-urn", "", "")
+		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
+
+		accessUpsertGrantFlags            = flag.NewFlagSet("upsert-grant", flag.ExitOnError)
+		accessUpsertGrantBodyFlag         = accessUpsertGrantFlags.String("body", "REQUIRED", "")
+		accessUpsertGrantSessionTokenFlag = accessUpsertGrantFlags.String("session-token", "", "")
+
+		accessDeleteGrantFlags            = flag.NewFlagSet("delete-grant", flag.ExitOnError)
+		accessDeleteGrantIDFlag           = accessDeleteGrantFlags.String("id", "REQUIRED", "")
+		accessDeleteGrantSessionTokenFlag = accessDeleteGrantFlags.String("session-token", "", "")
 
 		agentworkflowsFlags = flag.NewFlagSet("agentworkflows", flag.ContinueOnError)
 
@@ -870,6 +886,11 @@ func ParseEndpoint(
 	aboutFlags.Usage = aboutUsage
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
 
+	accessFlags.Usage = accessUsage
+	accessListGrantsFlags.Usage = accessListGrantsUsage
+	accessUpsertGrantFlags.Usage = accessUpsertGrantUsage
+	accessDeleteGrantFlags.Usage = accessDeleteGrantUsage
+
 	agentworkflowsFlags.Usage = agentworkflowsUsage
 	agentworkflowsCreateResponseFlags.Usage = agentworkflowsCreateResponseUsage
 	agentworkflowsGetResponseFlags.Usage = agentworkflowsGetResponseUsage
@@ -1068,6 +1089,8 @@ func ParseEndpoint(
 		switch svcn {
 		case "about":
 			svcf = aboutFlags
+		case "access":
+			svcf = accessFlags
 		case "agentworkflows":
 			svcf = agentworkflowsFlags
 		case "assets":
@@ -1141,6 +1164,19 @@ func ParseEndpoint(
 			switch epn {
 			case "openapi":
 				epf = aboutOpenapiFlags
+
+			}
+
+		case "access":
+			switch epn {
+			case "list-grants":
+				epf = accessListGrantsFlags
+
+			case "upsert-grant":
+				epf = accessUpsertGrantFlags
+
+			case "delete-grant":
+				epf = accessDeleteGrantFlags
 
 			}
 
@@ -1658,6 +1694,19 @@ func ParseEndpoint(
 			switch epn {
 			case "openapi":
 				endpoint = c.Openapi()
+			}
+		case "access":
+			c := accessc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-grants":
+				endpoint = c.ListGrants()
+				data, err = accessc.BuildListGrantsPayload(*accessListGrantsPrincipalUrnFlag, *accessListGrantsSessionTokenFlag)
+			case "upsert-grant":
+				endpoint = c.UpsertGrant()
+				data, err = accessc.BuildUpsertGrantPayload(*accessUpsertGrantBodyFlag, *accessUpsertGrantSessionTokenFlag)
+			case "delete-grant":
+				endpoint = c.DeleteGrant()
+				data, err = accessc.BuildDeleteGrantPayload(*accessDeleteGrantIDFlag, *accessDeleteGrantSessionTokenFlag)
 			}
 		case "agentworkflows":
 			c := agentworkflowsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2192,6 +2241,78 @@ func aboutOpenapiUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "about openapi")
+}
+
+// accessUsage displays the usage of the access command and its subcommands.
+func accessUsage() {
+	fmt.Fprintln(os.Stderr, `Managing RBAC principal grants for an organization.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-grants: List all principal grants for an organization, optionally filtered by principal URN.`)
+	fmt.Fprintln(os.Stderr, `    upsert-grant: Create or update a principal grant. If a grant with the same (org, principal, scope, resource) already exists, its updated_at timestamp is refreshed.`)
+	fmt.Fprintln(os.Stderr, `    delete-grant: Delete a specific principal grant by ID.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
+}
+func accessListGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all principal grants for an organization, optionally filtered by principal URN.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --principal-urn \"abc123\" --session-token \"abc123\"")
+}
+
+func accessUpsertGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access upsert-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or update a principal grant. If a grant with the same (org, principal, scope, resource) already exists, its updated_at timestamp is refreshed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access upsert-grant --body '{\n      \"principal_urn\": \"aaa\",\n      \"resource\": \"aaa\",\n      \"scope\": \"aaa\"\n   }' --session-token \"abc123\"")
+}
+
+func accessDeleteGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access delete-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a specific principal grant by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-grant --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // agentworkflowsUsage displays the usage of the agentworkflows command and its
