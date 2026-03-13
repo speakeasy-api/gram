@@ -21,7 +21,7 @@ const (
 type Cache interface {
 	Get(ctx context.Context, key string, value any) error
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
-	Update(ctx context.Context, key string, value any, fallbackTTL time.Duration) error
+	Update(ctx context.Context, key string, value any) error
 	Delete(ctx context.Context, key string) error
 	// List operations for atomic append/read
 	ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error
@@ -137,7 +137,7 @@ func (d *TypedCacheObject[T]) Update(ctx context.Context, obj T) error {
 
 	updateKey := func(key string) error {
 		fullKey := d.fullKey(key)
-		if err := d.cache.Update(ctx, fullKey, obj, obj.TTL()); err != nil {
+		if err := d.cache.Update(ctx, fullKey, obj); err != nil {
 			return fmt.Errorf("failed to update key %s: %w", fullKey, err)
 		}
 		return nil
