@@ -6,6 +6,7 @@ import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import Billing from "./pages/billing/Billing";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
+import Catalogs, { CatalogsRoot } from "./pages/catalogs/Catalogs";
 import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
@@ -236,6 +237,13 @@ const ROUTE_STRUCTURE = {
         indexComponent: CatalogDetail,
       },
     },
+  },
+  catalogs: {
+    title: "Catalogs",
+    url: "catalogs",
+    icon: "library",
+    component: CatalogsRoot,
+    indexComponent: Catalogs,
   },
   slackApps: {
     title: "Slack",
