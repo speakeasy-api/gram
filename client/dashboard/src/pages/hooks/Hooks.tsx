@@ -423,7 +423,12 @@ function HooksContent() {
     [setSearchParams],
   );
 
+  const isServerInputInitialMount = useRef(true);
   useEffect(() => {
+    if (isServerInputInitialMount.current) {
+      isServerInputInitialMount.current = false;
+      return;
+    }
     const timeoutId = setTimeout(() => {
       const newServer = serverInput || null;
       setServerFilter(newServer);
@@ -443,7 +448,12 @@ function HooksContent() {
     return () => clearTimeout(timeoutId);
   }, [serverInput, setSearchParams]);
 
+  const isUserEmailInitialMount = useRef(true);
   useEffect(() => {
+    if (isUserEmailInitialMount.current) {
+      isUserEmailInitialMount.current = false;
+      return;
+    }
     const timeoutId = setTimeout(() => {
       const newUserEmail = userEmailInput || null;
       setUserEmailFilter(newUserEmail);

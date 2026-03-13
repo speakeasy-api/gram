@@ -244,9 +244,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1]);
   // Redirect if: (1) it's a project slug and not an org route, OR
   // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
+  // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
   if (
     pathParts.length >= 2 &&
     pathParts[0] === session.organization?.slug &&
+    pathParts[1] !== "projects" &&
     isProjectSlug &&
     (!isOrgRoutePath || pathParts.length >= 3)
   ) {
