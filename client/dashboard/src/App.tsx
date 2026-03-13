@@ -227,7 +227,7 @@ const RouteProvider = () => {
         </Route>
       </Routes>
     ),
-    [routes],
+    [routes, orgRoutes],
   );
 
   return routeElements;

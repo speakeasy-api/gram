@@ -230,10 +230,18 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
   // If the second segment is a known project slug (and not "projects" or an org-level route),
   // redirect to the new URL structure.
+  // Known org-level route paths that should not be treated as project slugs
+  const ORG_ROUTE_PATHS = [
+    "billing",
+    "api-keys",
+    "domains",
+    "logs",
+    "projects",
+  ];
   if (
     pathParts.length >= 2 &&
     pathParts[0] === session.organization?.slug &&
-    pathParts[1] !== "projects" &&
+    !ORG_ROUTE_PATHS.includes(pathParts[1]) &&
     session.organization.projects.some((p) => p.slug === pathParts[1])
   ) {
     const rest = pathParts.slice(2).join("/");

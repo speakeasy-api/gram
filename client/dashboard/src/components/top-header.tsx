@@ -87,9 +87,12 @@ export function TopHeader() {
       <header className="flex items-center h-14 pl-5 pr-4 border-b bg-white dark:bg-background shrink-0">
         <div className="flex items-center gap-3">
           {/* Logo */}
-          <routes.home.Link className="hover:no-underline flex items-center">
+          <Link
+            to={projectSlug ? routes.home.url : `/${organization.slug}`}
+            className="hover:no-underline flex items-center"
+          >
             <GramLogo className="w-28" />
-          </routes.home.Link>
+          </Link>
 
           {/* Separator */}
           <span className="text-muted-foreground/50 text-xl select-none">
@@ -233,10 +236,12 @@ export function TopHeader() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem onClick={() => routes.settings.goTo()}>
-                  <SettingsIcon className="mr-2 h-4 w-4" />
-                  Project Settings
-                </DropdownMenuItem>
+                {projectSlug && (
+                  <DropdownMenuItem onClick={() => routes.settings.goTo()}>
+                    <SettingsIcon className="mr-2 h-4 w-4" />
+                    Project Settings
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
                   <CreditCardIcon className="mr-2 h-4 w-4" />
                   Billing
