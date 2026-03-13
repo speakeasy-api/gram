@@ -7,6 +7,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestListGrants_EmptyWhenNoGrantsExist(t *testing.T) {
@@ -81,4 +82,17 @@ func TestListGrants_FiltersByPrincipalURN(t *testing.T) {
 	require.Equal(t, "user:user_abc", result.Grants[0].PrincipalUrn)
 	require.Equal(t, "user", result.Grants[0].PrincipalType)
 	require.Equal(t, "build:read", result.Grants[0].Scope)
+}
+
+func TestListGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestAccessService(t)
+
+	_, err := ti.service.ListGrants(t.Context(), &gen.ListGrantsPayload{})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }

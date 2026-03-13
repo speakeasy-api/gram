@@ -158,3 +158,20 @@ func TestUpsertGrant_InvalidPrincipalURN(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
+
+func TestUpsertGrant_UnauthorizedWithoutAuthContext(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestAccessService(t)
+
+	_, err := ti.service.UpsertGrant(t.Context(), &gen.UpsertGrantPayload{
+		PrincipalUrn: "user:user_abc",
+		Scope:        "build:read",
+		Resource:     "*",
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
