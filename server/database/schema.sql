@@ -1488,46 +1488,29 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
 
-CREATE TABLE IF NOT EXISTS scopes (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  slug TEXT NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT scopes_pkey PRIMARY KEY (id),
-  CONSTRAINT scopes_slug_key UNIQUE (slug),
-  CONSTRAINT scopes_slug_check CHECK (slug <> '' AND char_length(slug) <= 100)
-);
-
-COMMENT ON TABLE scopes IS 'RBAC scope vocabulary. Reference data seeded at app startup.';
-COMMENT ON COLUMN scopes.slug IS 'Unique human-readable identifier, e.g. "project:read", "build:write". Used as the FK target from principal_grants so grant rows are self-describing.';
-
+-- The sentinel value '*' for resource means "all resources" (wildcard).
+-- This avoids NULL semantics and enables pure index-only scans on the
+-- unique B-tree index for permission checks:
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   principal_type TEXT NOT NULL,
   principal_id TEXT NOT NULL,
   scope_slug TEXT NOT NULL,
-  resources TEXT[],
+  resource TEXT NOT NULL DEFAULT '*',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_scope_slug_fkey FOREIGN KEY (scope_slug) REFERENCES scopes (slug) ON DELETE RESTRICT,
   CONSTRAINT principal_grants_principal_type_check CHECK (principal_type IN ('user', 'role')),
-  CONSTRAINT principal_grants_resources_check CHECK (resources IS NULL OR cardinality(resources) BETWEEN 1 AND 200),
-  CONSTRAINT principal_grants_organization_id_principal_type_principal_id_scope_slug_key UNIQUE (organization_id, principal_type, principal_id, scope_slug)
+  CONSTRAINT principal_grants_organization_id_principal_type_principal_id_scope_slug_resource_key UNIQUE (organization_id, principal_type, principal_id, scope_slug, resource)
 );
 
-COMMENT ON TABLE principal_grants IS 'RBAC grants. One row per (org, principal, scope). NULL resources = unrestricted, array = allowlist.';
+COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted.';
 COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
 COMMENT ON COLUMN principal_grants.principal_type IS 'Discriminator: ''user'' for a direct user grant, ''role'' for a WorkOS role grant.';
 COMMENT ON COLUMN principal_grants.principal_id IS 'The identifier of the principal: a WorkOS user ID when principal_type=''user'', or a WorkOS role slug when principal_type=''role''.';
-COMMENT ON COLUMN principal_grants.scope_slug IS 'The scope being granted, e.g. "project:read". References scopes(slug).';
-COMMENT ON COLUMN principal_grants.resources IS 'NULL = unrestricted (scope applies to all resources in the org). Non-empty array = allowlist of resource IDs this scope is restricted to. Empty arrays are rejected by the CHECK constraint.';
-
-CREATE INDEX IF NOT EXISTS principal_grants_resources_idx ON principal_grants USING GIN (resources);
-COMMENT ON INDEX principal_grants_resources_idx IS 'Supports efficient @> (array containment) queries used by access.Filter() to find grants covering a specific resource ID.';
+COMMENT ON COLUMN principal_grants.scope_slug IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
+COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
