@@ -622,6 +622,23 @@ type PackageVersion struct {
 	Deleted      bool
 }
 
+// RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted.
+type PrincipalGrant struct {
+	ID uuid.UUID
+	// The organization this grant belongs to. Grants are always org-scoped.
+	OrganizationID string
+	// URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.
+	PrincipalUrn string
+	// Derived from principal_urn. The type prefix, e.g. "user", "role".
+	PrincipalType string
+	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
+	Scope string
+	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
+	Resource  string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type Project struct {
 	ID                     uuid.UUID
 	Name                   string

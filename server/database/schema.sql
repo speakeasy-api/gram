@@ -1487,3 +1487,29 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 );
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
+
+-- The sentinel value '*' for resource means "all resources" (wildcard).
+-- This avoids NULL semantics and enables pure index-only scans on the
+-- unique B-tree index for permission checks:
+CREATE TABLE IF NOT EXISTS principal_grants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  principal_urn TEXT NOT NULL,
+  principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
+  scope TEXT NOT NULL,
+  resource TEXT NOT NULL DEFAULT '*',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
+  CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT principal_grants_org_principal_scope_resource_key UNIQUE (organization_id, principal_urn, scope, resource)
+);
+
+COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted.';
+COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
+COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.';
+COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
+COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
+COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
