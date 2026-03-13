@@ -3,6 +3,9 @@ import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { MCPCard } from "@/components/mcp/MCPCard";
 import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useIsProjectEmpty } from "@/pages/onboarding/UploadOpenAPI";
+import { InitialChoiceStep } from "@/pages/onboarding/Wizard";
 import { useRoutes } from "@/routes";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
@@ -30,6 +33,11 @@ export function MCPOverview() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const client = useSdkClient();
+  const { isEmpty: isProjectEmpty, isLoading: isProjectLoading } =
+    useIsProjectEmpty();
+  const telemetry = useTelemetry();
+  const isFunctionsEnabled =
+    telemetry.isFeatureEnabled("gram-functions") ?? false;
 
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
   const [newMcpServerName, setNewMcpServerName] = useState("");
@@ -105,7 +113,14 @@ export function MCPOverview() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
+          {isProjectEmpty && !isProjectLoading ? (
+            <InitialChoiceStep
+              routes={routes}
+              isFunctionsEnabled={isFunctionsEnabled}
+            />
+          ) : (
+            <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
+          )}
           {builtInSection}
           {newMcpServerDialog}
         </Page.Body>

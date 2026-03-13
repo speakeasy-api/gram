@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -47,6 +48,7 @@ type Service struct {
 	cache            cache.Cache
 	nameMapper       NameMapper
 	temporalEnv      *tenv.Environment
+	repo             *repo.Queries
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -68,6 +70,7 @@ type HookSpecificOutput struct {
 }
 
 var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
 
 func NewService(
 	logger *slog.Logger,
@@ -96,12 +99,23 @@ func NewService(
 		cache:            cacheAdapter,
 		nameMapper:       nameMapper,
 		temporalEnv:      temporalEnv,
+		repo:             repo.New(db),
 	}
 }
 
-// APIKeyAuth implements the API key authentication for the hooks service
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func Attach(mux goahttp.Muxer, service *Service) {
+	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
+	endpoints.Use(middleware.TraceMethods(service.tracer))
+	srv.Mount(
+		mux,
+		srv.New(endpoints, mux, claudeRequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
+	AttachServerNames(mux, service)
 }
 
 // claudeRequestDecoder is a custom decoder that handles both JSON and form-urlencoded content types
@@ -156,16 +170,6 @@ func (d *formDecoder) Decode(v any) error {
 		return fmt.Errorf("unmarshal json: %w", err)
 	}
 	return nil
-}
-
-func Attach(mux goahttp.Muxer, service *Service) {
-	endpoints := gen.NewEndpoints(service)
-	endpoints.Use(middleware.MapErrors())
-	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, claudeRequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
 }
 
 // Logs handles authenticated OTEL logs data from Claude Code

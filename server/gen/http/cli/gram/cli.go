@@ -25,6 +25,7 @@ import (
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
+	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
@@ -60,6 +61,7 @@ func UsageCommands() []string {
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"functions get-signed-asset-url",
+		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|logs)",
 		"instances get-instance",
 		"integrations (get|list)",
@@ -429,6 +431,25 @@ func ParseEndpoint(
 		functionsGetSignedAssetURLFlags             = flag.NewFlagSet("get-signed-asset-url", flag.ExitOnError)
 		functionsGetSignedAssetURLBodyFlag          = functionsGetSignedAssetURLFlags.String("body", "REQUIRED", "")
 		functionsGetSignedAssetURLFunctionTokenFlag = functionsGetSignedAssetURLFlags.String("function-token", "", "")
+
+		hooksServerNamesFlags = flag.NewFlagSet("hooks-server-names", flag.ContinueOnError)
+
+		hooksServerNamesListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		hooksServerNamesListApikeyTokenFlag      = hooksServerNamesListFlags.String("apikey-token", "", "")
+		hooksServerNamesListSessionTokenFlag     = hooksServerNamesListFlags.String("session-token", "", "")
+		hooksServerNamesListProjectSlugInputFlag = hooksServerNamesListFlags.String("project-slug-input", "", "")
+
+		hooksServerNamesUpsertFlags                = flag.NewFlagSet("upsert", flag.ExitOnError)
+		hooksServerNamesUpsertBodyFlag             = hooksServerNamesUpsertFlags.String("body", "REQUIRED", "")
+		hooksServerNamesUpsertApikeyTokenFlag      = hooksServerNamesUpsertFlags.String("apikey-token", "", "")
+		hooksServerNamesUpsertSessionTokenFlag     = hooksServerNamesUpsertFlags.String("session-token", "", "")
+		hooksServerNamesUpsertProjectSlugInputFlag = hooksServerNamesUpsertFlags.String("project-slug-input", "", "")
+
+		hooksServerNamesDeleteFlags                = flag.NewFlagSet("delete", flag.ExitOnError)
+		hooksServerNamesDeleteBodyFlag             = hooksServerNamesDeleteFlags.String("body", "REQUIRED", "")
+		hooksServerNamesDeleteApikeyTokenFlag      = hooksServerNamesDeleteFlags.String("apikey-token", "", "")
+		hooksServerNamesDeleteSessionTokenFlag     = hooksServerNamesDeleteFlags.String("session-token", "", "")
+		hooksServerNamesDeleteProjectSlugInputFlag = hooksServerNamesDeleteFlags.String("project-slug-input", "", "")
 
 		hooksFlags = flag.NewFlagSet("hooks", flag.ContinueOnError)
 
@@ -916,6 +937,11 @@ func ParseEndpoint(
 	functionsFlags.Usage = functionsUsage
 	functionsGetSignedAssetURLFlags.Usage = functionsGetSignedAssetURLUsage
 
+	hooksServerNamesFlags.Usage = hooksServerNamesUsage
+	hooksServerNamesListFlags.Usage = hooksServerNamesListUsage
+	hooksServerNamesUpsertFlags.Usage = hooksServerNamesUpsertUsage
+	hooksServerNamesDeleteFlags.Usage = hooksServerNamesDeleteUsage
+
 	hooksFlags.Usage = hooksUsage
 	hooksClaudeFlags.Usage = hooksClaudeUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
@@ -1054,6 +1080,8 @@ func ParseEndpoint(
 			svcf = mcpRegistriesFlags
 		case "functions":
 			svcf = functionsFlags
+		case "hooks-server-names":
+			svcf = hooksServerNamesFlags
 		case "hooks":
 			svcf = hooksFlags
 		case "instances":
@@ -1310,6 +1338,19 @@ func ParseEndpoint(
 			switch epn {
 			case "get-signed-asset-url":
 				epf = functionsGetSignedAssetURLFlags
+
+			}
+
+		case "hooks-server-names":
+			switch epn {
+			case "list":
+				epf = hooksServerNamesListFlags
+
+			case "upsert":
+				epf = hooksServerNamesUpsertFlags
+
+			case "delete":
+				epf = hooksServerNamesDeleteFlags
 
 			}
 
@@ -1826,6 +1867,19 @@ func ParseEndpoint(
 			case "get-signed-asset-url":
 				endpoint = c.GetSignedAssetURL()
 				data, err = functionsc.BuildGetSignedAssetURLPayload(*functionsGetSignedAssetURLBodyFlag, *functionsGetSignedAssetURLFunctionTokenFlag)
+			}
+		case "hooks-server-names":
+			c := hooksservernamesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = hooksservernamesc.BuildListPayload(*hooksServerNamesListApikeyTokenFlag, *hooksServerNamesListSessionTokenFlag, *hooksServerNamesListProjectSlugInputFlag)
+			case "upsert":
+				endpoint = c.Upsert()
+				data, err = hooksservernamesc.BuildUpsertPayload(*hooksServerNamesUpsertBodyFlag, *hooksServerNamesUpsertApikeyTokenFlag, *hooksServerNamesUpsertSessionTokenFlag, *hooksServerNamesUpsertProjectSlugInputFlag)
+			case "delete":
+				endpoint = c.Delete()
+				data, err = hooksservernamesc.BuildDeletePayload(*hooksServerNamesDeleteBodyFlag, *hooksServerNamesDeleteApikeyTokenFlag, *hooksServerNamesDeleteSessionTokenFlag, *hooksServerNamesDeleteProjectSlugInputFlag)
 			}
 		case "hooks":
 			c := hooksc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3555,6 +3609,89 @@ func functionsGetSignedAssetURLUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"abc123\"\n   }' --function-token \"abc123\"")
+}
+
+// hooksServerNamesUsage displays the usage of the hooks-server-names command
+// and its subcommands.
+func hooksServerNamesUsage() {
+	fmt.Fprintln(os.Stderr, `Manages display name overrides for hooks servers.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] hooks-server-names COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: List all server name display overrides for a project`)
+	fmt.Fprintln(os.Stderr, `    upsert: Create or update a server name display override`)
+	fmt.Fprintln(os.Stderr, `    delete: Delete a server name display override`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s hooks-server-names COMMAND --help\n", os.Args[0])
+}
+func hooksServerNamesListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks-server-names list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all server name display overrides for a project`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks-server-names list --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func hooksServerNamesUpsertUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks-server-names upsert", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or update a server name display override`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks-server-names upsert --body '{\n      \"display_name\": \"abc123\",\n      \"raw_server_name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func hooksServerNamesDeleteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks-server-names delete", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a server name display override`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks-server-names delete --body '{\n      \"override_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // hooksUsage displays the usage of the hooks command and its subcommands.
