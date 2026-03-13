@@ -88,7 +88,7 @@ export function TopHeader() {
         <div className="flex items-center gap-3">
           {/* Logo */}
           <Link
-            to={projectSlug ? routes.home.url : `/${organization.slug}`}
+            to={projectSlug ? routes.home.href() : `/${organization.slug}`}
             className="hover:no-underline flex items-center"
           >
             <GramLogo className="w-28" />
