@@ -8,6 +8,7 @@ import {
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
@@ -23,12 +24,19 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
+  const telemetry = useTelemetry();
+  const isCatalogsEnabled = telemetry.isFeatureEnabled("catalogs") ?? false;
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
+  const buildItems = [routes.elements, routes.mcp, routes.slackApps];
+  if (isCatalogsEnabled) {
+    buildItems.push(routes.catalogs);
+  }
+
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
-    build: [routes.elements, routes.mcp, routes.catalogs, routes.slackApps],
+    build: buildItems,
     observe: [
       routes.observability,
       routes.logs,

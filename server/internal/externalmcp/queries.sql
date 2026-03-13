@@ -36,7 +36,7 @@ FROM mcp_registries
 WHERE id = @id AND deleted IS FALSE;
 
 -- name: GetMCPRegistryBySlug :one
-SELECT id, name, url, slug, source, visibility, organization_id, created_at, updated_at
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
 WHERE slug = @slug AND deleted IS FALSE;
 
@@ -75,7 +75,7 @@ SELECT EXISTS (
 ) AS has_grant;
 
 -- name: ListRegistriesForOrganization :many
-SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.created_at, r.updated_at
+SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.project_id, r.created_at, r.updated_at
 FROM mcp_registries r
 WHERE r.deleted IS FALSE
   AND (
@@ -93,11 +93,11 @@ SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organiz
 FROM toolsets t
 WHERE t.id = @id AND t.deleted IS FALSE;
 
--- name: GetRegistryToolsetBySlug :one
+-- name: GetRegistryToolsetByMCPSlug :one
 SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
 FROM toolsets t
 JOIN mcp_registry_toolset_links l ON l.toolset_id = t.id
-WHERE l.registry_id = @registry_id AND t.slug = @slug AND t.deleted IS FALSE;
+WHERE l.registry_id = @registry_id AND t.mcp_slug = @mcp_slug AND t.deleted IS FALSE;
 
 -- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
