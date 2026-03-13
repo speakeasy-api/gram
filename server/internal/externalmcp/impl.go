@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -24,8 +25,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -70,6 +73,60 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+func (s *Service) Publish(ctx context.Context, payload *gen.PublishPayload) (*types.MCPRegistry, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Parse and validate toolset IDs
+	toolsetIDs := make([]uuid.UUID, 0, len(payload.ToolsetIds))
+	for _, idStr := range payload.ToolsetIds {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+		}
+		toolsetIDs = append(toolsetIDs, id)
+	}
+
+	var projectID uuid.NullUUID
+	if authCtx.ProjectID != nil {
+		projectID = uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	txRepo := s.repo.WithTx(tx)
+
+	registry, err := txRepo.CreateInternalRegistry(ctx, repo.CreateInternalRegistryParams{
+		Name:           payload.Name,
+		Slug:           conv.ToPGText(payload.Slug),
+		Visibility:     payload.Visibility,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create internal registry").Log(ctx, s.logger)
+	}
+
+	if err := txRepo.SetRegistryToolsets(ctx, repo.SetRegistryToolsetsParams{
+		RegistryID: registry.ID,
+		ToolsetIds: toolsetIDs,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "set registry toolsets").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
+	}
+
+	return registryRowToType(registry.ID, registry.Name, registry.Url, registry.Slug, registry.Source, registry.Visibility, registry.OrganizationID), nil
+}
+
 func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
@@ -98,7 +155,7 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 	}
 
 	if !registry.Url.Valid {
-		return oops.E(oops.CodeBadRequest, nil, "registry has no URL").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "internal registries have no cache to clear").Log(ctx, s.logger)
 	}
 
 	if err := s.registryClient.ClearCache(ctx, registry.Url.String); err != nil {
@@ -222,11 +279,7 @@ func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistrie
 
 	result := make([]*types.MCPRegistry, 0, len(registries))
 	for _, r := range registries {
-		result = append(result, &types.MCPRegistry{
-			ID:   r.ID.String(),
-			Name: r.Name,
-			URL:  r.Url.String,
-		})
+		result = append(result, registryRowToType(r.ID, r.Name, r.Url, r.Slug, r.Source, r.Visibility, r.OrganizationID))
 	}
 
 	return &gen.ListRegistriesResult{
@@ -471,4 +524,16 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 		Tools:       tools,
 		Remotes:     remotes,
 	}, nil
+}
+
+func registryRowToType(id uuid.UUID, name string, urlField, slugField, sourceField pgtype.Text, visibility string, orgID pgtype.Text) *types.MCPRegistry {
+	return &types.MCPRegistry{
+		ID:             id.String(),
+		Name:           name,
+		URL:            conv.FromPGText[string](urlField),
+		Slug:           conv.FromPGText[string](slugField),
+		Source:         conv.FromPGText[string](sourceField),
+		Visibility:     &visibility,
+		OrganizationID: conv.FromPGText[string](orgID),
+	}
 }

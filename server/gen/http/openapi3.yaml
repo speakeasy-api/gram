@@ -6982,6 +6982,108 @@ paths:
             x-speakeasy-name-override: listRegistries
             x-speakeasy-react-hook:
                 name: ListMCPRegistries
+    /rpc/mcpRegistries.publish:
+        post:
+            description: Publish toolsets as an internal MCP registry catalog
+            operationId: publishMCPRegistry
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PublishRequestBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MCPRegistry'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: publish mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: publish
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -16374,14 +16476,31 @@ components:
                 name:
                     type: string
                     description: Display name for the registry
+                organization_id:
+                    type: string
+                    description: Owning organization ID
+                slug:
+                    type: string
+                    description: URL-friendly identifier for the registry
+                source:
+                    type: string
+                    description: Source type of the registry
+                    enum:
+                        - internal
+                        - external
                 url:
                     type: string
                     description: URL of the registry
+                visibility:
+                    type: string
+                    description: Visibility of the registry
+                    enum:
+                        - public
+                        - private
             description: An MCP registry
             required:
                 - id
                 - name
-                - url
         McpEnvironmentConfig:
             type: object
             properties:
@@ -17432,6 +17551,36 @@ components:
             required:
                 - package
                 - version
+        PublishRequestBody:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Display name for the catalog
+                    minLength: 1
+                    maxLength: 100
+                slug:
+                    type: string
+                    description: URL-friendly identifier for the catalog
+                    minLength: 1
+                    maxLength: 100
+                toolset_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs of the toolsets to include
+                    minItems: 1
+                visibility:
+                    type: string
+                    description: Visibility of the catalog
+                    default: private
+                    enum:
+                        - public
+                        - private
+            required:
+                - name
+                - slug
+                - toolset_ids
         RedeployRequestBody:
             type: object
             properties:

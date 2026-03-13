@@ -29,6 +29,10 @@ type Client struct {
 	// endpoint.
 	DeletePeerDoer goahttp.Doer
 
+	// Publish Doer is the HTTP client used to make requests to the publish
+	// endpoint.
+	PublishDoer goahttp.Doer
+
 	// ClearCache Doer is the HTTP client used to make requests to the clearCache
 	// endpoint.
 	ClearCacheDoer goahttp.Doer
@@ -69,6 +73,7 @@ func NewClient(
 		CreatePeerDoer:       doer,
 		ListPeersDoer:        doer,
 		DeletePeerDoer:       doer,
+		PublishDoer:          doer,
 		ClearCacheDoer:       doer,
 		ListRegistriesDoer:   doer,
 		ListCatalogDoer:      doer,
@@ -148,6 +153,30 @@ func (c *Client) DeletePeer() goa.Endpoint {
 		resp, err := c.DeletePeerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpRegistries", "deletePeer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Publish returns an endpoint that makes HTTP requests to the mcpRegistries
+// service publish server.
+func (c *Client) Publish() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePublishRequest(c.encoder)
+		decodeResponse = DecodePublishResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPublishRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PublishDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "publish", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -59,7 +59,7 @@ func UsageCommands() []string {
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
-		"mcp-registries (create-peer|list-peers|delete-peer|clear-cache|list-registries|list-catalog|get-server-details)",
+		"mcp-registries (create-peer|list-peers|delete-peer|publish|clear-cache|list-registries|list-catalog|get-server-details)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|logs)",
@@ -419,6 +419,12 @@ func ParseEndpoint(
 		mcpRegistriesDeletePeerSessionTokenFlag      = mcpRegistriesDeletePeerFlags.String("session-token", "", "")
 		mcpRegistriesDeletePeerApikeyTokenFlag       = mcpRegistriesDeletePeerFlags.String("apikey-token", "", "")
 		mcpRegistriesDeletePeerProjectSlugInputFlag  = mcpRegistriesDeletePeerFlags.String("project-slug-input", "", "")
+
+		mcpRegistriesPublishFlags                = flag.NewFlagSet("publish", flag.ExitOnError)
+		mcpRegistriesPublishBodyFlag             = mcpRegistriesPublishFlags.String("body", "REQUIRED", "")
+		mcpRegistriesPublishSessionTokenFlag     = mcpRegistriesPublishFlags.String("session-token", "", "")
+		mcpRegistriesPublishApikeyTokenFlag      = mcpRegistriesPublishFlags.String("apikey-token", "", "")
+		mcpRegistriesPublishProjectSlugInputFlag = mcpRegistriesPublishFlags.String("project-slug-input", "", "")
 
 		mcpRegistriesClearCacheFlags                = flag.NewFlagSet("clear-cache", flag.ExitOnError)
 		mcpRegistriesClearCacheRegistryIDFlag       = mcpRegistriesClearCacheFlags.String("registry-id", "REQUIRED", "")
@@ -957,6 +963,7 @@ func ParseEndpoint(
 	mcpRegistriesCreatePeerFlags.Usage = mcpRegistriesCreatePeerUsage
 	mcpRegistriesListPeersFlags.Usage = mcpRegistriesListPeersUsage
 	mcpRegistriesDeletePeerFlags.Usage = mcpRegistriesDeletePeerUsage
+	mcpRegistriesPublishFlags.Usage = mcpRegistriesPublishUsage
 	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
 	mcpRegistriesListCatalogFlags.Usage = mcpRegistriesListCatalogUsage
@@ -1356,6 +1363,9 @@ func ParseEndpoint(
 
 			case "delete-peer":
 				epf = mcpRegistriesDeletePeerFlags
+
+			case "publish":
+				epf = mcpRegistriesPublishFlags
 
 			case "clear-cache":
 				epf = mcpRegistriesClearCacheFlags
@@ -1894,6 +1904,9 @@ func ParseEndpoint(
 			case "delete-peer":
 				endpoint = c.DeletePeer()
 				data, err = mcpregistriesc.BuildDeletePeerPayload(*mcpRegistriesDeletePeerSubOrganizationIDFlag, *mcpRegistriesDeletePeerSessionTokenFlag, *mcpRegistriesDeletePeerApikeyTokenFlag, *mcpRegistriesDeletePeerProjectSlugInputFlag)
+			case "publish":
+				endpoint = c.Publish()
+				data, err = mcpregistriesc.BuildPublishPayload(*mcpRegistriesPublishBodyFlag, *mcpRegistriesPublishSessionTokenFlag, *mcpRegistriesPublishApikeyTokenFlag, *mcpRegistriesPublishProjectSlugInputFlag)
 			case "clear-cache":
 				endpoint = c.ClearCache()
 				data, err = mcpregistriesc.BuildClearCachePayload(*mcpRegistriesClearCacheRegistryIDFlag, *mcpRegistriesClearCacheSessionTokenFlag, *mcpRegistriesClearCacheApikeyTokenFlag, *mcpRegistriesClearCacheProjectSlugInputFlag)
@@ -3527,6 +3540,7 @@ func mcpRegistriesUsage() {
 	fmt.Fprintln(os.Stderr, `    create-peer: Create a peered organization relationship (super org grants sub org access)`)
 	fmt.Fprintln(os.Stderr, `    list-peers: List peered organizations for the current organization`)
 	fmt.Fprintln(os.Stderr, `    delete-peer: Remove a peered organization relationship`)
+	fmt.Fprintln(os.Stderr, `    publish: Publish toolsets as an internal MCP registry catalog`)
 	fmt.Fprintln(os.Stderr, `    clear-cache: Clear the registry cache for a specific registry (admin only)`)
 	fmt.Fprintln(os.Stderr, `    list-registries: List all MCP registries (admin only)`)
 	fmt.Fprintln(os.Stderr, `    list-catalog: List available MCP servers from configured registries`)
@@ -3603,6 +3617,30 @@ func mcpRegistriesDeletePeerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries delete-peer --sub-organization-id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpRegistriesPublishUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries publish", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Publish toolsets as an internal MCP registry catalog`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries publish --body '{\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpRegistriesClearCacheUsage() {

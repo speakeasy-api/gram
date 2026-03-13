@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	mcpregistries "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -18,6 +20,19 @@ import (
 type CreatePeerRequestBody struct {
 	// ID of the sub organization to peer with
 	SubOrganizationID *string `form:"sub_organization_id,omitempty" json:"sub_organization_id,omitempty" xml:"sub_organization_id,omitempty"`
+}
+
+// PublishRequestBody is the type of the "mcpRegistries" service "publish"
+// endpoint HTTP request body.
+type PublishRequestBody struct {
+	// Display name for the catalog
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly identifier for the catalog
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// IDs of the toolsets to include
+	ToolsetIds []string `form:"toolset_ids,omitempty" json:"toolset_ids,omitempty" xml:"toolset_ids,omitempty"`
+	// Visibility of the catalog
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 }
 
 // CreatePeerResponseBody is the type of the "mcpRegistries" service
@@ -42,6 +57,25 @@ type CreatePeerResponseBody struct {
 type ListPeersResponseBody struct {
 	// List of peered organizations
 	Peers []*PeeredOrganizationResponseBody `form:"peers" json:"peers" xml:"peers"`
+}
+
+// PublishResponseBody is the type of the "mcpRegistries" service "publish"
+// endpoint HTTP response body.
+type PublishResponseBody struct {
+	// Registry ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name for the registry
+	Name string `form:"name" json:"name" xml:"name"`
+	// URL of the registry
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// URL-friendly identifier for the registry
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Source type of the registry
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Visibility of the registry
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// Owning organization ID
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
 // ListRegistriesResponseBody is the type of the "mcpRegistries" service
@@ -619,6 +653,188 @@ type DeletePeerUnexpectedResponseBody struct {
 // service "deletePeer" endpoint HTTP response body for the "gateway_error"
 // error.
 type DeletePeerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishUnauthorizedResponseBody is the type of the "mcpRegistries" service
+// "publish" endpoint HTTP response body for the "unauthorized" error.
+type PublishUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishForbiddenResponseBody is the type of the "mcpRegistries" service
+// "publish" endpoint HTTP response body for the "forbidden" error.
+type PublishForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishBadRequestResponseBody is the type of the "mcpRegistries" service
+// "publish" endpoint HTTP response body for the "bad_request" error.
+type PublishBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishNotFoundResponseBody is the type of the "mcpRegistries" service
+// "publish" endpoint HTTP response body for the "not_found" error.
+type PublishNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishConflictResponseBody is the type of the "mcpRegistries" service
+// "publish" endpoint HTTP response body for the "conflict" error.
+type PublishConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishUnsupportedMediaResponseBody is the type of the "mcpRegistries"
+// service "publish" endpoint HTTP response body for the "unsupported_media"
+// error.
+type PublishUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishInvalidResponseBody is the type of the "mcpRegistries" service
+// "publish" endpoint HTTP response body for the "invalid" error.
+type PublishInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishInvariantViolationResponseBody is the type of the "mcpRegistries"
+// service "publish" endpoint HTTP response body for the "invariant_violation"
+// error.
+type PublishInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishUnexpectedResponseBody is the type of the "mcpRegistries" service
+// "publish" endpoint HTTP response body for the "unexpected" error.
+type PublishUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishGatewayErrorResponseBody is the type of the "mcpRegistries" service
+// "publish" endpoint HTTP response body for the "gateway_error" error.
+type PublishGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1405,7 +1621,15 @@ type MCPRegistryResponseBody struct {
 	// Display name for the registry
 	Name string `form:"name" json:"name" xml:"name"`
 	// URL of the registry
-	URL string `form:"url" json:"url" xml:"url"`
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// URL-friendly identifier for the registry
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Source type of the registry
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Visibility of the registry
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// Owning organization ID
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
 // ExternalMCPServerResponseBody is used to define fields on response body
@@ -1482,6 +1706,21 @@ func NewListPeersResponseBody(res *mcpregistries.ListPeersResult) *ListPeersResp
 		}
 	} else {
 		body.Peers = []*PeeredOrganizationResponseBody{}
+	}
+	return body
+}
+
+// NewPublishResponseBody builds the HTTP response body from the result of the
+// "publish" endpoint of the "mcpRegistries" service.
+func NewPublishResponseBody(res *types.MCPRegistry) *PublishResponseBody {
+	body := &PublishResponseBody{
+		ID:             res.ID,
+		Name:           res.Name,
+		URL:            res.URL,
+		Slug:           res.Slug,
+		Source:         res.Source,
+		Visibility:     res.Visibility,
+		OrganizationID: res.OrganizationID,
 	}
 	return body
 }
@@ -1971,6 +2210,146 @@ func NewDeletePeerUnexpectedResponseBody(res *goa.ServiceError) *DeletePeerUnexp
 // result of the "deletePeer" endpoint of the "mcpRegistries" service.
 func NewDeletePeerGatewayErrorResponseBody(res *goa.ServiceError) *DeletePeerGatewayErrorResponseBody {
 	body := &DeletePeerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishUnauthorizedResponseBody(res *goa.ServiceError) *PublishUnauthorizedResponseBody {
+	body := &PublishUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishForbiddenResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishForbiddenResponseBody(res *goa.ServiceError) *PublishForbiddenResponseBody {
+	body := &PublishForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishBadRequestResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishBadRequestResponseBody(res *goa.ServiceError) *PublishBadRequestResponseBody {
+	body := &PublishBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishNotFoundResponseBody builds the HTTP response body from the result
+// of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishNotFoundResponseBody(res *goa.ServiceError) *PublishNotFoundResponseBody {
+	body := &PublishNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishConflictResponseBody builds the HTTP response body from the result
+// of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishConflictResponseBody(res *goa.ServiceError) *PublishConflictResponseBody {
+	body := &PublishConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishUnsupportedMediaResponseBody(res *goa.ServiceError) *PublishUnsupportedMediaResponseBody {
+	body := &PublishUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishInvalidResponseBody builds the HTTP response body from the result
+// of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishInvalidResponseBody(res *goa.ServiceError) *PublishInvalidResponseBody {
+	body := &PublishInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishInvariantViolationResponseBody(res *goa.ServiceError) *PublishInvariantViolationResponseBody {
+	body := &PublishInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishUnexpectedResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishUnexpectedResponseBody(res *goa.ServiceError) *PublishUnexpectedResponseBody {
+	body := &PublishUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "mcpRegistries" service.
+func NewPublishGatewayErrorResponseBody(res *goa.ServiceError) *PublishGatewayErrorResponseBody {
+	body := &PublishGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2583,6 +2962,29 @@ func NewDeletePeerPayload(subOrganizationID string, sessionToken *string, apikey
 	return v
 }
 
+// NewPublishPayload builds a mcpRegistries service publish endpoint payload.
+func NewPublishPayload(body *PublishRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.PublishPayload {
+	v := &mcpregistries.PublishPayload{
+		Name: *body.Name,
+		Slug: *body.Slug,
+	}
+	if body.Visibility != nil {
+		v.Visibility = *body.Visibility
+	}
+	v.ToolsetIds = make([]string, len(body.ToolsetIds))
+	for i, val := range body.ToolsetIds {
+		v.ToolsetIds[i] = val
+	}
+	if body.Visibility == nil {
+		v.Visibility = "private"
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewClearCachePayload builds a mcpRegistries service clearCache endpoint
 // payload.
 func NewClearCachePayload(registryID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ClearCachePayload {
@@ -2638,6 +3040,48 @@ func NewGetServerDetailsPayload(registryID string, serverSpecifier string, sessi
 func ValidateCreatePeerRequestBody(body *CreatePeerRequestBody) (err error) {
 	if body.SubOrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sub_organization_id", "body"))
+	}
+	return
+}
+
+// ValidatePublishRequestBody runs the validations defined on PublishRequestBody
+func ValidatePublishRequestBody(body *PublishRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ToolsetIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_ids", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+		}
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 1, true))
+		}
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 100, false))
+		}
+	}
+	if len(body.ToolsetIds) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_ids", body.ToolsetIds, len(body.ToolsetIds), 1, true))
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "public" || *body.Visibility == "private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"public", "private"}))
+		}
 	}
 	return
 }

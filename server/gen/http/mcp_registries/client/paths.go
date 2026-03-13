@@ -22,6 +22,11 @@ func DeletePeerMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.deletePeer"
 }
 
+// PublishMcpRegistriesPath returns the URL path to the mcpRegistries service publish HTTP endpoint.
+func PublishMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.publish"
+}
+
 // ClearCacheMcpRegistriesPath returns the URL path to the mcpRegistries service clearCache HTTP endpoint.
 func ClearCacheMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.clearCache"

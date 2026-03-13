@@ -22,6 +22,7 @@ type Server struct {
 	CreatePeer       http.Handler
 	ListPeers        http.Handler
 	DeletePeer       http.Handler
+	Publish          http.Handler
 	ClearCache       http.Handler
 	ListRegistries   http.Handler
 	ListCatalog      http.Handler
@@ -58,6 +59,7 @@ func New(
 			{"CreatePeer", "POST", "/rpc/mcpRegistries.createPeer"},
 			{"ListPeers", "GET", "/rpc/mcpRegistries.listPeers"},
 			{"DeletePeer", "DELETE", "/rpc/mcpRegistries.deletePeer"},
+			{"Publish", "POST", "/rpc/mcpRegistries.publish"},
 			{"ClearCache", "DELETE", "/rpc/mcpRegistries.clearCache"},
 			{"ListRegistries", "GET", "/rpc/mcpRegistries.listRegistries"},
 			{"ListCatalog", "GET", "/rpc/mcpRegistries.listCatalog"},
@@ -66,6 +68,7 @@ func New(
 		CreatePeer:       NewCreatePeerHandler(e.CreatePeer, mux, decoder, encoder, errhandler, formatter),
 		ListPeers:        NewListPeersHandler(e.ListPeers, mux, decoder, encoder, errhandler, formatter),
 		DeletePeer:       NewDeletePeerHandler(e.DeletePeer, mux, decoder, encoder, errhandler, formatter),
+		Publish:          NewPublishHandler(e.Publish, mux, decoder, encoder, errhandler, formatter),
 		ClearCache:       NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
 		ListRegistries:   NewListRegistriesHandler(e.ListRegistries, mux, decoder, encoder, errhandler, formatter),
 		ListCatalog:      NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
@@ -81,6 +84,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreatePeer = m(s.CreatePeer)
 	s.ListPeers = m(s.ListPeers)
 	s.DeletePeer = m(s.DeletePeer)
+	s.Publish = m(s.Publish)
 	s.ClearCache = m(s.ClearCache)
 	s.ListRegistries = m(s.ListRegistries)
 	s.ListCatalog = m(s.ListCatalog)
@@ -95,6 +99,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreatePeerHandler(mux, h.CreatePeer)
 	MountListPeersHandler(mux, h.ListPeers)
 	MountDeletePeerHandler(mux, h.DeletePeer)
+	MountPublishHandler(mux, h.Publish)
 	MountClearCacheHandler(mux, h.ClearCache)
 	MountListRegistriesHandler(mux, h.ListRegistries)
 	MountListCatalogHandler(mux, h.ListCatalog)
@@ -242,6 +247,59 @@ func NewDeletePeerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deletePeer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountPublishHandler configures the mux to serve the "mcpRegistries" service
+// "publish" endpoint.
+func MountPublishHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpRegistries.publish", f)
+}
+
+// NewPublishHandler creates a HTTP handler which loads the HTTP request and
+// calls the "mcpRegistries" service "publish" endpoint.
+func NewPublishHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePublishRequest(mux, decoder)
+		encodeResponse = EncodePublishResponse(encoder)
+		encodeError    = EncodePublishError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "publish")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
 		payload, err := decodeRequest(r)
 		if err != nil {
