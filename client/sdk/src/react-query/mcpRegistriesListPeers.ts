@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildListMCPCatalogQuery,
-  ListMCPCatalogQueryData,
-  prefetchListMCPCatalog,
-  queryKeyListMCPCatalog,
-} from "./listMCPCatalog.core.js";
+  buildMcpRegistriesListPeersQuery,
+  McpRegistriesListPeersQueryData,
+  prefetchMcpRegistriesListPeers,
+  queryKeyMcpRegistriesListPeers,
+} from "./mcpRegistriesListPeers.core.js";
 export {
-  buildListMCPCatalogQuery,
-  type ListMCPCatalogQueryData,
-  prefetchListMCPCatalog,
-  queryKeyListMCPCatalog,
+  buildMcpRegistriesListPeersQuery,
+  type McpRegistriesListPeersQueryData,
+  prefetchMcpRegistriesListPeers,
+  queryKeyMcpRegistriesListPeers,
 };
 
-export type ListMCPCatalogQueryError =
+export type McpRegistriesListPeersQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,19 +53,25 @@ export type ListMCPCatalogQueryError =
   | SDKValidationError;
 
 /**
- * listCatalog mcpRegistries
+ * listPeers mcpRegistries
  *
  * @remarks
- * List available MCP servers from configured registries
+ * List peered organizations for the current organization
  */
-export function useListMCPCatalog(
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
-  options?: QueryHookOptions<ListMCPCatalogQueryData, ListMCPCatalogQueryError>,
-): UseQueryResult<ListMCPCatalogQueryData, ListMCPCatalogQueryError> {
+export function useMcpRegistriesListPeers(
+  request?: operations.ListMCPPeersRequest | undefined,
+  security?: operations.ListMCPPeersSecurity | undefined,
+  options?: QueryHookOptions<
+    McpRegistriesListPeersQueryData,
+    McpRegistriesListPeersQueryError
+  >,
+): UseQueryResult<
+  McpRegistriesListPeersQueryData,
+  McpRegistriesListPeersQueryError
+> {
   const client = useGramContext();
   return useQuery({
-    ...buildListMCPCatalogQuery(
+    ...buildMcpRegistriesListPeersQuery(
       client,
       request,
       security,
@@ -76,22 +82,25 @@ export function useListMCPCatalog(
 }
 
 /**
- * listCatalog mcpRegistries
+ * listPeers mcpRegistries
  *
  * @remarks
- * List available MCP servers from configured registries
+ * List peered organizations for the current organization
  */
-export function useListMCPCatalogSuspense(
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+export function useMcpRegistriesListPeersSuspense(
+  request?: operations.ListMCPPeersRequest | undefined,
+  security?: operations.ListMCPPeersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    ListMCPCatalogQueryData,
-    ListMCPCatalogQueryError
+    McpRegistriesListPeersQueryData,
+    McpRegistriesListPeersQueryError
   >,
-): UseSuspenseQueryResult<ListMCPCatalogQueryData, ListMCPCatalogQueryError> {
+): UseSuspenseQueryResult<
+  McpRegistriesListPeersQueryData,
+  McpRegistriesListPeersQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildListMCPCatalogQuery(
+    ...buildMcpRegistriesListPeersQuery(
       client,
       request,
       security,
@@ -101,32 +110,26 @@ export function useListMCPCatalogSuspense(
   });
 }
 
-export function setListMCPCatalogData(
+export function setMcpRegistriesListPeersData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      registryId?: string | undefined;
-      search?: string | undefined;
-      cursor?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
-  data: ListMCPCatalogQueryData,
-): ListMCPCatalogQueryData | undefined {
-  const key = queryKeyListMCPCatalog(...queryKeyBase);
+  data: McpRegistriesListPeersQueryData,
+): McpRegistriesListPeersQueryData | undefined {
+  const key = queryKeyMcpRegistriesListPeers(...queryKeyBase);
 
-  return client.setQueryData<ListMCPCatalogQueryData>(key, data);
+  return client.setQueryData<McpRegistriesListPeersQueryData>(key, data);
 }
 
-export function invalidateListMCPCatalog(
+export function invalidateMcpRegistriesListPeers(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      registryId?: string | undefined;
-      search?: string | undefined;
-      cursor?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -136,16 +139,16 @@ export function invalidateListMCPCatalog(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "mcpRegistries", "listCatalog", ...queryKeyBase],
+    queryKey: ["@gram/client", "mcpRegistries", "listPeers", ...queryKeyBase],
   });
 }
 
-export function invalidateAllListMCPCatalog(
+export function invalidateAllMcpRegistriesListPeers(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "mcpRegistries", "listCatalog"],
+    queryKey: ["@gram/client", "mcpRegistries", "listPeers"],
   });
 }

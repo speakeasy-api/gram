@@ -12,7 +12,7 @@ import {
   ExternalMCPServer$inboundSchema,
 } from "./externalmcpserver.js";
 
-export type ListCatalogResponseBody = {
+export type ServeResponseBody = {
   /**
    * Pagination cursor for the next page
    */
@@ -24,8 +24,8 @@ export type ListCatalogResponseBody = {
 };
 
 /** @internal */
-export const ListCatalogResponseBody$inboundSchema: z.ZodMiniType<
-  ListCatalogResponseBody,
+export const ServeResponseBody$inboundSchema: z.ZodMiniType<
+  ServeResponseBody,
   unknown
 > = z.pipe(
   z.object({
@@ -39,12 +39,12 @@ export const ListCatalogResponseBody$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listCatalogResponseBodyFromJSON(
+export function serveResponseBodyFromJSON(
   jsonString: string,
-): SafeParseResult<ListCatalogResponseBody, SDKValidationError> {
+): SafeParseResult<ServeResponseBody, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ListCatalogResponseBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ListCatalogResponseBody' from JSON`,
+    (x) => ServeResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ServeResponseBody' from JSON`,
   );
 }

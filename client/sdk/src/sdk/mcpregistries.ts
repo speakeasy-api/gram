@@ -3,9 +3,15 @@
  */
 
 import { mcpRegistriesClearCache } from "../funcs/mcpRegistriesClearCache.js";
+import { mcpRegistriesCreatePeer } from "../funcs/mcpRegistriesCreatePeer.js";
+import { mcpRegistriesDeletePeer } from "../funcs/mcpRegistriesDeletePeer.js";
 import { mcpRegistriesGetServerDetails } from "../funcs/mcpRegistriesGetServerDetails.js";
-import { mcpRegistriesListCatalog } from "../funcs/mcpRegistriesListCatalog.js";
+import { mcpRegistriesGrant } from "../funcs/mcpRegistriesGrant.js";
+import { mcpRegistriesListPeers } from "../funcs/mcpRegistriesListPeers.js";
 import { mcpRegistriesListRegistries } from "../funcs/mcpRegistriesListRegistries.js";
+import { mcpRegistriesPublish } from "../funcs/mcpRegistriesPublish.js";
+import { mcpRegistriesRevokeGrant } from "../funcs/mcpRegistriesRevokeGrant.js";
+import { mcpRegistriesServe } from "../funcs/mcpRegistriesServe.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -24,6 +30,44 @@ export class McpRegistries extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(mcpRegistriesClearCache(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createPeer mcpRegistries
+   *
+   * @remarks
+   * Create a peered organization relationship (super org grants sub org access)
+   */
+  async createPeer(
+    request: operations.CreateMCPPeerRequest,
+    security?: operations.CreateMCPPeerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.PeeredOrganization> {
+    return unwrapAsync(mcpRegistriesCreatePeer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deletePeer mcpRegistries
+   *
+   * @remarks
+   * Remove a peered organization relationship
+   */
+  async deletePeer(
+    request: operations.DeleteMCPPeerRequest,
+    security?: operations.DeleteMCPPeerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(mcpRegistriesDeletePeer(
       this,
       request,
       security,
@@ -51,17 +95,36 @@ export class McpRegistries extends ClientSDK {
   }
 
   /**
-   * listCatalog mcpRegistries
+   * grant mcpRegistries
    *
    * @remarks
-   * List available MCP servers from configured registries
+   * Grant an organization access to a private registry
    */
-  async listCatalog(
-    request?: operations.ListMCPCatalogRequest | undefined,
-    security?: operations.ListMCPCatalogSecurity | undefined,
+  async grant(
+    request: operations.GrantMCPRegistryAccessRequest,
+    security?: operations.GrantMCPRegistryAccessSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListCatalogResponseBody> {
-    return unwrapAsync(mcpRegistriesListCatalog(
+  ): Promise<void> {
+    return unwrapAsync(mcpRegistriesGrant(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listPeers mcpRegistries
+   *
+   * @remarks
+   * List peered organizations for the current organization
+   */
+  async listPeers(
+    request?: operations.ListMCPPeersRequest | undefined,
+    security?: operations.ListMCPPeersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListPeersResponseBody> {
+    return unwrapAsync(mcpRegistriesListPeers(
       this,
       request,
       security,
@@ -73,7 +136,7 @@ export class McpRegistries extends ClientSDK {
    * listRegistries mcpRegistries
    *
    * @remarks
-   * List all MCP registries (admin only)
+   * List MCP registries accessible to the current organization
    */
   async listRegistries(
     request?: operations.ListMCPRegistriesRequest | undefined,
@@ -81,6 +144,63 @@ export class McpRegistries extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListRegistriesResponseBody> {
     return unwrapAsync(mcpRegistriesListRegistries(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * publish mcpRegistries
+   *
+   * @remarks
+   * Publish toolsets as an internal MCP registry catalog
+   */
+  async publish(
+    request: operations.PublishMCPRegistryRequest,
+    security?: operations.PublishMCPRegistrySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.MCPRegistry> {
+    return unwrapAsync(mcpRegistriesPublish(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * revokeGrant mcpRegistries
+   *
+   * @remarks
+   * Revoke an organization's access to a private registry
+   */
+  async revokeGrant(
+    request: operations.RevokeMCPRegistryAccessRequest,
+    security?: operations.RevokeMCPRegistryAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(mcpRegistriesRevokeGrant(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * serve mcpRegistries
+   *
+   * @remarks
+   * Serve MCP servers from a specific registry by slug
+   */
+  async serve(
+    request: operations.ServeMCPRegistryRequest,
+    security?: operations.ServeMCPRegistrySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ServeResponseBody> {
+    return unwrapAsync(mcpRegistriesServe(
       this,
       request,
       security,

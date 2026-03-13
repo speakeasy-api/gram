@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listRegistries mcpRegistries
+ * serve mcpRegistries
  *
  * @remarks
- * List MCP registries accessible to the current organization
+ * Serve MCP servers from a specific registry by slug
  */
-export function mcpRegistriesListRegistries(
+export function mcpRegistriesServe(
   client: GramCore,
-  request?: operations.ListMCPRegistriesRequest | undefined,
-  security?: operations.ListMCPRegistriesSecurity | undefined,
+  request: operations.ServeMCPRegistryRequest,
+  security?: operations.ServeMCPRegistrySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListRegistriesResponseBody,
+    components.ServeResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function mcpRegistriesListRegistries(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListMCPRegistriesRequest | undefined,
-  security?: operations.ListMCPRegistriesSecurity | undefined,
+  request: operations.ServeMCPRegistryRequest,
+  security?: operations.ServeMCPRegistrySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListRegistriesResponseBody,
+      components.ServeResponseBody,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,10 +85,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.ListMCPRegistriesRequest$outboundSchema),
-        value,
-      ),
+      z.parse(operations.ServeMCPRegistryRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -97,19 +94,25 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/mcpRegistries.listRegistries")();
+  const path = pathToFunc("/rpc/mcpRegistries.serve")();
+
+  const query = encodeFormQuery({
+    "cursor": payload.cursor,
+    "registry_slug": payload.registry_slug,
+    "search": payload.search,
+  });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -145,7 +148,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listMCPRegistries",
+    operationID: "serveMCPRegistry",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -163,6 +166,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -200,7 +204,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListRegistriesResponseBody,
+    components.ServeResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -211,7 +215,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListRegistriesResponseBody$inboundSchema),
+    M.json(200, components.ServeResponseBody$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

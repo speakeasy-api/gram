@@ -3,9 +3,35 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Source type of the registry
+ */
+export const Source = {
+  Internal: "internal",
+  External: "external",
+} as const;
+/**
+ * Source type of the registry
+ */
+export type Source = ClosedEnum<typeof Source>;
+
+/**
+ * Visibility of the registry
+ */
+export const Visibility = {
+  Public: "public",
+  Private: "private",
+} as const;
+/**
+ * Visibility of the registry
+ */
+export type Visibility = ClosedEnum<typeof Visibility>;
 
 /**
  * An MCP registry
@@ -20,18 +46,54 @@ export type MCPRegistry = {
    */
   name: string;
   /**
+   * Owning organization ID
+   */
+  organizationId?: string | undefined;
+  /**
+   * URL-friendly identifier for the registry
+   */
+  slug?: string | undefined;
+  /**
+   * Source type of the registry
+   */
+  source?: Source | undefined;
+  /**
    * URL of the registry
    */
-  url: string;
+  url?: string | undefined;
+  /**
+   * Visibility of the registry
+   */
+  visibility?: Visibility | undefined;
 };
 
 /** @internal */
+export const Source$inboundSchema: z.ZodMiniEnum<typeof Source> = z.enum(
+  Source,
+);
+
+/** @internal */
+export const Visibility$inboundSchema: z.ZodMiniEnum<typeof Visibility> = z
+  .enum(Visibility);
+
+/** @internal */
 export const MCPRegistry$inboundSchema: z.ZodMiniType<MCPRegistry, unknown> = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    url: z.string(),
-  });
+  .pipe(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      organization_id: z.optional(z.string()),
+      slug: z.optional(z.string()),
+      source: z.optional(Source$inboundSchema),
+      url: z.optional(z.string()),
+      visibility: z.optional(Visibility$inboundSchema),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        "organization_id": "organizationId",
+      });
+    }),
+  );
 
 export function mcpRegistryFromJSON(
   jsonString: string,

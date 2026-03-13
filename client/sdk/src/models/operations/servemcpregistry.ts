@@ -5,26 +5,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type ListMCPCatalogSecurityOption1 = {
+export type ServeMCPRegistrySecurityOption1 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
-export type ListMCPCatalogSecurityOption2 = {
+export type ServeMCPRegistrySecurityOption2 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
 
-export type ListMCPCatalogSecurity = {
-  option1?: ListMCPCatalogSecurityOption1 | undefined;
-  option2?: ListMCPCatalogSecurityOption2 | undefined;
+export type ServeMCPRegistrySecurity = {
+  option1?: ServeMCPRegistrySecurityOption1 | undefined;
+  option2?: ServeMCPRegistrySecurityOption2 | undefined;
 };
 
-export type ListMCPCatalogRequest = {
+export type ServeMCPRegistryRequest = {
   /**
-   * Filter to a specific registry
+   * Slug of the registry to serve
    */
-  registryId?: string | undefined;
+  registrySlug: string;
   /**
    * Search query to filter servers by name
    */
@@ -48,15 +48,15 @@ export type ListMCPCatalogRequest = {
 };
 
 /** @internal */
-export type ListMCPCatalogSecurityOption1$Outbound = {
+export type ServeMCPRegistrySecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const ListMCPCatalogSecurityOption1$outboundSchema: z.ZodMiniType<
-  ListMCPCatalogSecurityOption1$Outbound,
-  ListMCPCatalogSecurityOption1
+export const ServeMCPRegistrySecurityOption1$outboundSchema: z.ZodMiniType<
+  ServeMCPRegistrySecurityOption1$Outbound,
+  ServeMCPRegistrySecurityOption1
 > = z.pipe(
   z.object({
     projectSlugHeaderGramProject: z.string(),
@@ -70,26 +70,26 @@ export const ListMCPCatalogSecurityOption1$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listMCPCatalogSecurityOption1ToJSON(
-  listMCPCatalogSecurityOption1: ListMCPCatalogSecurityOption1,
+export function serveMCPRegistrySecurityOption1ToJSON(
+  serveMCPRegistrySecurityOption1: ServeMCPRegistrySecurityOption1,
 ): string {
   return JSON.stringify(
-    ListMCPCatalogSecurityOption1$outboundSchema.parse(
-      listMCPCatalogSecurityOption1,
+    ServeMCPRegistrySecurityOption1$outboundSchema.parse(
+      serveMCPRegistrySecurityOption1,
     ),
   );
 }
 
 /** @internal */
-export type ListMCPCatalogSecurityOption2$Outbound = {
+export type ServeMCPRegistrySecurityOption2$Outbound = {
   "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
 };
 
 /** @internal */
-export const ListMCPCatalogSecurityOption2$outboundSchema: z.ZodMiniType<
-  ListMCPCatalogSecurityOption2$Outbound,
-  ListMCPCatalogSecurityOption2
+export const ServeMCPRegistrySecurityOption2$outboundSchema: z.ZodMiniType<
+  ServeMCPRegistrySecurityOption2$Outbound,
+  ServeMCPRegistrySecurityOption2
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.string(),
@@ -103,33 +103,33 @@ export const ListMCPCatalogSecurityOption2$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listMCPCatalogSecurityOption2ToJSON(
-  listMCPCatalogSecurityOption2: ListMCPCatalogSecurityOption2,
+export function serveMCPRegistrySecurityOption2ToJSON(
+  serveMCPRegistrySecurityOption2: ServeMCPRegistrySecurityOption2,
 ): string {
   return JSON.stringify(
-    ListMCPCatalogSecurityOption2$outboundSchema.parse(
-      listMCPCatalogSecurityOption2,
+    ServeMCPRegistrySecurityOption2$outboundSchema.parse(
+      serveMCPRegistrySecurityOption2,
     ),
   );
 }
 
 /** @internal */
-export type ListMCPCatalogSecurity$Outbound = {
-  Option1?: ListMCPCatalogSecurityOption1$Outbound | undefined;
-  Option2?: ListMCPCatalogSecurityOption2$Outbound | undefined;
+export type ServeMCPRegistrySecurity$Outbound = {
+  Option1?: ServeMCPRegistrySecurityOption1$Outbound | undefined;
+  Option2?: ServeMCPRegistrySecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
-export const ListMCPCatalogSecurity$outboundSchema: z.ZodMiniType<
-  ListMCPCatalogSecurity$Outbound,
-  ListMCPCatalogSecurity
+export const ServeMCPRegistrySecurity$outboundSchema: z.ZodMiniType<
+  ServeMCPRegistrySecurity$Outbound,
+  ServeMCPRegistrySecurity
 > = z.pipe(
   z.object({
     option1: z.optional(
-      z.lazy(() => ListMCPCatalogSecurityOption1$outboundSchema),
+      z.lazy(() => ServeMCPRegistrySecurityOption1$outboundSchema),
     ),
     option2: z.optional(
-      z.lazy(() => ListMCPCatalogSecurityOption2$outboundSchema),
+      z.lazy(() => ServeMCPRegistrySecurityOption2$outboundSchema),
     ),
   }),
   z.transform((v) => {
@@ -140,17 +140,17 @@ export const ListMCPCatalogSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listMCPCatalogSecurityToJSON(
-  listMCPCatalogSecurity: ListMCPCatalogSecurity,
+export function serveMCPRegistrySecurityToJSON(
+  serveMCPRegistrySecurity: ServeMCPRegistrySecurity,
 ): string {
   return JSON.stringify(
-    ListMCPCatalogSecurity$outboundSchema.parse(listMCPCatalogSecurity),
+    ServeMCPRegistrySecurity$outboundSchema.parse(serveMCPRegistrySecurity),
   );
 }
 
 /** @internal */
-export type ListMCPCatalogRequest$Outbound = {
-  registry_id?: string | undefined;
+export type ServeMCPRegistryRequest$Outbound = {
+  registry_slug: string;
   search?: string | undefined;
   cursor?: string | undefined;
   "Gram-Session"?: string | undefined;
@@ -159,12 +159,12 @@ export type ListMCPCatalogRequest$Outbound = {
 };
 
 /** @internal */
-export const ListMCPCatalogRequest$outboundSchema: z.ZodMiniType<
-  ListMCPCatalogRequest$Outbound,
-  ListMCPCatalogRequest
+export const ServeMCPRegistryRequest$outboundSchema: z.ZodMiniType<
+  ServeMCPRegistryRequest$Outbound,
+  ServeMCPRegistryRequest
 > = z.pipe(
   z.object({
-    registryId: z.optional(z.string()),
+    registrySlug: z.string(),
     search: z.optional(z.string()),
     cursor: z.optional(z.string()),
     gramSession: z.optional(z.string()),
@@ -173,7 +173,7 @@ export const ListMCPCatalogRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      registryId: "registry_id",
+      registrySlug: "registry_slug",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
@@ -181,10 +181,10 @@ export const ListMCPCatalogRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listMCPCatalogRequestToJSON(
-  listMCPCatalogRequest: ListMCPCatalogRequest,
+export function serveMCPRegistryRequestToJSON(
+  serveMCPRegistryRequest: ServeMCPRegistryRequest,
 ): string {
   return JSON.stringify(
-    ListMCPCatalogRequest$outboundSchema.parse(listMCPCatalogRequest),
+    ServeMCPRegistryRequest$outboundSchema.parse(serveMCPRegistryRequest),
   );
 }

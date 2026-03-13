@@ -6408,6 +6408,210 @@ paths:
       tags:
         - mcpRegistries
       x-speakeasy-name-override: clearCache
+  /rpc/mcpRegistries.createPeer:
+    post:
+      description: Create a peered organization relationship (super org grants sub org access)
+      operationId: createMCPPeer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePeerRequestBody'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeredOrganization'
+          description: Created response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createPeer mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: createPeer
+  /rpc/mcpRegistries.deletePeer:
+    delete:
+      description: Remove a peered organization relationship
+      operationId: deleteMCPPeer
+      parameters:
+        - allowEmptyValue: true
+          description: ID of the sub organization to remove
+          in: query
+          name: sub_organization_id
+          required: true
+          schema:
+            description: ID of the sub organization to remove
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: deletePeer mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: deletePeer
   /rpc/mcpRegistries.getServerDetails:
     get:
       description: Get detailed information about an MCP server including remotes
@@ -6522,33 +6726,110 @@ paths:
       tags:
         - mcpRegistries
       x-speakeasy-name-override: getServerDetails
-  /rpc/mcpRegistries.listCatalog:
-    get:
-      description: List available MCP servers from configured registries
-      operationId: listMCPCatalog
+  /rpc/mcpRegistries.grant:
+    post:
+      description: Grant an organization access to a private registry
+      operationId: grantMCPRegistryAccess
       parameters:
         - allowEmptyValue: true
-          description: Filter to a specific registry
-          in: query
-          name: registry_id
+          description: Session header
+          in: header
+          name: Gram-Session
           schema:
-            description: Filter to a specific registry
-            format: uuid
+            description: Session header
             type: string
         - allowEmptyValue: true
-          description: Search query to filter servers by name
-          in: query
-          name: search
+          description: API Key header
+          in: header
+          name: Gram-Key
           schema:
-            description: Search query to filter servers by name
+            description: API Key header
             type: string
         - allowEmptyValue: true
-          description: Pagination cursor
-          in: query
-          name: cursor
+          description: project header
+          in: header
+          name: Gram-Project
           schema:
-            description: Pagination cursor
+            description: project header
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: grant mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: grant
+  /rpc/mcpRegistries.listPeers:
+    get:
+      description: List peered organizations for the current organization
+      operationId: listMCPPeers
+      parameters:
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -6575,7 +6856,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListCatalogResponseBody'
+                $ref: '#/components/schemas/ListPeersResponseBody'
           description: OK response.
         "400":
           content:
@@ -6637,15 +6918,13 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
-      summary: listCatalog mcpRegistries
+      summary: listPeers mcpRegistries
       tags:
         - mcpRegistries
-      x-speakeasy-name-override: listCatalog
-      x-speakeasy-react-hook:
-        name: ListMCPCatalog
+      x-speakeasy-name-override: listPeers
   /rpc/mcpRegistries.listRegistries:
     get:
-      description: List all MCP registries (admin only)
+      description: List MCP registries accessible to the current organization
       operationId: listMCPRegistries
       parameters:
         - allowEmptyValue: true
@@ -6742,6 +7021,340 @@ paths:
       x-speakeasy-name-override: listRegistries
       x-speakeasy-react-hook:
         name: ListMCPRegistries
+  /rpc/mcpRegistries.publish:
+    post:
+      description: Publish toolsets as an internal MCP registry catalog
+      operationId: publishMCPRegistry
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequestBody'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPRegistry'
+          description: Created response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: publish mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: publish
+  /rpc/mcpRegistries.revokeGrant:
+    delete:
+      description: Revoke an organization's access to a private registry
+      operationId: revokeMCPRegistryAccess
+      parameters:
+        - allowEmptyValue: true
+          description: ID of the registry to revoke access to
+          in: query
+          name: registry_id
+          required: true
+          schema:
+            description: ID of the registry to revoke access to
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: ID of the organization to revoke access from
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: ID of the organization to revoke access from
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: revokeGrant mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: revokeGrant
+  /rpc/mcpRegistries.serve:
+    get:
+      description: Serve MCP servers from a specific registry by slug
+      operationId: serveMCPRegistry
+      parameters:
+        - allowEmptyValue: true
+          description: Slug of the registry to serve
+          in: query
+          name: registry_slug
+          required: true
+          schema:
+            description: Slug of the registry to serve
+            type: string
+        - allowEmptyValue: true
+          description: Search query to filter servers by name
+          in: query
+          name: search
+          schema:
+            description: Search query to filter servers by name
+            type: string
+        - allowEmptyValue: true
+          description: Pagination cursor
+          in: query
+          name: cursor
+          schema:
+            description: Pagination cursor
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServeResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: serve mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: serve
+      x-speakeasy-react-hook:
+        name: ServeMCPRegistry
   /rpc/packages.create:
     post:
       description: Create a new package for a project.
@@ -13757,6 +14370,14 @@ components:
           $ref: '#/components/schemas/Package'
       required:
         - package
+    CreatePeerRequestBody:
+      type: object
+      properties:
+        sub_organization_id:
+          type: string
+          description: ID of the sub organization to peer with
+      required:
+        - sub_organization_id
     CreateProjectForm:
       type: object
       properties:
@@ -15441,6 +16062,19 @@ components:
       required:
         - logs_enabled
         - tool_io_logs_enabled
+    GrantRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: ID of the organization to grant access to
+        registry_id:
+          type: string
+          description: ID of the registry to grant access to
+          format: uuid
+      required:
+        - registry_id
+        - organization_id
     HTTPToolDefinition:
       type: object
       properties:
@@ -15839,19 +16473,6 @@ components:
       description: Result of listing distinct attribute keys
       required:
         - keys
-    ListCatalogResponseBody:
-      type: object
-      properties:
-        next_cursor:
-          type: string
-          description: Pagination cursor for the next page
-        servers:
-          type: array
-          items:
-            $ref: '#/components/schemas/ExternalMCPServer'
-          description: List of available MCP servers
-      required:
-        - servers
     ListChatsResult:
       type: object
       properties:
@@ -15979,6 +16600,16 @@ components:
           description: The list of packages
       required:
         - packages
+    ListPeersResponseBody:
+      type: object
+      properties:
+        peers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeeredOrganization'
+          description: List of peered organizations
+      required:
+        - peers
     ListProjectsPayload:
       type: object
       properties:
@@ -16136,14 +16767,31 @@ components:
         name:
           type: string
           description: Display name for the registry
+        organization_id:
+          type: string
+          description: Owning organization ID
+        slug:
+          type: string
+          description: URL-friendly identifier for the registry
+        source:
+          type: string
+          description: Source type of the registry
+          enum:
+            - internal
+            - external
         url:
           type: string
           description: URL of the registry
+        visibility:
+          type: string
+          description: Visibility of the registry
+          enum:
+            - public
+            - private
       description: An MCP registry
       required:
         - id
         - name
-        - url
     McpEnvironmentConfig:
       type: object
       properties:
@@ -16797,6 +17445,34 @@ components:
         - visibility
         - semver
         - created_at
+    PeeredOrganization:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the peer relationship was created
+        id:
+          type: string
+          description: Peer relationship ID
+          format: uuid
+        sub_organization_id:
+          type: string
+          description: ID of the sub (granted) organization
+        sub_organization_name:
+          type: string
+          description: Name of the sub organization
+        sub_organization_slug:
+          type: string
+          description: Slug of the sub organization
+        super_organization_id:
+          type: string
+          description: ID of the super (granting) organization
+      description: A peered organization relationship
+      required:
+        - id
+        - super_organization_id
+        - sub_organization_id
+        - created_at
     PeriodUsage:
       type: object
       properties:
@@ -17166,6 +17842,36 @@ components:
       required:
         - package
         - version
+    PublishRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Display name for the catalog
+          minLength: 1
+          maxLength: 100
+        slug:
+          type: string
+          description: URL-friendly identifier for the catalog
+          minLength: 1
+          maxLength: 100
+        toolset_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of the toolsets to include
+          minItems: 1
+        visibility:
+          type: string
+          description: Visibility of the catalog
+          default: private
+          enum:
+            - public
+            - private
+      required:
+        - name
+        - slug
+        - toolset_ids
     RedeployRequestBody:
       type: object
       properties:
@@ -17790,6 +18496,19 @@ components:
         - content_type
         - content_length
         - last_modified
+    ServeResponseBody:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Pagination cursor for the next page
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPServer'
+          description: List of available MCP servers
+      required:
+        - servers
     ServerNameOverride:
       type: object
       properties:
