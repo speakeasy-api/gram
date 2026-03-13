@@ -101,7 +101,12 @@ export const ProjectProvider = ({
   const { projectSlug } = useSlugs();
   const [project, setProject] = useState<ProjectEntry | null>(null);
 
-  const defaultProject = organization.projects[0];
+  // Fall back to the user's most recently used project, then to the first project
+  const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
+  const preferredProject = preferredSlug
+    ? organization.projects.find((p) => p.slug === preferredSlug)
+    : undefined;
+  const defaultProject = preferredProject ?? organization.projects[0];
 
   const currentProject =
     organization.projects.find((p) => p.slug === projectSlug) ?? defaultProject;
@@ -268,6 +273,19 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // On an org-level page or bare URL with no project context — that's fine,
     // unless we're at the root "/" with no org slug either
     if (!orgSlug || orgSlug !== session.organization.slug) {
+      // If the user has a preferred project, redirect to it instead of org home
+      const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
+      const preferredProject = preferredSlug
+        ? session.organization.projects.find((p) => p.slug === preferredSlug)
+        : undefined;
+      if (preferredProject) {
+        return (
+          <Navigate
+            to={`/${session.organization.slug}/projects/${preferredProject.slug}`}
+            replace
+          />
+        );
+      }
       // Redirect to org home
       return <Navigate to={`/${session.organization.slug}`} replace />;
     }
