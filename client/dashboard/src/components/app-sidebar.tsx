@@ -7,19 +7,22 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
+import { useSlugs } from "@/contexts/Sdk";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, TestTube2Icon } from "lucide-react";
+import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
+  const { orgSlug } = useSlugs();
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -52,6 +55,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+        <div className="mt-auto px-2 py-3">
+          <Link
+            to={`/${orgSlug}`}
+            className="flex items-center gap-1.5 px-2 py-1 text-sm text-muted-foreground hover:text-foreground transition-colors hover:no-underline"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span>Back to org</span>
+          </Link>
+        </div>
       </SidebarContent>
       <SidebarFooter>
         <FreeTierExceededNotification />

@@ -10,6 +10,7 @@ import {
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
+import { ExternalLink } from "lucide-react";
 import * as React from "react";
 
 export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -45,6 +46,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <NavButton
                   title="Team"
+                  titleNode={
+                    <span className="flex items-center gap-1.5">
+                      Team
+                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    </span>
+                  }
                   href={teamUrl}
                   target="_blank"
                   Icon={(props) => <Icon name="users-round" {...props} />}

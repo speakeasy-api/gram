@@ -2,7 +2,6 @@ import { Page } from "@/components/page-layout";
 import { DotCard } from "@/components/ui/dot-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useUser } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
@@ -41,7 +40,6 @@ const FEATURED_SERVER_SPECIFIERS = [
 
 export default function Home() {
   const routes = useRoutes();
-  const user = useUser();
   const telemetry = useTelemetry();
   const { data, isLoading } = useInfiniteListMCPCatalog();
   const { data: deploymentResult } = useLatestDeployment();
@@ -80,18 +78,12 @@ export default function Home() {
       .slice(0, 6);
   }, [toolsetsResult]);
 
-  const firstName = user.displayName?.split(" ")[0];
-
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <h1 className="text-2xl font-semibold mb-6">
-          Welcome{firstName ? `, ${firstName}` : ""}
-        </h1>
-
         {/* MCP Servers Section */}
         {(isToolsetsLoading || recentMcpServers.length > 0) && (
           <div className="mb-10">

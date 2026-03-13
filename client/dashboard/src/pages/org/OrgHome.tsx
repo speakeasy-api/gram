@@ -22,9 +22,14 @@ export default function OrgHome() {
         <Page.Header.Title>Home</Page.Header.Title>
       </Page.Header>
       <Page.Body>
-        <Heading variant="h4" className="mb-2">
+        <Heading variant="h4" className="mb-1">
           Projects
         </Heading>
+        <Type small muted className="mb-4">
+          Projects organize your MCP servers, tools, deployments, and
+          integrations into separate workspaces. Use them to isolate different
+          products or environments within your organization.
+        </Type>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           {projects.map((project) => (
             <Link
