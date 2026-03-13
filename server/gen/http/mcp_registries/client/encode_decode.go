@@ -1893,13 +1893,13 @@ func DecodeListRegistriesResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
-// BuildListCatalogRequest instantiates a HTTP request object with method and
-// path set to call the "mcpRegistries" service "listCatalog" endpoint
-func (c *Client) BuildListCatalogRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListCatalogMcpRegistriesPath()}
+// BuildServeRequest instantiates a HTTP request object with method and path
+// set to call the "mcpRegistries" service "serve" endpoint
+func (c *Client) BuildServeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ServeMcpRegistriesPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("mcpRegistries", "listCatalog", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "serve", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -1908,13 +1908,13 @@ func (c *Client) BuildListCatalogRequest(ctx context.Context, v any) (*http.Requ
 	return req, nil
 }
 
-// EncodeListCatalogRequest returns an encoder for requests sent to the
-// mcpRegistries listCatalog server.
-func EncodeListCatalogRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeServeRequest returns an encoder for requests sent to the mcpRegistries
+// serve server.
+func EncodeServeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*mcpregistries.ListCatalogPayload)
+		p, ok := v.(*mcpregistries.ServePayload)
 		if !ok {
-			return goahttp.ErrInvalidType("mcpRegistries", "listCatalog", "*mcpregistries.ListCatalogPayload", v)
+			return goahttp.ErrInvalidType("mcpRegistries", "serve", "*mcpregistries.ServePayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -1929,9 +1929,7 @@ func EncodeListCatalogRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		if p.RegistryID != nil {
-			values.Add("registry_id", *p.RegistryID)
-		}
+		values.Add("registry_slug", p.RegistrySlug)
 		if p.Search != nil {
 			values.Add("search", *p.Search)
 		}
@@ -1943,10 +1941,10 @@ func EncodeListCatalogRequest(encoder func(*http.Request) goahttp.Encoder) func(
 	}
 }
 
-// DecodeListCatalogResponse returns a decoder for responses returned by the
-// mcpRegistries listCatalog endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeListCatalogResponse may return the following errors:
+// DecodeServeResponse returns a decoder for responses returned by the
+// mcpRegistries serve endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeServeResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1958,7 +1956,7 @@ func EncodeListCatalogRequest(encoder func(*http.Request) goahttp.Encoder) func(
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeListCatalogResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeServeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -1975,169 +1973,169 @@ func DecodeListCatalogResponse(decoder func(*http.Response) goahttp.Decoder, res
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body ListCatalogResponseBody
+				body ServeResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogResponseBody(&body)
+			err = ValidateServeResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			res := NewListCatalogResultOK(&body)
+			res := NewServeResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body ListCatalogUnauthorizedResponseBody
+				body ServeUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogUnauthorizedResponseBody(&body)
+			err = ValidateServeUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			return nil, NewListCatalogUnauthorized(&body)
+			return nil, NewServeUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body ListCatalogForbiddenResponseBody
+				body ServeForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogForbiddenResponseBody(&body)
+			err = ValidateServeForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			return nil, NewListCatalogForbidden(&body)
+			return nil, NewServeForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body ListCatalogBadRequestResponseBody
+				body ServeBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogBadRequestResponseBody(&body)
+			err = ValidateServeBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			return nil, NewListCatalogBadRequest(&body)
+			return nil, NewServeBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body ListCatalogNotFoundResponseBody
+				body ServeNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogNotFoundResponseBody(&body)
+			err = ValidateServeNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			return nil, NewListCatalogNotFound(&body)
+			return nil, NewServeNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body ListCatalogConflictResponseBody
+				body ServeConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogConflictResponseBody(&body)
+			err = ValidateServeConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			return nil, NewListCatalogConflict(&body)
+			return nil, NewServeConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body ListCatalogUnsupportedMediaResponseBody
+				body ServeUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogUnsupportedMediaResponseBody(&body)
+			err = ValidateServeUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			return nil, NewListCatalogUnsupportedMedia(&body)
+			return nil, NewServeUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body ListCatalogInvalidResponseBody
+				body ServeInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogInvalidResponseBody(&body)
+			err = ValidateServeInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			return nil, NewListCatalogInvalid(&body)
+			return nil, NewServeInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body ListCatalogInvariantViolationResponseBody
+					body ServeInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 				}
-				err = ValidateListCatalogInvariantViolationResponseBody(&body)
+				err = ValidateServeInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+					return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 				}
-				return nil, NewListCatalogInvariantViolation(&body)
+				return nil, NewServeInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body ListCatalogUnexpectedResponseBody
+					body ServeUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 				}
-				err = ValidateListCatalogUnexpectedResponseBody(&body)
+				err = ValidateServeUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+					return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 				}
-				return nil, NewListCatalogUnexpected(&body)
+				return nil, NewServeUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "listCatalog", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "serve", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body ListCatalogGatewayErrorResponseBody
+				body ServeGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "serve", err)
 			}
-			err = ValidateListCatalogGatewayErrorResponseBody(&body)
+			err = ValidateServeGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				return nil, goahttp.ErrValidationError("mcpRegistries", "serve", err)
 			}
-			return nil, NewListCatalogGatewayError(&body)
+			return nil, NewServeGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "listCatalog", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "serve", resp.StatusCode, string(body))
 		}
 	}
 }

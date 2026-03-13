@@ -59,7 +59,7 @@ func UsageCommands() []string {
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
-		"mcp-registries (create-peer|list-peers|delete-peer|publish|grant|revoke-grant|clear-cache|list-registries|list-catalog|get-server-details)",
+		"mcp-registries (create-peer|list-peers|delete-peer|publish|grant|revoke-grant|clear-cache|list-registries|serve|get-server-details)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|logs)",
@@ -450,13 +450,13 @@ func ParseEndpoint(
 		mcpRegistriesListRegistriesApikeyTokenFlag      = mcpRegistriesListRegistriesFlags.String("apikey-token", "", "")
 		mcpRegistriesListRegistriesProjectSlugInputFlag = mcpRegistriesListRegistriesFlags.String("project-slug-input", "", "")
 
-		mcpRegistriesListCatalogFlags                = flag.NewFlagSet("list-catalog", flag.ExitOnError)
-		mcpRegistriesListCatalogRegistryIDFlag       = mcpRegistriesListCatalogFlags.String("registry-id", "", "")
-		mcpRegistriesListCatalogSearchFlag           = mcpRegistriesListCatalogFlags.String("search", "", "")
-		mcpRegistriesListCatalogCursorFlag           = mcpRegistriesListCatalogFlags.String("cursor", "", "")
-		mcpRegistriesListCatalogSessionTokenFlag     = mcpRegistriesListCatalogFlags.String("session-token", "", "")
-		mcpRegistriesListCatalogApikeyTokenFlag      = mcpRegistriesListCatalogFlags.String("apikey-token", "", "")
-		mcpRegistriesListCatalogProjectSlugInputFlag = mcpRegistriesListCatalogFlags.String("project-slug-input", "", "")
+		mcpRegistriesServeFlags                = flag.NewFlagSet("serve", flag.ExitOnError)
+		mcpRegistriesServeRegistrySlugFlag     = mcpRegistriesServeFlags.String("registry-slug", "REQUIRED", "")
+		mcpRegistriesServeSearchFlag           = mcpRegistriesServeFlags.String("search", "", "")
+		mcpRegistriesServeCursorFlag           = mcpRegistriesServeFlags.String("cursor", "", "")
+		mcpRegistriesServeSessionTokenFlag     = mcpRegistriesServeFlags.String("session-token", "", "")
+		mcpRegistriesServeApikeyTokenFlag      = mcpRegistriesServeFlags.String("apikey-token", "", "")
+		mcpRegistriesServeProjectSlugInputFlag = mcpRegistriesServeFlags.String("project-slug-input", "", "")
 
 		mcpRegistriesGetServerDetailsFlags                = flag.NewFlagSet("get-server-details", flag.ExitOnError)
 		mcpRegistriesGetServerDetailsRegistryIDFlag       = mcpRegistriesGetServerDetailsFlags.String("registry-id", "REQUIRED", "")
@@ -981,7 +981,7 @@ func ParseEndpoint(
 	mcpRegistriesRevokeGrantFlags.Usage = mcpRegistriesRevokeGrantUsage
 	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
-	mcpRegistriesListCatalogFlags.Usage = mcpRegistriesListCatalogUsage
+	mcpRegistriesServeFlags.Usage = mcpRegistriesServeUsage
 	mcpRegistriesGetServerDetailsFlags.Usage = mcpRegistriesGetServerDetailsUsage
 
 	functionsFlags.Usage = functionsUsage
@@ -1394,8 +1394,8 @@ func ParseEndpoint(
 			case "list-registries":
 				epf = mcpRegistriesListRegistriesFlags
 
-			case "list-catalog":
-				epf = mcpRegistriesListCatalogFlags
+			case "serve":
+				epf = mcpRegistriesServeFlags
 
 			case "get-server-details":
 				epf = mcpRegistriesGetServerDetailsFlags
@@ -1940,9 +1940,9 @@ func ParseEndpoint(
 			case "list-registries":
 				endpoint = c.ListRegistries()
 				data, err = mcpregistriesc.BuildListRegistriesPayload(*mcpRegistriesListRegistriesSessionTokenFlag, *mcpRegistriesListRegistriesApikeyTokenFlag, *mcpRegistriesListRegistriesProjectSlugInputFlag)
-			case "list-catalog":
-				endpoint = c.ListCatalog()
-				data, err = mcpregistriesc.BuildListCatalogPayload(*mcpRegistriesListCatalogRegistryIDFlag, *mcpRegistriesListCatalogSearchFlag, *mcpRegistriesListCatalogCursorFlag, *mcpRegistriesListCatalogSessionTokenFlag, *mcpRegistriesListCatalogApikeyTokenFlag, *mcpRegistriesListCatalogProjectSlugInputFlag)
+			case "serve":
+				endpoint = c.Serve()
+				data, err = mcpregistriesc.BuildServePayload(*mcpRegistriesServeRegistrySlugFlag, *mcpRegistriesServeSearchFlag, *mcpRegistriesServeCursorFlag, *mcpRegistriesServeSessionTokenFlag, *mcpRegistriesServeApikeyTokenFlag, *mcpRegistriesServeProjectSlugInputFlag)
 			case "get-server-details":
 				endpoint = c.GetServerDetails()
 				data, err = mcpregistriesc.BuildGetServerDetailsPayload(*mcpRegistriesGetServerDetailsRegistryIDFlag, *mcpRegistriesGetServerDetailsServerSpecifierFlag, *mcpRegistriesGetServerDetailsSessionTokenFlag, *mcpRegistriesGetServerDetailsApikeyTokenFlag, *mcpRegistriesGetServerDetailsProjectSlugInputFlag)
@@ -3571,8 +3571,8 @@ func mcpRegistriesUsage() {
 	fmt.Fprintln(os.Stderr, `    grant: Grant an organization access to a private registry`)
 	fmt.Fprintln(os.Stderr, `    revoke-grant: Revoke an organization's access to a private registry`)
 	fmt.Fprintln(os.Stderr, `    clear-cache: Clear the registry cache for a specific registry (admin only)`)
-	fmt.Fprintln(os.Stderr, `    list-registries: List all MCP registries (admin only)`)
-	fmt.Fprintln(os.Stderr, `    list-catalog: List available MCP servers from configured registries`)
+	fmt.Fprintln(os.Stderr, `    list-registries: List MCP registries accessible to the current organization`)
+	fmt.Fprintln(os.Stderr, `    serve: Serve MCP servers from a specific registry by slug`)
 	fmt.Fprintln(os.Stderr, `    get-server-details: Get detailed information about an MCP server including remotes`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -3756,7 +3756,7 @@ func mcpRegistriesListRegistriesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all MCP registries (admin only)`)
+	fmt.Fprintln(os.Stderr, `List MCP registries accessible to the current organization`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -3768,10 +3768,10 @@ func mcpRegistriesListRegistriesUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries list-registries --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpRegistriesListCatalogUsage() {
+func mcpRegistriesServeUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries list-catalog", os.Args[0])
-	fmt.Fprint(os.Stderr, " -registry-id STRING")
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries serve", os.Args[0])
+	fmt.Fprint(os.Stderr, " -registry-slug STRING")
 	fmt.Fprint(os.Stderr, " -search STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -3781,10 +3781,10 @@ func mcpRegistriesListCatalogUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List available MCP servers from configured registries`)
+	fmt.Fprintln(os.Stderr, `Serve MCP servers from a specific registry by slug`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -registry-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -registry-slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -search STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -3793,7 +3793,7 @@ func mcpRegistriesListCatalogUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries list-catalog --registry-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"abc123\" --cursor \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries serve --registry-slug \"abc123\" --search \"abc123\" --cursor \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpRegistriesGetServerDetailsUsage() {

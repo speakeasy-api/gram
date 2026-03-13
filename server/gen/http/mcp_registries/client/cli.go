@@ -353,52 +353,45 @@ func BuildListRegistriesPayload(mcpRegistriesListRegistriesSessionToken string, 
 	return v, nil
 }
 
-// BuildListCatalogPayload builds the payload for the mcpRegistries listCatalog
-// endpoint from CLI flags.
-func BuildListCatalogPayload(mcpRegistriesListCatalogRegistryID string, mcpRegistriesListCatalogSearch string, mcpRegistriesListCatalogCursor string, mcpRegistriesListCatalogSessionToken string, mcpRegistriesListCatalogApikeyToken string, mcpRegistriesListCatalogProjectSlugInput string) (*mcpregistries.ListCatalogPayload, error) {
-	var err error
-	var registryID *string
+// BuildServePayload builds the payload for the mcpRegistries serve endpoint
+// from CLI flags.
+func BuildServePayload(mcpRegistriesServeRegistrySlug string, mcpRegistriesServeSearch string, mcpRegistriesServeCursor string, mcpRegistriesServeSessionToken string, mcpRegistriesServeApikeyToken string, mcpRegistriesServeProjectSlugInput string) (*mcpregistries.ServePayload, error) {
+	var registrySlug string
 	{
-		if mcpRegistriesListCatalogRegistryID != "" {
-			registryID = &mcpRegistriesListCatalogRegistryID
-			err = goa.MergeErrors(err, goa.ValidateFormat("registry_id", *registryID, goa.FormatUUID))
-			if err != nil {
-				return nil, err
-			}
-		}
+		registrySlug = mcpRegistriesServeRegistrySlug
 	}
 	var search *string
 	{
-		if mcpRegistriesListCatalogSearch != "" {
-			search = &mcpRegistriesListCatalogSearch
+		if mcpRegistriesServeSearch != "" {
+			search = &mcpRegistriesServeSearch
 		}
 	}
 	var cursor *string
 	{
-		if mcpRegistriesListCatalogCursor != "" {
-			cursor = &mcpRegistriesListCatalogCursor
+		if mcpRegistriesServeCursor != "" {
+			cursor = &mcpRegistriesServeCursor
 		}
 	}
 	var sessionToken *string
 	{
-		if mcpRegistriesListCatalogSessionToken != "" {
-			sessionToken = &mcpRegistriesListCatalogSessionToken
+		if mcpRegistriesServeSessionToken != "" {
+			sessionToken = &mcpRegistriesServeSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if mcpRegistriesListCatalogApikeyToken != "" {
-			apikeyToken = &mcpRegistriesListCatalogApikeyToken
+		if mcpRegistriesServeApikeyToken != "" {
+			apikeyToken = &mcpRegistriesServeApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if mcpRegistriesListCatalogProjectSlugInput != "" {
-			projectSlugInput = &mcpRegistriesListCatalogProjectSlugInput
+		if mcpRegistriesServeProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesServeProjectSlugInput
 		}
 	}
-	v := &mcpregistries.ListCatalogPayload{}
-	v.RegistryID = registryID
+	v := &mcpregistries.ServePayload{}
+	v.RegistrySlug = registrySlug
 	v.Search = search
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
