@@ -6329,6 +6329,208 @@ paths:
             tags:
                 - mcpRegistries
             x-speakeasy-name-override: clearCache
+    /rpc/mcpRegistries.createPeer:
+        post:
+            description: Create a peered organization relationship (super org grants sub org access)
+            operationId: createMCPPeer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePeerRequestBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PeeredOrganization'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createPeer mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: createPeer
+    /rpc/mcpRegistries.deletePeer:
+        delete:
+            description: Remove a peered organization relationship
+            operationId: deleteMCPPeer
+            parameters:
+                - allowEmptyValue: true
+                  description: ID of the sub organization to remove
+                  in: query
+                  name: sub_organization_id
+                  required: true
+                  schema:
+                    description: ID of the sub organization to remove
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deletePeer mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: deletePeer
     /rpc/mcpRegistries.getServerDetails:
         get:
             description: Get detailed information about an MCP server including remotes
@@ -6562,6 +6764,102 @@ paths:
             x-speakeasy-name-override: listCatalog
             x-speakeasy-react-hook:
                 name: ListMCPCatalog
+    /rpc/mcpRegistries.listPeers:
+        get:
+            description: List peered organizations for the current organization
+            operationId: listMCPPeers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPeersResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listPeers mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: listPeers
     /rpc/mcpRegistries.listRegistries:
         get:
             description: List all MCP registries (admin only)
@@ -13619,6 +13917,14 @@ components:
                     $ref: '#/components/schemas/Package'
             required:
                 - package
+        CreatePeerRequestBody:
+            type: object
+            properties:
+                sub_organization_id:
+                    type: string
+                    description: ID of the sub organization to peer with
+            required:
+                - sub_organization_id
         CreateProjectForm:
             type: object
             properties:
@@ -15840,6 +16146,16 @@ components:
                     description: The list of packages
             required:
                 - packages
+        ListPeersResponseBody:
+            type: object
+            properties:
+                peers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PeeredOrganization'
+                    description: List of peered organizations
+            required:
+                - peers
         ListProjectsPayload:
             type: object
             properties:
@@ -16657,6 +16973,34 @@ components:
                 - deployment_id
                 - visibility
                 - semver
+                - created_at
+        PeeredOrganization:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the peer relationship was created
+                id:
+                    type: string
+                    description: Peer relationship ID
+                    format: uuid
+                sub_organization_id:
+                    type: string
+                    description: ID of the sub (granted) organization
+                sub_organization_name:
+                    type: string
+                    description: Name of the sub organization
+                sub_organization_slug:
+                    type: string
+                    description: Slug of the sub organization
+                super_organization_id:
+                    type: string
+                    description: ID of the super (granting) organization
+            description: A peered organization relationship
+            required:
+                - id
+                - super_organization_id
+                - sub_organization_id
                 - created_at
         PeriodUsage:
             type: object

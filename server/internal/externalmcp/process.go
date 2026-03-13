@@ -98,7 +98,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 	serverDetails, err := te.registryClient.GetServerDetails(ctx, Registry{
 		ID:  registry.ID,
-		URL: registry.Url,
+		URL: registry.Url.String,
 	}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).Log(ctx, logger)

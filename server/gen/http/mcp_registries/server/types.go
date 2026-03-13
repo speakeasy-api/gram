@@ -13,6 +13,37 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// CreatePeerRequestBody is the type of the "mcpRegistries" service
+// "createPeer" endpoint HTTP request body.
+type CreatePeerRequestBody struct {
+	// ID of the sub organization to peer with
+	SubOrganizationID *string `form:"sub_organization_id,omitempty" json:"sub_organization_id,omitempty" xml:"sub_organization_id,omitempty"`
+}
+
+// CreatePeerResponseBody is the type of the "mcpRegistries" service
+// "createPeer" endpoint HTTP response body.
+type CreatePeerResponseBody struct {
+	// Peer relationship ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// ID of the super (granting) organization
+	SuperOrganizationID string `form:"super_organization_id" json:"super_organization_id" xml:"super_organization_id"`
+	// ID of the sub (granted) organization
+	SubOrganizationID string `form:"sub_organization_id" json:"sub_organization_id" xml:"sub_organization_id"`
+	// Name of the sub organization
+	SubOrganizationName *string `form:"sub_organization_name,omitempty" json:"sub_organization_name,omitempty" xml:"sub_organization_name,omitempty"`
+	// Slug of the sub organization
+	SubOrganizationSlug *string `form:"sub_organization_slug,omitempty" json:"sub_organization_slug,omitempty" xml:"sub_organization_slug,omitempty"`
+	// When the peer relationship was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// ListPeersResponseBody is the type of the "mcpRegistries" service "listPeers"
+// endpoint HTTP response body.
+type ListPeersResponseBody struct {
+	// List of peered organizations
+	Peers []*PeeredOrganizationResponseBody `form:"peers" json:"peers" xml:"peers"`
+}
+
 // ListRegistriesResponseBody is the type of the "mcpRegistries" service
 // "listRegistries" endpoint HTTP response body.
 type ListRegistriesResponseBody struct {
@@ -51,6 +82,556 @@ type GetServerDetailsResponseBody struct {
 	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
+}
+
+// CreatePeerUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "createPeer" endpoint HTTP response body for the "unauthorized"
+// error.
+type CreatePeerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerForbiddenResponseBody is the type of the "mcpRegistries" service
+// "createPeer" endpoint HTTP response body for the "forbidden" error.
+type CreatePeerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerBadRequestResponseBody is the type of the "mcpRegistries" service
+// "createPeer" endpoint HTTP response body for the "bad_request" error.
+type CreatePeerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerNotFoundResponseBody is the type of the "mcpRegistries" service
+// "createPeer" endpoint HTTP response body for the "not_found" error.
+type CreatePeerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerConflictResponseBody is the type of the "mcpRegistries" service
+// "createPeer" endpoint HTTP response body for the "conflict" error.
+type CreatePeerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerUnsupportedMediaResponseBody is the type of the "mcpRegistries"
+// service "createPeer" endpoint HTTP response body for the "unsupported_media"
+// error.
+type CreatePeerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerInvalidResponseBody is the type of the "mcpRegistries" service
+// "createPeer" endpoint HTTP response body for the "invalid" error.
+type CreatePeerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerInvariantViolationResponseBody is the type of the "mcpRegistries"
+// service "createPeer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreatePeerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerUnexpectedResponseBody is the type of the "mcpRegistries" service
+// "createPeer" endpoint HTTP response body for the "unexpected" error.
+type CreatePeerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePeerGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "createPeer" endpoint HTTP response body for the "gateway_error"
+// error.
+type CreatePeerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersUnauthorizedResponseBody is the type of the "mcpRegistries" service
+// "listPeers" endpoint HTTP response body for the "unauthorized" error.
+type ListPeersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersForbiddenResponseBody is the type of the "mcpRegistries" service
+// "listPeers" endpoint HTTP response body for the "forbidden" error.
+type ListPeersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersBadRequestResponseBody is the type of the "mcpRegistries" service
+// "listPeers" endpoint HTTP response body for the "bad_request" error.
+type ListPeersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersNotFoundResponseBody is the type of the "mcpRegistries" service
+// "listPeers" endpoint HTTP response body for the "not_found" error.
+type ListPeersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersConflictResponseBody is the type of the "mcpRegistries" service
+// "listPeers" endpoint HTTP response body for the "conflict" error.
+type ListPeersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersUnsupportedMediaResponseBody is the type of the "mcpRegistries"
+// service "listPeers" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ListPeersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersInvalidResponseBody is the type of the "mcpRegistries" service
+// "listPeers" endpoint HTTP response body for the "invalid" error.
+type ListPeersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersInvariantViolationResponseBody is the type of the "mcpRegistries"
+// service "listPeers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListPeersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersUnexpectedResponseBody is the type of the "mcpRegistries" service
+// "listPeers" endpoint HTTP response body for the "unexpected" error.
+type ListPeersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPeersGatewayErrorResponseBody is the type of the "mcpRegistries" service
+// "listPeers" endpoint HTTP response body for the "gateway_error" error.
+type ListPeersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "deletePeer" endpoint HTTP response body for the "unauthorized"
+// error.
+type DeletePeerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerForbiddenResponseBody is the type of the "mcpRegistries" service
+// "deletePeer" endpoint HTTP response body for the "forbidden" error.
+type DeletePeerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerBadRequestResponseBody is the type of the "mcpRegistries" service
+// "deletePeer" endpoint HTTP response body for the "bad_request" error.
+type DeletePeerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerNotFoundResponseBody is the type of the "mcpRegistries" service
+// "deletePeer" endpoint HTTP response body for the "not_found" error.
+type DeletePeerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerConflictResponseBody is the type of the "mcpRegistries" service
+// "deletePeer" endpoint HTTP response body for the "conflict" error.
+type DeletePeerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerUnsupportedMediaResponseBody is the type of the "mcpRegistries"
+// service "deletePeer" endpoint HTTP response body for the "unsupported_media"
+// error.
+type DeletePeerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerInvalidResponseBody is the type of the "mcpRegistries" service
+// "deletePeer" endpoint HTTP response body for the "invalid" error.
+type DeletePeerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerInvariantViolationResponseBody is the type of the "mcpRegistries"
+// service "deletePeer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DeletePeerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerUnexpectedResponseBody is the type of the "mcpRegistries" service
+// "deletePeer" endpoint HTTP response body for the "unexpected" error.
+type DeletePeerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeletePeerGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "deletePeer" endpoint HTTP response body for the "gateway_error"
+// error.
+type DeletePeerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // ClearCacheUnauthorizedResponseBody is the type of the "mcpRegistries"
@@ -800,6 +1381,23 @@ type GetServerDetailsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// PeeredOrganizationResponseBody is used to define fields on response body
+// types.
+type PeeredOrganizationResponseBody struct {
+	// Peer relationship ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// ID of the super (granting) organization
+	SuperOrganizationID string `form:"super_organization_id" json:"super_organization_id" xml:"super_organization_id"`
+	// ID of the sub (granted) organization
+	SubOrganizationID string `form:"sub_organization_id" json:"sub_organization_id" xml:"sub_organization_id"`
+	// Name of the sub organization
+	SubOrganizationName *string `form:"sub_organization_name,omitempty" json:"sub_organization_name,omitempty" xml:"sub_organization_name,omitempty"`
+	// Slug of the sub organization
+	SubOrganizationSlug *string `form:"sub_organization_slug,omitempty" json:"sub_organization_slug,omitempty" xml:"sub_organization_slug,omitempty"`
+	// When the peer relationship was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // MCPRegistryResponseBody is used to define fields on response body types.
 type MCPRegistryResponseBody struct {
 	// Registry ID
@@ -853,6 +1451,39 @@ type ExternalMCPRemoteResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// Transport type (sse or streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+}
+
+// NewCreatePeerResponseBody builds the HTTP response body from the result of
+// the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerResponseBody(res *types.PeeredOrganization) *CreatePeerResponseBody {
+	body := &CreatePeerResponseBody{
+		ID:                  res.ID,
+		SuperOrganizationID: res.SuperOrganizationID,
+		SubOrganizationID:   res.SubOrganizationID,
+		SubOrganizationName: res.SubOrganizationName,
+		SubOrganizationSlug: res.SubOrganizationSlug,
+		CreatedAt:           res.CreatedAt,
+	}
+	return body
+}
+
+// NewListPeersResponseBody builds the HTTP response body from the result of
+// the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersResponseBody(res *mcpregistries.ListPeersResult) *ListPeersResponseBody {
+	body := &ListPeersResponseBody{}
+	if res.Peers != nil {
+		body.Peers = make([]*PeeredOrganizationResponseBody, len(res.Peers))
+		for i, val := range res.Peers {
+			if val == nil {
+				body.Peers[i] = nil
+				continue
+			}
+			body.Peers[i] = marshalTypesPeeredOrganizationToPeeredOrganizationResponseBody(val)
+		}
+	} else {
+		body.Peers = []*PeeredOrganizationResponseBody{}
+	}
+	return body
 }
 
 // NewListRegistriesResponseBody builds the HTTP response body from the result
@@ -926,6 +1557,426 @@ func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDet
 			}
 			body.Remotes[i] = marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(val)
 		}
+	}
+	return body
+}
+
+// NewCreatePeerUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerUnauthorizedResponseBody(res *goa.ServiceError) *CreatePeerUnauthorizedResponseBody {
+	body := &CreatePeerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerForbiddenResponseBody builds the HTTP response body from the
+// result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerForbiddenResponseBody(res *goa.ServiceError) *CreatePeerForbiddenResponseBody {
+	body := &CreatePeerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerBadRequestResponseBody builds the HTTP response body from the
+// result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerBadRequestResponseBody(res *goa.ServiceError) *CreatePeerBadRequestResponseBody {
+	body := &CreatePeerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerNotFoundResponseBody builds the HTTP response body from the
+// result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerNotFoundResponseBody(res *goa.ServiceError) *CreatePeerNotFoundResponseBody {
+	body := &CreatePeerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerConflictResponseBody builds the HTTP response body from the
+// result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerConflictResponseBody(res *goa.ServiceError) *CreatePeerConflictResponseBody {
+	body := &CreatePeerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerUnsupportedMediaResponseBody(res *goa.ServiceError) *CreatePeerUnsupportedMediaResponseBody {
+	body := &CreatePeerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerInvalidResponseBody builds the HTTP response body from the
+// result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerInvalidResponseBody(res *goa.ServiceError) *CreatePeerInvalidResponseBody {
+	body := &CreatePeerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerInvariantViolationResponseBody(res *goa.ServiceError) *CreatePeerInvariantViolationResponseBody {
+	body := &CreatePeerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerUnexpectedResponseBody builds the HTTP response body from the
+// result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerUnexpectedResponseBody(res *goa.ServiceError) *CreatePeerUnexpectedResponseBody {
+	body := &CreatePeerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePeerGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "createPeer" endpoint of the "mcpRegistries" service.
+func NewCreatePeerGatewayErrorResponseBody(res *goa.ServiceError) *CreatePeerGatewayErrorResponseBody {
+	body := &CreatePeerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersUnauthorizedResponseBody(res *goa.ServiceError) *ListPeersUnauthorizedResponseBody {
+	body := &ListPeersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersForbiddenResponseBody builds the HTTP response body from the
+// result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersForbiddenResponseBody(res *goa.ServiceError) *ListPeersForbiddenResponseBody {
+	body := &ListPeersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersBadRequestResponseBody builds the HTTP response body from the
+// result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersBadRequestResponseBody(res *goa.ServiceError) *ListPeersBadRequestResponseBody {
+	body := &ListPeersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersNotFoundResponseBody builds the HTTP response body from the
+// result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersNotFoundResponseBody(res *goa.ServiceError) *ListPeersNotFoundResponseBody {
+	body := &ListPeersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersConflictResponseBody builds the HTTP response body from the
+// result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersConflictResponseBody(res *goa.ServiceError) *ListPeersConflictResponseBody {
+	body := &ListPeersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPeersUnsupportedMediaResponseBody {
+	body := &ListPeersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersInvalidResponseBody builds the HTTP response body from the
+// result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersInvalidResponseBody(res *goa.ServiceError) *ListPeersInvalidResponseBody {
+	body := &ListPeersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersInvariantViolationResponseBody(res *goa.ServiceError) *ListPeersInvariantViolationResponseBody {
+	body := &ListPeersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersUnexpectedResponseBody(res *goa.ServiceError) *ListPeersUnexpectedResponseBody {
+	body := &ListPeersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPeersGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listPeers" endpoint of the "mcpRegistries" service.
+func NewListPeersGatewayErrorResponseBody(res *goa.ServiceError) *ListPeersGatewayErrorResponseBody {
+	body := &ListPeersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerUnauthorizedResponseBody(res *goa.ServiceError) *DeletePeerUnauthorizedResponseBody {
+	body := &DeletePeerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerForbiddenResponseBody builds the HTTP response body from the
+// result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerForbiddenResponseBody(res *goa.ServiceError) *DeletePeerForbiddenResponseBody {
+	body := &DeletePeerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerBadRequestResponseBody builds the HTTP response body from the
+// result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerBadRequestResponseBody(res *goa.ServiceError) *DeletePeerBadRequestResponseBody {
+	body := &DeletePeerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerNotFoundResponseBody builds the HTTP response body from the
+// result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerNotFoundResponseBody(res *goa.ServiceError) *DeletePeerNotFoundResponseBody {
+	body := &DeletePeerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerConflictResponseBody builds the HTTP response body from the
+// result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerConflictResponseBody(res *goa.ServiceError) *DeletePeerConflictResponseBody {
+	body := &DeletePeerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerUnsupportedMediaResponseBody(res *goa.ServiceError) *DeletePeerUnsupportedMediaResponseBody {
+	body := &DeletePeerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerInvalidResponseBody builds the HTTP response body from the
+// result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerInvalidResponseBody(res *goa.ServiceError) *DeletePeerInvalidResponseBody {
+	body := &DeletePeerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerInvariantViolationResponseBody(res *goa.ServiceError) *DeletePeerInvariantViolationResponseBody {
+	body := &DeletePeerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerUnexpectedResponseBody builds the HTTP response body from the
+// result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerUnexpectedResponseBody(res *goa.ServiceError) *DeletePeerUnexpectedResponseBody {
+	body := &DeletePeerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeletePeerGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "deletePeer" endpoint of the "mcpRegistries" service.
+func NewDeletePeerGatewayErrorResponseBody(res *goa.ServiceError) *DeletePeerGatewayErrorResponseBody {
+	body := &DeletePeerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -1496,6 +2547,42 @@ func NewGetServerDetailsGatewayErrorResponseBody(res *goa.ServiceError) *GetServ
 	return body
 }
 
+// NewCreatePeerPayload builds a mcpRegistries service createPeer endpoint
+// payload.
+func NewCreatePeerPayload(body *CreatePeerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.CreatePeerPayload {
+	v := &mcpregistries.CreatePeerPayload{
+		SubOrganizationID: *body.SubOrganizationID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListPeersPayload builds a mcpRegistries service listPeers endpoint
+// payload.
+func NewListPeersPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ListPeersPayload {
+	v := &mcpregistries.ListPeersPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeletePeerPayload builds a mcpRegistries service deletePeer endpoint
+// payload.
+func NewDeletePeerPayload(subOrganizationID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.DeletePeerPayload {
+	v := &mcpregistries.DeletePeerPayload{}
+	v.SubOrganizationID = subOrganizationID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewClearCachePayload builds a mcpRegistries service clearCache endpoint
 // payload.
 func NewClearCachePayload(registryID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ClearCachePayload {
@@ -1544,4 +2631,13 @@ func NewGetServerDetailsPayload(registryID string, serverSpecifier string, sessi
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateCreatePeerRequestBody runs the validations defined on
+// CreatePeerRequestBody
+func ValidateCreatePeerRequestBody(body *CreatePeerRequestBody) (err error) {
+	if body.SubOrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sub_organization_id", "body"))
+	}
+	return
 }

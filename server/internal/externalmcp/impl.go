@@ -97,14 +97,106 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 		return oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
 	}
 
-	if err := s.registryClient.ClearCache(ctx, registry.Url); err != nil {
+	if !registry.Url.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "registry has no URL").Log(ctx, s.logger)
+	}
+
+	if err := s.registryClient.ClearCache(ctx, registry.Url.String); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "clear registry cache").Log(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "registry cache cleared",
 		attr.SlogMCPRegistryID(registryID.String()),
-		attr.SlogMCPRegistryURL(registry.Url),
+		attr.SlogMCPRegistryURL(registry.Url.String),
 	)
+
+	return nil
+}
+
+func (s *Service) CreatePeer(ctx context.Context, payload *gen.CreatePeerPayload) (*types.PeeredOrganization, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	if authCtx.ActiveOrganizationID == payload.SubOrganizationID {
+		return nil, oops.E(oops.CodeBadRequest, nil, "cannot peer an organization with itself").Log(ctx, s.logger)
+	}
+
+	peer, err := s.repo.CreatePeer(ctx, repo.CreatePeerParams{
+		SuperOrganizationID: authCtx.ActiveOrganizationID,
+		SubOrganizationID:   payload.SubOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create peer").Log(ctx, s.logger)
+	}
+
+	return &types.PeeredOrganization{
+		ID:                  peer.ID.String(),
+		SuperOrganizationID: peer.SuperOrganizationID,
+		SubOrganizationID:   peer.SubOrganizationID,
+		SubOrganizationName: nil,
+		SubOrganizationSlug: nil,
+		CreatedAt:           peer.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
+	}, nil
+}
+
+func (s *Service) ListPeers(ctx context.Context, payload *gen.ListPeersPayload) (*gen.ListPeersResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	peers, err := s.repo.ListPeers(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list peers").Log(ctx, s.logger)
+	}
+
+	result := make([]*types.PeeredOrganization, 0, len(peers))
+	for _, p := range peers {
+		result = append(result, &types.PeeredOrganization{
+			ID:                  p.ID.String(),
+			SuperOrganizationID: p.SuperOrganizationID,
+			SubOrganizationID:   p.SubOrganizationID,
+			SubOrganizationName: &p.SubOrganizationName,
+			SubOrganizationSlug: &p.SubOrganizationSlug,
+			CreatedAt:           p.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+
+	return &gen.ListPeersResult{
+		Peers: result,
+	}, nil
+}
+
+func (s *Service) DeletePeer(ctx context.Context, payload *gen.DeletePeerPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return oops.C(oops.CodeForbidden)
+	}
+
+	if err := s.repo.DeletePeer(ctx, repo.DeletePeerParams{
+		SuperOrganizationID: authCtx.ActiveOrganizationID,
+		SubOrganizationID:   payload.SubOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete peer").Log(ctx, s.logger)
+	}
 
 	return nil
 }
@@ -133,7 +225,7 @@ func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistrie
 		result = append(result, &types.MCPRegistry{
 			ID:   r.ID.String(),
 			Name: r.Name,
-			URL:  r.Url,
+			URL:  r.Url.String,
 		})
 	}
 
@@ -165,7 +257,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 
 		servers, err := s.registryClient.ListServers(ctx, Registry{
 			ID:  registry.ID,
-			URL: registry.Url,
+			URL: registry.Url.String,
 		}, ListServersParams{
 			Search: payload.Search,
 			Cursor: payload.Cursor,
@@ -191,7 +283,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 	for _, registry := range registries {
 		servers, err := s.registryClient.ListServers(ctx, Registry{
 			ID:  registry.ID,
-			URL: registry.Url,
+			URL: registry.Url.String,
 		}, ListServersParams{
 			Search: payload.Search,
 			Cursor: payload.Cursor,
@@ -199,7 +291,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to fetch servers from registry",
 				attr.SlogMCPRegistryID(registry.ID.String()),
-				attr.SlogMCPRegistryURL(registry.Url),
+				attr.SlogMCPRegistryURL(registry.Url.String),
 				attr.SlogError(err),
 			)
 			continue
@@ -267,7 +359,7 @@ type serverDetailsResult struct {
 
 // fetchServerDetails fetches all server details from the registry in a single HTTP call.
 func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRegistryByIDRow, serverName string) (*serverDetailsResult, error) {
-	reqURL := fmt.Sprintf("%s/v0.1/servers/%s/versions/latest", registry.Url, url.PathEscape(serverName))
+	reqURL := fmt.Sprintf("%s/v0.1/servers/%s/versions/latest", registry.Url.String, url.PathEscape(serverName))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {

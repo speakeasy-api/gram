@@ -17,6 +17,12 @@ import (
 
 // External MCP registry operations
 type Service interface {
+	// Create a peered organization relationship (super org grants sub org access)
+	CreatePeer(context.Context, *CreatePeerPayload) (res *types.PeeredOrganization, err error)
+	// List peered organizations for the current organization
+	ListPeers(context.Context, *ListPeersPayload) (res *ListPeersResult, err error)
+	// Remove a peered organization relationship
+	DeletePeer(context.Context, *DeletePeerPayload) (err error)
 	// Clear the registry cache for a specific registry (admin only)
 	ClearCache(context.Context, *ClearCachePayload) (err error)
 	// List all MCP registries (admin only)
@@ -47,7 +53,7 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"clearCache", "listRegistries", "listCatalog", "getServerDetails"}
+var MethodNames = [7]string{"createPeer", "listPeers", "deletePeer", "clearCache", "listRegistries", "listCatalog", "getServerDetails"}
 
 // ClearCachePayload is the payload type of the mcpRegistries service
 // clearCache method.
@@ -57,6 +63,26 @@ type ClearCachePayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// CreatePeerPayload is the payload type of the mcpRegistries service
+// createPeer method.
+type CreatePeerPayload struct {
+	// ID of the sub organization to peer with
+	SubOrganizationID string
+	SessionToken      *string
+	ApikeyToken       *string
+	ProjectSlugInput  *string
+}
+
+// DeletePeerPayload is the payload type of the mcpRegistries service
+// deletePeer method.
+type DeletePeerPayload struct {
+	// ID of the sub organization to remove
+	SubOrganizationID string
+	SessionToken      *string
+	ApikeyToken       *string
+	ProjectSlugInput  *string
 }
 
 // GetServerDetailsPayload is the payload type of the mcpRegistries service
@@ -92,6 +118,21 @@ type ListCatalogResult struct {
 	Servers []*types.ExternalMCPServer
 	// Pagination cursor for the next page
 	NextCursor *string
+}
+
+// ListPeersPayload is the payload type of the mcpRegistries service listPeers
+// method.
+type ListPeersPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListPeersResult is the result type of the mcpRegistries service listPeers
+// method.
+type ListPeersResult struct {
+	// List of peered organizations
+	Peers []*types.PeeredOrganization
 }
 
 // ListRegistriesPayload is the payload type of the mcpRegistries service

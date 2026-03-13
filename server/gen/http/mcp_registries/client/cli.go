@@ -8,9 +8,114 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	mcpregistries "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildCreatePeerPayload builds the payload for the mcpRegistries createPeer
+// endpoint from CLI flags.
+func BuildCreatePeerPayload(mcpRegistriesCreatePeerBody string, mcpRegistriesCreatePeerSessionToken string, mcpRegistriesCreatePeerApikeyToken string, mcpRegistriesCreatePeerProjectSlugInput string) (*mcpregistries.CreatePeerPayload, error) {
+	var err error
+	var body CreatePeerRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpRegistriesCreatePeerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"sub_organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesCreatePeerSessionToken != "" {
+			sessionToken = &mcpRegistriesCreatePeerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesCreatePeerApikeyToken != "" {
+			apikeyToken = &mcpRegistriesCreatePeerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesCreatePeerProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesCreatePeerProjectSlugInput
+		}
+	}
+	v := &mcpregistries.CreatePeerPayload{
+		SubOrganizationID: body.SubOrganizationID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListPeersPayload builds the payload for the mcpRegistries listPeers
+// endpoint from CLI flags.
+func BuildListPeersPayload(mcpRegistriesListPeersSessionToken string, mcpRegistriesListPeersApikeyToken string, mcpRegistriesListPeersProjectSlugInput string) (*mcpregistries.ListPeersPayload, error) {
+	var sessionToken *string
+	{
+		if mcpRegistriesListPeersSessionToken != "" {
+			sessionToken = &mcpRegistriesListPeersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesListPeersApikeyToken != "" {
+			apikeyToken = &mcpRegistriesListPeersApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesListPeersProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesListPeersProjectSlugInput
+		}
+	}
+	v := &mcpregistries.ListPeersPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeletePeerPayload builds the payload for the mcpRegistries deletePeer
+// endpoint from CLI flags.
+func BuildDeletePeerPayload(mcpRegistriesDeletePeerSubOrganizationID string, mcpRegistriesDeletePeerSessionToken string, mcpRegistriesDeletePeerApikeyToken string, mcpRegistriesDeletePeerProjectSlugInput string) (*mcpregistries.DeletePeerPayload, error) {
+	var subOrganizationID string
+	{
+		subOrganizationID = mcpRegistriesDeletePeerSubOrganizationID
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesDeletePeerSessionToken != "" {
+			sessionToken = &mcpRegistriesDeletePeerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesDeletePeerApikeyToken != "" {
+			apikeyToken = &mcpRegistriesDeletePeerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesDeletePeerProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesDeletePeerProjectSlugInput
+		}
+	}
+	v := &mcpregistries.DeletePeerPayload{}
+	v.SubOrganizationID = subOrganizationID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
 
 // BuildClearCachePayload builds the payload for the mcpRegistries clearCache
 // endpoint from CLI flags.
