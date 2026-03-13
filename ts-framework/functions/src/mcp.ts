@@ -247,6 +247,7 @@ export function fromGram(
           const text = await resp.text();
           return {
             content: [{ type: "text", text }],
+            isError: !resp.ok,
           };
         }
         case imageLike.test(ctype): {
@@ -258,6 +259,7 @@ export function fromGram(
                 data: await responseToBase64(resp),
               },
             ],
+            isError: !resp.ok,
           };
         }
         case audioLike.test(ctype): {
@@ -269,6 +271,7 @@ export function fromGram(
                 data: await responseToBase64(resp),
               },
             ],
+            isError: !resp.ok,
           };
         }
         default: {
