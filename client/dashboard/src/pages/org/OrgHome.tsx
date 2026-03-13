@@ -2,19 +2,29 @@ import { Page } from "@/components/page-layout";
 import { ProjectAvatar } from "@/components/project-menu";
 import { DotCard } from "@/components/ui/dot-card";
 import { Heading } from "@/components/ui/heading";
+import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { ArrowRight } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
 
 export default function OrgHome() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
+  const [search, setSearch] = useState("");
 
-  const projects = [...organization.projects].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const projects = [...organization.projects]
+    .filter((project) => {
+      if (!search) return true;
+      const query = search.toLowerCase();
+      return (
+        project.name.toLowerCase().includes(query) ||
+        project.slug.toLowerCase().includes(query)
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <Page>
@@ -30,42 +40,54 @@ export default function OrgHome() {
           integrations into separate workspaces. Use them to isolate different
           products or environments within your organization.
         </Type>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {projects.map((project) => (
-            <Link
-              key={project.id}
-              to={`/${orgSlug}/projects/${project.slug}`}
-              className="hover:no-underline"
-            >
-              <DotCard
-                icon={
-                  <ProjectAvatar
-                    project={project}
-                    className="h-10 w-10 rounded-md"
-                  />
-                }
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search projects..."
+          className="mb-4"
+        />
+        {projects.length === 0 ? (
+          <Type muted className="py-8 text-center">
+            No projects matching &ldquo;{search}&rdquo;
+          </Type>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {projects.map((project) => (
+              <Link
+                key={project.id}
+                to={`/${orgSlug}/projects/${project.slug}`}
+                className="hover:no-underline"
               >
-                <Type
-                  variant="subheading"
-                  as="div"
-                  className="truncate text-md group-hover:text-primary transition-colors"
+                <DotCard
+                  icon={
+                    <ProjectAvatar
+                      project={project}
+                      className="h-10 w-10 rounded-md"
+                    />
+                  }
                 >
-                  {project.name}
-                </Type>
-                <Type small muted className="truncate mb-3">
-                  {project.slug}
-                </Type>
+                  <Type
+                    variant="subheading"
+                    as="div"
+                    className="truncate text-md group-hover:text-primary transition-colors"
+                  >
+                    {project.name}
+                  </Type>
+                  <Type small muted className="truncate mb-3">
+                    {project.slug}
+                  </Type>
 
-                <div className="flex items-center justify-end mt-auto pt-2">
-                  <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
-                    <span>Open</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-end mt-auto pt-2">
+                    <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+                      <span>Open</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </div>
                   </div>
-                </div>
-              </DotCard>
-            </Link>
-          ))}
-        </div>
+                </DotCard>
+              </Link>
+            ))}
+          </div>
+        )}
       </Page.Body>
     </Page>
   );
