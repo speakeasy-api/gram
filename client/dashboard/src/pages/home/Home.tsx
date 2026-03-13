@@ -4,7 +4,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useUser } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { Server, useInfiniteServeMCPRegistry } from "@/pages/catalog/hooks";
+import { parseServerMetadata } from "@/pages/catalog/hooks/serverMetadata";
 import { useRoutes } from "@/routes";
 import { DeploymentExternalMCP } from "@gram/client/models/components";
 import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
@@ -58,7 +59,7 @@ export default function Home() {
   const routes = useRoutes();
   const user = useUser();
   const telemetry = useTelemetry();
-  const { data, isLoading } = useInfiniteListMCPCatalog();
+  const { data, isLoading } = useInfiniteServeMCPRegistry();
   const { data: deploymentResult, isLoading: isDeploymentLoading } =
     useLatestDeployment();
   const { data: toolsetsResult, isLoading: isToolsetsLoading } =
@@ -293,9 +294,7 @@ function FeaturedServerCard({
   detailHref: string;
   externalMcps: DeploymentExternalMCP[];
 }) {
-  const meta = server.meta["com.pulsemcp/server"];
-  const isOfficial = meta?.isOfficial;
-  const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
+  const parsed = parseServerMetadata(server);
   const displayName = server.title ?? server.registrySpecifier;
 
   const isAdded = externalMcps.some(
@@ -325,7 +324,7 @@ function FeaturedServerCard({
               >
                 {displayName}
               </Type>
-              {isOfficial && <Badge>Official</Badge>}
+              {parsed.isOfficial && <Badge>Official</Badge>}
             </Stack>
             <Type small muted>
               {server.registrySpecifier} • v{server.version}
@@ -337,9 +336,9 @@ function FeaturedServerCard({
         </Type>
         <div className="mt-auto pt-2">
           <Stack direction="horizontal" justify="space-between" align="center">
-            {visitorsTotal && visitorsTotal > 0 ? (
+            {parsed.visitorsMonth > 0 ? (
               <Type small muted>
-                {visitorsTotal.toLocaleString()} monthly users
+                {parsed.visitorsMonth.toLocaleString()} monthly users
               </Type>
             ) : (
               <div />
