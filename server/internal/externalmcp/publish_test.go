@@ -73,6 +73,20 @@ func TestPublishWithToolsets(t *testing.T) {
 	require.Empty(t, links)
 }
 
+func TestPublishRequiresAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newNonAdminTestService(t)
+
+	_, err := ti.service.Publish(ctx, &gen.PublishPayload{
+		Name:       "Unauthorized Catalog",
+		Slug:       "unauth-catalog",
+		Visibility: "private",
+		ToolsetIds: []string{},
+	})
+	require.Error(t, err)
+}
+
 func TestPublishInvalidToolsetID(t *testing.T) {
 	t.Parallel()
 

@@ -284,7 +284,8 @@ func (q *Queries) CreateInternalRegistry(ctx context.Context, arg CreateInternal
 const createPeer = `-- name: CreatePeer :one
 INSERT INTO peered_organizations (super_organization_id, sub_organization_id)
 VALUES ($1, $2)
-ON CONFLICT (super_organization_id, sub_organization_id) DO NOTHING
+ON CONFLICT (super_organization_id, sub_organization_id) DO UPDATE SET
+  super_organization_id = EXCLUDED.super_organization_id
 RETURNING id, super_organization_id, sub_organization_id, created_at
 `
 
@@ -308,7 +309,8 @@ func (q *Queries) CreatePeer(ctx context.Context, arg CreatePeerParams) (PeeredO
 const createRegistryGrant = `-- name: CreateRegistryGrant :one
 INSERT INTO mcp_registry_grants (registry_id, organization_id)
 VALUES ($1, $2)
-ON CONFLICT (registry_id, organization_id) DO NOTHING
+ON CONFLICT (registry_id, organization_id) DO UPDATE SET
+  registry_id = EXCLUDED.registry_id
 RETURNING id, registry_id, organization_id, created_at
 `
 

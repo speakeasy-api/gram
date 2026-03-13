@@ -1,7 +1,8 @@
 -- name: CreatePeer :one
 INSERT INTO peered_organizations (super_organization_id, sub_organization_id)
 VALUES (@super_organization_id, @sub_organization_id)
-ON CONFLICT (super_organization_id, sub_organization_id) DO NOTHING
+ON CONFLICT (super_organization_id, sub_organization_id) DO UPDATE SET
+  super_organization_id = EXCLUDED.super_organization_id
 RETURNING id, super_organization_id, sub_organization_id, created_at;
 
 -- name: ListPeers :many
@@ -61,7 +62,8 @@ ORDER BY created_at ASC;
 -- name: CreateRegistryGrant :one
 INSERT INTO mcp_registry_grants (registry_id, organization_id)
 VALUES (@registry_id, @organization_id)
-ON CONFLICT (registry_id, organization_id) DO NOTHING
+ON CONFLICT (registry_id, organization_id) DO UPDATE SET
+  registry_id = EXCLUDED.registry_id
 RETURNING id, registry_id, organization_id, created_at;
 
 -- name: DeleteRegistryGrant :exec

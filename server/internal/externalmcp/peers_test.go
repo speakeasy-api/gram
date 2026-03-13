@@ -85,12 +85,12 @@ func TestCreatePeerIdempotent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Creating the same peer again should not error (ON CONFLICT DO NOTHING)
-	// but note it returns no rows on conflict, which may cause an error
-	// depending on sqlc behavior with :one
-	_, _ = ti.service.CreatePeer(ctx, &gen.CreatePeerPayload{
+	// Creating the same peer again should succeed idempotently
+	peer2, err := ti.service.CreatePeer(ctx, &gen.CreatePeerPayload{
 		SubOrganizationID: subOrgID,
 	})
+	require.NoError(t, err)
+	require.NotEmpty(t, peer2.ID)
 }
 
 func TestListPeers(t *testing.T) {
