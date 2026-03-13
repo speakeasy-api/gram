@@ -454,7 +454,7 @@ WHERE id = $1 AND deleted IS FALSE
 type GetMCPRegistryByIDRow struct {
 	ID        uuid.UUID
 	Name      string
-	Url       string
+	Url       pgtype.Text
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
@@ -647,7 +647,7 @@ ORDER BY name ASC
 type ListMCPRegistriesRow struct {
 	ID        uuid.UUID
 	Name      string
-	Url       string
+	Url       pgtype.Text
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
