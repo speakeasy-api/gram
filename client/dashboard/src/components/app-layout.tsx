@@ -107,12 +107,22 @@ const AppLayoutContent = ({
 };
 
 export const OrgLayout = () => {
+  const isAdmin = useIsAdmin();
+  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
+  const isImpersonating = isAdmin && !!overrideSlug;
+
   return (
     <SidebarProvider
-      style={{ "--sidebar-width": "14rem" } as React.CSSProperties}
+      style={
+        {
+          "--sidebar-width": "14rem",
+          ...(isImpersonating ? { "--header-offset": "5.75rem" } : undefined),
+        } as React.CSSProperties
+      }
     >
       <ModalProvider>
         <div className="flex flex-col h-screen w-full">
+          {isImpersonating && <ImpersonationBanner />}
           <TopHeader />
           <div className="flex flex-1 w-full overflow-hidden pt-2">
             <OrgSidebar variant="inset" />

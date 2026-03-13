@@ -145,7 +145,7 @@ const RouteProvider = () => {
   const { projectSlug } = useSlugs();
 
   // Update document title based on active route
-  usePageTitle(routes);
+  usePageTitle(routes, orgRoutes);
 
   // Register global command palette actions
   useEffect(() => {
