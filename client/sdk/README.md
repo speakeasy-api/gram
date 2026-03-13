@@ -105,12 +105,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  });
+  const result = await gram.access.list();
 
   console.log(result);
 }
@@ -125,6 +120,12 @@ run();
 
 <details open>
 <summary>Available methods</summary>
+
+### [Access](docs/sdks/access/README.md)
+
+* [list](docs/sdks/access/README.md#list) - listGrants access
+* [remove](docs/sdks/access/README.md#remove) - removeGrants access
+* [upsert](docs/sdks/access/README.md#upsert) - upsertGrant access
 
 ### [Agentworkflows](docs/sdks/agentworkflows/README.md)
 
@@ -348,6 +349,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`accessList`](docs/sdks/access/README.md#list) - listGrants access
+- [`accessRemove`](docs/sdks/access/README.md#remove) - removeGrants access
+- [`accessUpsert`](docs/sdks/access/README.md#upsert) - upsertGrant access
 - [`agentworkflowsCreateResponse`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`agentworkflowsDeleteResponse`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
 - [`agentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
@@ -570,6 +574,7 @@ To learn about this feature and how to get started, check
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
+- [`useListGrants`](docs/sdks/access/README.md#list) - listGrants access
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
@@ -590,6 +595,7 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
+- [`useRemoveGrantsMutation`](docs/sdks/access/README.md#remove) - removeGrants access
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
@@ -623,6 +629,7 @@ To learn about this feature and how to get started, check
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
+- [`useUpsertGrantMutation`](docs/sdks/access/README.md#upsert) - upsertGrant access
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
 
 </details>
@@ -674,12 +681,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  }, {
+  const result = await gram.access.list({
     retries: {
       strategy: "backoff",
       backoff: {
@@ -717,12 +719,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  });
+  const result = await gram.access.list();
 
   console.log(result);
 }
@@ -755,12 +752,7 @@ const gram = new Gram();
 
 async function run() {
   try {
-    const result = await gram.assets.createSignedChatAttachmentURL({
-      createSignedChatAttachmentURLForm2: {
-        id: "<id>",
-        projectId: "<id>",
-      },
-    });
+    const result = await gram.access.list();
 
     console.log(result);
   } catch (error) {
@@ -824,12 +816,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  });
+  const result = await gram.access.list();
 
   console.log(result);
 }

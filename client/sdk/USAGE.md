@@ -5,12 +5,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  });
+  const result = await gram.access.list();
 
   console.log(result);
 }
