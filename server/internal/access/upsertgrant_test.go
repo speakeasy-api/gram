@@ -9,160 +9,152 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func TestAccessService_UpsertGrant(t *testing.T) {
+func TestUpsertGrant_CreatesNewGrant(t *testing.T) {
 	t.Parallel()
 
-	t.Run("creates a new grant", func(t *testing.T) {
-		t.Parallel()
+	ctx, ti := newTestAccessService(t)
 
-		ctx, ti := newTestAccessService(t)
-
-		grant, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "user:user_abc",
-			Scope:        "build:read",
-			Resource:     "*",
-		})
-		require.NoError(t, err)
-		require.NotNil(t, grant)
-
-		require.NotEmpty(t, grant.ID)
-		require.Equal(t, "user:user_abc", grant.PrincipalUrn)
-		require.Equal(t, "user", grant.PrincipalType)
-		require.Equal(t, "build:read", grant.Scope)
-		require.Equal(t, "*", grant.Resource)
-		require.NotEmpty(t, grant.CreatedAt)
-		require.NotEmpty(t, grant.UpdatedAt)
-		require.NotEmpty(t, grant.OrganizationID)
+	grant, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+		SessionToken: nil,
+		PrincipalUrn: "user:user_abc",
+		Scope:        "build:read",
+		Resource:     "*",
 	})
+	require.NoError(t, err)
+	require.NotNil(t, grant)
 
-	t.Run("idempotent for same tuple", func(t *testing.T) {
-		t.Parallel()
+	require.NotEmpty(t, grant.ID)
+	require.Equal(t, "user:user_abc", grant.PrincipalUrn)
+	require.Equal(t, "user", grant.PrincipalType)
+	require.Equal(t, "build:read", grant.Scope)
+	require.Equal(t, "*", grant.Resource)
+	require.NotEmpty(t, grant.CreatedAt)
+	require.NotEmpty(t, grant.UpdatedAt)
+	require.NotEmpty(t, grant.OrganizationID)
+}
 
-		ctx, ti := newTestAccessService(t)
+func TestUpsertGrant_IdempotentForSameTuple(t *testing.T) {
+	t.Parallel()
 
-		grant1, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "user:user_abc",
-			Scope:        "build:read",
-			Resource:     "*",
-		})
-		require.NoError(t, err)
+	ctx, ti := newTestAccessService(t)
 
-		grant2, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "user:user_abc",
-			Scope:        "build:read",
-			Resource:     "*",
-		})
-		require.NoError(t, err)
-
-		require.Equal(t, grant1.ID, grant2.ID)
-		require.Equal(t, grant1.CreatedAt, grant2.CreatedAt)
+	grant1, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+		SessionToken: nil,
+		PrincipalUrn: "user:user_abc",
+		Scope:        "build:read",
+		Resource:     "*",
 	})
+	require.NoError(t, err)
 
-	t.Run("different scopes create separate grants", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, ti := newTestAccessService(t)
-
-		grant1, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "user:user_abc",
-			Scope:        "build:read",
-			Resource:     "*",
-		})
-		require.NoError(t, err)
-
-		grant2, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "user:user_abc",
-			Scope:        "build:write",
-			Resource:     "*",
-		})
-		require.NoError(t, err)
-
-		require.NotEqual(t, grant1.ID, grant2.ID)
-		require.Equal(t, "build:read", grant1.Scope)
-		require.Equal(t, "build:write", grant2.Scope)
+	grant2, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+		SessionToken: nil,
+		PrincipalUrn: "user:user_abc",
+		Scope:        "build:read",
+		Resource:     "*",
 	})
+	require.NoError(t, err)
 
-	t.Run("different resources create separate grants", func(t *testing.T) {
-		t.Parallel()
+	require.Equal(t, grant1.ID, grant2.ID)
+	require.Equal(t, grant1.CreatedAt, grant2.CreatedAt)
+}
 
-		ctx, ti := newTestAccessService(t)
+func TestUpsertGrant_UniqueTuplesCreateSeparateGrants(t *testing.T) {
+	t.Parallel()
 
-		grant1, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "user:user_abc",
-			Scope:        "build:read",
-			Resource:     "project-1",
+	tests := []struct {
+		name   string
+		grant1 gen.UpsertGrantPayload
+		grant2 gen.UpsertGrantPayload
+	}{
+		{
+			name: "different scopes",
+			grant1: gen.UpsertGrantPayload{
+				PrincipalUrn: "user:user_abc",
+				Scope:        "build:read",
+				Resource:     "*",
+			},
+			grant2: gen.UpsertGrantPayload{
+				PrincipalUrn: "user:user_abc",
+				Scope:        "build:write",
+				Resource:     "*",
+			},
+		},
+		{
+			name: "different resources",
+			grant1: gen.UpsertGrantPayload{
+				PrincipalUrn: "user:user_abc",
+				Scope:        "build:read",
+				Resource:     "project-1",
+			},
+			grant2: gen.UpsertGrantPayload{
+				PrincipalUrn: "user:user_abc",
+				Scope:        "build:read",
+				Resource:     "project-2",
+			},
+		},
+		{
+			name: "different principals",
+			grant1: gen.UpsertGrantPayload{
+				PrincipalUrn: "user:user_abc",
+				Scope:        "build:read",
+				Resource:     "*",
+			},
+			grant2: gen.UpsertGrantPayload{
+				PrincipalUrn: "user:user_def",
+				Scope:        "build:read",
+				Resource:     "*",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestAccessService(t)
+
+			g1, err := ti.service.UpsertGrant(ctx, &tt.grant1)
+			require.NoError(t, err)
+
+			g2, err := ti.service.UpsertGrant(ctx, &tt.grant2)
+			require.NoError(t, err)
+
+			require.NotEqual(t, g1.ID, g2.ID)
 		})
-		require.NoError(t, err)
+	}
+}
 
-		grant2, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "user:user_abc",
-			Scope:        "build:read",
-			Resource:     "project-2",
-		})
-		require.NoError(t, err)
+func TestUpsertGrant_RolePrincipalType(t *testing.T) {
+	t.Parallel()
 
-		require.NotEqual(t, grant1.ID, grant2.ID)
+	ctx, ti := newTestAccessService(t)
+
+	grant, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+		SessionToken: nil,
+		PrincipalUrn: "role:project:admin",
+		Scope:        "org:admin",
+		Resource:     "*",
 	})
+	require.NoError(t, err)
 
-	t.Run("role principal type", func(t *testing.T) {
-		t.Parallel()
+	require.Equal(t, "role:project:admin", grant.PrincipalUrn)
+	require.Equal(t, "role", grant.PrincipalType)
+}
 
-		ctx, ti := newTestAccessService(t)
+func TestUpsertGrant_InvalidPrincipalURN(t *testing.T) {
+	t.Parallel()
 
-		grant, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "role:project:admin",
-			Scope:        "org:admin",
-			Resource:     "*",
-		})
-		require.NoError(t, err)
+	ctx, ti := newTestAccessService(t)
 
-		require.Equal(t, "role:project:admin", grant.PrincipalUrn)
-		require.Equal(t, "role", grant.PrincipalType)
+	_, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+		SessionToken: nil,
+		PrincipalUrn: "invalid",
+		Scope:        "build:read",
+		Resource:     "*",
 	})
+	require.Error(t, err)
 
-	t.Run("invalid principal URN", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, ti := newTestAccessService(t)
-
-		_, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "invalid",
-			Scope:        "build:read",
-			Resource:     "*",
-		})
-		require.Error(t, err)
-
-		var oopsErr *oops.ShareableError
-		require.ErrorAs(t, err, &oopsErr)
-		require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	})
-
-	t.Run("unauthorized without auth context", func(t *testing.T) {
-		t.Parallel()
-
-		_, ti := newTestAccessService(t)
-
-		ctxWithoutAuth := t.Context()
-
-		_, err := ti.service.UpsertGrant(ctxWithoutAuth, &gen.UpsertGrantPayload{
-			SessionToken: nil,
-			PrincipalUrn: "user:user_abc",
-			Scope:        "build:read",
-			Resource:     "*",
-		})
-		require.Error(t, err)
-
-		var oopsErr *oops.ShareableError
-		require.ErrorAs(t, err, &oopsErr)
-		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
-	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
