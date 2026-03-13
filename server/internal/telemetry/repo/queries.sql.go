@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/Masterminds/squirrel"
+	"github.com/speakeasy-api/gram/server/internal/chq"
 )
 
 // validJSONPath matches safe dot-separated JSON paths for ClickHouse attribute access.
@@ -33,27 +33,27 @@ type AttributeFilter struct {
 	Values []string // Values to compare against. One value for single-value ops, multiple for "in".
 }
 
-// Predicate returns the squirrel condition for this filter, or nil if the filter
+// Predicate returns the chq condition for this filter, or nil if the filter
 // should be skipped (e.g. an operator that requires values but none were provided).
-func (f AttributeFilter) Predicate(col string) squirrel.Sqlizer {
+func (f AttributeFilter) Predicate(col string) chq.Sqlizer {
 	if len(f.Values) == 0 && f.Op != "exists" && f.Op != "not_exists" {
 		return nil
 	}
 	switch f.Op {
 	case "eq", "":
-		return squirrel.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
+		return chq.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
 	case "not_eq":
-		return squirrel.Expr(fmt.Sprintf("%s != ?", col), f.Values[0])
+		return chq.Expr(fmt.Sprintf("%s != ?", col), f.Values[0])
 	case "contains":
-		return squirrel.Expr(fmt.Sprintf("position(%s, ?) > 0", col), f.Values[0])
+		return chq.Expr(fmt.Sprintf("position(%s, ?) > 0", col), f.Values[0])
 	case "in":
-		return squirrel.Eq{col: f.Values}
+		return chq.In[string]{Col: col, Vals: f.Values}
 	case "exists":
-		return squirrel.Expr(fmt.Sprintf("%s != ''", col))
+		return chq.Expr(fmt.Sprintf("%s != ''", col))
 	case "not_exists":
-		return squirrel.Expr(fmt.Sprintf("%s = ''", col))
+		return chq.Expr(fmt.Sprintf("%s = ''", col))
 	default:
-		return squirrel.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
+		return chq.Expr(fmt.Sprintf("%s = ?", col), f.Values[0])
 	}
 }
 
@@ -73,9 +73,6 @@ func resolveAttributeColumn(path string) string {
 		return fmt.Sprintf("toString(attributes.%s)", path)
 	}
 }
-
-// sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
-var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
 // InsertTelemetryLogParams contains the parameters for inserting a telemetry log.
 type InsertTelemetryLogParams struct {
@@ -106,7 +103,7 @@ type InsertTelemetryLogParams struct {
 func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLogParams) error {
 	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
 
-	query, args, err := sq.Insert("telemetry_logs").
+	query, args, err := chq.Insert("telemetry_logs").
 		Columns(
 			"id",
 			"time_unix_nano",
@@ -184,7 +181,7 @@ type ListTelemetryLogsParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsParams) ([]TelemetryLog, error) {
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		"id",
 		"time_unix_nano",
 		"observed_time_unix_nano",
@@ -203,49 +200,51 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		"gram_chat_id",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+		)
 
 	// Optional filters
 	if len(arg.GramURNs) > 0 {
-		sb = sb.Where("has(?, gram_urn)", arg.GramURNs)
+		sb = sb.Where(chq.Expr("has(?, gram_urn)", arg.GramURNs))
 	}
 	if arg.TraceID != "" {
-		sb = sb.Where(squirrel.Eq{"trace_id": arg.TraceID})
+		sb = sb.Where(chq.Eq[string]{Col: "trace_id", Val: arg.TraceID})
 	}
 	if arg.GramDeploymentID != "" {
-		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+		sb = sb.Where(chq.Expr("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID))
 	}
 	if arg.GramFunctionID != "" {
-		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
+		sb = sb.Where(chq.Expr("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID))
 	}
 	if arg.SeverityText != "" {
-		sb = sb.Where(squirrel.Eq{"severity_text": arg.SeverityText})
+		sb = sb.Where(chq.Eq[string]{Col: "severity_text", Val: arg.SeverityText})
 	}
 	if arg.HTTPResponseStatusCode != 0 {
-		sb = sb.Where("toInt32OrZero(toString(attributes.http.response.status_code)) = ?", arg.HTTPResponseStatusCode)
+		sb = sb.Where(chq.Expr("toInt32OrZero(toString(attributes.http.response.status_code)) = ?", arg.HTTPResponseStatusCode))
 	}
 	if arg.HTTPRoute != "" {
-		sb = sb.Where("toString(attributes.http.route) = ?", arg.HTTPRoute)
+		sb = sb.Where(chq.Expr("toString(attributes.http.route) = ?", arg.HTTPRoute))
 	}
 	if arg.HTTPRequestMethod != "" {
-		sb = sb.Where("toString(attributes.http.request.method) = ?", arg.HTTPRequestMethod)
+		sb = sb.Where(chq.Expr("toString(attributes.http.request.method) = ?", arg.HTTPRequestMethod))
 	}
 	if arg.ServiceName != "" {
-		sb = sb.Where(squirrel.Eq{"service_name": arg.ServiceName})
+		sb = sb.Where(chq.Eq[string]{Col: "service_name", Val: arg.ServiceName})
 	}
 	if arg.GramChatID != "" {
-		sb = sb.Where(squirrel.Eq{"gram_chat_id": arg.GramChatID})
+		sb = sb.Where(chq.Eq[string]{Col: "gram_chat_id", Val: arg.GramChatID})
 	}
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		sb = sb.Where(chq.Eq[string]{Col: "user_id", Val: arg.UserID})
 	}
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(chq.Eq[string]{Col: "external_user_id", Val: arg.ExternalUserID})
 	}
 	if arg.EventSource != "" {
-		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
+		sb = sb.Where(chq.Eq[string]{Col: "event_source", Val: arg.EventSource})
 	}
 
 	// Arbitrary attribute filters
@@ -316,7 +315,7 @@ type ListToolTracesParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) ([]TraceSummary, error) {
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		"trace_id",
 		"min(start_time_unix_nano) as start_time_unix_nano",
 		"sum(log_count) as log_count",
@@ -327,16 +326,18 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		"any(event_source) as event_source",
 	).
 		From("trace_summaries").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Having("start_time_unix_nano >= ?", arg.TimeStart).
-		Having("start_time_unix_nano <= ?", arg.TimeEnd)
+		Where(chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID}).
+		Having(
+			chq.Gte[int64]{Col: "start_time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "start_time_unix_nano", Val: arg.TimeEnd},
+		)
 
 	// Optional filters
 	if arg.GramDeploymentID != "" {
-		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+		sb = sb.Where(chq.Expr("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID))
 	}
 	if arg.GramFunctionID != "" {
-		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
+		sb = sb.Where(chq.Expr("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID))
 	}
 
 	// Build HAVING clause for tool filtering.
@@ -344,36 +345,32 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	// correct boolean precedence. Multiple .Having() calls would create separate conditions
 	// that interact incorrectly with the OR in the tool_name check, causing the gram_urn
 	// filter to be bypassed when startsWith(gram_urn, 'tools:') is true.
-	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:'))"}
-	havingArgs := []any{}
+	havingParts := []chq.Sqlizer{
+		chq.Expr("((tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:'))"),
+	}
 
 	// URN filter must use HAVING because it's an aggregate function in SELECT
 	if arg.GramURN != "" {
-		havingParts = append(havingParts, "position(gram_urn, ?) > 0")
-		havingArgs = append(havingArgs, arg.GramURN)
+		havingParts = append(havingParts, chq.Expr("position(gram_urn, ?) > 0", arg.GramURN))
 	}
 
 	// EventSource filter must use HAVING because it's an aggregate function in SELECT
 	if arg.EventSource != "" {
-		havingParts = append(havingParts, "event_source = ?")
-		havingArgs = append(havingArgs, arg.EventSource)
+		havingParts = append(havingParts, chq.Expr("event_source = ?", arg.EventSource))
 	} else {
 		// Exclude hooks logs by default when no event_source filter is specified
-		havingParts = append(havingParts, "event_source != ?")
-		havingArgs = append(havingArgs, "hook")
+		havingParts = append(havingParts, chq.Expr("event_source != ?", "hook"))
 	}
 
 	// Combine all HAVING conditions with explicit AND to ensure proper filtering
-	if len(havingParts) > 0 {
-		sb = sb.Having(strings.Join(havingParts, " AND "), havingArgs...)
-	}
+	sb = sb.Having(chq.And(havingParts))
 
 	// Exclude chat completion logs (urn:uuid:...) which are not tool calls.
 	// The trace_summaries_mv filters these at insert time via a WHERE clause,
 	// so for new data any(gram_urn) will never pick a urn:uuid: value.
 	// This HAVING clause is kept as a safety net for historical data that may
 	// have been inserted before the MV was updated to exclude these URNs.
-	sb = sb.Having("position(gram_urn, 'urn:uuid:') != 1")
+	sb = sb.Having(chq.Expr("position(gram_urn, 'urn:uuid:') != 1"))
 
 	sb = sb.GroupBy("trace_id")
 
@@ -434,7 +431,7 @@ type GetMetricsSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryParams) (*MetricsSummaryRow, error) {
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		// Activity timestamps
 		"min(first_seen_unix_nano) AS first_seen_unix_nano",
 		"max(last_seen_unix_nano) AS last_seen_unix_nano",
@@ -480,9 +477,11 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 		"sumMapIfMerge(tool_failure_counts) AS tool_failure_counts",
 	).
 		From("metrics_summaries").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
-		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Expr("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart),
+			chq.Expr("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd),
+		)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -563,45 +562,57 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	alignedEnd := ((arg.TimeEnd / intervalNanos) * intervalNanos) + intervalNanos
 
 	// toIntervalSecond(?) allows the interval to be fully parameterized — unlike INTERVAL literals.
-	sb := sq.Select().
-		Column(squirrel.Expr(
-			"toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), toIntervalSecond(?))) * 1000000000 AS bucket_time_unix_nano",
-			arg.IntervalSeconds,
-		)).
-		Columns(
-			"uniqExactIf(chat_id, chat_id != '') AS total_chats",
-			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') AS resolved_chats",
-			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') AS failed_chats",
-			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') AS partial_chats",
-			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') AS abandoned_chats",
-			"countIf(startsWith(gram_urn, 'tools:')) AS total_tool_calls",
-			"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS failed_tool_calls",
-			"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) AS avg_tool_latency_ms",
-			"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_session_duration_ms",
-		).
+	sb := chq.Select(
+		chq.As(
+			chq.BinaryOp(
+				chq.ToInt64(chq.ToStartOfInterval(
+					chq.FromUnixTimestamp64Nano(chq.Col("time_unix_nano")),
+					chq.ToIntervalSecond(chq.Param(arg.IntervalSeconds)),
+				)),
+				"*",
+				chq.Param(int64(1_000_000_000)),
+			),
+			"bucket_time_unix_nano",
+		),
+	).ColumnRaw(
+		"uniqExactIf(chat_id, chat_id != '') AS total_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') AS resolved_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') AS failed_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') AS partial_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') AS abandoned_chats",
+		"countIf(startsWith(gram_urn, 'tools:')) AS total_tool_calls",
+		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS failed_tool_calls",
+		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) AS avg_tool_latency_ms",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_session_duration_ms",
+	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+		).
 		GroupBy("bucket_time_unix_nano")
 
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(chq.Eq[string]{Col: "external_user_id", Val: arg.ExternalUserID})
 	}
 	if arg.APIKeyID != "" {
-		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+		sb = sb.Where(chq.Eq[string]{Col: "api_key_id", Val: arg.APIKeyID})
 	}
 	if arg.ToolsetID != "" {
 		// ToolsetID is a URN prefix like "tools:http:gram"; append ":" to match the full prefix segment
-		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
+		sb = sb.Where(chq.Expr("startsWith(gram_urn, ?)", arg.ToolsetID+":"))
 	}
 
 	// ClickHouse fills missing buckets with zeros via WITH FILL.
 	// FROM/TO use aligned nanosecond boundaries; TO is exclusive so we add one step.
-	sb = sb.OrderByClause(squirrel.Expr(
-		"bucket_time_unix_nano ASC WITH FILL FROM ? TO ? STEP ?",
-		alignedStart, alignedEnd, intervalNanos,
-	))
+	sb = sb.OrderByWithFill(chq.WithFillClause{
+		Column: "bucket_time_unix_nano",
+		Desc:   false,
+		From:   chq.Param(alignedStart),
+		To:     chq.Param(alignedEnd),
+		Step:   chq.Param(intervalNanos),
+	})
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -646,7 +657,7 @@ type GetToolMetricsBreakdownParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetricsBreakdownParams) ([]ToolMetric, error) {
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		"gram_urn",
 		"count(*) as call_count",
 		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) as success_count",
@@ -655,21 +666,23 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) / greatest(toFloat64(count(*)), 1) as failure_rate",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("startsWith(gram_urn, 'tools:')")
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+			chq.Expr("startsWith(gram_urn, 'tools:')"),
+		)
 
 	// Optional filters
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(chq.Eq[string]{Col: "external_user_id", Val: arg.ExternalUserID})
 	}
 	if arg.APIKeyID != "" {
-		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+		sb = sb.Where(chq.Eq[string]{Col: "api_key_id", Val: arg.APIKeyID})
 	}
 	if arg.ToolsetID != "" {
 		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
-		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
+		sb = sb.Where(chq.Expr("startsWith(gram_urn, ?)", arg.ToolsetID+":"))
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -728,7 +741,7 @@ type GetOverviewSummaryParams struct {
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
 	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetID != ""
 
-	var sb squirrel.SelectBuilder
+	var sb chq.SelectBuilder
 	if hasFilters {
 		sb = q.getOverviewSummaryRaw(arg)
 	} else {
@@ -772,8 +785,8 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 }
 
 // getOverviewSummaryMV builds a query against the pre-aggregated metrics_summaries table.
-func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.SelectBuilder {
-	return sq.Select(
+func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) chq.SelectBuilder {
+	return chq.SelectRaw(
 		"uniqExactIfMerge(total_chats) as total_chats",
 		"uniqExactIfMerge(resolved_chats) as resolved_chats",
 		"uniqExactIfMerge(failed_chats) as failed_chats",
@@ -784,14 +797,16 @@ func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.Se
 		"avgIfMerge(avg_tool_duration_ms) as avg_latency_ms",
 	).
 		From("metrics_summaries").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
-		Where("time_bucket < toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Expr("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart),
+			chq.Expr("time_bucket < toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd),
+		)
 }
 
 // getOverviewSummaryRaw builds a query against the raw telemetry_logs table (used when filters are applied).
-func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.SelectBuilder {
-	sb := sq.Select(
+func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) chq.SelectBuilder {
+	sb := chq.SelectRaw(
 		"uniqExactIf(chat_id, chat_id != '') as total_chats",
 		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
 		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
@@ -802,19 +817,21 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+		)
 
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(chq.Eq[string]{Col: "external_user_id", Val: arg.ExternalUserID})
 	}
 	if arg.APIKeyID != "" {
-		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+		sb = sb.Where(chq.Eq[string]{Col: "api_key_id", Val: arg.APIKeyID})
 	}
 	if arg.ToolsetID != "" {
 		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
-		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
+		sb = sb.Where(chq.Expr("startsWith(gram_urn, ?)", arg.ToolsetID+":"))
 	}
 
 	return sb
@@ -843,7 +860,7 @@ type ListChatsParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSummary, error) {
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		"gram_chat_id",
 		"min(time_unix_nano) as start_time_unix_nano",
 		"max(time_unix_nano) as end_time_unix_nano",
@@ -863,24 +880,26 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_tokens",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("gram_chat_id IS NOT NULL").
-		Where("gram_chat_id != ''")
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+			chq.Expr("gram_chat_id IS NOT NULL"),
+			chq.Expr("gram_chat_id != ''"),
+		)
 
 	// Optional filters
 	if arg.GramDeploymentID != "" {
-		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+		sb = sb.Where(chq.Expr("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID))
 	}
 	if arg.GramURN != "" {
-		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
+		sb = sb.Where(chq.Expr("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN))
 	}
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		sb = sb.Where(chq.Eq[string]{Col: "user_id", Val: arg.UserID})
 	}
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(chq.Eq[string]{Col: "external_user_id", Val: arg.ExternalUserID})
 	}
 
 	sb = sb.GroupBy("gram_chat_id")
@@ -945,7 +964,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		groupCol = "external_user_id"
 	}
 
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		groupCol+" AS user_id",
 
 		// Activity timestamps
@@ -973,15 +992,17 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where(groupCol + " IS NOT NULL").
-		Where(groupCol + " != ''")
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+			chq.Expr(groupCol+" IS NOT NULL"),
+			chq.Expr(groupCol+" != ''"),
+		)
 
 	// Optional deployment filter
 	if arg.GramDeploymentID != "" {
-		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+		sb = sb.Where(chq.Expr("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID))
 	}
 
 	sb = sb.GroupBy(groupCol)
@@ -1035,7 +1056,7 @@ type GetUserMetricsSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsSummaryParams) (*MetricsSummaryRow, error) {
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",
 		"max(time_unix_nano) AS last_seen_unix_nano",
@@ -1081,15 +1102,17 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+		)
 
 	// Filter by user ID (one of these must be set)
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		sb = sb.Where(chq.Eq[string]{Col: "user_id", Val: arg.UserID})
 	} else if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(chq.Eq[string]{Col: "external_user_id", Val: arg.ExternalUserID})
 	}
 
 	query, args, err := sb.ToSql()
@@ -1194,16 +1217,18 @@ func (q *Queries) ListFilterOptions(ctx context.Context, arg ListFilterOptionsPa
 		return nil, fmt.Errorf("invalid filter type: %s", arg.FilterType)
 	}
 
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		groupCol+" AS id",
 		groupCol+" AS label",               // For now, label is same as ID
 		"uniqExact(gram_chat_id) AS count", // Count unique chat sessions, not log rows
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where(groupCol + " != ''").
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+			chq.Expr(groupCol+" != ''"),
+		).
 		GroupBy(groupCol).
 		OrderBy("count DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
@@ -1247,11 +1272,13 @@ type ListAttributeKeysParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListAttributeKeys(ctx context.Context, arg ListAttributeKeysParams) ([]string, error) {
-	sb := sq.Select("DISTINCT arrayJoin(JSONAllPaths(attributes)) AS path").
+	sb := chq.SelectRaw("DISTINCT arrayJoin(JSONAllPaths(attributes)) AS path").
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+		).
 		OrderBy("path")
 
 	query, args, err := sb.ToSql()
@@ -1302,7 +1329,7 @@ type GetHooksSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams) ([]HooksServerSummaryRow, error) {
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		"ifNull(toString(attributes.`gram.tool_call.source`), 'local') as server_name",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
@@ -1311,11 +1338,13 @@ func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Expr("event_source = 'hook'"),
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+			chq.Expr("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')"),
+		).
 		GroupBy("server_name").
 		OrderBy("event_count DESC")
 
@@ -1357,12 +1386,14 @@ type GetHooksSessionCountParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionCountParams) (int64, error) {
-	sb := sq.Select("uniqExact(toString(attributes.`genai.conversation.id`)) as session_count").
+	sb := chq.SelectRaw("uniqExact(toString(attributes.`genai.conversation.id`)) as session_count").
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Expr("event_source = 'hook'"),
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+		)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -1410,7 +1441,7 @@ type GetHooksUserSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSummaryParams) ([]HooksUserSummaryRow, error) {
-	sb := sq.Select(
+	sb := chq.SelectRaw(
 		"ifNull(toString(attributes.`user.email`), 'Unknown') as user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
@@ -1419,11 +1450,13 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		Where(
+			chq.Eq[string]{Col: "gram_project_id", Val: arg.GramProjectID},
+			chq.Expr("event_source = 'hook'"),
+			chq.Gte[int64]{Col: "time_unix_nano", Val: arg.TimeStart},
+			chq.Lte[int64]{Col: "time_unix_nano", Val: arg.TimeEnd},
+			chq.Expr("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')"),
+		).
 		GroupBy("user_email").
 		OrderBy("event_count DESC")
 
