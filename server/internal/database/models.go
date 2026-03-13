@@ -622,7 +622,7 @@ type PackageVersion struct {
 	Deleted      bool
 }
 
-// RBAC principal grants. One row per (org, principal, scope). The UNIQUE constraint guarantees at most one row per combination, so NULL resources (unrestricted) and array resources (allowlist) are mutually exclusive by construction.
+// RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted.
 type PrincipalGrant struct {
 	ID uuid.UUID
 	// The organization this grant belongs to. Grants are always org-scoped.
@@ -631,10 +631,10 @@ type PrincipalGrant struct {
 	PrincipalType string
 	// The identifier of the principal: a WorkOS user ID when principal_type='user', or a WorkOS role slug when principal_type='role'.
 	PrincipalID string
-	// The scope being granted, e.g. "project:read". References scopes(slug).
+	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	ScopeSlug string
-	// NULL = unrestricted (scope applies to all resources in the org). Non-empty array = allowlist of resource IDs this scope is restricted to. Empty arrays are rejected by the CHECK constraint.
-	Resources []string
+	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
+	Resource  string
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
@@ -687,15 +687,6 @@ type PromptTemplate struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
-}
-
-// RBAC scope vocabulary. Reference data seeded at app startup.
-type Scope struct {
-	ID uuid.UUID
-	// Unique human-readable identifier, e.g. "project:read", "build:write". Used as the FK target from principal_grants so grant rows are self-describing.
-	Slug      string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
 }
 
 type SlackApp struct {
