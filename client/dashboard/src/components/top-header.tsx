@@ -1,4 +1,9 @@
-import { useOrganization, useProject, useUser } from "@/contexts/Auth";
+import {
+  useIsAdmin,
+  useOrganization,
+  useProject,
+  useUser,
+} from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
@@ -15,6 +20,7 @@ import {
   BugIcon,
   CheckIcon,
   ChevronsUpDown,
+  ArrowRightLeftIcon,
   CreditCardIcon,
   LogOutIcon,
   MailIcon,
@@ -47,6 +53,7 @@ export function TopHeader() {
   const user = useUser();
   const { projectSlug } = useSlugs();
   const [open, setOpen] = useState(false);
+  const isAdmin = useIsAdmin();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const client = useSdkClient();
@@ -246,6 +253,14 @@ export function TopHeader() {
                   <CreditCardIcon className="mr-2 h-4 w-4" />
                   Billing
                 </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem
+                    onClick={() => orgRoutes.adminSettings.goTo()}
+                  >
+                    <ArrowRightLeftIcon className="mr-2 h-4 w-4" />
+                    Organization Override
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
