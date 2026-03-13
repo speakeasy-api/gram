@@ -101,7 +101,6 @@ export function useFetchSourceContent(
         }
       }
     },
-    enabled: !!source,
   });
 }
 
