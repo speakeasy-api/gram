@@ -7,7 +7,7 @@ import {
   SidebarGroupLabel,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useOrganization } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
@@ -16,6 +16,7 @@ import * as React from "react";
 export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
+  const isAdmin = useIsAdmin();
 
   const teamUrl =
     organization?.userWorkspaceSlugs &&
@@ -41,6 +42,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 orgRoutes.apiKeys,
                 orgRoutes.domains,
                 orgRoutes.logs,
+                ...(isAdmin ? [orgRoutes.adminSettings] : []),
               ]}
             >
               <SidebarMenuItem>
