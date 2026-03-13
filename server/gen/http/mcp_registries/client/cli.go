@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	mcpregistries "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	goa "goa.design/goa/v3/pkg"
@@ -110,6 +111,85 @@ func BuildDeletePeerPayload(mcpRegistriesDeletePeerSubOrganizationID string, mcp
 	}
 	v := &mcpregistries.DeletePeerPayload{}
 	v.SubOrganizationID = subOrganizationID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildPublishPayload builds the payload for the mcpRegistries publish
+// endpoint from CLI flags.
+func BuildPublishPayload(mcpRegistriesPublishBody string, mcpRegistriesPublishSessionToken string, mcpRegistriesPublishApikeyToken string, mcpRegistriesPublishProjectSlugInput string) (*mcpregistries.PublishPayload, error) {
+	var err error
+	var body PublishRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpRegistriesPublishBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }'")
+		}
+		if body.ToolsetIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_ids", "body"))
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
+		}
+		if utf8.RuneCountInString(body.Slug) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 1, true))
+		}
+		if utf8.RuneCountInString(body.Slug) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 100, false))
+		}
+		if len(body.ToolsetIds) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_ids", body.ToolsetIds, len(body.ToolsetIds), 1, true))
+		}
+		if !(body.Visibility == "public" || body.Visibility == "private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesPublishSessionToken != "" {
+			sessionToken = &mcpRegistriesPublishSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesPublishApikeyToken != "" {
+			apikeyToken = &mcpRegistriesPublishApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesPublishProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesPublishProjectSlugInput
+		}
+	}
+	v := &mcpregistries.PublishPayload{
+		Name:       body.Name,
+		Slug:       body.Slug,
+		Visibility: body.Visibility,
+	}
+	if body.ToolsetIds != nil {
+		v.ToolsetIds = make([]string, len(body.ToolsetIds))
+		for i, val := range body.ToolsetIds {
+			v.ToolsetIds[i] = val
+		}
+	} else {
+		v.ToolsetIds = []string{}
+	}
+	{
+		var zero string
+		if v.Visibility == zero {
+			v.Visibility = "private"
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -19,6 +19,7 @@ type Endpoints struct {
 	CreatePeer       goa.Endpoint
 	ListPeers        goa.Endpoint
 	DeletePeer       goa.Endpoint
+	Publish          goa.Endpoint
 	ClearCache       goa.Endpoint
 	ListRegistries   goa.Endpoint
 	ListCatalog      goa.Endpoint
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreatePeer:       NewCreatePeerEndpoint(s, a.APIKeyAuth),
 		ListPeers:        NewListPeersEndpoint(s, a.APIKeyAuth),
 		DeletePeer:       NewDeletePeerEndpoint(s, a.APIKeyAuth),
+		Publish:          NewPublishEndpoint(s, a.APIKeyAuth),
 		ClearCache:       NewClearCacheEndpoint(s, a.APIKeyAuth),
 		ListRegistries:   NewListRegistriesEndpoint(s, a.APIKeyAuth),
 		ListCatalog:      NewListCatalogEndpoint(s, a.APIKeyAuth),
@@ -46,6 +48,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreatePeer = m(e.CreatePeer)
 	e.ListPeers = m(e.ListPeers)
 	e.DeletePeer = m(e.DeletePeer)
+	e.Publish = m(e.Publish)
 	e.ClearCache = m(e.ClearCache)
 	e.ListRegistries = m(e.ListRegistries)
 	e.ListCatalog = m(e.ListCatalog)
@@ -226,6 +229,65 @@ func NewDeletePeerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return nil, s.DeletePeer(ctx, p)
+	}
+}
+
+// NewPublishEndpoint returns an endpoint function that calls the method
+// "publish" of service "mcpRegistries".
+func NewPublishEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PublishPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Publish(ctx, p)
 	}
 }
 

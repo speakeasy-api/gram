@@ -92,6 +92,46 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deletePeer")
 	})
 
+	Method("publish", func() {
+		Description("Publish toolsets as an internal MCP registry catalog")
+
+		Payload(func() {
+			Attribute("name", String, "Display name for the catalog", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("slug", String, "URL-friendly identifier for the catalog", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("toolset_ids", ArrayOf(String), "IDs of the toolsets to include", func() {
+				MinLength(1)
+			})
+			Attribute("visibility", String, "Visibility of the catalog", func() {
+				Enum("public", "private")
+				Default("private")
+			})
+			Required("name", "slug", "toolset_ids")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(MCPRegistry)
+
+		HTTP(func() {
+			POST("/rpc/mcpRegistries.publish")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusCreated)
+		})
+
+		Meta("openapi:operationId", "publishMCPRegistry")
+		Meta("openapi:extension:x-speakeasy-name-override", "publish")
+	})
+
 	Method("clearCache", func() {
 		Description("Clear the registry cache for a specific registry (admin only)")
 
@@ -252,8 +292,16 @@ var MCPRegistry = Type("MCPRegistry", func() {
 	})
 	Attribute("name", String, "Display name for the registry")
 	Attribute("url", String, "URL of the registry")
+	Attribute("slug", String, "URL-friendly identifier for the registry")
+	Attribute("source", String, "Source type of the registry", func() {
+		Enum("internal", "external")
+	})
+	Attribute("visibility", String, "Visibility of the registry", func() {
+		Enum("public", "private")
+	})
+	Attribute("organization_id", String, "Owning organization ID")
 
-	Required("id", "name", "url")
+	Required("id", "name")
 })
 
 var ExternalMCPTool = Type("ExternalMCPTool", func() {

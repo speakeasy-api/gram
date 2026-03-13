@@ -23,6 +23,8 @@ type Service interface {
 	ListPeers(context.Context, *ListPeersPayload) (res *ListPeersResult, err error)
 	// Remove a peered organization relationship
 	DeletePeer(context.Context, *DeletePeerPayload) (err error)
+	// Publish toolsets as an internal MCP registry catalog
+	Publish(context.Context, *PublishPayload) (res *types.MCPRegistry, err error)
 	// Clear the registry cache for a specific registry (admin only)
 	ClearCache(context.Context, *ClearCachePayload) (err error)
 	// List all MCP registries (admin only)
@@ -53,7 +55,7 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createPeer", "listPeers", "deletePeer", "clearCache", "listRegistries", "listCatalog", "getServerDetails"}
+var MethodNames = [8]string{"createPeer", "listPeers", "deletePeer", "publish", "clearCache", "listRegistries", "listCatalog", "getServerDetails"}
 
 // ClearCachePayload is the payload type of the mcpRegistries service
 // clearCache method.
@@ -148,6 +150,22 @@ type ListRegistriesPayload struct {
 type ListRegistriesResult struct {
 	// List of MCP registries
 	Registries []*types.MCPRegistry
+}
+
+// PublishPayload is the payload type of the mcpRegistries service publish
+// method.
+type PublishPayload struct {
+	// Display name for the catalog
+	Name string
+	// URL-friendly identifier for the catalog
+	Slug string
+	// IDs of the toolsets to include
+	ToolsetIds []string
+	// Visibility of the catalog
+	Visibility       string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

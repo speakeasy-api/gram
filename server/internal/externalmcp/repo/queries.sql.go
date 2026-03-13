@@ -211,6 +211,57 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 	return i, err
 }
 
+const createInternalRegistry = `-- name: CreateInternalRegistry :one
+INSERT INTO mcp_registries (name, slug, source, visibility, organization_id, project_id)
+VALUES ($1, $2, 'internal', $3, $4, $5)
+RETURNING id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
+`
+
+type CreateInternalRegistryParams struct {
+	Name           string
+	Slug           pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+}
+
+type CreateInternalRegistryRow struct {
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) CreateInternalRegistry(ctx context.Context, arg CreateInternalRegistryParams) (CreateInternalRegistryRow, error) {
+	row := q.db.QueryRow(ctx, createInternalRegistry,
+		arg.Name,
+		arg.Slug,
+		arg.Visibility,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i CreateInternalRegistryRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.Slug,
+		&i.Source,
+		&i.Visibility,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createPeer = `-- name: CreatePeer :one
 INSERT INTO peered_organizations (super_organization_id, sub_organization_id)
 VALUES ($1, $2)
@@ -486,17 +537,22 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 }
 
 const getMCPRegistryByID = `-- name: GetMCPRegistryByID :one
-SELECT id, name, url, created_at, updated_at
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
 WHERE id = $1 AND deleted IS FALSE
 `
 
 type GetMCPRegistryByIDRow struct {
-	ID        uuid.UUID
-	Name      string
-	Url       pgtype.Text
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPRegistryByIDRow, error) {
@@ -506,6 +562,11 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 		&i.ID,
 		&i.Name,
 		&i.Url,
+		&i.Slug,
+		&i.Source,
+		&i.Visibility,
+		&i.OrganizationID,
+		&i.ProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -698,18 +759,23 @@ func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deployment
 }
 
 const listMCPRegistries = `-- name: ListMCPRegistries :many
-SELECT id, name, url, created_at, updated_at
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
 WHERE deleted IS FALSE
 ORDER BY name ASC
 `
 
 type ListMCPRegistriesRow struct {
-	ID        uuid.UUID
-	Name      string
-	Url       pgtype.Text
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow, error) {
@@ -725,6 +791,11 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 			&i.ID,
 			&i.Name,
 			&i.Url,
+			&i.Slug,
+			&i.Source,
+			&i.Visibility,
+			&i.OrganizationID,
+			&i.ProjectID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -781,4 +852,54 @@ func (q *Queries) ListPeers(ctx context.Context, superOrganizationID string) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const listRegistryToolsetLinks = `-- name: ListRegistryToolsetLinks :many
+SELECT id, registry_id, toolset_id, created_at
+FROM mcp_registry_toolset_links
+WHERE registry_id = $1
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListRegistryToolsetLinks(ctx context.Context, registryID uuid.UUID) ([]McpRegistryToolsetLink, error) {
+	rows, err := q.db.Query(ctx, listRegistryToolsetLinks, registryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpRegistryToolsetLink
+	for rows.Next() {
+		var i McpRegistryToolsetLink
+		if err := rows.Scan(
+			&i.ID,
+			&i.RegistryID,
+			&i.ToolsetID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setRegistryToolsets = `-- name: SetRegistryToolsets :exec
+WITH deleted AS (
+  DELETE FROM mcp_registry_toolset_links WHERE registry_id = $1
+)
+INSERT INTO mcp_registry_toolset_links (registry_id, toolset_id)
+SELECT $1, unnest($2::uuid[])
+`
+
+type SetRegistryToolsetsParams struct {
+	RegistryID uuid.UUID
+	ToolsetIds []uuid.UUID
+}
+
+func (q *Queries) SetRegistryToolsets(ctx context.Context, arg SetRegistryToolsetsParams) error {
+	_, err := q.db.Exec(ctx, setRegistryToolsets, arg.RegistryID, arg.ToolsetIds)
+	return err
 }

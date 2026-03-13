@@ -727,6 +727,248 @@ func DecodeDeletePeerResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildPublishRequest instantiates a HTTP request object with method and path
+// set to call the "mcpRegistries" service "publish" endpoint
+func (c *Client) BuildPublishRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PublishMcpRegistriesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "publish", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodePublishRequest returns an encoder for requests sent to the
+// mcpRegistries publish server.
+func EncodePublishRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.PublishPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "publish", "*mcpregistries.PublishPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewPublishRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpRegistries", "publish", err)
+		}
+		return nil
+	}
+}
+
+// DecodePublishResponse returns a decoder for responses returned by the
+// mcpRegistries publish endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodePublishResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodePublishResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusCreated:
+			var (
+				body PublishResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			res := NewPublishMCPRegistryCreated(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body PublishUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			return nil, NewPublishUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PublishForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			return nil, NewPublishForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PublishBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			return nil, NewPublishBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PublishNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			return nil, NewPublishNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PublishConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			return nil, NewPublishConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PublishUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			return nil, NewPublishUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PublishInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			return nil, NewPublishInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PublishInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+				}
+				err = ValidatePublishInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+				}
+				return nil, NewPublishInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PublishUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+				}
+				err = ValidatePublishUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+				}
+				return nil, NewPublishUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "publish", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body PublishGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "publish", err)
+			}
+			err = ValidatePublishGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "publish", err)
+			}
+			return nil, NewPublishGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "publish", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildClearCacheRequest instantiates a HTTP request object with method and
 // path set to call the "mcpRegistries" service "clearCache" endpoint
 func (c *Client) BuildClearCacheRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1704,9 +1946,13 @@ func unmarshalPeeredOrganizationResponseBodyToTypesPeeredOrganization(v *PeeredO
 // *types.MCPRegistry from a value of type *MCPRegistryResponseBody.
 func unmarshalMCPRegistryResponseBodyToTypesMCPRegistry(v *MCPRegistryResponseBody) *types.MCPRegistry {
 	res := &types.MCPRegistry{
-		ID:   *v.ID,
-		Name: *v.Name,
-		URL:  *v.URL,
+		ID:             *v.ID,
+		Name:           *v.Name,
+		URL:            v.URL,
+		Slug:           v.Slug,
+		Source:         v.Source,
+		Visibility:     v.Visibility,
+		OrganizationID: v.OrganizationID,
 	}
 
 	return res
