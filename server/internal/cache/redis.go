@@ -43,14 +43,14 @@ func (r *RedisCacheAdapter) Set(ctx context.Context, key string, value any, ttl 
 	})
 }
 
-func (r *RedisCacheAdapter) Update(ctx context.Context, key string, value any) error {
+func (r *RedisCacheAdapter) Update(ctx context.Context, key string, value any, fallbackTTL time.Duration) error {
 	ttl, err := r.client.TTL(ctx, key).Result()
 	if err != nil {
 		return fmt.Errorf("failed to fetch TTL for key %s: %w", key, err)
 	}
 
 	if ttl <= 0 {
-		return fmt.Errorf("failed to fetch TTL for key %s", key)
+		ttl = fallbackTTL
 	}
 
 	//nolint:wrapcheck // Wrapping happens in the typed cache implementation

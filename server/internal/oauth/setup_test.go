@@ -142,7 +142,7 @@ func (e *tokenTestEnv) expireTokenInCache(
 	token.ExpiresAt = expiresAt
 
 	// Update the token in cache
-	err = e.cacheAdapter.Update(ctx, cacheKey, token)
+	err = e.cacheAdapter.Update(ctx, cacheKey, token, token.TTL())
 	require.NoError(t, err, "failed to update token in cache")
 }
 
