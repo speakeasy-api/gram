@@ -340,9 +340,10 @@ export function InstallPageConfigForm({
   return (
     <Stack direction="horizontal" align="center" gap={2}>
       <CodeBlock
-        className="flex-grow overflow-hidden pr-10"
+        className="flex-grow overflow-hidden pr-10 bg-zinc-950 text-zinc-100 border-zinc-800"
         preClassName="whitespace-nowrap overflow-auto"
         copyable={true}
+        forceDark
       >
         {installPageUrl}
       </CodeBlock>

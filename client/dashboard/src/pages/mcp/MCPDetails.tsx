@@ -1,5 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
+import { DetailHero } from "@/components/detail-hero";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import {
   InstallPageConfigForm,
@@ -16,7 +17,13 @@ import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -241,73 +248,10 @@ export function MCPDetailPage() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth noPadding>
-        {/* Hero Header - full width */}
-        <div className="relative w-full h-64 overflow-hidden">
-          <div
-            className="absolute inset-0 bg-muted/30 text-muted-foreground/20"
-            style={{
-              backgroundImage:
-                "radial-gradient(circle, currentColor 1px, transparent 1px)",
-              backgroundSize: "16px 16px",
-            }}
-          />
-
-          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
-            <div className="flex items-end justify-between">
-              <Stack gap={2}>
-                <div className="flex items-center gap-3 ml-1">
-                  <Heading variant="h1">{toolset.name}</Heading>
-                  {statusBadge}
-                </div>
-                <div className="flex items-center gap-2 ml-1">
-                  <Type className="max-w-2xl truncate text-muted-foreground">
-                    {mcpUrl}
-                  </Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={() => {
-                      if (mcpUrl) {
-                        navigator.clipboard.writeText(mcpUrl);
-                        toast.success("URL copied to clipboard");
-                      }
-                    }}
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                  >
-                    <Button.LeftIcon>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect
-                          width="14"
-                          height="14"
-                          x="8"
-                          y="8"
-                          rx="2"
-                          ry="2"
-                        />
-                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                      </svg>
-                    </Button.LeftIcon>
-                    <Button.Text className="sr-only">Copy URL</Button.Text>
-                  </Button>
-                </div>
-              </Stack>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
-            <Stack direction="horizontal" gap={2} className="justify-end">
+      <Page.Body fullWidth noPadding className="gap-0">
+        <DetailHero
+          actions={
+            <>
               <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
                 <Button
                   variant="secondary"
@@ -321,9 +265,52 @@ export function MCPDetailPage() {
                 </Button>
               </routes.playground.Link>
               <MCPEnableButton toolset={toolset} />
+            </>
+          }
+        >
+          <div className="flex items-end justify-between">
+            <Stack gap={2}>
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1">{toolset.name}</Heading>
+                {statusBadge}
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Type className="max-w-2xl truncate text-muted-foreground">
+                  {mcpUrl}
+                </Type>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => {
+                    if (mcpUrl) {
+                      navigator.clipboard.writeText(mcpUrl);
+                      toast.success("URL copied to clipboard");
+                    }
+                  }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <Button.LeftIcon>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                    </svg>
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Copy URL</Button.Text>
+                </Button>
+              </div>
             </Stack>
           </div>
-        </div>
+        </DetailHero>
 
         {/* Sub-navigation tabs */}
         <Tabs
@@ -334,47 +321,19 @@ export function MCPDetailPage() {
           <div className="border-b">
             <div className="max-w-[1270px] mx-auto px-8">
               <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
-                <TabsTrigger
-                  value="overview"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="tools"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Tools
-                </TabsTrigger>
-                <TabsTrigger
-                  value="resources"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Resources
-                </TabsTrigger>
-                <TabsTrigger
-                  value="prompts"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Prompts
-                </TabsTrigger>
-                <TabsTrigger
-                  value="authentication"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
+                <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
+                <PageTabsTrigger value="tools">Tools</PageTabsTrigger>
+                <PageTabsTrigger value="resources">Resources</PageTabsTrigger>
+                <PageTabsTrigger value="prompts">Prompts</PageTabsTrigger>
+                <PageTabsTrigger value="authentication">
                   <span className="flex items-center gap-1.5">
                     Authentication
                     {missingRequiredEnvVars > 0 && (
                       <AlertTriangle className="h-3.5 w-3.5 text-warning" />
                     )}
                   </span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="settings"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Settings
-                </TabsTrigger>
+                </PageTabsTrigger>
+                <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
           </div>
@@ -486,7 +445,12 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         heading="Hosted URL"
         description="The URL you or your users will use to access this MCP server."
       >
-        <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
+        <CodeBlock
+          className="mb-2 bg-zinc-950 text-zinc-100 border-zinc-800"
+          forceDark
+        >
+          {mcpUrl ?? ""}
+        </CodeBlock>
       </PageSection>
 
       <PageSection
