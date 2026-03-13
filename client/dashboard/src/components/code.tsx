@@ -16,7 +16,6 @@ export function CodeBlock({
   copyable = true,
   onCopy,
   preClassName,
-  forceDark = false,
 }: {
   children: string;
   language?: string;
@@ -24,10 +23,8 @@ export function CodeBlock({
   copyable?: boolean;
   onCopy?: () => void;
   preClassName?: string;
-  forceDark?: boolean;
 }) {
   const { theme } = useMoonshineConfig();
-  const effectiveTheme = forceDark ? "dark" : theme;
   const [highlightedCode, setHighlightedCode] = React.useState<string | null>(
     null,
   );
@@ -45,7 +42,7 @@ export function CodeBlock({
 
     codeToHtml(code, {
       lang: language,
-      theme: DEFAULT_THEME_PER_MODE[effectiveTheme],
+      theme: DEFAULT_THEME_PER_MODE[theme],
       transformers: [
         {
           pre(node) {
@@ -53,13 +50,13 @@ export function CodeBlock({
             node.properties.class = cn(
               "!bg-transparent",
               preClassName,
-              effectiveTheme === "dark" ? "dark" : "light",
+              theme === "dark" ? "dark" : "light",
             );
           },
         },
       ],
     }).then(setHighlightedCode);
-  }, [code, language, preClassName, effectiveTheme]);
+  }, [code, language, preClassName]);
 
   return (
     <div className="relative group">

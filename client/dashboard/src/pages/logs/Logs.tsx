@@ -40,6 +40,7 @@ import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Settings, XIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
 import type { ActiveLogFilter } from "./log-filter-types";
 import { parseFilters, serializeFilters } from "./log-filter-url";
@@ -657,6 +658,8 @@ function LogsInnerContent({
   attributeKeys: string[];
   isLoadingAttributeKeys?: boolean;
 }) {
+  const orgRoutes = useOrgRoutes();
+
   const pageTitle = (
     <div className="flex flex-col gap-1 min-w-0">
       <h1 className="text-xl font-semibold">Logs</h1>
@@ -694,7 +697,7 @@ function LogsInnerContent({
                   <div className="flex items-start justify-between gap-4 mb-4">
                     {pageTitle}
                     <Button variant="outline" size="sm" asChild>
-                      <Link to="../settings/logs">
+                      <Link to={orgRoutes.logs.href()}>
                         <Settings className="h-4 w-4" />
                         Configure settings
                       </Link>

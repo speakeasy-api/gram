@@ -445,12 +445,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         heading="Hosted URL"
         description="The URL you or your users will use to access this MCP server."
       >
-        <CodeBlock
-          className="mb-2 bg-zinc-950 text-zinc-100 border-zinc-800"
-          forceDark
-        >
-          {mcpUrl ?? ""}
-        </CodeBlock>
+        <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
       </PageSection>
 
       <PageSection
