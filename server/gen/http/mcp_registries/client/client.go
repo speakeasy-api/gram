@@ -33,6 +33,13 @@ type Client struct {
 	// endpoint.
 	PublishDoer goahttp.Doer
 
+	// Grant Doer is the HTTP client used to make requests to the grant endpoint.
+	GrantDoer goahttp.Doer
+
+	// RevokeGrant Doer is the HTTP client used to make requests to the revokeGrant
+	// endpoint.
+	RevokeGrantDoer goahttp.Doer
+
 	// ClearCache Doer is the HTTP client used to make requests to the clearCache
 	// endpoint.
 	ClearCacheDoer goahttp.Doer
@@ -74,6 +81,8 @@ func NewClient(
 		ListPeersDoer:        doer,
 		DeletePeerDoer:       doer,
 		PublishDoer:          doer,
+		GrantDoer:            doer,
+		RevokeGrantDoer:      doer,
 		ClearCacheDoer:       doer,
 		ListRegistriesDoer:   doer,
 		ListCatalogDoer:      doer,
@@ -177,6 +186,54 @@ func (c *Client) Publish() goa.Endpoint {
 		resp, err := c.PublishDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpRegistries", "publish", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Grant returns an endpoint that makes HTTP requests to the mcpRegistries
+// service grant server.
+func (c *Client) Grant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGrantRequest(c.encoder)
+		decodeResponse = DecodeGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "grant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeGrant returns an endpoint that makes HTTP requests to the
+// mcpRegistries service revokeGrant server.
+func (c *Client) RevokeGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeGrantRequest(c.encoder)
+		decodeResponse = DecodeRevokeGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "revokeGrant", err)
 		}
 		return decodeResponse(resp)
 	}

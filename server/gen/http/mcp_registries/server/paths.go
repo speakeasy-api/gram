@@ -27,6 +27,16 @@ func PublishMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.publish"
 }
 
+// GrantMcpRegistriesPath returns the URL path to the mcpRegistries service grant HTTP endpoint.
+func GrantMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.grant"
+}
+
+// RevokeGrantMcpRegistriesPath returns the URL path to the mcpRegistries service revokeGrant HTTP endpoint.
+func RevokeGrantMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.revokeGrant"
+}
+
 // ClearCacheMcpRegistriesPath returns the URL path to the mcpRegistries service clearCache HTTP endpoint.
 func ClearCacheMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.clearCache"

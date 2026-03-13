@@ -197,6 +197,94 @@ func BuildPublishPayload(mcpRegistriesPublishBody string, mcpRegistriesPublishSe
 	return v, nil
 }
 
+// BuildGrantPayload builds the payload for the mcpRegistries grant endpoint
+// from CLI flags.
+func BuildGrantPayload(mcpRegistriesGrantBody string, mcpRegistriesGrantSessionToken string, mcpRegistriesGrantApikeyToken string, mcpRegistriesGrantProjectSlugInput string) (*mcpregistries.GrantPayload, error) {
+	var err error
+	var body GrantRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpRegistriesGrantBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", body.RegistryID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesGrantSessionToken != "" {
+			sessionToken = &mcpRegistriesGrantSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesGrantApikeyToken != "" {
+			apikeyToken = &mcpRegistriesGrantApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesGrantProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesGrantProjectSlugInput
+		}
+	}
+	v := &mcpregistries.GrantPayload{
+		RegistryID:     body.RegistryID,
+		OrganizationID: body.OrganizationID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRevokeGrantPayload builds the payload for the mcpRegistries revokeGrant
+// endpoint from CLI flags.
+func BuildRevokeGrantPayload(mcpRegistriesRevokeGrantRegistryID string, mcpRegistriesRevokeGrantOrganizationID string, mcpRegistriesRevokeGrantSessionToken string, mcpRegistriesRevokeGrantApikeyToken string, mcpRegistriesRevokeGrantProjectSlugInput string) (*mcpregistries.RevokeGrantPayload, error) {
+	var err error
+	var registryID string
+	{
+		registryID = mcpRegistriesRevokeGrantRegistryID
+		err = goa.MergeErrors(err, goa.ValidateFormat("registry_id", registryID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var organizationID string
+	{
+		organizationID = mcpRegistriesRevokeGrantOrganizationID
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesRevokeGrantSessionToken != "" {
+			sessionToken = &mcpRegistriesRevokeGrantSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesRevokeGrantApikeyToken != "" {
+			apikeyToken = &mcpRegistriesRevokeGrantApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesRevokeGrantProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesRevokeGrantProjectSlugInput
+		}
+	}
+	v := &mcpregistries.RevokeGrantPayload{}
+	v.RegistryID = registryID
+	v.OrganizationID = organizationID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildClearCachePayload builds the payload for the mcpRegistries clearCache
 // endpoint from CLI flags.
 func BuildClearCachePayload(mcpRegistriesClearCacheRegistryID string, mcpRegistriesClearCacheSessionToken string, mcpRegistriesClearCacheApikeyToken string, mcpRegistriesClearCacheProjectSlugInput string) (*mcpregistries.ClearCachePayload, error) {

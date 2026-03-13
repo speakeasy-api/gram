@@ -35,6 +35,15 @@ type PublishRequestBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 }
 
+// GrantRequestBody is the type of the "mcpRegistries" service "grant" endpoint
+// HTTP request body.
+type GrantRequestBody struct {
+	// ID of the registry to grant access to
+	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// ID of the organization to grant access to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
 // CreatePeerResponseBody is the type of the "mcpRegistries" service
 // "createPeer" endpoint HTTP response body.
 type CreatePeerResponseBody struct {
@@ -835,6 +844,371 @@ type PublishUnexpectedResponseBody struct {
 // PublishGatewayErrorResponseBody is the type of the "mcpRegistries" service
 // "publish" endpoint HTTP response body for the "gateway_error" error.
 type PublishGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantUnauthorizedResponseBody is the type of the "mcpRegistries" service
+// "grant" endpoint HTTP response body for the "unauthorized" error.
+type GrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantForbiddenResponseBody is the type of the "mcpRegistries" service
+// "grant" endpoint HTTP response body for the "forbidden" error.
+type GrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantBadRequestResponseBody is the type of the "mcpRegistries" service
+// "grant" endpoint HTTP response body for the "bad_request" error.
+type GrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantNotFoundResponseBody is the type of the "mcpRegistries" service "grant"
+// endpoint HTTP response body for the "not_found" error.
+type GrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantConflictResponseBody is the type of the "mcpRegistries" service "grant"
+// endpoint HTTP response body for the "conflict" error.
+type GrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantUnsupportedMediaResponseBody is the type of the "mcpRegistries" service
+// "grant" endpoint HTTP response body for the "unsupported_media" error.
+type GrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantInvalidResponseBody is the type of the "mcpRegistries" service "grant"
+// endpoint HTTP response body for the "invalid" error.
+type GrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantInvariantViolationResponseBody is the type of the "mcpRegistries"
+// service "grant" endpoint HTTP response body for the "invariant_violation"
+// error.
+type GrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantUnexpectedResponseBody is the type of the "mcpRegistries" service
+// "grant" endpoint HTTP response body for the "unexpected" error.
+type GrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GrantGatewayErrorResponseBody is the type of the "mcpRegistries" service
+// "grant" endpoint HTTP response body for the "gateway_error" error.
+type GrantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "revokeGrant" endpoint HTTP response body for the "unauthorized"
+// error.
+type RevokeGrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantForbiddenResponseBody is the type of the "mcpRegistries" service
+// "revokeGrant" endpoint HTTP response body for the "forbidden" error.
+type RevokeGrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantBadRequestResponseBody is the type of the "mcpRegistries" service
+// "revokeGrant" endpoint HTTP response body for the "bad_request" error.
+type RevokeGrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantNotFoundResponseBody is the type of the "mcpRegistries" service
+// "revokeGrant" endpoint HTTP response body for the "not_found" error.
+type RevokeGrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantConflictResponseBody is the type of the "mcpRegistries" service
+// "revokeGrant" endpoint HTTP response body for the "conflict" error.
+type RevokeGrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantUnsupportedMediaResponseBody is the type of the "mcpRegistries"
+// service "revokeGrant" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RevokeGrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantInvalidResponseBody is the type of the "mcpRegistries" service
+// "revokeGrant" endpoint HTTP response body for the "invalid" error.
+type RevokeGrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantInvariantViolationResponseBody is the type of the "mcpRegistries"
+// service "revokeGrant" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RevokeGrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantUnexpectedResponseBody is the type of the "mcpRegistries" service
+// "revokeGrant" endpoint HTTP response body for the "unexpected" error.
+type RevokeGrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeGrantGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "revokeGrant" endpoint HTTP response body for the "gateway_error"
+// error.
+type RevokeGrantGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2360,6 +2734,286 @@ func NewPublishGatewayErrorResponseBody(res *goa.ServiceError) *PublishGatewayEr
 	return body
 }
 
+// NewGrantUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantUnauthorizedResponseBody(res *goa.ServiceError) *GrantUnauthorizedResponseBody {
+	body := &GrantUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantForbiddenResponseBody builds the HTTP response body from the result
+// of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantForbiddenResponseBody(res *goa.ServiceError) *GrantForbiddenResponseBody {
+	body := &GrantForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantBadRequestResponseBody builds the HTTP response body from the result
+// of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantBadRequestResponseBody(res *goa.ServiceError) *GrantBadRequestResponseBody {
+	body := &GrantBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantNotFoundResponseBody builds the HTTP response body from the result
+// of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantNotFoundResponseBody(res *goa.ServiceError) *GrantNotFoundResponseBody {
+	body := &GrantNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantConflictResponseBody builds the HTTP response body from the result
+// of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantConflictResponseBody(res *goa.ServiceError) *GrantConflictResponseBody {
+	body := &GrantConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantUnsupportedMediaResponseBody(res *goa.ServiceError) *GrantUnsupportedMediaResponseBody {
+	body := &GrantUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantInvalidResponseBody builds the HTTP response body from the result of
+// the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantInvalidResponseBody(res *goa.ServiceError) *GrantInvalidResponseBody {
+	body := &GrantInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantInvariantViolationResponseBody(res *goa.ServiceError) *GrantInvariantViolationResponseBody {
+	body := &GrantInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantUnexpectedResponseBody builds the HTTP response body from the result
+// of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantUnexpectedResponseBody(res *goa.ServiceError) *GrantUnexpectedResponseBody {
+	body := &GrantUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGrantGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "grant" endpoint of the "mcpRegistries" service.
+func NewGrantGatewayErrorResponseBody(res *goa.ServiceError) *GrantGatewayErrorResponseBody {
+	body := &GrantGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantUnauthorizedResponseBody(res *goa.ServiceError) *RevokeGrantUnauthorizedResponseBody {
+	body := &RevokeGrantUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantForbiddenResponseBody builds the HTTP response body from the
+// result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantForbiddenResponseBody(res *goa.ServiceError) *RevokeGrantForbiddenResponseBody {
+	body := &RevokeGrantForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantBadRequestResponseBody builds the HTTP response body from the
+// result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantBadRequestResponseBody(res *goa.ServiceError) *RevokeGrantBadRequestResponseBody {
+	body := &RevokeGrantBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantNotFoundResponseBody builds the HTTP response body from the
+// result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantNotFoundResponseBody(res *goa.ServiceError) *RevokeGrantNotFoundResponseBody {
+	body := &RevokeGrantNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantConflictResponseBody builds the HTTP response body from the
+// result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantConflictResponseBody(res *goa.ServiceError) *RevokeGrantConflictResponseBody {
+	body := &RevokeGrantConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeGrantUnsupportedMediaResponseBody {
+	body := &RevokeGrantUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantInvalidResponseBody builds the HTTP response body from the
+// result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantInvalidResponseBody(res *goa.ServiceError) *RevokeGrantInvalidResponseBody {
+	body := &RevokeGrantInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantInvariantViolationResponseBody(res *goa.ServiceError) *RevokeGrantInvariantViolationResponseBody {
+	body := &RevokeGrantInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantUnexpectedResponseBody builds the HTTP response body from the
+// result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantUnexpectedResponseBody(res *goa.ServiceError) *RevokeGrantUnexpectedResponseBody {
+	body := &RevokeGrantUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeGrantGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "revokeGrant" endpoint of the "mcpRegistries" service.
+func NewRevokeGrantGatewayErrorResponseBody(res *goa.ServiceError) *RevokeGrantGatewayErrorResponseBody {
+	body := &RevokeGrantGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewClearCacheUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "clearCache" endpoint of the "mcpRegistries" service.
 func NewClearCacheUnauthorizedResponseBody(res *goa.ServiceError) *ClearCacheUnauthorizedResponseBody {
@@ -2985,6 +3639,32 @@ func NewPublishPayload(body *PublishRequestBody, sessionToken *string, apikeyTok
 	return v
 }
 
+// NewGrantPayload builds a mcpRegistries service grant endpoint payload.
+func NewGrantPayload(body *GrantRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.GrantPayload {
+	v := &mcpregistries.GrantPayload{
+		RegistryID:     *body.RegistryID,
+		OrganizationID: *body.OrganizationID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRevokeGrantPayload builds a mcpRegistries service revokeGrant endpoint
+// payload.
+func NewRevokeGrantPayload(registryID string, organizationID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.RevokeGrantPayload {
+	v := &mcpregistries.RevokeGrantPayload{}
+	v.RegistryID = registryID
+	v.OrganizationID = organizationID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewClearCachePayload builds a mcpRegistries service clearCache endpoint
 // payload.
 func NewClearCachePayload(registryID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ClearCachePayload {
@@ -3082,6 +3762,20 @@ func ValidatePublishRequestBody(body *PublishRequestBody) (err error) {
 		if !(*body.Visibility == "public" || *body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"public", "private"}))
 		}
+	}
+	return
+}
+
+// ValidateGrantRequestBody runs the validations defined on GrantRequestBody
+func ValidateGrantRequestBody(body *GrantRequestBody) (err error) {
+	if body.RegistryID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RegistryID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
 	}
 	return
 }

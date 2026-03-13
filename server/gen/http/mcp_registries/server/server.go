@@ -23,6 +23,8 @@ type Server struct {
 	ListPeers        http.Handler
 	DeletePeer       http.Handler
 	Publish          http.Handler
+	Grant            http.Handler
+	RevokeGrant      http.Handler
 	ClearCache       http.Handler
 	ListRegistries   http.Handler
 	ListCatalog      http.Handler
@@ -60,6 +62,8 @@ func New(
 			{"ListPeers", "GET", "/rpc/mcpRegistries.listPeers"},
 			{"DeletePeer", "DELETE", "/rpc/mcpRegistries.deletePeer"},
 			{"Publish", "POST", "/rpc/mcpRegistries.publish"},
+			{"Grant", "POST", "/rpc/mcpRegistries.grant"},
+			{"RevokeGrant", "DELETE", "/rpc/mcpRegistries.revokeGrant"},
 			{"ClearCache", "DELETE", "/rpc/mcpRegistries.clearCache"},
 			{"ListRegistries", "GET", "/rpc/mcpRegistries.listRegistries"},
 			{"ListCatalog", "GET", "/rpc/mcpRegistries.listCatalog"},
@@ -69,6 +73,8 @@ func New(
 		ListPeers:        NewListPeersHandler(e.ListPeers, mux, decoder, encoder, errhandler, formatter),
 		DeletePeer:       NewDeletePeerHandler(e.DeletePeer, mux, decoder, encoder, errhandler, formatter),
 		Publish:          NewPublishHandler(e.Publish, mux, decoder, encoder, errhandler, formatter),
+		Grant:            NewGrantHandler(e.Grant, mux, decoder, encoder, errhandler, formatter),
+		RevokeGrant:      NewRevokeGrantHandler(e.RevokeGrant, mux, decoder, encoder, errhandler, formatter),
 		ClearCache:       NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
 		ListRegistries:   NewListRegistriesHandler(e.ListRegistries, mux, decoder, encoder, errhandler, formatter),
 		ListCatalog:      NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
@@ -85,6 +91,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListPeers = m(s.ListPeers)
 	s.DeletePeer = m(s.DeletePeer)
 	s.Publish = m(s.Publish)
+	s.Grant = m(s.Grant)
+	s.RevokeGrant = m(s.RevokeGrant)
 	s.ClearCache = m(s.ClearCache)
 	s.ListRegistries = m(s.ListRegistries)
 	s.ListCatalog = m(s.ListCatalog)
@@ -100,6 +108,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListPeersHandler(mux, h.ListPeers)
 	MountDeletePeerHandler(mux, h.DeletePeer)
 	MountPublishHandler(mux, h.Publish)
+	MountGrantHandler(mux, h.Grant)
+	MountRevokeGrantHandler(mux, h.RevokeGrant)
 	MountClearCacheHandler(mux, h.ClearCache)
 	MountListRegistriesHandler(mux, h.ListRegistries)
 	MountListCatalogHandler(mux, h.ListCatalog)
@@ -300,6 +310,112 @@ func NewPublishHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "publish")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGrantHandler configures the mux to serve the "mcpRegistries" service
+// "grant" endpoint.
+func MountGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpRegistries.grant", f)
+}
+
+// NewGrantHandler creates a HTTP handler which loads the HTTP request and
+// calls the "mcpRegistries" service "grant" endpoint.
+func NewGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGrantRequest(mux, decoder)
+		encodeResponse = EncodeGrantResponse(encoder)
+		encodeError    = EncodeGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "grant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeGrantHandler configures the mux to serve the "mcpRegistries"
+// service "revokeGrant" endpoint.
+func MountRevokeGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/mcpRegistries.revokeGrant", f)
+}
+
+// NewRevokeGrantHandler creates a HTTP handler which loads the HTTP request
+// and calls the "mcpRegistries" service "revokeGrant" endpoint.
+func NewRevokeGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeGrantRequest(mux, decoder)
+		encodeResponse = EncodeRevokeGrantResponse(encoder)
+		encodeError    = EncodeRevokeGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeGrant")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
 		payload, err := decodeRequest(r)
 		if err != nil {

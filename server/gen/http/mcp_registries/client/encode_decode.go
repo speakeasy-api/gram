@@ -969,6 +969,464 @@ func DecodePublishResponse(decoder func(*http.Response) goahttp.Decoder, restore
 	}
 }
 
+// BuildGrantRequest instantiates a HTTP request object with method and path
+// set to call the "mcpRegistries" service "grant" endpoint
+func (c *Client) BuildGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GrantMcpRegistriesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "grant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGrantRequest returns an encoder for requests sent to the mcpRegistries
+// grant server.
+func EncodeGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.GrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "grant", "*mcpregistries.GrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGrantRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpRegistries", "grant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGrantResponse returns a decoder for responses returned by the
+// mcpRegistries grant endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body GrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+			}
+			err = ValidateGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+			}
+			return nil, NewGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+			}
+			err = ValidateGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+			}
+			return nil, NewGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+			}
+			err = ValidateGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+			}
+			return nil, NewGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+			}
+			err = ValidateGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+			}
+			return nil, NewGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+			}
+			err = ValidateGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+			}
+			return nil, NewGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+			}
+			err = ValidateGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+			}
+			return nil, NewGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+			}
+			err = ValidateGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+			}
+			return nil, NewGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+				}
+				err = ValidateGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+				}
+				return nil, NewGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+				}
+				err = ValidateGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+				}
+				return nil, NewGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "grant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "grant", err)
+			}
+			err = ValidateGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "grant", err)
+			}
+			return nil, NewGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "grant", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRevokeGrantRequest instantiates a HTTP request object with method and
+// path set to call the "mcpRegistries" service "revokeGrant" endpoint
+func (c *Client) BuildRevokeGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeGrantMcpRegistriesPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "revokeGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRevokeGrantRequest returns an encoder for requests sent to the
+// mcpRegistries revokeGrant server.
+func EncodeRevokeGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.RevokeGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "revokeGrant", "*mcpregistries.RevokeGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("registry_id", p.RegistryID)
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRevokeGrantResponse returns a decoder for responses returned by the
+// mcpRegistries revokeGrant endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRevokeGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRevokeGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body RevokeGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+			}
+			err = ValidateRevokeGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+			}
+			return nil, NewRevokeGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RevokeGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+			}
+			err = ValidateRevokeGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+			}
+			return nil, NewRevokeGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RevokeGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+			}
+			err = ValidateRevokeGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+			}
+			return nil, NewRevokeGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RevokeGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+			}
+			err = ValidateRevokeGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+			}
+			return nil, NewRevokeGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RevokeGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+			}
+			err = ValidateRevokeGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+			}
+			return nil, NewRevokeGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RevokeGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+			}
+			err = ValidateRevokeGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+			}
+			return nil, NewRevokeGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RevokeGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+			}
+			err = ValidateRevokeGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+			}
+			return nil, NewRevokeGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RevokeGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+				}
+				err = ValidateRevokeGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+				}
+				return nil, NewRevokeGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RevokeGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+				}
+				err = ValidateRevokeGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+				}
+				return nil, NewRevokeGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "revokeGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RevokeGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "revokeGrant", err)
+			}
+			err = ValidateRevokeGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "revokeGrant", err)
+			}
+			return nil, NewRevokeGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "revokeGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildClearCacheRequest instantiates a HTTP request object with method and
 // path set to call the "mcpRegistries" service "clearCache" endpoint
 func (c *Client) BuildClearCacheRequest(ctx context.Context, v any) (*http.Request, error) {

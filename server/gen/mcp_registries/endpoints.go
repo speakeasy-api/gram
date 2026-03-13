@@ -20,6 +20,8 @@ type Endpoints struct {
 	ListPeers        goa.Endpoint
 	DeletePeer       goa.Endpoint
 	Publish          goa.Endpoint
+	Grant            goa.Endpoint
+	RevokeGrant      goa.Endpoint
 	ClearCache       goa.Endpoint
 	ListRegistries   goa.Endpoint
 	ListCatalog      goa.Endpoint
@@ -35,6 +37,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListPeers:        NewListPeersEndpoint(s, a.APIKeyAuth),
 		DeletePeer:       NewDeletePeerEndpoint(s, a.APIKeyAuth),
 		Publish:          NewPublishEndpoint(s, a.APIKeyAuth),
+		Grant:            NewGrantEndpoint(s, a.APIKeyAuth),
+		RevokeGrant:      NewRevokeGrantEndpoint(s, a.APIKeyAuth),
 		ClearCache:       NewClearCacheEndpoint(s, a.APIKeyAuth),
 		ListRegistries:   NewListRegistriesEndpoint(s, a.APIKeyAuth),
 		ListCatalog:      NewListCatalogEndpoint(s, a.APIKeyAuth),
@@ -49,6 +53,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListPeers = m(e.ListPeers)
 	e.DeletePeer = m(e.DeletePeer)
 	e.Publish = m(e.Publish)
+	e.Grant = m(e.Grant)
+	e.RevokeGrant = m(e.RevokeGrant)
 	e.ClearCache = m(e.ClearCache)
 	e.ListRegistries = m(e.ListRegistries)
 	e.ListCatalog = m(e.ListCatalog)
@@ -288,6 +294,124 @@ func NewPublishEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			return nil, err
 		}
 		return s.Publish(ctx, p)
+	}
+}
+
+// NewGrantEndpoint returns an endpoint function that calls the method "grant"
+// of service "mcpRegistries".
+func NewGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Grant(ctx, p)
+	}
+}
+
+// NewRevokeGrantEndpoint returns an endpoint function that calls the method
+// "revokeGrant" of service "mcpRegistries".
+func NewRevokeGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeGrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RevokeGrant(ctx, p)
 	}
 }
 
