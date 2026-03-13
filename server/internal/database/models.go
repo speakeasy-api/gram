@@ -627,12 +627,12 @@ type PrincipalGrant struct {
 	ID uuid.UUID
 	// The organization this grant belongs to. Grants are always org-scoped.
 	OrganizationID string
-	// Discriminator: 'user' for a direct user grant, 'role' for a WorkOS role grant.
+	// URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.
+	PrincipalUrn urn.Principal
+	// Derived from principal_urn. The type prefix, e.g. "user", "role".
 	PrincipalType string
-	// The identifier of the principal: a WorkOS user ID when principal_type='user', or a WorkOS role slug when principal_type='role'.
-	PrincipalID string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
-	ScopeSlug string
+	Scope string
 	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
 	Resource  string
 	CreatedAt pgtype.Timestamptz
