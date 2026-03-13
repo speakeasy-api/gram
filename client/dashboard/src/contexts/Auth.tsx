@@ -238,11 +238,17 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     "logs",
     "projects",
   ];
+  const isProjectSlug = session.organization?.projects.some(
+    (p) => p.slug === pathParts[1],
+  );
+  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1]);
+  // Redirect if: (1) it's a project slug and not an org route, OR
+  // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
   if (
     pathParts.length >= 2 &&
     pathParts[0] === session.organization?.slug &&
-    !ORG_ROUTE_PATHS.includes(pathParts[1]) &&
-    session.organization.projects.some((p) => p.slug === pathParts[1])
+    isProjectSlug &&
+    (!isOrgRoutePath || pathParts.length >= 3)
   ) {
     const rest = pathParts.slice(2).join("/");
     const newPath = `/${pathParts[0]}/projects/${pathParts[1]}${rest ? `/${rest}` : ""}`;

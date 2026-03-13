@@ -86,7 +86,7 @@ function PageHeaderBreadcrumbs({
   const visibleElements = location.pathname
     .split("/")
     .filter(Boolean) // Remove empty strings
-    .slice(2) // Remove the two leading elements (org slug and project slug)
+    .slice(3) // Remove the three leading elements (org slug, "projects", and project slug)
     .filter((segment) => !skipSegments.includes(segment)) // Skip specified segments
     .map((segment, index, segments) => {
       const url = "/" + segments.slice(0, index + 1).join("/");
