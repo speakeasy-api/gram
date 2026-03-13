@@ -1,3 +1,29 @@
+-- name: CreatePeer :one
+INSERT INTO peered_organizations (super_organization_id, sub_organization_id)
+VALUES (@super_organization_id, @sub_organization_id)
+ON CONFLICT (super_organization_id, sub_organization_id) DO NOTHING
+RETURNING id, super_organization_id, sub_organization_id, created_at;
+
+-- name: ListPeers :many
+SELECT p.id, p.super_organization_id, p.sub_organization_id, p.created_at,
+       o.name as sub_organization_name, o.slug as sub_organization_slug
+FROM peered_organizations p
+JOIN organization_metadata o ON p.sub_organization_id = o.id
+WHERE p.super_organization_id = @super_organization_id
+ORDER BY p.created_at ASC;
+
+-- name: DeletePeer :exec
+DELETE FROM peered_organizations
+WHERE super_organization_id = @super_organization_id
+  AND sub_organization_id = @sub_organization_id;
+
+-- name: IsPeer :one
+SELECT EXISTS (
+  SELECT 1 FROM peered_organizations
+  WHERE super_organization_id = @super_organization_id
+    AND sub_organization_id = @sub_organization_id
+) AS is_peer;
+
 -- name: ListMCPRegistries :many
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries

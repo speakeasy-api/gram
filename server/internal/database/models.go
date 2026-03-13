@@ -492,6 +492,7 @@ type McpRegistry struct {
 	Source         pgtype.Text
 	Visibility     string
 	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

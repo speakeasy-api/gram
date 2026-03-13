@@ -17,6 +17,18 @@ import (
 
 // Client lists the mcpRegistries service endpoint HTTP clients.
 type Client struct {
+	// CreatePeer Doer is the HTTP client used to make requests to the createPeer
+	// endpoint.
+	CreatePeerDoer goahttp.Doer
+
+	// ListPeers Doer is the HTTP client used to make requests to the listPeers
+	// endpoint.
+	ListPeersDoer goahttp.Doer
+
+	// DeletePeer Doer is the HTTP client used to make requests to the deletePeer
+	// endpoint.
+	DeletePeerDoer goahttp.Doer
+
 	// ClearCache Doer is the HTTP client used to make requests to the clearCache
 	// endpoint.
 	ClearCacheDoer goahttp.Doer
@@ -54,6 +66,9 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		CreatePeerDoer:       doer,
+		ListPeersDoer:        doer,
+		DeletePeerDoer:       doer,
 		ClearCacheDoer:       doer,
 		ListRegistriesDoer:   doer,
 		ListCatalogDoer:      doer,
@@ -63,6 +78,78 @@ func NewClient(
 		host:                 host,
 		decoder:              dec,
 		encoder:              enc,
+	}
+}
+
+// CreatePeer returns an endpoint that makes HTTP requests to the mcpRegistries
+// service createPeer server.
+func (c *Client) CreatePeer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreatePeerRequest(c.encoder)
+		decodeResponse = DecodeCreatePeerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreatePeerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreatePeerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "createPeer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPeers returns an endpoint that makes HTTP requests to the mcpRegistries
+// service listPeers server.
+func (c *Client) ListPeers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPeersRequest(c.encoder)
+		decodeResponse = DecodeListPeersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPeersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPeersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "listPeers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeletePeer returns an endpoint that makes HTTP requests to the mcpRegistries
+// service deletePeer server.
+func (c *Client) DeletePeer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeletePeerRequest(c.encoder)
+		decodeResponse = DecodeDeletePeerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeletePeerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeletePeerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "deletePeer", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

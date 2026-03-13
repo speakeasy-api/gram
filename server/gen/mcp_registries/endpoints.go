@@ -16,6 +16,9 @@ import (
 
 // Endpoints wraps the "mcpRegistries" service endpoints.
 type Endpoints struct {
+	CreatePeer       goa.Endpoint
+	ListPeers        goa.Endpoint
+	DeletePeer       goa.Endpoint
 	ClearCache       goa.Endpoint
 	ListRegistries   goa.Endpoint
 	ListCatalog      goa.Endpoint
@@ -27,6 +30,9 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		CreatePeer:       NewCreatePeerEndpoint(s, a.APIKeyAuth),
+		ListPeers:        NewListPeersEndpoint(s, a.APIKeyAuth),
+		DeletePeer:       NewDeletePeerEndpoint(s, a.APIKeyAuth),
 		ClearCache:       NewClearCacheEndpoint(s, a.APIKeyAuth),
 		ListRegistries:   NewListRegistriesEndpoint(s, a.APIKeyAuth),
 		ListCatalog:      NewListCatalogEndpoint(s, a.APIKeyAuth),
@@ -37,10 +43,190 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "mcpRegistries" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.CreatePeer = m(e.CreatePeer)
+	e.ListPeers = m(e.ListPeers)
+	e.DeletePeer = m(e.DeletePeer)
 	e.ClearCache = m(e.ClearCache)
 	e.ListRegistries = m(e.ListRegistries)
 	e.ListCatalog = m(e.ListCatalog)
 	e.GetServerDetails = m(e.GetServerDetails)
+}
+
+// NewCreatePeerEndpoint returns an endpoint function that calls the method
+// "createPeer" of service "mcpRegistries".
+func NewCreatePeerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreatePeerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreatePeer(ctx, p)
+	}
+}
+
+// NewListPeersEndpoint returns an endpoint function that calls the method
+// "listPeers" of service "mcpRegistries".
+func NewListPeersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPeersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPeers(ctx, p)
+	}
+}
+
+// NewDeletePeerEndpoint returns an endpoint function that calls the method
+// "deletePeer" of service "mcpRegistries".
+func NewDeletePeerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeletePeerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeletePeer(ctx, p)
+	}
 }
 
 // NewClearCacheEndpoint returns an endpoint function that calls the method

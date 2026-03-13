@@ -7,6 +7,21 @@
 
 package client
 
+// CreatePeerMcpRegistriesPath returns the URL path to the mcpRegistries service createPeer HTTP endpoint.
+func CreatePeerMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.createPeer"
+}
+
+// ListPeersMcpRegistriesPath returns the URL path to the mcpRegistries service listPeers HTTP endpoint.
+func ListPeersMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.listPeers"
+}
+
+// DeletePeerMcpRegistriesPath returns the URL path to the mcpRegistries service deletePeer HTTP endpoint.
+func DeletePeerMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.deletePeer"
+}
+
 // ClearCacheMcpRegistriesPath returns the URL path to the mcpRegistries service clearCache HTTP endpoint.
 func ClearCacheMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.clearCache"

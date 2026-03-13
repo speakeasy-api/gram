@@ -3,3 +3,15 @@
 //   sqlc v1.29.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type PeeredOrganization struct {
+	ID                  uuid.UUID
+	SuperOrganizationID string
+	SubOrganizationID   string
+	CreatedAt           pgtype.Timestamptz
+}

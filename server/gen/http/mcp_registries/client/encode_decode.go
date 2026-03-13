@@ -19,6 +19,714 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildCreatePeerRequest instantiates a HTTP request object with method and
+// path set to call the "mcpRegistries" service "createPeer" endpoint
+func (c *Client) BuildCreatePeerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreatePeerMcpRegistriesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "createPeer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreatePeerRequest returns an encoder for requests sent to the
+// mcpRegistries createPeer server.
+func EncodeCreatePeerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.CreatePeerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "createPeer", "*mcpregistries.CreatePeerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreatePeerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpRegistries", "createPeer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreatePeerResponse returns a decoder for responses returned by the
+// mcpRegistries createPeer endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeCreatePeerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreatePeerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusCreated:
+			var (
+				body CreatePeerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			res := NewCreatePeerPeeredOrganizationCreated(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreatePeerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			return nil, NewCreatePeerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreatePeerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			return nil, NewCreatePeerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreatePeerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			return nil, NewCreatePeerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreatePeerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			return nil, NewCreatePeerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreatePeerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			return nil, NewCreatePeerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreatePeerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			return nil, NewCreatePeerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreatePeerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			return nil, NewCreatePeerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreatePeerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+				}
+				err = ValidateCreatePeerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+				}
+				return nil, NewCreatePeerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreatePeerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+				}
+				err = ValidateCreatePeerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+				}
+				return nil, NewCreatePeerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "createPeer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreatePeerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "createPeer", err)
+			}
+			err = ValidateCreatePeerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "createPeer", err)
+			}
+			return nil, NewCreatePeerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "createPeer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListPeersRequest instantiates a HTTP request object with method and
+// path set to call the "mcpRegistries" service "listPeers" endpoint
+func (c *Client) BuildListPeersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListPeersMcpRegistriesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "listPeers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListPeersRequest returns an encoder for requests sent to the
+// mcpRegistries listPeers server.
+func EncodeListPeersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.ListPeersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "listPeers", "*mcpregistries.ListPeersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListPeersResponse returns a decoder for responses returned by the
+// mcpRegistries listPeers endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListPeersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListPeersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListPeersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			res := NewListPeersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListPeersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			return nil, NewListPeersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPeersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			return nil, NewListPeersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPeersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			return nil, NewListPeersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPeersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			return nil, NewListPeersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListPeersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			return nil, NewListPeersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPeersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			return nil, NewListPeersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPeersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			return nil, NewListPeersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPeersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+				}
+				err = ValidateListPeersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+				}
+				return nil, NewListPeersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPeersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+				}
+				err = ValidateListPeersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+				}
+				return nil, NewListPeersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "listPeers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPeersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "listPeers", err)
+			}
+			err = ValidateListPeersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "listPeers", err)
+			}
+			return nil, NewListPeersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "listPeers", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeletePeerRequest instantiates a HTTP request object with method and
+// path set to call the "mcpRegistries" service "deletePeer" endpoint
+func (c *Client) BuildDeletePeerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeletePeerMcpRegistriesPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "deletePeer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeletePeerRequest returns an encoder for requests sent to the
+// mcpRegistries deletePeer server.
+func EncodeDeletePeerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.DeletePeerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "deletePeer", "*mcpregistries.DeletePeerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("sub_organization_id", p.SubOrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeletePeerResponse returns a decoder for responses returned by the
+// mcpRegistries deletePeer endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeDeletePeerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeletePeerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeletePeerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+			}
+			err = ValidateDeletePeerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+			}
+			return nil, NewDeletePeerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeletePeerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+			}
+			err = ValidateDeletePeerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+			}
+			return nil, NewDeletePeerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeletePeerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+			}
+			err = ValidateDeletePeerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+			}
+			return nil, NewDeletePeerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeletePeerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+			}
+			err = ValidateDeletePeerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+			}
+			return nil, NewDeletePeerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeletePeerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+			}
+			err = ValidateDeletePeerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+			}
+			return nil, NewDeletePeerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeletePeerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+			}
+			err = ValidateDeletePeerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+			}
+			return nil, NewDeletePeerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeletePeerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+			}
+			err = ValidateDeletePeerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+			}
+			return nil, NewDeletePeerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeletePeerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+				}
+				err = ValidateDeletePeerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+				}
+				return nil, NewDeletePeerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeletePeerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+				}
+				err = ValidateDeletePeerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+				}
+				return nil, NewDeletePeerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "deletePeer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeletePeerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "deletePeer", err)
+			}
+			err = ValidateDeletePeerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "deletePeer", err)
+			}
+			return nil, NewDeletePeerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "deletePeer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildClearCacheRequest instantiates a HTTP request object with method and
 // path set to call the "mcpRegistries" service "clearCache" endpoint
 func (c *Client) BuildClearCacheRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -974,6 +1682,22 @@ func DecodeGetServerDetailsResponse(decoder func(*http.Response) goahttp.Decoder
 			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "getServerDetails", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalPeeredOrganizationResponseBodyToTypesPeeredOrganization builds a
+// value of type *types.PeeredOrganization from a value of type
+// *PeeredOrganizationResponseBody.
+func unmarshalPeeredOrganizationResponseBodyToTypesPeeredOrganization(v *PeeredOrganizationResponseBody) *types.PeeredOrganization {
+	res := &types.PeeredOrganization{
+		ID:                  *v.ID,
+		SuperOrganizationID: *v.SuperOrganizationID,
+		SubOrganizationID:   *v.SubOrganizationID,
+		SubOrganizationName: v.SubOrganizationName,
+		SubOrganizationSlug: v.SubOrganizationSlug,
+		CreatedAt:           *v.CreatedAt,
+	}
+
+	return res
 }
 
 // unmarshalMCPRegistryResponseBodyToTypesMCPRegistry builds a value of type
