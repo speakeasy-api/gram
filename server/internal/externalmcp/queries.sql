@@ -53,6 +53,22 @@ FROM mcp_registry_toolset_links
 WHERE registry_id = @registry_id
 ORDER BY created_at ASC;
 
+-- name: CreateRegistryGrant :one
+INSERT INTO mcp_registry_grants (registry_id, organization_id)
+VALUES (@registry_id, @organization_id)
+ON CONFLICT (registry_id, organization_id) DO NOTHING
+RETURNING id, registry_id, organization_id, created_at;
+
+-- name: DeleteRegistryGrant :exec
+DELETE FROM mcp_registry_grants
+WHERE registry_id = @registry_id AND organization_id = @organization_id;
+
+-- name: CheckRegistryGrant :one
+SELECT EXISTS (
+  SELECT 1 FROM mcp_registry_grants
+  WHERE registry_id = @registry_id AND organization_id = @organization_id
+) AS has_grant;
+
 -- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
 VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier)

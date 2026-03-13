@@ -25,6 +25,10 @@ type Service interface {
 	DeletePeer(context.Context, *DeletePeerPayload) (err error)
 	// Publish toolsets as an internal MCP registry catalog
 	Publish(context.Context, *PublishPayload) (res *types.MCPRegistry, err error)
+	// Grant an organization access to a private registry
+	Grant(context.Context, *GrantPayload) (err error)
+	// Revoke an organization's access to a private registry
+	RevokeGrant(context.Context, *RevokeGrantPayload) (err error)
 	// Clear the registry cache for a specific registry (admin only)
 	ClearCache(context.Context, *ClearCachePayload) (err error)
 	// List all MCP registries (admin only)
@@ -55,7 +59,7 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"createPeer", "listPeers", "deletePeer", "publish", "clearCache", "listRegistries", "listCatalog", "getServerDetails"}
+var MethodNames = [10]string{"createPeer", "listPeers", "deletePeer", "publish", "grant", "revokeGrant", "clearCache", "listRegistries", "listCatalog", "getServerDetails"}
 
 // ClearCachePayload is the payload type of the mcpRegistries service
 // clearCache method.
@@ -94,6 +98,17 @@ type GetServerDetailsPayload struct {
 	RegistryID string
 	// Server specifier (e.g., 'io.github.user/server')
 	ServerSpecifier  string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GrantPayload is the payload type of the mcpRegistries service grant method.
+type GrantPayload struct {
+	// ID of the registry to grant access to
+	RegistryID string
+	// ID of the organization to grant access to
+	OrganizationID   string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -163,6 +178,18 @@ type PublishPayload struct {
 	ToolsetIds []string
 	// Visibility of the catalog
 	Visibility       string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// RevokeGrantPayload is the payload type of the mcpRegistries service
+// revokeGrant method.
+type RevokeGrantPayload struct {
+	// ID of the registry to revoke access to
+	RegistryID string
+	// ID of the organization to revoke access from
+	OrganizationID   string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

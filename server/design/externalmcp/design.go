@@ -132,6 +132,62 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "publish")
 	})
 
+	Method("grant", func() {
+		Description("Grant an organization access to a private registry")
+
+		Payload(func() {
+			Attribute("registry_id", String, "ID of the registry to grant access to", func() {
+				Format(FormatUUID)
+			})
+			Attribute("organization_id", String, "ID of the organization to grant access to")
+			Required("registry_id", "organization_id")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/mcpRegistries.grant")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "grantMCPRegistryAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "grant")
+	})
+
+	Method("revokeGrant", func() {
+		Description("Revoke an organization's access to a private registry")
+
+		Payload(func() {
+			Attribute("registry_id", String, "ID of the registry to revoke access to", func() {
+				Format(FormatUUID)
+			})
+			Attribute("organization_id", String, "ID of the organization to revoke access from")
+			Required("registry_id", "organization_id")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/mcpRegistries.revokeGrant")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("registry_id")
+			Param("organization_id")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "revokeMCPRegistryAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeGrant")
+	})
+
 	Method("clearCache", func() {
 		Description("Clear the registry cache for a specific registry (admin only)")
 

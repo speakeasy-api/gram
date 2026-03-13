@@ -9,6 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type McpRegistryGrant struct {
+	ID             uuid.UUID
+	RegistryID     uuid.UUID
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+}
+
 type McpRegistryToolsetLink struct {
 	ID         uuid.UUID
 	RegistryID uuid.UUID

@@ -13,6 +13,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 )
 
+const checkRegistryGrant = `-- name: CheckRegistryGrant :one
+SELECT EXISTS (
+  SELECT 1 FROM mcp_registry_grants
+  WHERE registry_id = $1 AND organization_id = $2
+) AS has_grant
+`
+
+type CheckRegistryGrantParams struct {
+	RegistryID     uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CheckRegistryGrant(ctx context.Context, arg CheckRegistryGrantParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkRegistryGrant, arg.RegistryID, arg.OrganizationID)
+	var has_grant bool
+	err := row.Scan(&has_grant)
+	return has_grant, err
+}
+
 const createExternalMCPAttachment = `-- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
 VALUES ($1, $2, $3, $4, $5)
@@ -286,6 +305,30 @@ func (q *Queries) CreatePeer(ctx context.Context, arg CreatePeerParams) (PeeredO
 	return i, err
 }
 
+const createRegistryGrant = `-- name: CreateRegistryGrant :one
+INSERT INTO mcp_registry_grants (registry_id, organization_id)
+VALUES ($1, $2)
+ON CONFLICT (registry_id, organization_id) DO NOTHING
+RETURNING id, registry_id, organization_id, created_at
+`
+
+type CreateRegistryGrantParams struct {
+	RegistryID     uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CreateRegistryGrant(ctx context.Context, arg CreateRegistryGrantParams) (McpRegistryGrant, error) {
+	row := q.db.QueryRow(ctx, createRegistryGrant, arg.RegistryID, arg.OrganizationID)
+	var i McpRegistryGrant
+	err := row.Scan(
+		&i.ID,
+		&i.RegistryID,
+		&i.OrganizationID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const deletePeer = `-- name: DeletePeer :exec
 DELETE FROM peered_organizations
 WHERE super_organization_id = $1
@@ -299,6 +342,21 @@ type DeletePeerParams struct {
 
 func (q *Queries) DeletePeer(ctx context.Context, arg DeletePeerParams) error {
 	_, err := q.db.Exec(ctx, deletePeer, arg.SuperOrganizationID, arg.SubOrganizationID)
+	return err
+}
+
+const deleteRegistryGrant = `-- name: DeleteRegistryGrant :exec
+DELETE FROM mcp_registry_grants
+WHERE registry_id = $1 AND organization_id = $2
+`
+
+type DeleteRegistryGrantParams struct {
+	RegistryID     uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteRegistryGrant(ctx context.Context, arg DeleteRegistryGrantParams) error {
+	_, err := q.db.Exec(ctx, deleteRegistryGrant, arg.RegistryID, arg.OrganizationID)
 	return err
 }
 

@@ -73,6 +73,86 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+func (s *Service) Grant(ctx context.Context, payload *gen.GrantPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	registryID, err := uuid.Parse(payload.RegistryID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+	}
+
+	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
+	}
+
+	// Verify the caller's project owns this registry
+	if authCtx.ProjectID == nil || !registry.ProjectID.Valid || registry.ProjectID.UUID != *authCtx.ProjectID {
+		return oops.C(oops.CodeForbidden)
+	}
+
+	// Verify the target org is a peered sub of the caller's org
+	isPeer, err := s.repo.IsPeer(ctx, repo.IsPeerParams{
+		SuperOrganizationID: authCtx.ActiveOrganizationID,
+		SubOrganizationID:   payload.OrganizationID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check peer").Log(ctx, s.logger)
+	}
+	if !isPeer {
+		return oops.E(oops.CodeForbidden, nil, "target organization is not a peered sub-organization").Log(ctx, s.logger)
+	}
+
+	if _, err := s.repo.CreateRegistryGrant(ctx, repo.CreateRegistryGrantParams{
+		RegistryID:     registryID,
+		OrganizationID: payload.OrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "create registry grant").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) RevokeGrant(ctx context.Context, payload *gen.RevokeGrantPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	registryID, err := uuid.Parse(payload.RegistryID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+	}
+
+	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
+	}
+
+	// Verify the caller's project owns this registry
+	if authCtx.ProjectID == nil || !registry.ProjectID.Valid || registry.ProjectID.UUID != *authCtx.ProjectID {
+		return oops.C(oops.CodeForbidden)
+	}
+
+	if err := s.repo.DeleteRegistryGrant(ctx, repo.DeleteRegistryGrantParams{
+		RegistryID:     registryID,
+		OrganizationID: payload.OrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete registry grant").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
 func (s *Service) Publish(ctx context.Context, payload *gen.PublishPayload) (*types.MCPRegistry, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
