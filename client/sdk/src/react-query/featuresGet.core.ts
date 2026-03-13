@@ -43,10 +43,7 @@ export function buildFeaturesGetQuery(
   queryFn: (context: QueryFunctionContext) => Promise<FeaturesGetQueryData>;
 } {
   return {
-    queryKey: queryKeyFeaturesGet({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyFeaturesGet({ gramSession: request?.gramSession }),
     queryFn: async function featuresGetQueryFn(
       ctx,
     ): Promise<FeaturesGetQueryData> {
@@ -72,10 +69,7 @@ export function buildFeaturesGetQuery(
 }
 
 export function queryKeyFeaturesGet(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "features", "get", parameters];
 }

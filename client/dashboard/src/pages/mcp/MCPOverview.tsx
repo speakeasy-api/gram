@@ -97,7 +97,7 @@ export function MCPOverview() {
         from Claude Desktop, Cursor, or any MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {BUILT_IN_SERVERS.map((server) => (
             <BuiltInMCPCard key={server.slug} {...server} />
           ))}
@@ -137,13 +137,13 @@ export function MCPOverview() {
         <Page.Section>
           <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
           <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
-          <Page.Section.Description>
+          <Page.Section.Description className="max-w-2xl">
             Each source is exposed as an MCP server. First-party sources like
             functions and OpenAPI specs are private by default, while catalog
             servers are public.
           </Page.Section.Description>
           <Page.Section.Body>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               {toolsets.map((toolset) => (
                 <MCPCard key={toolset.id} toolset={toolset} />
               ))}

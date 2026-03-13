@@ -215,45 +215,47 @@ export function SourceDeploymentsPanel({
     deployments.find((d) => d.id === selectedId) ?? deployments[0]!;
 
   return (
-    <div className="grid grid-cols-[280px_1fr] h-full min-h-0">
-      {/* ── Left sidebar ── */}
-      <div className="border-r border-border overflow-y-auto">
-        <div className="px-3 py-3 border-b border-border flex items-start justify-between">
-          <div>
-            <Heading variant="h4">Deployments</Heading>
-            <Type muted small>
-              {deployments.length} total
-            </Type>
-          </div>
-          <routes.deployments.Link className="hover:no-underline">
-            <Button variant="tertiary" size="sm">
-              <Button.Text>All</Button.Text>
-              <Button.RightIcon>
-                <ExternalLink className="size-3" />
-              </Button.RightIcon>
-            </Button>
-          </routes.deployments.Link>
+    <div className="max-w-[1270px] mx-auto px-8 py-8 w-full h-full min-h-0 flex flex-col">
+      <div className="flex items-center justify-between mb-4 shrink-0">
+        <div>
+          <Heading variant="h4">Deployments</Heading>
+          <Type muted small>
+            {deployments.length} total
+          </Type>
         </div>
-
-        {deployments.map((d) => (
-          <DeploymentSidebarItem
-            key={d.id}
-            deployment={d}
-            isActive={activeDeployment?.id === d.id}
-            isSelected={selectedDeployment.id === d.id}
-            onClick={() => setSelectedId(d.id)}
-          />
-        ))}
+        <routes.deployments.Link className="hover:no-underline">
+          <Button variant="tertiary" size="sm">
+            <Button.Text>View all</Button.Text>
+            <Button.RightIcon>
+              <ExternalLink className="size-3" />
+            </Button.RightIcon>
+          </Button>
+        </routes.deployments.Link>
       </div>
 
-      {/* ── Right detail panel ── */}
-      <DeploymentDetailPanel
-        key={selectedDeployment.id}
-        deployment={selectedDeployment}
-        isActive={activeDeployment?.id === selectedDeployment.id}
-        sourceKind={sourceKind}
-        attachmentType={attachmentType}
-      />
+      <div className="grid grid-cols-[280px_1fr] flex-1 min-h-0 rounded-lg border border-border overflow-hidden">
+        {/* ── Left sidebar ── */}
+        <div className="border-r border-border overflow-y-auto bg-muted/30">
+          {deployments.map((d) => (
+            <DeploymentSidebarItem
+              key={d.id}
+              deployment={d}
+              isActive={activeDeployment?.id === d.id}
+              isSelected={selectedDeployment.id === d.id}
+              onClick={() => setSelectedId(d.id)}
+            />
+          ))}
+        </div>
+
+        {/* ── Right detail panel ── */}
+        <DeploymentDetailPanel
+          key={selectedDeployment.id}
+          deployment={selectedDeployment}
+          isActive={activeDeployment?.id === selectedDeployment.id}
+          sourceKind={sourceKind}
+          attachmentType={attachmentType}
+        />
+      </div>
     </div>
   );
 }

@@ -334,18 +334,15 @@ func ParseEndpoint(
 
 		domainsFlags = flag.NewFlagSet("domains", flag.ContinueOnError)
 
-		domainsGetDomainFlags                = flag.NewFlagSet("get-domain", flag.ExitOnError)
-		domainsGetDomainSessionTokenFlag     = domainsGetDomainFlags.String("session-token", "", "")
-		domainsGetDomainProjectSlugInputFlag = domainsGetDomainFlags.String("project-slug-input", "", "")
+		domainsGetDomainFlags            = flag.NewFlagSet("get-domain", flag.ExitOnError)
+		domainsGetDomainSessionTokenFlag = domainsGetDomainFlags.String("session-token", "", "")
 
-		domainsCreateDomainFlags                = flag.NewFlagSet("create-domain", flag.ExitOnError)
-		domainsCreateDomainBodyFlag             = domainsCreateDomainFlags.String("body", "REQUIRED", "")
-		domainsCreateDomainSessionTokenFlag     = domainsCreateDomainFlags.String("session-token", "", "")
-		domainsCreateDomainProjectSlugInputFlag = domainsCreateDomainFlags.String("project-slug-input", "", "")
+		domainsCreateDomainFlags            = flag.NewFlagSet("create-domain", flag.ExitOnError)
+		domainsCreateDomainBodyFlag         = domainsCreateDomainFlags.String("body", "REQUIRED", "")
+		domainsCreateDomainSessionTokenFlag = domainsCreateDomainFlags.String("session-token", "", "")
 
-		domainsDeleteDomainFlags                = flag.NewFlagSet("delete-domain", flag.ExitOnError)
-		domainsDeleteDomainSessionTokenFlag     = domainsDeleteDomainFlags.String("session-token", "", "")
-		domainsDeleteDomainProjectSlugInputFlag = domainsDeleteDomainFlags.String("project-slug-input", "", "")
+		domainsDeleteDomainFlags            = flag.NewFlagSet("delete-domain", flag.ExitOnError)
+		domainsDeleteDomainSessionTokenFlag = domainsDeleteDomainFlags.String("session-token", "", "")
 
 		environmentsFlags = flag.NewFlagSet("environments", flag.ContinueOnError)
 
@@ -555,14 +552,12 @@ func ParseEndpoint(
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
-		featuresGetProductFeaturesFlags                = flag.NewFlagSet("get-product-features", flag.ExitOnError)
-		featuresGetProductFeaturesSessionTokenFlag     = featuresGetProductFeaturesFlags.String("session-token", "", "")
-		featuresGetProductFeaturesProjectSlugInputFlag = featuresGetProductFeaturesFlags.String("project-slug-input", "", "")
+		featuresGetProductFeaturesFlags            = flag.NewFlagSet("get-product-features", flag.ExitOnError)
+		featuresGetProductFeaturesSessionTokenFlag = featuresGetProductFeaturesFlags.String("session-token", "", "")
 
-		featuresSetProductFeatureFlags                = flag.NewFlagSet("set-product-feature", flag.ExitOnError)
-		featuresSetProductFeatureBodyFlag             = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
-		featuresSetProductFeatureSessionTokenFlag     = featuresSetProductFeatureFlags.String("session-token", "", "")
-		featuresSetProductFeatureProjectSlugInputFlag = featuresSetProductFeatureFlags.String("project-slug-input", "", "")
+		featuresSetProductFeatureFlags            = flag.NewFlagSet("set-product-feature", flag.ExitOnError)
+		featuresSetProductFeatureBodyFlag         = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
+		featuresSetProductFeatureSessionTokenFlag = featuresSetProductFeatureFlags.String("session-token", "", "")
 
 		projectsFlags = flag.NewFlagSet("projects", flag.ContinueOnError)
 
@@ -834,19 +829,16 @@ func ParseEndpoint(
 
 		usageFlags = flag.NewFlagSet("usage", flag.ContinueOnError)
 
-		usageGetPeriodUsageFlags                = flag.NewFlagSet("get-period-usage", flag.ExitOnError)
-		usageGetPeriodUsageSessionTokenFlag     = usageGetPeriodUsageFlags.String("session-token", "", "")
-		usageGetPeriodUsageProjectSlugInputFlag = usageGetPeriodUsageFlags.String("project-slug-input", "", "")
+		usageGetPeriodUsageFlags            = flag.NewFlagSet("get-period-usage", flag.ExitOnError)
+		usageGetPeriodUsageSessionTokenFlag = usageGetPeriodUsageFlags.String("session-token", "", "")
 
 		usageGetUsageTiersFlags = flag.NewFlagSet("get-usage-tiers", flag.ExitOnError)
 
-		usageCreateCustomerSessionFlags                = flag.NewFlagSet("create-customer-session", flag.ExitOnError)
-		usageCreateCustomerSessionSessionTokenFlag     = usageCreateCustomerSessionFlags.String("session-token", "", "")
-		usageCreateCustomerSessionProjectSlugInputFlag = usageCreateCustomerSessionFlags.String("project-slug-input", "", "")
+		usageCreateCustomerSessionFlags            = flag.NewFlagSet("create-customer-session", flag.ExitOnError)
+		usageCreateCustomerSessionSessionTokenFlag = usageCreateCustomerSessionFlags.String("session-token", "", "")
 
-		usageCreateCheckoutFlags                = flag.NewFlagSet("create-checkout", flag.ExitOnError)
-		usageCreateCheckoutSessionTokenFlag     = usageCreateCheckoutFlags.String("session-token", "", "")
-		usageCreateCheckoutProjectSlugInputFlag = usageCreateCheckoutFlags.String("project-slug-input", "", "")
+		usageCreateCheckoutFlags            = flag.NewFlagSet("create-checkout", flag.ExitOnError)
+		usageCreateCheckoutSessionTokenFlag = usageCreateCheckoutFlags.String("session-token", "", "")
 
 		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
 
@@ -1811,13 +1803,13 @@ func ParseEndpoint(
 			switch epn {
 			case "get-domain":
 				endpoint = c.GetDomain()
-				data, err = domainsc.BuildGetDomainPayload(*domainsGetDomainSessionTokenFlag, *domainsGetDomainProjectSlugInputFlag)
+				data, err = domainsc.BuildGetDomainPayload(*domainsGetDomainSessionTokenFlag)
 			case "create-domain":
 				endpoint = c.CreateDomain()
-				data, err = domainsc.BuildCreateDomainPayload(*domainsCreateDomainBodyFlag, *domainsCreateDomainSessionTokenFlag, *domainsCreateDomainProjectSlugInputFlag)
+				data, err = domainsc.BuildCreateDomainPayload(*domainsCreateDomainBodyFlag, *domainsCreateDomainSessionTokenFlag)
 			case "delete-domain":
 				endpoint = c.DeleteDomain()
-				data, err = domainsc.BuildDeleteDomainPayload(*domainsDeleteDomainSessionTokenFlag, *domainsDeleteDomainProjectSlugInputFlag)
+				data, err = domainsc.BuildDeleteDomainPayload(*domainsDeleteDomainSessionTokenFlag)
 			}
 		case "environments":
 			c := environmentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -1969,10 +1961,10 @@ func ParseEndpoint(
 			switch epn {
 			case "get-product-features":
 				endpoint = c.GetProductFeatures()
-				data, err = featuresc.BuildGetProductFeaturesPayload(*featuresGetProductFeaturesSessionTokenFlag, *featuresGetProductFeaturesProjectSlugInputFlag)
+				data, err = featuresc.BuildGetProductFeaturesPayload(*featuresGetProductFeaturesSessionTokenFlag)
 			case "set-product-feature":
 				endpoint = c.SetProductFeature()
-				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag, *featuresSetProductFeatureProjectSlugInputFlag)
+				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag)
 			}
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2136,15 +2128,15 @@ func ParseEndpoint(
 			switch epn {
 			case "get-period-usage":
 				endpoint = c.GetPeriodUsage()
-				data, err = usagec.BuildGetPeriodUsagePayload(*usageGetPeriodUsageSessionTokenFlag, *usageGetPeriodUsageProjectSlugInputFlag)
+				data, err = usagec.BuildGetPeriodUsagePayload(*usageGetPeriodUsageSessionTokenFlag)
 			case "get-usage-tiers":
 				endpoint = c.GetUsageTiers()
 			case "create-customer-session":
 				endpoint = c.CreateCustomerSession()
-				data, err = usagec.BuildCreateCustomerSessionPayload(*usageCreateCustomerSessionSessionTokenFlag, *usageCreateCustomerSessionProjectSlugInputFlag)
+				data, err = usagec.BuildCreateCustomerSessionPayload(*usageCreateCustomerSessionSessionTokenFlag)
 			case "create-checkout":
 				endpoint = c.CreateCheckout()
-				data, err = usagec.BuildCreateCheckoutPayload(*usageCreateCheckoutSessionTokenFlag, *usageCreateCheckoutProjectSlugInputFlag)
+				data, err = usagec.BuildCreateCheckoutPayload(*usageCreateCheckoutSessionTokenFlag)
 			}
 		case "variations":
 			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3167,8 +3159,8 @@ func domainsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage custom domains for gram.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] domains COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-domain: Get the custom domain for a project`)
-	fmt.Fprintln(os.Stderr, `    create-domain: Create a custom domain for a organization`)
+	fmt.Fprintln(os.Stderr, `    get-domain: Get the custom domain for an organization`)
+	fmt.Fprintln(os.Stderr, `    create-domain: Create a custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    delete-domain: Delete a custom domain`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -3178,20 +3170,18 @@ func domainsGetDomainUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] domains get-domain", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the custom domain for a project`)
+	fmt.Fprintln(os.Stderr, `Get the custom domain for an organization`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains get-domain --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains get-domain --session-token \"abc123\"")
 }
 
 func domainsCreateDomainUsage() {
@@ -3199,28 +3189,25 @@ func domainsCreateDomainUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] domains create-domain", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a custom domain for a organization`)
+	fmt.Fprintln(os.Stderr, `Create a custom domain for an organization`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains create-domain --body '{\n      \"domain\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains create-domain --body '{\n      \"domain\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func domainsDeleteDomainUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] domains delete-domain", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -3229,11 +3216,10 @@ func domainsDeleteDomainUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains delete-domain --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains delete-domain --session-token \"abc123\"")
 }
 
 // environmentsUsage displays the usage of the environments command and its
@@ -4175,7 +4161,6 @@ func featuresGetProductFeaturesUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] features get-product-features", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -4184,11 +4169,10 @@ func featuresGetProductFeaturesUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features get-product-features --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features get-product-features --session-token \"abc123\"")
 }
 
 func featuresSetProductFeatureUsage() {
@@ -4196,7 +4180,6 @@ func featuresSetProductFeatureUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] features set-product-feature", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -4206,11 +4189,10 @@ func featuresSetProductFeatureUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }' --session-token \"abc123\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.
@@ -5351,7 +5333,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `Read usage for gram.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] usage COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-period-usage: Get the usage for a project for a given period`)
+	fmt.Fprintln(os.Stderr, `    get-period-usage: Get the usage for an organization for a given period`)
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
@@ -5363,20 +5345,18 @@ func usageGetPeriodUsageUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] usage get-period-usage", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the usage for a project for a given period`)
+	fmt.Fprintln(os.Stderr, `Get the usage for an organization for a given period`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-period-usage --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-period-usage --session-token \"abc123\"")
 }
 
 func usageGetUsageTiersUsage() {
@@ -5399,7 +5379,6 @@ func usageCreateCustomerSessionUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] usage create-customer-session", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -5408,18 +5387,16 @@ func usageCreateCustomerSessionUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-customer-session --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-customer-session --session-token \"abc123\"")
 }
 
 func usageCreateCheckoutUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] usage create-checkout", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -5428,11 +5405,10 @@ func usageCreateCheckoutUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-checkout --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-checkout --session-token \"abc123\"")
 }
 
 // variationsUsage displays the usage of the variations command and its

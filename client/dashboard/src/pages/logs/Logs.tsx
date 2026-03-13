@@ -40,6 +40,7 @@ import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Settings, XIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
 import type { ActiveLogFilter } from "./log-filter-types";
 import { parseFilters, serializeFilters } from "./log-filter-url";
@@ -657,6 +658,8 @@ function LogsInnerContent({
   attributeKeys: string[];
   isLoadingAttributeKeys?: boolean;
 }) {
+  const orgRoutes = useOrgRoutes();
+
   const pageTitle = (
     <div className="flex flex-col gap-1 min-w-0">
       <h1 className="text-xl font-semibold">Logs</h1>
@@ -694,7 +697,7 @@ function LogsInnerContent({
                   <div className="flex items-start justify-between gap-4 mb-4">
                     {pageTitle}
                     <Button variant="outline" size="sm" asChild>
-                      <Link to="../settings/logs">
+                      <Link to={orgRoutes.logs.href()}>
                         <Settings className="h-4 w-4" />
                         Configure settings
                       </Link>
@@ -744,7 +747,7 @@ function LogsInnerContent({
                     )}
 
                     {/* Header */}
-                    <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+                    <div className="flex items-center gap-3 px-8 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
                       <div className="shrink-0 w-[150px]">Timestamp</div>
                       <div className="shrink-0 w-5" />
                       <div className="flex-1">Source / Tool</div>
@@ -772,7 +775,7 @@ function LogsInnerContent({
 
                     {/* Footer */}
                     {allTraces.length > 0 && (
-                      <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                      <div className="flex items-center gap-4 px-8 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
                         <span>
                           {allTraces.length}{" "}
                           {allTraces.length === 1 ? "trace" : "traces"}

@@ -24,7 +24,7 @@ import { SimpleTooltip } from "./ui/tooltip.tsx";
 import { Type } from "./ui/type.tsx";
 
 // Generate colors from project label
-function getProjectColors(label: string): {
+export function getProjectColors(label: string): {
   from: string;
   to: string;
   angle: number;

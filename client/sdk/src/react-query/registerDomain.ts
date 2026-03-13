@@ -50,7 +50,7 @@ export type RegisterDomainMutationError =
  * createDomain domains
  *
  * @remarks
- * Create a custom domain for a organization
+ * Create a custom domain for an organization
  */
 export function useRegisterDomainMutation(
   options?: MutationHookOptions<

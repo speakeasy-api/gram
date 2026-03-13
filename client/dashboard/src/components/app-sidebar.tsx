@@ -1,4 +1,4 @@
-import { NavButton, NavMenu } from "@/components/nav-menu";
+import { NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -6,31 +6,25 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useOrganization } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
 import { useProductTier } from "@/hooks/useProductTier";
-import { AppRoute, useRoutes } from "@/routes";
+import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
-import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, TestTube2Icon } from "lucide-react";
+import { cn, Stack } from "@speakeasy-api/moonshine";
+import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
-  const organization = useOrganization();
+  const { orgSlug } = useSlugs();
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-
-  const teamUrl =
-    organization?.userWorkspaceSlugs &&
-    organization.userWorkspaceSlugs.length > 0
-      ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
-      : "https://app.speakeasy.com";
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
@@ -41,13 +35,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       routes.chatSessions,
       routes.hooks,
     ],
-    settings: [routes.settings, routes.billing] as AppRoute[],
+    settings: [routes.settings] as AppRoute[],
   };
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarContent className="pt-2">
         <SidebarGroup>
+          <SidebarGroupLabel>project</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavMenu items={[routes.home]} />
           </SidebarGroupContent>
@@ -56,21 +51,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <NavMenu items={items}>
-                {label === "settings" && (
-                  <SidebarMenuItem>
-                    <NavButton
-                      title="Team"
-                      href={teamUrl}
-                      target="_blank"
-                      Icon={(props) => <Icon name="users-round" {...props} />}
-                    />
-                  </SidebarMenuItem>
-                )}
-              </NavMenu>
+              <NavMenu items={items} />
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+        <div className="mt-auto px-2 py-3">
+          <Link
+            to={`/${orgSlug}`}
+            className="flex items-center gap-1.5 px-2 py-1 text-sm text-muted-foreground hover:text-foreground transition-colors hover:no-underline"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span>Back to org</span>
+          </Link>
+        </div>
       </SidebarContent>
       <SidebarFooter>
         <FreeTierExceededNotification />
@@ -93,7 +86,7 @@ const FreeTierExceededNotification = () => {
   const { data: usage } = useGetPeriodUsage(undefined, undefined, {
     throwOnError: false,
   });
-  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
 
   if (!usage || productTier !== "base") {
     return null;
@@ -110,11 +103,11 @@ const FreeTierExceededNotification = () => {
           <Type small>
             Free tier limits exceeded. Upgrade to continue using Gram.
           </Type>
-          <routes.billing.Link className="w-full mt-auto">
+          <orgRoutes.billing.Link className="w-full mt-auto">
             <Button size="sm" className="w-full">
               Billing →
             </Button>
-          </routes.billing.Link>
+          </orgRoutes.billing.Link>
         </Stack>
       </PersistentNotification>
     );

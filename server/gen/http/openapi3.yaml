@@ -3599,13 +3599,6 @@ paths:
                   schema:
                     description: Session header
                     type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
             responses:
                 "200":
                     description: OK response.
@@ -3664,8 +3657,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: deleteDomain domains
             tags:
                 - domains
@@ -3674,7 +3666,7 @@ paths:
                 name: deleteDomain
     /rpc/domain.get:
         get:
-            description: Get the custom domain for a project
+            description: Get the custom domain for an organization
             operationId: getDomain
             parameters:
                 - allowEmptyValue: true
@@ -3683,13 +3675,6 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             responses:
                 "200":
@@ -3753,8 +3738,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: getDomain domains
             tags:
                 - domains
@@ -3763,7 +3747,7 @@ paths:
                 name: getDomain
     /rpc/domain.register:
         post:
-            description: Create a custom domain for a organization
+            description: Create a custom domain for an organization
             operationId: registerDomain
             parameters:
                 - allowEmptyValue: true
@@ -3772,13 +3756,6 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             requestBody:
                 content:
@@ -3844,8 +3821,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: createDomain domains
             tags:
                 - domains
@@ -7218,13 +7194,6 @@ paths:
                   schema:
                     description: Session header
                     type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
             responses:
                 "200":
                     content:
@@ -7287,8 +7256,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: getProductFeatures features
             tags:
                 - features
@@ -7304,13 +7272,6 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             requestBody:
                 content:
@@ -7376,8 +7337,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: setProductFeature features
             tags:
                 - features
@@ -11861,13 +11821,6 @@ paths:
                   schema:
                     description: Session header
                     type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
             responses:
                 "200":
                     content:
@@ -11930,8 +11883,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: createCheckout usage
             tags:
                 - usage
@@ -11950,13 +11902,6 @@ paths:
                   schema:
                     description: Session header
                     type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
             responses:
                 "200":
                     content:
@@ -12019,8 +11964,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: createCustomerSession usage
             tags:
                 - usage
@@ -12029,7 +11973,7 @@ paths:
                 name: createCustomerSession
     /rpc/usage.getPeriodUsage:
         get:
-            description: Get the usage for a project for a given period
+            description: Get the usage for an organization for a given period
             operationId: getPeriodUsage
             parameters:
                 - allowEmptyValue: true
@@ -12038,13 +11982,6 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             responses:
                 "200":
@@ -12108,8 +12045,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: getPeriodUsage usage
             tags:
                 - usage

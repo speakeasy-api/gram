@@ -7,7 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
 export type SetProductFeatureSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -16,16 +15,11 @@ export type SetProductFeatureRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
   setProductFeatureRequestBody: components.SetProductFeatureRequestBody;
 };
 
 /** @internal */
 export type SetProductFeatureSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -35,12 +29,10 @@ export const SetProductFeatureSecurity$outboundSchema: z.ZodMiniType<
   SetProductFeatureSecurity
 > = z.pipe(
   z.object({
-    projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -57,7 +49,6 @@ export function setProductFeatureSecurityToJSON(
 /** @internal */
 export type SetProductFeatureRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   SetProductFeatureRequestBody:
     components.SetProductFeatureRequestBody$Outbound;
 };
@@ -69,14 +60,12 @@ export const SetProductFeatureRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
     setProductFeatureRequestBody:
       components.SetProductFeatureRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
       setProductFeatureRequestBody: "SetProductFeatureRequestBody",
     });
   }),

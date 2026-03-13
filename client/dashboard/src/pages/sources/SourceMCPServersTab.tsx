@@ -1,26 +1,9 @@
+import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { Badge, Button } from "@speakeasy-api/moonshine";
-import { ChevronRight, Globe, Lock, Power, Server } from "lucide-react";
-
-function McpEnabledBadge({ enabled }: { enabled: boolean }) {
-  return (
-    <Badge variant={enabled ? "success" : "neutral"} className="gap-1">
-      <Power size={12} />
-      <Badge.Text>{enabled ? "Enabled" : "Disabled"}</Badge.Text>
-    </Badge>
-  );
-}
-
-function McpPublicBadge({ isPublic }: { isPublic: boolean }) {
-  return (
-    <Badge variant={isPublic ? "success" : "neutral"} className="gap-1">
-      {isPublic ? <Globe size={12} /> : <Lock size={12} />}
-      <Badge.Text>{isPublic ? "Public" : "Private"}</Badge.Text>
-    </Badge>
-  );
-}
+import { ArrowRight, Network, Server } from "lucide-react";
 
 function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
@@ -28,40 +11,53 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
   return (
     <routes.mcp.details.Link
       params={[toolset.slug]}
-      className="group block rounded-xl border bg-card hover:bg-surface-secondary hover:border-primary/30 transition-all duration-200 cursor-pointer hover:no-underline hover:shadow-lg"
+      className="hover:no-underline"
     >
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Server className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <Type className="font-semibold text-base group-hover:text-primary transition-colors">
-                {toolset.name}
-              </Type>
-              <div className="flex items-center gap-2 mt-1">
-                <McpEnabledBadge enabled={!!toolset.mcpEnabled} />
-                <McpPublicBadge isPublic={!!toolset.mcpIsPublic} />
-              </div>
-            </div>
-          </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
+      <DotCard icon={<Network className="w-10 h-10 text-muted-foreground" />}>
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <Type
+            variant="subheading"
+            as="div"
+            className="truncate text-md group-hover:text-primary transition-colors"
+          >
+            {toolset.name}
+          </Type>
+          <Badge className="shrink-0">
+            {`${toolset.toolUrns?.length || 0} tool${(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""}`}
+          </Badge>
         </div>
-
+        <Type small muted className="truncate">
+          {toolset.slug}
+        </Type>
         {toolset.description && (
-          <Type className="text-sm text-muted-foreground line-clamp-2">
+          <Type small muted className="line-clamp-2 mt-2">
             {toolset.description}
           </Type>
         )}
-
-        <div className="mt-4 pt-3 border-t">
-          <Type className="text-xs text-muted-foreground">
-            {toolset.toolUrns?.length || 0} tool
-            {(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""} available
-          </Type>
+        <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+          <div className="flex items-center gap-2">
+            <div className="relative flex h-2.5 w-2.5">
+              {toolset.mcpEnabled && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400" />
+              )}
+              <span
+                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${toolset.mcpEnabled ? "bg-green-500" : "bg-red-500"}`}
+              />
+            </div>
+            <Type variant="small" muted>
+              {toolset.mcpEnabled
+                ? toolset.mcpIsPublic
+                  ? "Public"
+                  : "Private"
+                : "Disabled"}
+            </Type>
+          </div>
+          <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+            <span>Open</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
         </div>
-      </div>
+      </DotCard>
     </routes.mcp.details.Link>
   );
 }
@@ -76,7 +72,7 @@ export function SourceMCPServersTab({
   return (
     <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
       {associatedToolsets.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           {associatedToolsets.map((toolset) => (
             <MCPServerPortalCard key={toolset.slug} toolset={toolset} />
           ))}

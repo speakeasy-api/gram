@@ -47,10 +47,6 @@ func EncodeGetProductFeaturesRequest(encoder func(*http.Request) goahttp.Encoder
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		return nil
 	}
 }
@@ -282,10 +278,6 @@ func EncodeSetProductFeatureRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		body := NewSetProductFeatureRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {

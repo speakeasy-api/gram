@@ -1,6 +1,6 @@
+import { DetailHero } from "@/components/detail-hero";
 import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
-import { MCPPatternIllustration } from "@/components/sources/SourceCardIllustrations";
 import { useFetchSourceContent } from "@/components/sources/ViewSourceDialogContent";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import {
@@ -236,32 +236,28 @@ export default function SourceDetails() {
         />
       </Page.Header>
 
-      <Page.Body fullWidth noPadding fullHeight overflowHidden>
-        {/* Hero Header */}
-        <div className="relative w-full h-64 shrink-0 overflow-hidden">
-          <MCPPatternIllustration
-            toolsetSlug={sourceSlug || ""}
-            className="saturate-[.3]"
-          />
-          <div className="absolute inset-0 bg-linear-to-t from-foreground/50 via-foreground/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3 ml-1">
-                <Heading variant="h1" className="text-background">
-                  {source?.name || sourceSlug}
-                </Heading>
-                <Badge variant="neutral">
-                  <Badge.Text>{sourceType}</Badge.Text>
-                </Badge>
-              </div>
-              <div className="flex items-center gap-2 ml-1">
-                <Type className="max-w-2xl truncate text-background/70!">
-                  {source?.slug}
-                </Type>
-              </div>
+      <Page.Body
+        fullWidth
+        noPadding
+        fullHeight
+        overflowHidden
+        className="gap-0"
+      >
+        <DetailHero>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3 ml-1">
+              <Heading variant="h1">{source?.name || sourceSlug}</Heading>
+              <Badge variant="neutral">
+                <Badge.Text>{sourceType}</Badge.Text>
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2 ml-1">
+              <Type className="max-w-2xl truncate text-muted-foreground">
+                {source?.slug}
+              </Type>
             </div>
           </div>
-        </div>
+        </DetailHero>
 
         {/* Tabs */}
         <Tabs

@@ -711,23 +711,21 @@ func NewSetProductFeatureGatewayErrorResponseBody(res *goa.ServiceError) *SetPro
 
 // NewGetProductFeaturesPayload builds a features service getProductFeatures
 // endpoint payload.
-func NewGetProductFeaturesPayload(sessionToken *string, projectSlugInput *string) *features.GetProductFeaturesPayload {
+func NewGetProductFeaturesPayload(sessionToken *string) *features.GetProductFeaturesPayload {
 	v := &features.GetProductFeaturesPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewSetProductFeaturePayload builds a features service setProductFeature
 // endpoint payload.
-func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToken *string, projectSlugInput *string) *features.SetProductFeaturePayload {
+func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToken *string) *features.SetProductFeaturePayload {
 	v := &features.SetProductFeaturePayload{
 		FeatureName: *body.FeatureName,
 		Enabled:     *body.Enabled,
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

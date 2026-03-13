@@ -18,29 +18,22 @@ import (
 
 // BuildGetProductFeaturesPayload builds the payload for the features
 // getProductFeatures endpoint from CLI flags.
-func BuildGetProductFeaturesPayload(featuresGetProductFeaturesSessionToken string, featuresGetProductFeaturesProjectSlugInput string) (*features.GetProductFeaturesPayload, error) {
+func BuildGetProductFeaturesPayload(featuresGetProductFeaturesSessionToken string) (*features.GetProductFeaturesPayload, error) {
 	var sessionToken *string
 	{
 		if featuresGetProductFeaturesSessionToken != "" {
 			sessionToken = &featuresGetProductFeaturesSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if featuresGetProductFeaturesProjectSlugInput != "" {
-			projectSlugInput = &featuresGetProductFeaturesProjectSlugInput
-		}
-	}
 	v := &features.GetProductFeaturesPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildSetProductFeaturePayload builds the payload for the features
 // setProductFeature endpoint from CLI flags.
-func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, featuresSetProductFeatureSessionToken string, featuresSetProductFeatureProjectSlugInput string) (*features.SetProductFeaturePayload, error) {
+func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, featuresSetProductFeatureSessionToken string) (*features.SetProductFeaturePayload, error) {
 	var err error
 	var body SetProductFeatureRequestBody
 	{
@@ -64,18 +57,11 @@ func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, feature
 			sessionToken = &featuresSetProductFeatureSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if featuresSetProductFeatureProjectSlugInput != "" {
-			projectSlugInput = &featuresSetProductFeatureProjectSlugInput
-		}
-	}
 	v := &features.SetProductFeaturePayload{
 		FeatureName: body.FeatureName,
 		Enabled:     body.Enabled,
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

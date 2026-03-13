@@ -126,12 +126,13 @@ export const useSlugs = () => {
   let { orgSlug, projectSlug } = useParams();
   const location = useLocation();
 
-  // If we don't have params, extract from pathname
-  if (!orgSlug || !projectSlug) {
+  // If we don't have params from React Router, extract from pathname.
+  // Project routes live at /:orgSlug/projects/:projectSlug/...
+  if (!orgSlug) {
     const parts = location.pathname.split("/").filter(Boolean);
-    if (parts.length >= 2) {
-      orgSlug = parts[0];
-      projectSlug = parts[1];
+    orgSlug = parts[0];
+    if (parts[1] === "projects" && parts.length >= 3) {
+      projectSlug = parts[2];
     }
   }
 
