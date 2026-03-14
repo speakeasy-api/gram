@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.13.1
+
+### Patch Changes
+
+- 2cd2b1d: Set isError on MCP tool results based on HTTP response status
+
 ## 0.13.0
 
 ### Minor Changes
