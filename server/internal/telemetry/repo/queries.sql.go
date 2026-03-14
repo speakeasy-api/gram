@@ -348,10 +348,14 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:'))"}
 	havingArgs := []any{}
 
-	// URN filter must use HAVING because it's an aggregate function in SELECT
+	// URN filter must use HAVING because gram_urn comes from an aggregate (any()).
+	// This field serves double duty:
+	//   - Server filter dropdown sends a URN prefix like "tools:http:petstore" → use startsWith with ':'
+	//     so it doesn't accidentally match "tools:http:petstore-external:tool1"
+	//   - Search bar sends free-text like "petstore" → fall back to position() substring match
 	if arg.GramURN != "" {
-		havingParts = append(havingParts, "position(gram_urn, ?) > 0")
-		havingArgs = append(havingArgs, arg.GramURN)
+		havingParts = append(havingParts, "(startsWith(gram_urn, concat(?, ':')) OR gram_urn = ? OR (NOT startsWith(?, 'tools:') AND position(gram_urn, ?) > 0))")
+		havingArgs = append(havingArgs, arg.GramURN, arg.GramURN, arg.GramURN, arg.GramURN)
 	}
 
 	// EventSource filter must use HAVING because it's an aggregate function in SELECT
