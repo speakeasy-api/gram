@@ -29,6 +29,7 @@ export * from "./createSignedChatAttachmentURL.js";
 export * from "./createSlackApp.js";
 export * from "./createTemplate.js";
 export * from "./createToolset.js";
+export * from "./deleteChat.js";
 export * from "./deleteDomain.js";
 export * from "./deleteEnvironment.js";
 export * from "./deleteGlobalVariation.js";
