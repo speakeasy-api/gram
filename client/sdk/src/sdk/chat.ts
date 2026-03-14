@@ -3,6 +3,7 @@
  */
 
 import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
+import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatList } from "../funcs/chatList.js";
 import { chatListChatsWithResolutions } from "../funcs/chatListChatsWithResolutions.js";
@@ -26,6 +27,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CreditUsageResponseBody> {
     return unwrapAsync(chatCreditUsage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteChat chat
+   *
+   * @remarks
+   * Soft-delete a chat by its ID
+   */
+  async delete(
+    request: operations.DeleteChatRequest,
+    security?: operations.DeleteChatSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(chatDelete(
       this,
       request,
       security,
