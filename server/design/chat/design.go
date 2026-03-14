@@ -211,6 +211,30 @@ var _ = Service("chat", func() {
 		Meta("openapi:operationId", "submitFeedback")
 		Meta("openapi:extension:x-speakeasy-name-override", "submitFeedback")
 	})
+
+	Method("deleteChat", func() {
+		Description("Soft-delete a chat by its ID")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			Attribute("id", String, "The ID of the chat to delete")
+			Required("id")
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/chat.delete")
+			Param("id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteChat")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+	})
 })
 
 var ListChatsResult = Type("ListChatsResult", func() {

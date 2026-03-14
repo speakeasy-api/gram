@@ -36,3 +36,8 @@ func ListChatsWithResolutionsChatPath() string {
 func SubmitFeedbackChatPath() string {
 	return "/rpc/chat.submitFeedback"
 }
+
+// DeleteChatChatPath returns the URL path to the chat service deleteChat HTTP endpoint.
+func DeleteChatChatPath() string {
+	return "/rpc/chat.delete"
+}

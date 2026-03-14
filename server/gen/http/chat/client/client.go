@@ -41,6 +41,10 @@ type Client struct {
 	// submitFeedback endpoint.
 	SubmitFeedbackDoer goahttp.Doer
 
+	// DeleteChat Doer is the HTTP client used to make requests to the deleteChat
+	// endpoint.
+	DeleteChatDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -67,6 +71,7 @@ func NewClient(
 		CreditUsageDoer:              doer,
 		ListChatsWithResolutionsDoer: doer,
 		SubmitFeedbackDoer:           doer,
+		DeleteChatDoer:               doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -214,6 +219,30 @@ func (c *Client) SubmitFeedback() goa.Endpoint {
 		resp, err := c.SubmitFeedbackDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "submitFeedback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteChat returns an endpoint that makes HTTP requests to the chat service
+// deleteChat server.
+func (c *Client) DeleteChat() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteChatRequest(c.encoder)
+		decodeResponse = DecodeDeleteChatResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteChatRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteChatDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "deleteChat", err)
 		}
 		return decodeResponse(resp)
 	}

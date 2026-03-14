@@ -812,6 +812,45 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 	return &gen.SubmitFeedbackResult{Success: true}, nil
 }
 
+func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete chat").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "chat deleted",
+		attr.SlogChatID(chatID.String()),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+
+	return nil
+}
+
 // loadMessageContent retrieves the full message content using the precedence:
 // 1. ContentRaw (inline JSON for messages ≤128 KiB)
 // 2. ContentAssetUrl (fetch from asset storage)

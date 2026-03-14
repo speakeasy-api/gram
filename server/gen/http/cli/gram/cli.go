@@ -54,7 +54,7 @@ func UsageCommands() []string {
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
-		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|submit-feedback)",
+		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|submit-feedback|delete-chat)",
 		"chat-sessions (create|revoke)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
@@ -267,6 +267,12 @@ func ParseEndpoint(
 		chatSubmitFeedbackSessionTokenFlag      = chatSubmitFeedbackFlags.String("session-token", "", "")
 		chatSubmitFeedbackProjectSlugInputFlag  = chatSubmitFeedbackFlags.String("project-slug-input", "", "")
 		chatSubmitFeedbackChatSessionsTokenFlag = chatSubmitFeedbackFlags.String("chat-sessions-token", "", "")
+
+		chatDeleteChatFlags                 = flag.NewFlagSet("delete-chat", flag.ExitOnError)
+		chatDeleteChatIDFlag                = chatDeleteChatFlags.String("id", "REQUIRED", "")
+		chatDeleteChatSessionTokenFlag      = chatDeleteChatFlags.String("session-token", "", "")
+		chatDeleteChatProjectSlugInputFlag  = chatDeleteChatFlags.String("project-slug-input", "", "")
+		chatDeleteChatChatSessionsTokenFlag = chatDeleteChatFlags.String("chat-sessions-token", "", "")
 
 		chatSessionsFlags = flag.NewFlagSet("chat-sessions", flag.ContinueOnError)
 
@@ -896,6 +902,7 @@ func ParseEndpoint(
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
 	chatListChatsWithResolutionsFlags.Usage = chatListChatsWithResolutionsUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
+	chatDeleteChatFlags.Usage = chatDeleteChatUsage
 
 	chatSessionsFlags.Usage = chatSessionsUsage
 	chatSessionsCreateFlags.Usage = chatSessionsCreateUsage
@@ -1230,6 +1237,9 @@ func ParseEndpoint(
 
 			case "submit-feedback":
 				epf = chatSubmitFeedbackFlags
+
+			case "delete-chat":
+				epf = chatDeleteChatFlags
 
 			}
 
@@ -1759,6 +1769,9 @@ func ParseEndpoint(
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
+			case "delete-chat":
+				endpoint = c.DeleteChat()
+				data, err = chatc.BuildDeleteChatPayload(*chatDeleteChatIDFlag, *chatDeleteChatSessionTokenFlag, *chatDeleteChatProjectSlugInputFlag, *chatDeleteChatChatSessionsTokenFlag)
 			}
 		case "chat-sessions":
 			c := chatsessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2724,6 +2737,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    credit-usage: Load a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    list-chats-with-resolutions: List all chats for a project with their resolutions`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
+	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s chat COMMAND --help\n", os.Args[0])
@@ -2882,6 +2896,30 @@ func chatSubmitFeedbackUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat submit-feedback --body '{\n      \"feedback\": \"failure\",\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+}
+
+func chatDeleteChatUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat delete-chat", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a chat by its ID`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat delete-chat --id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 // chatSessionsUsage displays the usage of the chat-sessions command and its
