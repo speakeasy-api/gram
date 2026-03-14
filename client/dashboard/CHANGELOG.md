@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.33.1
+
+### Patch Changes
+
+- 3b26329: Display audience field in OAuth proxy server details view
+
 ## 0.33.0
 
 ### Minor Changes
