@@ -38,6 +38,7 @@ import (
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -306,12 +307,11 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 		return oops.E(oops.CodeBadRequest, err, "toolset does not require OAuth or external MCP not found").Log(ctx, s.logger)
 	}
 
-	// Get or register OAuth client via DCR (for MCP OAuth 2.1)
+	// Standard DCR flow — register as client against the OAuth server (Gram proxy or external)
 	oauthClient, err := s.getOrRegisterClient(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, oauthConfig)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to register OAuth client").Log(ctx, s.logger)
 	}
-	// Update the config with the obtained client_id
 	oauthConfig.ClientID = oauthClient.ClientID
 
 	// Generate PKCE code_verifier (43-128 chars)
@@ -434,13 +434,14 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		return oops.E(oops.CodeUnexpected, err, "failed to get OAuth config").Log(ctx, s.logger)
 	}
 
-	// Get the registered client credentials for token exchange
+	// Standard DCR flow — retrieve or register client against the OAuth server
 	oauthClient, err := s.getOrRegisterClient(ctx, state.OrganizationID, state.ProjectID, oauthConfig)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to get OAuth client credentials").Log(ctx, s.logger)
 	}
 	oauthConfig.ClientID = oauthClient.ClientID
 	oauthConfig.ClientSecret = oauthClient.ClientSecret
+	callbackRegistrationID := oauthClient.RegistrationID
 
 	// Exchange code for tokens
 	callbackURL := fmt.Sprintf("%s/oauth-external/callback", s.serverURL.String())
@@ -480,7 +481,7 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		UserID:                state.UserID,
 		OrganizationID:        state.OrganizationID,
 		ProjectID:             state.ProjectID,
-		ClientRegistrationID:  oauthClient.RegistrationID,
+		ClientRegistrationID:  callbackRegistrationID,
 		ToolsetID:             toolset.ID,
 		OauthServerIssuer:     state.OAuthServerIssuer,
 		AccessTokenEncrypted:  accessTokenEncrypted,
@@ -695,11 +696,113 @@ type ExternalOAuthConfig struct {
 	ProviderName          string
 }
 
-// getExternalOAuthConfig extracts OAuth configuration from a toolset's external MCP tools.
-// If externalMCPSlug is provided, it filters by that specific MCP attachment.
-// Otherwise, it returns the first OAuth-requiring tool found.
+// getExternalOAuthConfig resolves OAuth configuration for a toolset.
+//
+// For toolsets with an OAuth proxy server or external OAuth server, this delegates
+// to wellknown.ResolveOAuthServerMetadataFromToolset which returns Gram's proxy
+// endpoints. The external OAuth service then uses standard DCR against the proxy —
+// the proxy handles upstream provider interaction internally.
+//
+// For toolsets without explicit OAuth config, falls back to legacy external MCP
+// tool definitions.
 func (s *ExternalOAuthService) getExternalOAuthConfig(ctx context.Context, toolset toolsets_repo.Toolset, externalMCPSlug string) (*ExternalOAuthConfig, error) {
-	// Get the active deployment for this toolset's project
+	// Path 1: Toolset-level OAuth config (proxy server or external OAuth server).
+	// Delegates to the well-known resolver which returns Gram's proxy endpoints.
+	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
+		mcpSlug := toolset.McpSlug.String
+		if mcpSlug == "" {
+			return nil, fmt.Errorf("toolset has OAuth config but no MCP slug")
+		}
+
+		result, err := wellknown.ResolveOAuthServerMetadataFromToolset(
+			ctx, s.logger, nil, s.oauthRepo, nil, &toolset, s.serverURL.String(), mcpSlug,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("resolve OAuth server metadata from toolset: %w", err)
+		}
+		if result == nil {
+			return nil, fmt.Errorf("no OAuth server metadata resolved for toolset")
+		}
+
+		return s.oauthConfigFromMetadataResult(ctx, result, toolset)
+	}
+
+	// Path 2: Legacy fallback — external MCP tool definitions
+	return s.getExternalMcpOauthConfigHint(ctx, toolset, externalMCPSlug)
+}
+
+// oauthConfigFromMetadataResult converts a well-known metadata result into ExternalOAuthConfig.
+func (s *ExternalOAuthService) oauthConfigFromMetadataResult(ctx context.Context, result *wellknown.OAuthServerMetadataResult, toolset toolsets_repo.Toolset) (*ExternalOAuthConfig, error) {
+	switch result.Kind {
+	case wellknown.OAuthServerMetadataResultKindStatic:
+		// Proxy server — Gram is the authorization server. Use its endpoints directly.
+		meta := result.Static
+		providerName := toolset.Slug
+		s.logger.DebugContext(ctx, "resolved OAuth config via Gram proxy",
+			attr.SlogOAuthIssuer(meta.Issuer))
+
+		return &ExternalOAuthConfig{
+			Issuer:                meta.Issuer,
+			AuthorizationEndpoint: meta.AuthorizationEndpoint,
+			TokenEndpoint:         meta.TokenEndpoint,
+			RegistrationEndpoint:  meta.RegistrationEndpoint,
+			ScopesSupported:       meta.ScopesSupported,
+			ClientID:              "",
+			ClientSecret:          "",
+			ProviderName:          providerName,
+		}, nil
+
+	case wellknown.OAuthServerMetadataResultKindRaw:
+		// External OAuth server — parse raw metadata JSON for endpoints.
+		var serverMeta struct {
+			Issuer                string   `json:"issuer"`
+			AuthorizationEndpoint string   `json:"authorization_endpoint"`
+			TokenEndpoint         string   `json:"token_endpoint"`
+			RegistrationEndpoint  string   `json:"registration_endpoint"`
+			ScopesSupported       []string `json:"scopes_supported"`
+		}
+		if err := json.Unmarshal(result.Raw, &serverMeta); err != nil {
+			return nil, fmt.Errorf("unmarshal external OAuth server metadata: %w", err)
+		}
+
+		if serverMeta.AuthorizationEndpoint == "" {
+			return nil, fmt.Errorf("authorization endpoint not configured in external OAuth server metadata")
+		}
+		if serverMeta.TokenEndpoint == "" {
+			return nil, fmt.Errorf("token endpoint not configured in external OAuth server metadata")
+		}
+
+		issuer := serverMeta.Issuer
+		if issuer == "" {
+			authURL, err := url.Parse(serverMeta.AuthorizationEndpoint)
+			if err != nil {
+				return nil, fmt.Errorf("invalid authorization endpoint URL: %w", err)
+			}
+			issuer = fmt.Sprintf("%s://%s", authURL.Scheme, authURL.Host)
+		}
+
+		s.logger.DebugContext(ctx, "resolved OAuth config from external OAuth server",
+			attr.SlogOAuthIssuer(issuer))
+
+		return &ExternalOAuthConfig{
+			Issuer:                issuer,
+			AuthorizationEndpoint: serverMeta.AuthorizationEndpoint,
+			TokenEndpoint:         serverMeta.TokenEndpoint,
+			RegistrationEndpoint:  serverMeta.RegistrationEndpoint,
+			ScopesSupported:       serverMeta.ScopesSupported,
+			ClientID:              "",
+			ClientSecret:          "",
+			ProviderName:          toolset.Slug,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported OAuth server metadata kind: %s", result.Kind)
+	}
+}
+
+// getExternalMcpOauthConfigHint resolves OAuth config from legacy external MCP tool definitions.
+// This is the backward-compatible fallback for toolsets without explicit OAuth configuration.
+func (s *ExternalOAuthService) getExternalMcpOauthConfigHint(ctx context.Context, toolset toolsets_repo.Toolset, externalMCPSlug string) (*ExternalOAuthConfig, error) {
 	deploymentID, err := s.deploymentsRepo.GetActiveDeploymentID(ctx, toolset.ProjectID)
 	if err != nil {
 		s.logger.DebugContext(ctx, "no active deployment found for toolset",
@@ -708,7 +811,6 @@ func (s *ExternalOAuthService) getExternalOAuthConfig(ctx context.Context, tools
 		return nil, fmt.Errorf("no active deployment for toolset: %w", err)
 	}
 
-	// Query external MCP tools that require OAuth
 	oauthTools, err := s.externalmcpRepo.GetExternalMCPToolsRequiringOAuth(ctx, deploymentID)
 	if err != nil {
 		s.logger.DebugContext(ctx, "failed to query OAuth-requiring MCP tools",
@@ -721,7 +823,6 @@ func (s *ExternalOAuthService) getExternalOAuthConfig(ctx context.Context, tools
 		return nil, fmt.Errorf("no OAuth-requiring external MCP tools found")
 	}
 
-	// Find the matching tool (by slug if provided, or first one)
 	var matchedTool *externalmcp_repo.GetExternalMCPToolsRequiringOAuthRow
 	for i, tool := range oauthTools {
 		if externalMCPSlug == "" || tool.Slug == externalMCPSlug {
@@ -734,7 +835,6 @@ func (s *ExternalOAuthService) getExternalOAuthConfig(ctx context.Context, tools
 		return nil, fmt.Errorf("external MCP tool with slug %q not found", externalMCPSlug)
 	}
 
-	// Validate required OAuth endpoints
 	if !matchedTool.OauthAuthorizationEndpoint.Valid || matchedTool.OauthAuthorizationEndpoint.String == "" {
 		return nil, fmt.Errorf("OAuth authorization endpoint not configured for %s", matchedTool.Slug)
 	}
@@ -742,29 +842,25 @@ func (s *ExternalOAuthService) getExternalOAuthConfig(ctx context.Context, tools
 		return nil, fmt.Errorf("OAuth token endpoint not configured for %s", matchedTool.Slug)
 	}
 
-	// Derive issuer from authorization endpoint (use the origin)
 	authURL, err := url.Parse(matchedTool.OauthAuthorizationEndpoint.String)
 	if err != nil {
 		return nil, fmt.Errorf("invalid authorization endpoint URL: %w", err)
 	}
 	issuer := fmt.Sprintf("%s://%s", authURL.Scheme, authURL.Host)
 
-	// Build registration endpoint (for DCR)
 	registrationEndpoint := ""
 	if matchedTool.OauthRegistrationEndpoint.Valid {
 		registrationEndpoint = matchedTool.OauthRegistrationEndpoint.String
 	}
 
-	// Note: ClientID and ClientSecret will be populated via DCR or manual configuration
-	// For MCP OAuth 2.1, we typically use Dynamic Client Registration
 	config := &ExternalOAuthConfig{
 		Issuer:                issuer,
 		AuthorizationEndpoint: matchedTool.OauthAuthorizationEndpoint.String,
 		TokenEndpoint:         matchedTool.OauthTokenEndpoint.String,
 		RegistrationEndpoint:  registrationEndpoint,
 		ScopesSupported:       matchedTool.OauthScopesSupported,
-		ClientID:              "", // Populated via DCR
-		ClientSecret:          "", // Populated via DCR
+		ClientID:              "",
+		ClientSecret:          "",
 		ProviderName:          matchedTool.Name.String,
 	}
 
