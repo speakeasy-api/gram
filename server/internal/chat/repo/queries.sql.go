@@ -922,6 +922,20 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID)
 	return items, nil
 }
 
+const softDeleteChat = `-- name: SoftDeleteChat :exec
+UPDATE chats SET deleted_at = NOW() WHERE id = $1 AND project_id = $2
+`
+
+type SoftDeleteChatParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) error {
+	_, err := q.db.Exec(ctx, softDeleteChat, arg.ID, arg.ProjectID)
+	return err
+}
+
 const updateChatTitle = `-- name: UpdateChatTitle :exec
 UPDATE chats SET title = $1, updated_at = NOW() WHERE id = $2
 `

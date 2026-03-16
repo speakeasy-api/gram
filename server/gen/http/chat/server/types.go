@@ -1185,6 +1185,186 @@ type SubmitFeedbackGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeleteChatUnauthorizedResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "unauthorized" error.
+type DeleteChatUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatForbiddenResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "forbidden" error.
+type DeleteChatForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatBadRequestResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "bad_request" error.
+type DeleteChatBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatNotFoundResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "not_found" error.
+type DeleteChatNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatConflictResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "conflict" error.
+type DeleteChatConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatUnsupportedMediaResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "unsupported_media" error.
+type DeleteChatUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatInvalidResponseBody is the type of the "chat" service "deleteChat"
+// endpoint HTTP response body for the "invalid" error.
+type DeleteChatInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatInvariantViolationResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "invariant_violation" error.
+type DeleteChatInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatUnexpectedResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "unexpected" error.
+type DeleteChatUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteChatGatewayErrorResponseBody is the type of the "chat" service
+// "deleteChat" endpoint HTTP response body for the "gateway_error" error.
+type DeleteChatGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ChatOverviewResponseBody is used to define fields on response body types.
 type ChatOverviewResponseBody struct {
 	// The ID of the chat
@@ -2211,6 +2391,146 @@ func NewSubmitFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *SubmitFee
 	return body
 }
 
+// NewDeleteChatUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatUnauthorizedResponseBody(res *goa.ServiceError) *DeleteChatUnauthorizedResponseBody {
+	body := &DeleteChatUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatForbiddenResponseBody builds the HTTP response body from the
+// result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatForbiddenResponseBody(res *goa.ServiceError) *DeleteChatForbiddenResponseBody {
+	body := &DeleteChatForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatBadRequestResponseBody builds the HTTP response body from the
+// result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatBadRequestResponseBody(res *goa.ServiceError) *DeleteChatBadRequestResponseBody {
+	body := &DeleteChatBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatNotFoundResponseBody builds the HTTP response body from the
+// result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatNotFoundResponseBody(res *goa.ServiceError) *DeleteChatNotFoundResponseBody {
+	body := &DeleteChatNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatConflictResponseBody builds the HTTP response body from the
+// result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatConflictResponseBody(res *goa.ServiceError) *DeleteChatConflictResponseBody {
+	body := &DeleteChatConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteChatUnsupportedMediaResponseBody {
+	body := &DeleteChatUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatInvalidResponseBody builds the HTTP response body from the
+// result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatInvalidResponseBody(res *goa.ServiceError) *DeleteChatInvalidResponseBody {
+	body := &DeleteChatInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatInvariantViolationResponseBody(res *goa.ServiceError) *DeleteChatInvariantViolationResponseBody {
+	body := &DeleteChatInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatUnexpectedResponseBody builds the HTTP response body from the
+// result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatUnexpectedResponseBody(res *goa.ServiceError) *DeleteChatUnexpectedResponseBody {
+	body := &DeleteChatUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteChatGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "deleteChat" endpoint of the "chat" service.
+func NewDeleteChatGatewayErrorResponseBody(res *goa.ServiceError) *DeleteChatGatewayErrorResponseBody {
+	body := &DeleteChatGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListChatsPayload builds a chat service listChats endpoint payload.
 func NewListChatsPayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
@@ -2281,6 +2601,17 @@ func NewSubmitFeedbackPayload(body *SubmitFeedbackRequestBody, sessionToken *str
 		ID:       *body.ID,
 		Feedback: *body.Feedback,
 	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v
+}
+
+// NewDeleteChatPayload builds a chat service deleteChat endpoint payload.
+func NewDeleteChatPayload(id string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.DeleteChatPayload {
+	v := &chat.DeleteChatPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

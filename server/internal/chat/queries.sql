@@ -386,3 +386,6 @@ INSERT INTO chat_user_feedback (
 UPDATE chat_user_feedback
 SET chat_resolution_id = @chat_resolution_id
 WHERE id = @id;
+
+-- name: SoftDeleteChat :exec
+UPDATE chats SET deleted_at = NOW() WHERE id = @id AND project_id = @project_id;

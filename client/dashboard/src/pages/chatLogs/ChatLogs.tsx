@@ -11,7 +11,12 @@ import {
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchatswithresolutions";
-import { useListChatsWithResolutions } from "@gram/client/react-query";
+import {
+  useListChatsWithResolutions,
+  useDeleteChatMutation,
+  invalidateAllListChatsWithResolutions,
+} from "@gram/client/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router";
@@ -125,6 +130,24 @@ export default function ChatLogs() {
 
   const [offset, setOffset] = useState(0);
   const limit = 50;
+
+  const queryClient = useQueryClient();
+  const deleteChatMutation = useDeleteChatMutation();
+
+  const handleDeleteChat = useCallback(
+    (chatId: string) => {
+      deleteChatMutation.mutate(
+        { request: { id: chatId } },
+        {
+          onSuccess: () => {
+            setSelectedChat(null);
+            invalidateAllListChatsWithResolutions(queryClient);
+          },
+        },
+      );
+    },
+    [deleteChatMutation, queryClient],
+  );
 
   // Copilot config - whitelist of tools for chat session analysis
   const mcpConfig = useObservabilityMcpConfig({
@@ -355,6 +378,7 @@ export default function ChatLogs() {
         setOffset={setOffset}
         limit={limit}
         total={total}
+        handleDeleteChat={handleDeleteChat}
       />
     </InsightsSidebar>
   );
@@ -387,6 +411,7 @@ function ChatLogsContent({
   setOffset,
   limit,
   total,
+  handleDeleteChat,
 }: {
   dateRange: DateRangePreset;
   setDateRangeParam: (preset: DateRangePreset) => void;
@@ -413,6 +438,7 @@ function ChatLogsContent({
   setOffset: (offset: number) => void;
   limit: number;
   total: number;
+  handleDeleteChat: (chatId: string) => void;
 }) {
   if (isLogsDisabled) {
     return (
@@ -590,6 +616,7 @@ function ChatLogsContent({
               chatId={selectedChat.id}
               resolutions={selectedChat.resolutions}
               onClose={() => setSelectedChat(null)}
+              onDelete={handleDeleteChat}
             />
           )}
         </DrawerContent>
