@@ -25,9 +25,9 @@ export function DotTable({
           <tr className="border-b bg-muted/30">
             {/* Empty header for the dot-pattern column */}
             <th className="w-17" />
-            {headers.map((header) => (
+            {headers.map((header, index) => (
               <th
-                key={header.label}
+                key={header.label || `header-${index}`}
                 className={cn(
                   "px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider",
                   header.className,
