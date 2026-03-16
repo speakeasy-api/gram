@@ -60,6 +60,21 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			}
 		})
 
+		// Verify the connection is alive before returning. Without this,
+		// the container's mapped port may be open before Redis is fully
+		// ready to speak RESP, causing "can't parse map reply: HTTP/1.1
+		// 400 Bad Request" errors under CI load.
+		ctx := t.Context()
+		for attempt := range 10 {
+			if err := client.Ping(ctx).Err(); err == nil {
+				break
+			} else if attempt == 9 {
+				client.Close()
+				return nil, fmt.Errorf("redis not ready after retries: %w", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
 		return client, nil
 	}
 }
