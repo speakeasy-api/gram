@@ -124,10 +124,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     }
   }, [mcpAttachedEnvironmentSlug]);
 
-  // Get attached environment and its available variables
+  // Get attached environment and its available variables — only if explicitly set
   const attachedEnvironment = mcpMetadata?.defaultEnvironmentId
-    ? environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId)
-    : environments.find((e) => e.slug === "default") || null;
+    ? (environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId) ??
+      null)
+    : null;
 
   const environmentConfigs = mcpMetadata?.environmentConfigs || [];
   const availableEnvVarsFromAttached =
@@ -731,9 +732,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 totalCount={envVars.length}
                 selectedEnvironmentView={selectedEnvironmentView}
                 mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
-                defaultEnvironmentSlug={
-                  toolset.defaultEnvironmentSlug || "default"
-                }
                 environmentConfigs={environmentConfigs}
                 editingState={editingState}
                 editingHeaderId={editingHeaderId}

@@ -23,7 +23,6 @@ interface EnvironmentVariableRowProps {
   totalCount: number;
   selectedEnvironmentView: string;
   mcpAttachedEnvironmentSlug: string | null;
-  defaultEnvironmentSlug: string;
   environmentConfigs: Array<{
     variableName: string;
     providedBy: string;
@@ -67,7 +66,6 @@ export function EnvironmentVariableRow({
   totalCount,
   selectedEnvironmentView,
   mcpAttachedEnvironmentSlug,
-  defaultEnvironmentSlug,
   environmentConfigs,
   editingState,
   editingHeaderId,
@@ -105,9 +103,9 @@ export function EnvironmentVariableRow({
   // When actively editing, use editing value to determine indicator; otherwise use saved
   const hasValue = isActivelyEditing ? editingHasValue : savedHasValue;
 
-  const isDisabled =
-    selectedEnvironmentView !==
-    (mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default");
+  const isDisabled = mcpAttachedEnvironmentSlug
+    ? selectedEnvironmentView !== mcpAttachedEnvironmentSlug
+    : false; // When no environment is attached, allow editing on any environment
 
   return (
     <div
