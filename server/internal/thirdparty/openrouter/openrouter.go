@@ -41,6 +41,7 @@ var allowList = map[string]bool{
 	"anthropic/claude-sonnet-4":     true,
 	"anthropic/claude-opus-4.5":     true,
 	"openai/gpt-5.4":                true,
+	"openai/gpt-5-mini":             true,
 	"openai/gpt-4o":                 true,
 	"openai/gpt-4o-mini":            true,
 	"openai/gpt-5.1-codex":          true,

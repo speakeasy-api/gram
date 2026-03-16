@@ -452,6 +452,9 @@ export function PlaygroundConfigPanel({
                       Claude 4 Sonnet
                     </SelectItem>
                     <SelectItem value="openai/gpt-5.4">GPT-5.4</SelectItem>
+                    <SelectItem value="openai/gpt-5-mini">
+                      GPT-5 mini
+                    </SelectItem>
                     <SelectItem value="openai/gpt-4o">GPT-4o</SelectItem>
                     <SelectItem value="openai/gpt-4o-mini">
                       GPT-4o-mini
