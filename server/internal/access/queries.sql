@@ -32,6 +32,14 @@ DELETE FROM principal_grants
 WHERE id = @id
   AND organization_id = @organization_id;
 
+-- name: DeletePrincipalGrantByTuple :execrows
+-- Removes a single grant row matching the exact (org, principal, scope, resource) tuple.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND resource = @resource;
+
 -- name: DeletePrincipalGrantsByPrincipal :execrows
 -- Removes all grants for a specific principal within an org.
 -- Useful when removing a user from an organization.
