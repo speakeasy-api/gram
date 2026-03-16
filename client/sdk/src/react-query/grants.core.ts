@@ -14,9 +14,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListGrantsQueryData = components.ListGrantsResult;
+export type GrantsQueryData = components.ListGrantsResult;
 
-export function prefetchListGrants(
+export function prefetchGrants(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.ListGrantsRequest | undefined,
@@ -24,7 +24,7 @@ export function prefetchListGrants(
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildListGrantsQuery(
+    ...buildGrantsQuery(
       client$,
       request,
       security,
@@ -33,23 +33,21 @@ export function prefetchListGrants(
   });
 }
 
-export function buildListGrantsQuery(
+export function buildGrantsQuery(
   client$: GramCore,
   request?: operations.ListGrantsRequest | undefined,
   security?: operations.ListGrantsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListGrantsQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<GrantsQueryData>;
 } {
   return {
-    queryKey: queryKeyListGrants({
+    queryKey: queryKeyGrants({
       principalUrn: request?.principalUrn,
       gramSession: request?.gramSession,
     }),
-    queryFn: async function listGrantsQueryFn(
-      ctx,
-    ): Promise<ListGrantsQueryData> {
+    queryFn: async function grantsQueryFn(ctx): Promise<GrantsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -71,7 +69,7 @@ export function buildListGrantsQuery(
   };
 }
 
-export function queryKeyListGrants(
+export function queryKeyGrants(
   parameters: {
     principalUrn?: string | undefined;
     gramSession?: string | undefined;

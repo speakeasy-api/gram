@@ -3,7 +3,8 @@
  */
 
 import { accessList } from "../funcs/accessList.js";
-import { accessRemove } from "../funcs/accessRemove.js";
+import { accessRemoveAll } from "../funcs/accessRemoveAll.js";
+import { accessRemoveOne } from "../funcs/accessRemoveOne.js";
 import { accessUpsert } from "../funcs/accessUpsert.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -31,17 +32,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * removeGrants access
+   * removeGrant access
    *
    * @remarks
-   * Remove all grants for a specific principal within the organization.
+   * Remove a single grant matching the exact (principal, scope, resource) tuple within the organization.
    */
-  async remove(
-    request: operations.RemoveGrantsRequest,
-    security?: operations.RemoveGrantsSecurity | undefined,
+  async removeOne(
+    request: operations.RemoveGrantRequest,
+    security?: operations.RemoveGrantSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
-    return unwrapAsync(accessRemove(
+    return unwrapAsync(accessRemoveOne(
       this,
       request,
       security,
@@ -50,16 +51,35 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * upsertGrant access
+   * removeGrants access
    *
    * @remarks
-   * Create or update a principal grant. If a grant with the same (org, principal, scope, resource) already exists, the record is kept as is.
+   * Remove all grants for a specific principal within the organization.
+   */
+  async removeAll(
+    request: operations.RemoveGrantsRequest,
+    security?: operations.RemoveGrantsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessRemoveAll(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upsertGrants access
+   *
+   * @remarks
+   * Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.
    */
   async upsert(
-    request: operations.UpsertGrantRequest,
-    security?: operations.UpsertGrantSecurity | undefined,
+    request: operations.UpsertGrantsRequest,
+    security?: operations.UpsertGrantsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Grant> {
+  ): Promise<components.UpsertGrantsResult> {
     return unwrapAsync(accessUpsert(
       this,
       request,

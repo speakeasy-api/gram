@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Remove all grants for a specific principal within the organization.
  */
-export function accessRemove(
+export function accessRemoveAll(
   client: GramCore,
   request: operations.RemoveGrantsRequest,
   security?: operations.RemoveGrantsSecurity | undefined,

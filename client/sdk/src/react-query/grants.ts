@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildListGrantsQuery,
-  ListGrantsQueryData,
-  prefetchListGrants,
-  queryKeyListGrants,
-} from "./listGrants.core.js";
+  buildGrantsQuery,
+  GrantsQueryData,
+  prefetchGrants,
+  queryKeyGrants,
+} from "./grants.core.js";
 export {
-  buildListGrantsQuery,
-  type ListGrantsQueryData,
-  prefetchListGrants,
-  queryKeyListGrants,
+  buildGrantsQuery,
+  type GrantsQueryData,
+  prefetchGrants,
+  queryKeyGrants,
 };
 
-export type ListGrantsQueryError =
+export type GrantsQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -58,14 +58,14 @@ export type ListGrantsQueryError =
  * @remarks
  * List all principal grants for an organization, optionally filtered by principal URN.
  */
-export function useListGrants(
+export function useGrants(
   request?: operations.ListGrantsRequest | undefined,
   security?: operations.ListGrantsSecurity | undefined,
-  options?: QueryHookOptions<ListGrantsQueryData, ListGrantsQueryError>,
-): UseQueryResult<ListGrantsQueryData, ListGrantsQueryError> {
+  options?: QueryHookOptions<GrantsQueryData, GrantsQueryError>,
+): UseQueryResult<GrantsQueryData, GrantsQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildListGrantsQuery(
+    ...buildGrantsQuery(
       client,
       request,
       security,
@@ -81,14 +81,14 @@ export function useListGrants(
  * @remarks
  * List all principal grants for an organization, optionally filtered by principal URN.
  */
-export function useListGrantsSuspense(
+export function useGrantsSuspense(
   request?: operations.ListGrantsRequest | undefined,
   security?: operations.ListGrantsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListGrantsQueryData, ListGrantsQueryError>,
-): UseSuspenseQueryResult<ListGrantsQueryData, ListGrantsQueryError> {
+  options?: SuspenseQueryHookOptions<GrantsQueryData, GrantsQueryError>,
+): UseSuspenseQueryResult<GrantsQueryData, GrantsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildListGrantsQuery(
+    ...buildGrantsQuery(
       client,
       request,
       security,
@@ -98,7 +98,7 @@ export function useListGrantsSuspense(
   });
 }
 
-export function setListGrantsData(
+export function setGrantsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -106,14 +106,14 @@ export function setListGrantsData(
       gramSession?: string | undefined;
     },
   ],
-  data: ListGrantsQueryData,
-): ListGrantsQueryData | undefined {
-  const key = queryKeyListGrants(...queryKeyBase);
+  data: GrantsQueryData,
+): GrantsQueryData | undefined {
+  const key = queryKeyGrants(...queryKeyBase);
 
-  return client.setQueryData<ListGrantsQueryData>(key, data);
+  return client.setQueryData<GrantsQueryData>(key, data);
 }
 
-export function invalidateListGrants(
+export function invalidateGrants(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -129,7 +129,7 @@ export function invalidateListGrants(
   });
 }
 
-export function invalidateAllListGrants(
+export function invalidateAllGrants(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

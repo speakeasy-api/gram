@@ -222,6 +222,8 @@ export * from "./upsertallowedoriginresult.js";
 export * from "./upsertglobaltoolvariationform.js";
 export * from "./upsertglobaltoolvariationresult.js";
 export * from "./upsertgrantform.js";
+export * from "./upsertgrantsrequestbody.js";
+export * from "./upsertgrantsresult.js";
 export * from "./upsertrequestbody.js";
 export * from "./usagetiers.js";
 export * from "./usersummary.js";

@@ -94,7 +94,114 @@ paths:
         - access
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
-        name: ListGrants
+        name: Grants
+  /rpc/access.removeGrant:
+    delete:
+      description: Remove a single grant matching the exact (principal, scope, resource) tuple within the organization.
+      operationId: removeGrant
+      parameters:
+        - allowEmptyValue: true
+          description: The principal URN of the grant to remove (e.g. "user:user_abc", "role:admin").
+          in: query
+          name: principal_urn
+          required: true
+          schema:
+            description: The principal URN of the grant to remove (e.g. "user:user_abc", "role:admin").
+            maxLength: 260
+            minLength: 3
+            type: string
+        - allowEmptyValue: true
+          description: The scope of the grant to remove (e.g. "build:read").
+          in: query
+          name: scope
+          required: true
+          schema:
+            description: The scope of the grant to remove (e.g. "build:read").
+            maxLength: 60
+            minLength: 3
+            type: string
+        - allowEmptyValue: true
+          description: The resource of the grant to remove (e.g. "*" or a specific resource ID).
+          in: query
+          name: resource
+          schema:
+            default: '*'
+            description: The resource of the grant to remove (e.g. "*" or a specific resource ID).
+            maxLength: 260
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: removeGrant access
+      tags:
+        - access
+      x-speakeasy-name-override: removeOne
+      x-speakeasy-react-hook:
+        name: RemoveGrant
   /rpc/access.removeGrants:
     delete:
       description: Remove all grants for a specific principal within the organization.
@@ -180,13 +287,13 @@ paths:
       summary: removeGrants access
       tags:
         - access
-      x-speakeasy-name-override: remove
+      x-speakeasy-name-override: removeAll
       x-speakeasy-react-hook:
         name: RemoveGrants
-  /rpc/access.upsertGrant:
+  /rpc/access.upsertGrants:
     post:
-      description: Create or update a principal grant. If a grant with the same (org, principal, scope, resource) already exists, the record is kept as is.
-      operationId: upsertGrant
+      description: Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.
+      operationId: upsertGrants
       parameters:
         - allowEmptyValue: true
           description: Session header
@@ -199,14 +306,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertGrantForm'
+              $ref: '#/components/schemas/UpsertGrantsRequestBody'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Grant'
+                $ref: '#/components/schemas/UpsertGrantsResult'
           description: OK response.
         "400":
           content:
@@ -265,12 +372,12 @@ paths:
       security:
         - session_header_Gram-Session: []
         - {}
-      summary: upsertGrant access
+      summary: upsertGrants access
       tags:
         - access
       x-speakeasy-name-override: upsert
       x-speakeasy-react-hook:
-        name: UpsertGrant
+        name: UpsertGrants
   /rpc/assets.createSignedChatAttachmentURL:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -19475,6 +19582,28 @@ components:
       required:
         - principal_urn
         - scope
+    UpsertGrantsRequestBody:
+      type: object
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpsertGrantForm'
+          description: The list of grants to upsert.
+          minItems: 1
+          maxItems: 100
+      required:
+        - grants
+    UpsertGrantsResult:
+      type: object
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Grant'
+          description: The list of grants that were added or updated.
+      required:
+        - grants
     UpsertRequestBody:
       type: object
       properties:

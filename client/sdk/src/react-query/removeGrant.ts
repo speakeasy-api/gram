@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { accessRemoveAll } from "../funcs/accessRemoveAll.js";
+import { accessRemoveOne } from "../funcs/accessRemoveOne.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -27,15 +27,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type RemoveGrantsMutationVariables = {
-  request: operations.RemoveGrantsRequest;
-  security?: operations.RemoveGrantsSecurity | undefined;
+export type RemoveGrantMutationVariables = {
+  request: operations.RemoveGrantRequest;
+  security?: operations.RemoveGrantSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RemoveGrantsMutationData = void;
+export type RemoveGrantMutationData = void;
 
-export type RemoveGrantsMutationError =
+export type RemoveGrantMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -47,49 +47,49 @@ export type RemoveGrantsMutationError =
   | SDKValidationError;
 
 /**
- * removeGrants access
+ * removeGrant access
  *
  * @remarks
- * Remove all grants for a specific principal within the organization.
+ * Remove a single grant matching the exact (principal, scope, resource) tuple within the organization.
  */
-export function useRemoveGrantsMutation(
+export function useRemoveGrantMutation(
   options?: MutationHookOptions<
-    RemoveGrantsMutationData,
-    RemoveGrantsMutationError,
-    RemoveGrantsMutationVariables
+    RemoveGrantMutationData,
+    RemoveGrantMutationError,
+    RemoveGrantMutationVariables
   >,
 ): UseMutationResult<
-  RemoveGrantsMutationData,
-  RemoveGrantsMutationError,
-  RemoveGrantsMutationVariables
+  RemoveGrantMutationData,
+  RemoveGrantMutationError,
+  RemoveGrantMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildRemoveGrantsMutation(client, options),
+    ...buildRemoveGrantMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyRemoveGrants(): MutationKey {
-  return ["@gram/client", "access", "removeAll"];
+export function mutationKeyRemoveGrant(): MutationKey {
+  return ["@gram/client", "access", "removeOne"];
 }
 
-export function buildRemoveGrantsMutation(
+export function buildRemoveGrantMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: RemoveGrantsMutationVariables,
-  ) => Promise<RemoveGrantsMutationData>;
+    variables: RemoveGrantMutationVariables,
+  ) => Promise<RemoveGrantMutationData>;
 } {
   return {
-    mutationKey: mutationKeyRemoveGrants(),
-    mutationFn: function removeGrantsMutationFn({
+    mutationKey: mutationKeyRemoveGrant(),
+    mutationFn: function removeGrantMutationFn({
       request,
       security,
       options,
-    }): Promise<RemoveGrantsMutationData> {
+    }): Promise<RemoveGrantMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -102,7 +102,7 @@ export function buildRemoveGrantsMutation(
           ),
         },
       };
-      return unwrapAsync(accessRemoveAll(
+      return unwrapAsync(accessRemoveOne(
         client$,
         request,
         security,

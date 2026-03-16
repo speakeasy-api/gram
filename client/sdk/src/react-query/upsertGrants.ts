@@ -28,15 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpsertGrantMutationVariables = {
-  request: operations.UpsertGrantRequest;
-  security?: operations.UpsertGrantSecurity | undefined;
+export type UpsertGrantsMutationVariables = {
+  request: operations.UpsertGrantsRequest;
+  security?: operations.UpsertGrantsSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpsertGrantMutationData = components.Grant;
+export type UpsertGrantsMutationData = components.UpsertGrantsResult;
 
-export type UpsertGrantMutationError =
+export type UpsertGrantsMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -48,49 +48,49 @@ export type UpsertGrantMutationError =
   | SDKValidationError;
 
 /**
- * upsertGrant access
+ * upsertGrants access
  *
  * @remarks
- * Create or update a principal grant. If a grant with the same (org, principal, scope, resource) already exists, the record is kept as is.
+ * Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.
  */
-export function useUpsertGrantMutation(
+export function useUpsertGrantsMutation(
   options?: MutationHookOptions<
-    UpsertGrantMutationData,
-    UpsertGrantMutationError,
-    UpsertGrantMutationVariables
+    UpsertGrantsMutationData,
+    UpsertGrantsMutationError,
+    UpsertGrantsMutationVariables
   >,
 ): UseMutationResult<
-  UpsertGrantMutationData,
-  UpsertGrantMutationError,
-  UpsertGrantMutationVariables
+  UpsertGrantsMutationData,
+  UpsertGrantsMutationError,
+  UpsertGrantsMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpsertGrantMutation(client, options),
+    ...buildUpsertGrantsMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpsertGrant(): MutationKey {
+export function mutationKeyUpsertGrants(): MutationKey {
   return ["@gram/client", "access", "upsert"];
 }
 
-export function buildUpsertGrantMutation(
+export function buildUpsertGrantsMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpsertGrantMutationVariables,
-  ) => Promise<UpsertGrantMutationData>;
+    variables: UpsertGrantsMutationVariables,
+  ) => Promise<UpsertGrantsMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpsertGrant(),
-    mutationFn: function upsertGrantMutationFn({
+    mutationKey: mutationKeyUpsertGrants(),
+    mutationFn: function upsertGrantsMutationFn({
       request,
       security,
       options,
-    }): Promise<UpsertGrantMutationData> {
+    }): Promise<UpsertGrantsMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,

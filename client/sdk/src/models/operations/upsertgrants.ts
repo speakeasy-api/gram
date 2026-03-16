@@ -6,27 +6,27 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
-export type UpsertGrantSecurity = {
+export type UpsertGrantsSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type UpsertGrantRequest = {
+export type UpsertGrantsRequest = {
   /**
    * Session header
    */
   gramSession?: string | undefined;
-  upsertGrantForm: components.UpsertGrantForm;
+  upsertGrantsRequestBody: components.UpsertGrantsRequestBody;
 };
 
 /** @internal */
-export type UpsertGrantSecurity$Outbound = {
+export type UpsertGrantsSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const UpsertGrantSecurity$outboundSchema: z.ZodMiniType<
-  UpsertGrantSecurity$Outbound,
-  UpsertGrantSecurity
+export const UpsertGrantsSecurity$outboundSchema: z.ZodMiniType<
+  UpsertGrantsSecurity$Outbound,
+  UpsertGrantsSecurity
 > = z.pipe(
   z.object({
     sessionHeaderGramSession: z.optional(z.string()),
@@ -38,41 +38,41 @@ export const UpsertGrantSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function upsertGrantSecurityToJSON(
-  upsertGrantSecurity: UpsertGrantSecurity,
+export function upsertGrantsSecurityToJSON(
+  upsertGrantsSecurity: UpsertGrantsSecurity,
 ): string {
   return JSON.stringify(
-    UpsertGrantSecurity$outboundSchema.parse(upsertGrantSecurity),
+    UpsertGrantsSecurity$outboundSchema.parse(upsertGrantsSecurity),
   );
 }
 
 /** @internal */
-export type UpsertGrantRequest$Outbound = {
+export type UpsertGrantsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  UpsertGrantForm: components.UpsertGrantForm$Outbound;
+  UpsertGrantsRequestBody: components.UpsertGrantsRequestBody$Outbound;
 };
 
 /** @internal */
-export const UpsertGrantRequest$outboundSchema: z.ZodMiniType<
-  UpsertGrantRequest$Outbound,
-  UpsertGrantRequest
+export const UpsertGrantsRequest$outboundSchema: z.ZodMiniType<
+  UpsertGrantsRequest$Outbound,
+  UpsertGrantsRequest
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    upsertGrantForm: components.UpsertGrantForm$outboundSchema,
+    upsertGrantsRequestBody: components.UpsertGrantsRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      upsertGrantForm: "UpsertGrantForm",
+      upsertGrantsRequestBody: "UpsertGrantsRequestBody",
     });
   }),
 );
 
-export function upsertGrantRequestToJSON(
-  upsertGrantRequest: UpsertGrantRequest,
+export function upsertGrantsRequestToJSON(
+  upsertGrantsRequest: UpsertGrantsRequest,
 ): string {
   return JSON.stringify(
-    UpsertGrantRequest$outboundSchema.parse(upsertGrantRequest),
+    UpsertGrantsRequest$outboundSchema.parse(upsertGrantsRequest),
   );
 }
