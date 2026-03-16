@@ -6,7 +6,7 @@ export type ViewMode = "grid" | "table";
 
 const STORAGE_KEY = "gram-view-mode";
 
-export function getStoredViewMode(): ViewMode {
+function getStoredViewMode(): ViewMode {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "grid" || stored === "table") return stored;
@@ -16,7 +16,7 @@ export function getStoredViewMode(): ViewMode {
   return "grid";
 }
 
-export function storeViewMode(mode: ViewMode) {
+function storeViewMode(mode: ViewMode) {
   try {
     localStorage.setItem(STORAGE_KEY, mode);
   } catch {

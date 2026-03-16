@@ -95,71 +95,69 @@ export function SourceTableRow({
   })();
 
   return (
-    <routes.sources.source.Link
-      params={[sourceKind, asset.slug]}
-      className="hover:no-underline contents"
+    <DotRow
+      icon={iconContent}
+      onClick={() => routes.sources.source.goTo(sourceKind, asset.slug)}
     >
-      <DotRow icon={iconContent}>
-        {/* Name */}
-        <td className="px-3 py-3">
-          <Type
-            variant="subheading"
-            as="div"
-            className="truncate text-sm group-hover:text-primary transition-colors"
-            title={asset.name}
-          >
-            {asset.name}
-          </Type>
-        </td>
+      {/* Name */}
+      <td className="px-3 py-3">
+        <Type
+          variant="subheading"
+          as="div"
+          className="truncate text-sm group-hover:text-primary transition-colors"
+          title={asset.name}
+        >
+          {asset.name}
+        </Type>
+      </td>
 
-        {/* Type */}
-        <td className="px-3 py-3">
-          <Badge variant="neutral">{config.label}</Badge>
-        </td>
+      {/* Type */}
+      <td className="px-3 py-3">
+        <Badge variant="neutral">{config.label}</Badge>
+      </td>
 
-        {/* Tools */}
-        <td className="px-3 py-3">
-          <Type small muted>
-            {toolCount}
-          </Type>
-        </td>
+      {/* Tools */}
+      <td className="px-3 py-3">
+        <Type small muted>
+          {toolCount}
+        </Type>
+      </td>
 
-        {/* Created */}
-        <td className="px-3 py-3">
-          <Type small muted>
-            {formatDate(createdAt)}
-          </Type>
-        </td>
+      {/* Created */}
+      <td className="px-3 py-3">
+        <Type small muted>
+          {formatDate(createdAt)}
+        </Type>
+      </td>
 
-        {/* Updated */}
-        <td className="px-3 py-3">
-          <Type small muted>
-            {formatDate(updatedAt)}
-          </Type>
-        </td>
+      {/* Updated */}
+      <td className="px-3 py-3">
+        <Type small muted>
+          {formatDate(updatedAt)}
+        </Type>
+      </td>
 
-        {/* Health */}
-        <td className="px-3 py-3">
-          {causingFailure && (
-            <div className="flex items-center gap-1.5 text-destructive">
-              <CircleAlertIcon className="size-3.5" />
-              <Type small className="text-destructive">
-                Error
-              </Type>
-            </div>
-          )}
-        </td>
-
-        {/* Actions */}
-        <td className="px-3 py-3">
-          <div
-            className="flex items-center justify-end"
-            onClick={(e) => e.preventDefault()}
-          >
-            <MoreActions actions={actions} />
+      {/* Health */}
+      <td className="px-3 py-3">
+        {causingFailure && (
+          <div className="flex items-center gap-1.5 text-destructive">
+            <CircleAlertIcon className="size-3.5" />
+            <Type small className="text-destructive">
+              Error
+            </Type>
           </div>
-        </td>
-      </DotRow>
-    </routes.sources.source.Link>
+        )}
+      </td>
+
+      {/* Actions */}
+      <td className="px-3 py-3">
+        <div
+          className="flex items-center justify-end"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreActions actions={actions} />
+        </div>
+      </td>
+    </DotRow>
   );
 }
