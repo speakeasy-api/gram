@@ -76,7 +76,7 @@ func GenerateMappingWithLLM(
 	completionReq := openrouter.CompletionRequest{
 		OrgID:       orgID,
 		ProjectID:   projectID,
-		Model:       "openai/gpt-4o-mini",
+		Model:       "openai/gpt-5-mini",
 		UsageSource: billing.ModelUsageSourceGram,
 		Messages: []or.Message{
 			or.CreateMessageUser(or.UserMessage{
