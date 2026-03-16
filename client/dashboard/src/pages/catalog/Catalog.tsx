@@ -1,7 +1,9 @@
 import { Page } from "@/components/page-layout";
+import { DotTable } from "@/components/ui/dot-table";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
@@ -18,6 +20,7 @@ import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState } from "./hooks/useFilterState";
 import { useSelectionState } from "./hooks/useSelectionState";
 import { ServerCard } from "./ServerCard";
+import { ServerTableRow } from "./ServerTableRow";
 import { SortDropdown } from "./SortDropdown";
 
 export function CatalogRoot() {
@@ -36,6 +39,7 @@ export default function Catalog() {
   const { selectedServers, toggleServerSelection, clearSelection } =
     useSelectionState();
 
+  const [viewMode, setViewMode] = useViewMode();
   const [addingServers, setAddingServers] = useState<Server[]>([]);
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
@@ -180,14 +184,17 @@ export default function Catalog() {
                   />
                 </Stack>
 
-                {/* Results count */}
-                {!isLoading && (
-                  <Type small muted>
-                    {filteredServers.length === allServers.length
-                      ? `${allServers.length} servers`
-                      : `${filteredServers.length} of ${allServers.length} servers`}
-                  </Type>
-                )}
+                {/* Results count and view toggle */}
+                <Stack direction="horizontal" gap={3} align="center">
+                  {!isLoading && (
+                    <Type small muted>
+                      {filteredServers.length === allServers.length
+                        ? `${allServers.length} servers`
+                        : `${filteredServers.length} of ${allServers.length} servers`}
+                    </Type>
+                  )}
+                  <ViewToggle value={viewMode} onChange={setViewMode} />
+                </Stack>
               </Stack>
 
               {/* Active filter chips */}
@@ -199,17 +206,21 @@ export default function Catalog() {
                 />
               )}
 
-              {/* Server grid */}
-              <div
-                ref={setGridElement}
-                className="grid grid-cols-1 xl:grid-cols-2 gap-6"
-              >
-                {isLoading &&
-                  Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
-                    (id) => <Skeleton key={id} className="h-[200px]" />,
+              {/* Server grid / table */}
+              {isLoading ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
+                    (id) => (
+                      <Skeleton key={id} className="h-[200px]" />
+                    ),
                   )}
-                {!isLoading &&
-                  filteredServers.map((server) => {
+                </div>
+              ) : viewMode === "grid" ? (
+                <div
+                  ref={setGridElement}
+                  className="grid grid-cols-1 xl:grid-cols-2 gap-6"
+                >
+                  {filteredServers.map((server) => {
                     const serverKey = `${server.registryId}-${server.registrySpecifier}`;
                     return (
                       <ServerCard
@@ -224,7 +235,39 @@ export default function Catalog() {
                       />
                     );
                   })}
-              </div>
+                </div>
+              ) : (
+                <div ref={setGridElement}>
+                  <DotTable
+                    headers={[
+                      { label: "", className: "w-10" },
+                      { label: "Name" },
+                      { label: "Version" },
+                      { label: "Description" },
+                      { label: "Tools" },
+                      { label: "" },
+                    ]}
+                  >
+                    {filteredServers.map((server) => {
+                      const serverKey = `${server.registryId}-${server.registrySpecifier}`;
+                      return (
+                        <ServerTableRow
+                          key={serverKey}
+                          server={server}
+                          detailHref={routes.catalog.detail.href(
+                            encodeURIComponent(server.registrySpecifier),
+                          )}
+                          externalMcps={externalMcps}
+                          isSelected={selectedServers.has(serverKey)}
+                          onToggleSelect={() =>
+                            toggleServerSelection(serverKey)
+                          }
+                        />
+                      );
+                    })}
+                  </DotTable>
+                </div>
+              )}
 
               {/* Load more trigger */}
               {!isLoading && hasNextPage && !searchQuery && (
