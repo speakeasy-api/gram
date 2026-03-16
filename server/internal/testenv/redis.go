@@ -54,12 +54,6 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			WriteTimeout: 1 * time.Second,
 		})
 
-		t.Cleanup(func() {
-			if err := client.Close(); err != nil {
-				t.Fatalf("failed to close redis client: %v", err)
-			}
-		})
-
 		// Verify the connection is alive before returning. Without this,
 		// the container's mapped port may be open before Redis is fully
 		// ready to speak RESP, causing "can't parse map reply: HTTP/1.1
@@ -69,11 +63,17 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			if err := client.Ping(ctx).Err(); err == nil {
 				break
 			} else if attempt == 9 {
-				client.Close()
+				_ = client.Close()
 				return nil, fmt.Errorf("redis not ready after retries: %w", err)
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
+
+		t.Cleanup(func() {
+			if err := client.Close(); err != nil {
+				t.Fatalf("failed to close redis client: %v", err)
+			}
+		})
 
 		return client, nil
 	}
