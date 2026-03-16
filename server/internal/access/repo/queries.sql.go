@@ -32,6 +32,35 @@ func (q *Queries) DeletePrincipalGrant(ctx context.Context, arg DeletePrincipalG
 	return result.RowsAffected(), nil
 }
 
+const deletePrincipalGrantByTuple = `-- name: DeletePrincipalGrantByTuple :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND resource = $4
+`
+
+type DeletePrincipalGrantByTupleParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Resource       string
+}
+
+// Removes a single grant row matching the exact (org, principal, scope, resource) tuple.
+func (q *Queries) DeletePrincipalGrantByTuple(ctx context.Context, arg DeletePrincipalGrantByTupleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalGrantByTuple,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Resource,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deletePrincipalGrantsByPrincipal = `-- name: DeletePrincipalGrantsByPrincipal :execrows
 DELETE FROM principal_grants
 WHERE organization_id = $1
