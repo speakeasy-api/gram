@@ -17,7 +17,8 @@ import (
 // Endpoints wraps the "access" service endpoints.
 type Endpoints struct {
 	ListGrants   goa.Endpoint
-	UpsertGrant  goa.Endpoint
+	UpsertGrants goa.Endpoint
+	RemoveGrant  goa.Endpoint
 	RemoveGrants goa.Endpoint
 }
 
@@ -27,7 +28,8 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		ListGrants:   NewListGrantsEndpoint(s, a.APIKeyAuth),
-		UpsertGrant:  NewUpsertGrantEndpoint(s, a.APIKeyAuth),
+		UpsertGrants: NewUpsertGrantsEndpoint(s, a.APIKeyAuth),
+		RemoveGrant:  NewRemoveGrantEndpoint(s, a.APIKeyAuth),
 		RemoveGrants: NewRemoveGrantsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -35,7 +37,8 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "access" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListGrants = m(e.ListGrants)
-	e.UpsertGrant = m(e.UpsertGrant)
+	e.UpsertGrants = m(e.UpsertGrants)
+	e.RemoveGrant = m(e.RemoveGrant)
 	e.RemoveGrants = m(e.RemoveGrants)
 }
 
@@ -62,11 +65,11 @@ func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 	}
 }
 
-// NewUpsertGrantEndpoint returns an endpoint function that calls the method
-// "upsertGrant" of service "access".
-func NewUpsertGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewUpsertGrantsEndpoint returns an endpoint function that calls the method
+// "upsertGrants" of service "access".
+func NewUpsertGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UpsertGrantPayload)
+		p := req.(*UpsertGrantsPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -81,7 +84,30 @@ func NewUpsertGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			return nil, err
 		}
-		return s.UpsertGrant(ctx, p)
+		return s.UpsertGrants(ctx, p)
+	}
+}
+
+// NewRemoveGrantEndpoint returns an endpoint function that calls the method
+// "removeGrant" of service "access".
+func NewRemoveGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RemoveGrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RemoveGrant(ctx, p)
 	}
 }
 

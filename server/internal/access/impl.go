@@ -83,28 +83,62 @@ func (s *Service) ListGrants(ctx context.Context, payload *gen.ListGrantsPayload
 	return &gen.ListGrantsResult{Grants: grants}, nil
 }
 
-func (s *Service) UpsertGrant(ctx context.Context, payload *gen.UpsertGrantPayload) (*gen.Grant, error) {
+func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPayload) (*gen.UpsertGrantsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	principal, err := urn.ParsePrincipal(payload.PrincipalUrn)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
+	grants := make([]*gen.Grant, 0, len(payload.Grants))
+
+	for _, form := range payload.Grants {
+		principal, err := urn.ParsePrincipal(form.PrincipalUrn)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
+		}
+
+		row, err := s.repo.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PrincipalUrn:   principal,
+			Scope:          form.Scope,
+			Resource:       form.Resource,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "upsert principal grant").Log(ctx, s.logger)
+		}
+
+		grants = append(grants, grantFromRow(row))
 	}
 
-	row, err := s.repo.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+	return &gen.UpsertGrantsResult{Grants: grants}, nil
+}
+
+func (s *Service) RemoveGrant(ctx context.Context, payload *gen.RemoveGrantPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	principal, err := urn.ParsePrincipal(payload.PrincipalUrn)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
+	}
+
+	rows, err := s.repo.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrn:   principal,
 		Scope:          payload.Scope,
 		Resource:       payload.Resource,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "upsert principal grant").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "remove principal grant").Log(ctx, s.logger)
 	}
 
-	return grantFromRow(row), nil
+	if rows == 0 {
+		return oops.C(oops.CodeNotFound)
+	}
+
+	return nil
 }
 
 func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPayload) error {

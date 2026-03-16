@@ -16,15 +16,17 @@ import (
 // Client is the "access" service client.
 type Client struct {
 	ListGrantsEndpoint   goa.Endpoint
-	UpsertGrantEndpoint  goa.Endpoint
+	UpsertGrantsEndpoint goa.Endpoint
+	RemoveGrantEndpoint  goa.Endpoint
 	RemoveGrantsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listGrants, upsertGrant, removeGrants goa.Endpoint) *Client {
+func NewClient(listGrants, upsertGrants, removeGrant, removeGrants goa.Endpoint) *Client {
 	return &Client{
 		ListGrantsEndpoint:   listGrants,
-		UpsertGrantEndpoint:  upsertGrant,
+		UpsertGrantsEndpoint: upsertGrants,
+		RemoveGrantEndpoint:  removeGrant,
 		RemoveGrantsEndpoint: removeGrants,
 	}
 }
@@ -51,8 +53,8 @@ func (c *Client) ListGrants(ctx context.Context, p *ListGrantsPayload) (res *Lis
 	return ires.(*ListGrantsResult), nil
 }
 
-// UpsertGrant calls the "upsertGrant" endpoint of the "access" service.
-// UpsertGrant may return the following errors:
+// UpsertGrants calls the "upsertGrants" endpoint of the "access" service.
+// UpsertGrants may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -64,13 +66,31 @@ func (c *Client) ListGrants(ctx context.Context, p *ListGrantsPayload) (res *Lis
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpsertGrant(ctx context.Context, p *UpsertGrantPayload) (res *Grant, err error) {
+func (c *Client) UpsertGrants(ctx context.Context, p *UpsertGrantsPayload) (res *UpsertGrantsResult, err error) {
 	var ires any
-	ires, err = c.UpsertGrantEndpoint(ctx, p)
+	ires, err = c.UpsertGrantsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*Grant), nil
+	return ires.(*UpsertGrantsResult), nil
+}
+
+// RemoveGrant calls the "removeGrant" endpoint of the "access" service.
+// RemoveGrant may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RemoveGrant(ctx context.Context, p *RemoveGrantPayload) (err error) {
+	_, err = c.RemoveGrantEndpoint(ctx, p)
+	return
 }
 
 // RemoveGrants calls the "removeGrants" endpoint of the "access" service.

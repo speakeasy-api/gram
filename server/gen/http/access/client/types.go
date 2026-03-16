@@ -8,20 +8,17 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	access "github.com/speakeasy-api/gram/server/gen/access"
 	goa "goa.design/goa/v3/pkg"
 )
 
-// UpsertGrantRequestBody is the type of the "access" service "upsertGrant"
+// UpsertGrantsRequestBody is the type of the "access" service "upsertGrants"
 // endpoint HTTP request body.
-type UpsertGrantRequestBody struct {
-	// The principal URN (e.g. "user:user_abc", "role:admin").
-	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	// The scope to grant (e.g. "build:read", "mcp:connect").
-	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
-	// access.
-	Resource string `form:"resource" json:"resource" xml:"resource"`
+type UpsertGrantsRequestBody struct {
+	// The list of grants to upsert.
+	Grants []*UpsertGrantFormRequestBody `form:"grants" json:"grants" xml:"grants"`
 }
 
 // ListGrantsResponseBody is the type of the "access" service "listGrants"
@@ -31,26 +28,11 @@ type ListGrantsResponseBody struct {
 	Grants []*GrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
-// UpsertGrantResponseBody is the type of the "access" service "upsertGrant"
+// UpsertGrantsResponseBody is the type of the "access" service "upsertGrants"
 // endpoint HTTP response body.
-type UpsertGrantResponseBody struct {
-	// Unique identifier of the grant.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The organization this grant belongs to.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The principal URN (e.g. "user:user_abc", "role:admin").
-	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
-	// The type portion of the principal URN (e.g. "user", "role"). Derived from
-	// principal_urn.
-	PrincipalType *string `form:"principal_type,omitempty" json:"principal_type,omitempty" xml:"principal_type,omitempty"`
-	// The scope being granted (e.g. "build:read").
-	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// The resource this grant applies to. "*" means unrestricted.
-	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
-	// When the grant was created.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the grant was last updated.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+type UpsertGrantsResponseBody struct {
+	// The list of grants that were added or updated.
+	Grants []*GrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
 // ListGrantsUnauthorizedResponseBody is the type of the "access" service
@@ -233,9 +215,9 @@ type ListGrantsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantUnauthorizedResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "unauthorized" error.
-type UpsertGrantUnauthorizedResponseBody struct {
+// UpsertGrantsUnauthorizedResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "unauthorized" error.
+type UpsertGrantsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -251,9 +233,9 @@ type UpsertGrantUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantForbiddenResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "forbidden" error.
-type UpsertGrantForbiddenResponseBody struct {
+// UpsertGrantsForbiddenResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "forbidden" error.
+type UpsertGrantsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -269,9 +251,9 @@ type UpsertGrantForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantBadRequestResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "bad_request" error.
-type UpsertGrantBadRequestResponseBody struct {
+// UpsertGrantsBadRequestResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "bad_request" error.
+type UpsertGrantsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -287,9 +269,9 @@ type UpsertGrantBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantNotFoundResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "not_found" error.
-type UpsertGrantNotFoundResponseBody struct {
+// UpsertGrantsNotFoundResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "not_found" error.
+type UpsertGrantsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -305,9 +287,9 @@ type UpsertGrantNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantConflictResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "conflict" error.
-type UpsertGrantConflictResponseBody struct {
+// UpsertGrantsConflictResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "conflict" error.
+type UpsertGrantsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -323,9 +305,9 @@ type UpsertGrantConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantUnsupportedMediaResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "unsupported_media" error.
-type UpsertGrantUnsupportedMediaResponseBody struct {
+// UpsertGrantsUnsupportedMediaResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "unsupported_media" error.
+type UpsertGrantsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -341,9 +323,9 @@ type UpsertGrantUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantInvalidResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "invalid" error.
-type UpsertGrantInvalidResponseBody struct {
+// UpsertGrantsInvalidResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "invalid" error.
+type UpsertGrantsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -359,10 +341,10 @@ type UpsertGrantInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantInvariantViolationResponseBody is the type of the "access"
-// service "upsertGrant" endpoint HTTP response body for the
+// UpsertGrantsInvariantViolationResponseBody is the type of the "access"
+// service "upsertGrants" endpoint HTTP response body for the
 // "invariant_violation" error.
-type UpsertGrantInvariantViolationResponseBody struct {
+type UpsertGrantsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -378,9 +360,9 @@ type UpsertGrantInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantUnexpectedResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "unexpected" error.
-type UpsertGrantUnexpectedResponseBody struct {
+// UpsertGrantsUnexpectedResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "unexpected" error.
+type UpsertGrantsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -396,9 +378,190 @@ type UpsertGrantUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGrantGatewayErrorResponseBody is the type of the "access" service
-// "upsertGrant" endpoint HTTP response body for the "gateway_error" error.
-type UpsertGrantGatewayErrorResponseBody struct {
+// UpsertGrantsGatewayErrorResponseBody is the type of the "access" service
+// "upsertGrants" endpoint HTTP response body for the "gateway_error" error.
+type UpsertGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantUnauthorizedResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "unauthorized" error.
+type RemoveGrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantForbiddenResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "forbidden" error.
+type RemoveGrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantBadRequestResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "bad_request" error.
+type RemoveGrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantNotFoundResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "not_found" error.
+type RemoveGrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantConflictResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "conflict" error.
+type RemoveGrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantUnsupportedMediaResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "unsupported_media" error.
+type RemoveGrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantInvalidResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "invalid" error.
+type RemoveGrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantInvariantViolationResponseBody is the type of the "access"
+// service "removeGrant" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RemoveGrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantUnexpectedResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "unexpected" error.
+type RemoveGrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveGrantGatewayErrorResponseBody is the type of the "access" service
+// "removeGrant" endpoint HTTP response body for the "gateway_error" error.
+type RemoveGrantGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -616,19 +779,32 @@ type GrantResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// NewUpsertGrantRequestBody builds the HTTP request body from the payload of
-// the "upsertGrant" endpoint of the "access" service.
-func NewUpsertGrantRequestBody(p *access.UpsertGrantPayload) *UpsertGrantRequestBody {
-	body := &UpsertGrantRequestBody{
-		PrincipalUrn: p.PrincipalUrn,
-		Scope:        p.Scope,
-		Resource:     p.Resource,
-	}
-	{
-		var zero string
-		if body.Resource == zero {
-			body.Resource = "*"
+// UpsertGrantFormRequestBody is used to define fields on request body types.
+type UpsertGrantFormRequestBody struct {
+	// The principal URN (e.g. "user:user_abc", "role:admin").
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// The scope to grant (e.g. "build:read", "mcp:connect").
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
+	// access.
+	Resource string `form:"resource" json:"resource" xml:"resource"`
+}
+
+// NewUpsertGrantsRequestBody builds the HTTP request body from the payload of
+// the "upsertGrants" endpoint of the "access" service.
+func NewUpsertGrantsRequestBody(p *access.UpsertGrantsPayload) *UpsertGrantsRequestBody {
+	body := &UpsertGrantsRequestBody{}
+	if p.Grants != nil {
+		body.Grants = make([]*UpsertGrantFormRequestBody, len(p.Grants))
+		for i, val := range p.Grants {
+			if val == nil {
+				body.Grants[i] = nil
+				continue
+			}
+			body.Grants[i] = marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody(val)
 		}
+	} else {
+		body.Grants = []*UpsertGrantFormRequestBody{}
 	}
 	return body
 }
@@ -799,26 +975,25 @@ func NewListGrantsGatewayError(body *ListGrantsGatewayErrorResponseBody) *goa.Se
 	return v
 }
 
-// NewUpsertGrantGrantOK builds a "access" service "upsertGrant" endpoint
+// NewUpsertGrantsResultOK builds a "access" service "upsertGrants" endpoint
 // result from a HTTP "OK" response.
-func NewUpsertGrantGrantOK(body *UpsertGrantResponseBody) *access.Grant {
-	v := &access.Grant{
-		ID:             *body.ID,
-		OrganizationID: *body.OrganizationID,
-		PrincipalUrn:   *body.PrincipalUrn,
-		PrincipalType:  *body.PrincipalType,
-		Scope:          *body.Scope,
-		Resource:       *body.Resource,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+func NewUpsertGrantsResultOK(body *UpsertGrantsResponseBody) *access.UpsertGrantsResult {
+	v := &access.UpsertGrantsResult{}
+	v.Grants = make([]*access.Grant, len(body.Grants))
+	for i, val := range body.Grants {
+		if val == nil {
+			v.Grants[i] = nil
+			continue
+		}
+		v.Grants[i] = unmarshalGrantResponseBodyToAccessGrant(val)
 	}
 
 	return v
 }
 
-// NewUpsertGrantUnauthorized builds a access service upsertGrant endpoint
+// NewUpsertGrantsUnauthorized builds a access service upsertGrants endpoint
 // unauthorized error.
-func NewUpsertGrantUnauthorized(body *UpsertGrantUnauthorizedResponseBody) *goa.ServiceError {
+func NewUpsertGrantsUnauthorized(body *UpsertGrantsUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -831,9 +1006,9 @@ func NewUpsertGrantUnauthorized(body *UpsertGrantUnauthorizedResponseBody) *goa.
 	return v
 }
 
-// NewUpsertGrantForbidden builds a access service upsertGrant endpoint
+// NewUpsertGrantsForbidden builds a access service upsertGrants endpoint
 // forbidden error.
-func NewUpsertGrantForbidden(body *UpsertGrantForbiddenResponseBody) *goa.ServiceError {
+func NewUpsertGrantsForbidden(body *UpsertGrantsForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -846,9 +1021,9 @@ func NewUpsertGrantForbidden(body *UpsertGrantForbiddenResponseBody) *goa.Servic
 	return v
 }
 
-// NewUpsertGrantBadRequest builds a access service upsertGrant endpoint
+// NewUpsertGrantsBadRequest builds a access service upsertGrants endpoint
 // bad_request error.
-func NewUpsertGrantBadRequest(body *UpsertGrantBadRequestResponseBody) *goa.ServiceError {
+func NewUpsertGrantsBadRequest(body *UpsertGrantsBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -861,9 +1036,9 @@ func NewUpsertGrantBadRequest(body *UpsertGrantBadRequestResponseBody) *goa.Serv
 	return v
 }
 
-// NewUpsertGrantNotFound builds a access service upsertGrant endpoint
+// NewUpsertGrantsNotFound builds a access service upsertGrants endpoint
 // not_found error.
-func NewUpsertGrantNotFound(body *UpsertGrantNotFoundResponseBody) *goa.ServiceError {
+func NewUpsertGrantsNotFound(body *UpsertGrantsNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -876,9 +1051,39 @@ func NewUpsertGrantNotFound(body *UpsertGrantNotFoundResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewUpsertGrantConflict builds a access service upsertGrant endpoint conflict
+// NewUpsertGrantsConflict builds a access service upsertGrants endpoint
+// conflict error.
+func NewUpsertGrantsConflict(body *UpsertGrantsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertGrantsUnsupportedMedia builds a access service upsertGrants
+// endpoint unsupported_media error.
+func NewUpsertGrantsUnsupportedMedia(body *UpsertGrantsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertGrantsInvalid builds a access service upsertGrants endpoint invalid
 // error.
-func NewUpsertGrantConflict(body *UpsertGrantConflictResponseBody) *goa.ServiceError {
+func NewUpsertGrantsInvalid(body *UpsertGrantsInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -891,39 +1096,9 @@ func NewUpsertGrantConflict(body *UpsertGrantConflictResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewUpsertGrantUnsupportedMedia builds a access service upsertGrant endpoint
-// unsupported_media error.
-func NewUpsertGrantUnsupportedMedia(body *UpsertGrantUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpsertGrantInvalid builds a access service upsertGrant endpoint invalid
-// error.
-func NewUpsertGrantInvalid(body *UpsertGrantInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpsertGrantInvariantViolation builds a access service upsertGrant
+// NewUpsertGrantsInvariantViolation builds a access service upsertGrants
 // endpoint invariant_violation error.
-func NewUpsertGrantInvariantViolation(body *UpsertGrantInvariantViolationResponseBody) *goa.ServiceError {
+func NewUpsertGrantsInvariantViolation(body *UpsertGrantsInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -936,9 +1111,9 @@ func NewUpsertGrantInvariantViolation(body *UpsertGrantInvariantViolationRespons
 	return v
 }
 
-// NewUpsertGrantUnexpected builds a access service upsertGrant endpoint
+// NewUpsertGrantsUnexpected builds a access service upsertGrants endpoint
 // unexpected error.
-func NewUpsertGrantUnexpected(body *UpsertGrantUnexpectedResponseBody) *goa.ServiceError {
+func NewUpsertGrantsUnexpected(body *UpsertGrantsUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -951,9 +1126,159 @@ func NewUpsertGrantUnexpected(body *UpsertGrantUnexpectedResponseBody) *goa.Serv
 	return v
 }
 
-// NewUpsertGrantGatewayError builds a access service upsertGrant endpoint
+// NewUpsertGrantsGatewayError builds a access service upsertGrants endpoint
 // gateway_error error.
-func NewUpsertGrantGatewayError(body *UpsertGrantGatewayErrorResponseBody) *goa.ServiceError {
+func NewUpsertGrantsGatewayError(body *UpsertGrantsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantUnauthorized builds a access service removeGrant endpoint
+// unauthorized error.
+func NewRemoveGrantUnauthorized(body *RemoveGrantUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantForbidden builds a access service removeGrant endpoint
+// forbidden error.
+func NewRemoveGrantForbidden(body *RemoveGrantForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantBadRequest builds a access service removeGrant endpoint
+// bad_request error.
+func NewRemoveGrantBadRequest(body *RemoveGrantBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantNotFound builds a access service removeGrant endpoint
+// not_found error.
+func NewRemoveGrantNotFound(body *RemoveGrantNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantConflict builds a access service removeGrant endpoint conflict
+// error.
+func NewRemoveGrantConflict(body *RemoveGrantConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantUnsupportedMedia builds a access service removeGrant endpoint
+// unsupported_media error.
+func NewRemoveGrantUnsupportedMedia(body *RemoveGrantUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantInvalid builds a access service removeGrant endpoint invalid
+// error.
+func NewRemoveGrantInvalid(body *RemoveGrantInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantInvariantViolation builds a access service removeGrant
+// endpoint invariant_violation error.
+func NewRemoveGrantInvariantViolation(body *RemoveGrantInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantUnexpected builds a access service removeGrant endpoint
+// unexpected error.
+func NewRemoveGrantUnexpected(body *RemoveGrantUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveGrantGatewayError builds a access service removeGrant endpoint
+// gateway_error error.
+func NewRemoveGrantGatewayError(body *RemoveGrantGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1132,41 +1457,18 @@ func ValidateListGrantsResponseBody(body *ListGrantsResponseBody) (err error) {
 	return
 }
 
-// ValidateUpsertGrantResponseBody runs the validations defined on
-// UpsertGrantResponseBody
-func ValidateUpsertGrantResponseBody(body *UpsertGrantResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+// ValidateUpsertGrantsResponseBody runs the validations defined on
+// UpsertGrantsResponseBody
+func ValidateUpsertGrantsResponseBody(body *UpsertGrantsResponseBody) (err error) {
+	if body.Grants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
 	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.PrincipalUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
-	}
-	if body.PrincipalType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("principal_type", "body"))
-	}
-	if body.Scope == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
-	}
-	if body.Resource == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	for _, e := range body.Grants {
+		if e != nil {
+			if err2 := ValidateGrantResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -1411,9 +1713,9 @@ func ValidateListGrantsGatewayErrorResponseBody(body *ListGrantsGatewayErrorResp
 	return
 }
 
-// ValidateUpsertGrantUnauthorizedResponseBody runs the validations defined on
-// upsertGrant_unauthorized_response_body
-func ValidateUpsertGrantUnauthorizedResponseBody(body *UpsertGrantUnauthorizedResponseBody) (err error) {
+// ValidateUpsertGrantsUnauthorizedResponseBody runs the validations defined on
+// upsertGrants_unauthorized_response_body
+func ValidateUpsertGrantsUnauthorizedResponseBody(body *UpsertGrantsUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1435,9 +1737,9 @@ func ValidateUpsertGrantUnauthorizedResponseBody(body *UpsertGrantUnauthorizedRe
 	return
 }
 
-// ValidateUpsertGrantForbiddenResponseBody runs the validations defined on
-// upsertGrant_forbidden_response_body
-func ValidateUpsertGrantForbiddenResponseBody(body *UpsertGrantForbiddenResponseBody) (err error) {
+// ValidateUpsertGrantsForbiddenResponseBody runs the validations defined on
+// upsertGrants_forbidden_response_body
+func ValidateUpsertGrantsForbiddenResponseBody(body *UpsertGrantsForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1459,9 +1761,9 @@ func ValidateUpsertGrantForbiddenResponseBody(body *UpsertGrantForbiddenResponse
 	return
 }
 
-// ValidateUpsertGrantBadRequestResponseBody runs the validations defined on
-// upsertGrant_bad_request_response_body
-func ValidateUpsertGrantBadRequestResponseBody(body *UpsertGrantBadRequestResponseBody) (err error) {
+// ValidateUpsertGrantsBadRequestResponseBody runs the validations defined on
+// upsertGrants_bad_request_response_body
+func ValidateUpsertGrantsBadRequestResponseBody(body *UpsertGrantsBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1483,9 +1785,9 @@ func ValidateUpsertGrantBadRequestResponseBody(body *UpsertGrantBadRequestRespon
 	return
 }
 
-// ValidateUpsertGrantNotFoundResponseBody runs the validations defined on
-// upsertGrant_not_found_response_body
-func ValidateUpsertGrantNotFoundResponseBody(body *UpsertGrantNotFoundResponseBody) (err error) {
+// ValidateUpsertGrantsNotFoundResponseBody runs the validations defined on
+// upsertGrants_not_found_response_body
+func ValidateUpsertGrantsNotFoundResponseBody(body *UpsertGrantsNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1507,9 +1809,9 @@ func ValidateUpsertGrantNotFoundResponseBody(body *UpsertGrantNotFoundResponseBo
 	return
 }
 
-// ValidateUpsertGrantConflictResponseBody runs the validations defined on
-// upsertGrant_conflict_response_body
-func ValidateUpsertGrantConflictResponseBody(body *UpsertGrantConflictResponseBody) (err error) {
+// ValidateUpsertGrantsConflictResponseBody runs the validations defined on
+// upsertGrants_conflict_response_body
+func ValidateUpsertGrantsConflictResponseBody(body *UpsertGrantsConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1531,9 +1833,9 @@ func ValidateUpsertGrantConflictResponseBody(body *UpsertGrantConflictResponseBo
 	return
 }
 
-// ValidateUpsertGrantUnsupportedMediaResponseBody runs the validations defined
-// on upsertGrant_unsupported_media_response_body
-func ValidateUpsertGrantUnsupportedMediaResponseBody(body *UpsertGrantUnsupportedMediaResponseBody) (err error) {
+// ValidateUpsertGrantsUnsupportedMediaResponseBody runs the validations
+// defined on upsertGrants_unsupported_media_response_body
+func ValidateUpsertGrantsUnsupportedMediaResponseBody(body *UpsertGrantsUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1555,9 +1857,9 @@ func ValidateUpsertGrantUnsupportedMediaResponseBody(body *UpsertGrantUnsupporte
 	return
 }
 
-// ValidateUpsertGrantInvalidResponseBody runs the validations defined on
-// upsertGrant_invalid_response_body
-func ValidateUpsertGrantInvalidResponseBody(body *UpsertGrantInvalidResponseBody) (err error) {
+// ValidateUpsertGrantsInvalidResponseBody runs the validations defined on
+// upsertGrants_invalid_response_body
+func ValidateUpsertGrantsInvalidResponseBody(body *UpsertGrantsInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1579,9 +1881,9 @@ func ValidateUpsertGrantInvalidResponseBody(body *UpsertGrantInvalidResponseBody
 	return
 }
 
-// ValidateUpsertGrantInvariantViolationResponseBody runs the validations
-// defined on upsertGrant_invariant_violation_response_body
-func ValidateUpsertGrantInvariantViolationResponseBody(body *UpsertGrantInvariantViolationResponseBody) (err error) {
+// ValidateUpsertGrantsInvariantViolationResponseBody runs the validations
+// defined on upsertGrants_invariant_violation_response_body
+func ValidateUpsertGrantsInvariantViolationResponseBody(body *UpsertGrantsInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1603,9 +1905,9 @@ func ValidateUpsertGrantInvariantViolationResponseBody(body *UpsertGrantInvarian
 	return
 }
 
-// ValidateUpsertGrantUnexpectedResponseBody runs the validations defined on
-// upsertGrant_unexpected_response_body
-func ValidateUpsertGrantUnexpectedResponseBody(body *UpsertGrantUnexpectedResponseBody) (err error) {
+// ValidateUpsertGrantsUnexpectedResponseBody runs the validations defined on
+// upsertGrants_unexpected_response_body
+func ValidateUpsertGrantsUnexpectedResponseBody(body *UpsertGrantsUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1627,9 +1929,249 @@ func ValidateUpsertGrantUnexpectedResponseBody(body *UpsertGrantUnexpectedRespon
 	return
 }
 
-// ValidateUpsertGrantGatewayErrorResponseBody runs the validations defined on
-// upsertGrant_gateway_error_response_body
-func ValidateUpsertGrantGatewayErrorResponseBody(body *UpsertGrantGatewayErrorResponseBody) (err error) {
+// ValidateUpsertGrantsGatewayErrorResponseBody runs the validations defined on
+// upsertGrants_gateway_error_response_body
+func ValidateUpsertGrantsGatewayErrorResponseBody(body *UpsertGrantsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantUnauthorizedResponseBody runs the validations defined on
+// removeGrant_unauthorized_response_body
+func ValidateRemoveGrantUnauthorizedResponseBody(body *RemoveGrantUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantForbiddenResponseBody runs the validations defined on
+// removeGrant_forbidden_response_body
+func ValidateRemoveGrantForbiddenResponseBody(body *RemoveGrantForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantBadRequestResponseBody runs the validations defined on
+// removeGrant_bad_request_response_body
+func ValidateRemoveGrantBadRequestResponseBody(body *RemoveGrantBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantNotFoundResponseBody runs the validations defined on
+// removeGrant_not_found_response_body
+func ValidateRemoveGrantNotFoundResponseBody(body *RemoveGrantNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantConflictResponseBody runs the validations defined on
+// removeGrant_conflict_response_body
+func ValidateRemoveGrantConflictResponseBody(body *RemoveGrantConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantUnsupportedMediaResponseBody runs the validations defined
+// on removeGrant_unsupported_media_response_body
+func ValidateRemoveGrantUnsupportedMediaResponseBody(body *RemoveGrantUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantInvalidResponseBody runs the validations defined on
+// removeGrant_invalid_response_body
+func ValidateRemoveGrantInvalidResponseBody(body *RemoveGrantInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantInvariantViolationResponseBody runs the validations
+// defined on removeGrant_invariant_violation_response_body
+func ValidateRemoveGrantInvariantViolationResponseBody(body *RemoveGrantInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantUnexpectedResponseBody runs the validations defined on
+// removeGrant_unexpected_response_body
+func ValidateRemoveGrantUnexpectedResponseBody(body *RemoveGrantUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveGrantGatewayErrorResponseBody runs the validations defined on
+// removeGrant_gateway_error_response_body
+func ValidateRemoveGrantGatewayErrorResponseBody(body *RemoveGrantGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1925,6 +2467,27 @@ func ValidateGrantResponseBody(body *GrantResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpsertGrantFormRequestBody runs the validations defined on
+// UpsertGrantFormRequestBody
+func ValidateUpsertGrantFormRequestBody(body *UpsertGrantFormRequestBody) (err error) {
+	if utf8.RuneCountInString(body.PrincipalUrn) < 3 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 3, true))
+	}
+	if utf8.RuneCountInString(body.PrincipalUrn) > 260 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 260, false))
+	}
+	if utf8.RuneCountInString(body.Scope) < 3 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 3, true))
+	}
+	if utf8.RuneCountInString(body.Scope) > 60 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 60, false))
+	}
+	if utf8.RuneCountInString(body.Resource) > 260 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 260, false))
 	}
 	return
 }

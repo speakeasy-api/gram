@@ -20,7 +20,8 @@ import (
 type Server struct {
 	Mounts       []*MountPoint
 	ListGrants   http.Handler
-	UpsertGrant  http.Handler
+	UpsertGrants http.Handler
+	RemoveGrant  http.Handler
 	RemoveGrants http.Handler
 }
 
@@ -52,11 +53,13 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
-			{"UpsertGrant", "POST", "/rpc/access.upsertGrant"},
+			{"UpsertGrants", "POST", "/rpc/access.upsertGrants"},
+			{"RemoveGrant", "DELETE", "/rpc/access.removeGrant"},
 			{"RemoveGrants", "DELETE", "/rpc/access.removeGrants"},
 		},
 		ListGrants:   NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
-		UpsertGrant:  NewUpsertGrantHandler(e.UpsertGrant, mux, decoder, encoder, errhandler, formatter),
+		UpsertGrants: NewUpsertGrantsHandler(e.UpsertGrants, mux, decoder, encoder, errhandler, formatter),
+		RemoveGrant:  NewRemoveGrantHandler(e.RemoveGrant, mux, decoder, encoder, errhandler, formatter),
 		RemoveGrants: NewRemoveGrantsHandler(e.RemoveGrants, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -67,7 +70,8 @@ func (s *Server) Service() string { return "access" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListGrants = m(s.ListGrants)
-	s.UpsertGrant = m(s.UpsertGrant)
+	s.UpsertGrants = m(s.UpsertGrants)
+	s.RemoveGrant = m(s.RemoveGrant)
 	s.RemoveGrants = m(s.RemoveGrants)
 }
 
@@ -77,7 +81,8 @@ func (s *Server) MethodNames() []string { return access.MethodNames[:] }
 // Mount configures the mux to serve the access endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListGrantsHandler(mux, h.ListGrants)
-	MountUpsertGrantHandler(mux, h.UpsertGrant)
+	MountUpsertGrantsHandler(mux, h.UpsertGrants)
+	MountRemoveGrantHandler(mux, h.RemoveGrant)
 	MountRemoveGrantsHandler(mux, h.RemoveGrants)
 }
 
@@ -139,21 +144,21 @@ func NewListGrantsHandler(
 	})
 }
 
-// MountUpsertGrantHandler configures the mux to serve the "access" service
-// "upsertGrant" endpoint.
-func MountUpsertGrantHandler(mux goahttp.Muxer, h http.Handler) {
+// MountUpsertGrantsHandler configures the mux to serve the "access" service
+// "upsertGrants" endpoint.
+func MountUpsertGrantsHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.upsertGrant", f)
+	mux.Handle("POST", "/rpc/access.upsertGrants", f)
 }
 
-// NewUpsertGrantHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "upsertGrant" endpoint.
-func NewUpsertGrantHandler(
+// NewUpsertGrantsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "upsertGrants" endpoint.
+func NewUpsertGrantsHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -162,13 +167,66 @@ func NewUpsertGrantHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeUpsertGrantRequest(mux, decoder)
-		encodeResponse = EncodeUpsertGrantResponse(encoder)
-		encodeError    = EncodeUpsertGrantError(encoder, formatter)
+		decodeRequest  = DecodeUpsertGrantsRequest(mux, decoder)
+		encodeResponse = EncodeUpsertGrantsResponse(encoder)
+		encodeError    = EncodeUpsertGrantsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "upsertGrant")
+		ctx = context.WithValue(ctx, goa.MethodKey, "upsertGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRemoveGrantHandler configures the mux to serve the "access" service
+// "removeGrant" endpoint.
+func MountRemoveGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/access.removeGrant", f)
+}
+
+// NewRemoveGrantHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "removeGrant" endpoint.
+func NewRemoveGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRemoveGrantRequest(mux, decoder)
+		encodeResponse = EncodeRemoveGrantResponse(encoder)
+		encodeError    = EncodeRemoveGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "removeGrant")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

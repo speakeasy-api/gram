@@ -218,25 +218,25 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 	}
 }
 
-// EncodeUpsertGrantResponse returns an encoder for responses returned by the
-// access upsertGrant endpoint.
-func EncodeUpsertGrantResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeUpsertGrantsResponse returns an encoder for responses returned by the
+// access upsertGrants endpoint.
+func EncodeUpsertGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*access.Grant)
+		res, _ := v.(*access.UpsertGrantsResult)
 		enc := encoder(ctx, w)
-		body := NewUpsertGrantResponseBody(res)
+		body := NewUpsertGrantsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeUpsertGrantRequest returns a decoder for requests sent to the access
-// upsertGrant endpoint.
-func DecodeUpsertGrantRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpsertGrantPayload, error) {
-	return func(r *http.Request) (*access.UpsertGrantPayload, error) {
-		var payload *access.UpsertGrantPayload
+// DecodeUpsertGrantsRequest returns a decoder for requests sent to the access
+// upsertGrants endpoint.
+func DecodeUpsertGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpsertGrantsPayload, error) {
+	return func(r *http.Request) (*access.UpsertGrantsPayload, error) {
+		var payload *access.UpsertGrantsPayload
 		var (
-			body UpsertGrantRequestBody
+			body UpsertGrantsRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -250,7 +250,7 @@ func DecodeUpsertGrantRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateUpsertGrantRequestBody(&body)
+		err = ValidateUpsertGrantsRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -262,7 +262,7 @@ func DecodeUpsertGrantRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpsertGrantPayload(&body, sessionToken)
+		payload = NewUpsertGrantsPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -275,9 +275,9 @@ func DecodeUpsertGrantRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	}
 }
 
-// EncodeUpsertGrantError returns an encoder for errors returned by the
-// upsertGrant access endpoint.
-func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeUpsertGrantsError returns an encoder for errors returned by the
+// upsertGrants access endpoint.
+func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -294,7 +294,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantUnauthorizedResponseBody(res)
+				body = NewUpsertGrantsUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -308,7 +308,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantForbiddenResponseBody(res)
+				body = NewUpsertGrantsForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -322,7 +322,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantBadRequestResponseBody(res)
+				body = NewUpsertGrantsBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -336,7 +336,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantNotFoundResponseBody(res)
+				body = NewUpsertGrantsNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -350,7 +350,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantConflictResponseBody(res)
+				body = NewUpsertGrantsConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -364,7 +364,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantUnsupportedMediaResponseBody(res)
+				body = NewUpsertGrantsUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -378,7 +378,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantInvalidResponseBody(res)
+				body = NewUpsertGrantsInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -392,7 +392,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantInvariantViolationResponseBody(res)
+				body = NewUpsertGrantsInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -406,7 +406,7 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantUnexpectedResponseBody(res)
+				body = NewUpsertGrantsUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -420,7 +420,234 @@ func EncodeUpsertGrantError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantGatewayErrorResponseBody(res)
+				body = NewUpsertGrantsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeRemoveGrantResponse returns an encoder for responses returned by the
+// access removeGrant endpoint.
+func EncodeRemoveGrantResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeRemoveGrantRequest returns a decoder for requests sent to the access
+// removeGrant endpoint.
+func DecodeRemoveGrantRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.RemoveGrantPayload, error) {
+	return func(r *http.Request) (*access.RemoveGrantPayload, error) {
+		var payload *access.RemoveGrantPayload
+		var (
+			principalUrn string
+			scope        string
+			resource     string
+			sessionToken *string
+			err          error
+		)
+		qp := r.URL.Query()
+		principalUrn = qp.Get("principal_urn")
+		if principalUrn == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "query string"))
+		}
+		if utf8.RuneCountInString(principalUrn) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 3, true))
+		}
+		if utf8.RuneCountInString(principalUrn) > 260 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 260, false))
+		}
+		scope = qp.Get("scope")
+		if scope == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("scope", "query string"))
+		}
+		if utf8.RuneCountInString(scope) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("scope", scope, utf8.RuneCountInString(scope), 3, true))
+		}
+		if utf8.RuneCountInString(scope) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("scope", scope, utf8.RuneCountInString(scope), 60, false))
+		}
+		resourceRaw := qp.Get("resource")
+		if resourceRaw != "" {
+			resource = resourceRaw
+		} else {
+			resource = "*"
+		}
+		if utf8.RuneCountInString(resource) > 260 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("resource", resource, utf8.RuneCountInString(resource), 260, false))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewRemoveGrantPayload(principalUrn, scope, resource, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeRemoveGrantError returns an encoder for errors returned by the
+// removeGrant access endpoint.
+func EncodeRemoveGrantError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRemoveGrantGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -648,6 +875,24 @@ func marshalAccessGrantToGrantResponseBody(v *access.Grant) *GrantResponseBody {
 		Resource:       v.Resource,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm builds a value of
+// type *access.UpsertGrantForm from a value of type
+// *UpsertGrantFormRequestBody.
+func unmarshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm(v *UpsertGrantFormRequestBody) *access.UpsertGrantForm {
+	res := &access.UpsertGrantForm{
+		PrincipalUrn: *v.PrincipalUrn,
+		Scope:        *v.Scope,
+	}
+	if v.Resource != nil {
+		res.Resource = *v.Resource
+	}
+	if v.Resource == nil {
+		res.Resource = "*"
 	}
 
 	return res

@@ -28,21 +28,8 @@ func TestListGrants_ReturnsAllGrantsForOrg(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
-	_, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-		SessionToken: nil,
-		PrincipalUrn: "user:user_abc",
-		Scope:        "build:read",
-		Resource:     "*",
-	})
-	require.NoError(t, err)
-
-	_, err = ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-		SessionToken: nil,
-		PrincipalUrn: "role:admin",
-		Scope:        "org:admin",
-		Resource:     "*",
-	})
-	require.NoError(t, err)
+	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
+	upsertGrant(t, ctx, ti.service, "role:admin", "org:admin", "*")
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{
 		SessionToken: nil,
@@ -56,21 +43,8 @@ func TestListGrants_FiltersByPrincipalURN(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
-	_, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-		SessionToken: nil,
-		PrincipalUrn: "user:user_abc",
-		Scope:        "build:read",
-		Resource:     "*",
-	})
-	require.NoError(t, err)
-
-	_, err = ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-		SessionToken: nil,
-		PrincipalUrn: "role:admin",
-		Scope:        "org:admin",
-		Resource:     "*",
-	})
-	require.NoError(t, err)
+	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
+	upsertGrant(t, ctx, ti.service, "role:admin", "org:admin", "*")
 
 	urn := "user:user_abc"
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{

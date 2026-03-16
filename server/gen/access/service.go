@@ -19,9 +19,13 @@ type Service interface {
 	// List all principal grants for an organization, optionally filtered by
 	// principal URN.
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListGrantsResult, err error)
-	// Create or update a principal grant. If a grant with the same (org,
-	// principal, scope, resource) already exists, the record is kept as is.
-	UpsertGrant(context.Context, *UpsertGrantPayload) (res *Grant, err error)
+	// Create or update one or more principal grants in batch. For each grant, if
+	// one with the same (org, principal, scope, resource) already exists, the
+	// record is kept as is.
+	UpsertGrants(context.Context, *UpsertGrantsPayload) (res *UpsertGrantsResult, err error)
+	// Remove a single grant matching the exact (principal, scope, resource) tuple
+	// within the organization.
+	RemoveGrant(context.Context, *RemoveGrantPayload) (err error)
 	// Remove all grants for a specific principal within the organization.
 	RemoveGrants(context.Context, *RemoveGrantsPayload) (err error)
 }
@@ -46,9 +50,9 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"listGrants", "upsertGrant", "removeGrants"}
+var MethodNames = [4]string{"listGrants", "upsertGrants", "removeGrant", "removeGrants"}
 
-// Grant is the result type of the access service upsertGrant method.
+// A principal grant representing a single RBAC permission.
 type Grant struct {
 	// Unique identifier of the grant.
 	ID string
@@ -84,6 +88,19 @@ type ListGrantsResult struct {
 	Grants []*Grant
 }
 
+// RemoveGrantPayload is the payload type of the access service removeGrant
+// method.
+type RemoveGrantPayload struct {
+	// The principal URN of the grant to remove (e.g. "user:user_abc",
+	// "role:admin").
+	PrincipalUrn string
+	// The scope of the grant to remove (e.g. "build:read").
+	Scope string
+	// The resource of the grant to remove (e.g. "*" or a specific resource ID).
+	Resource     string
+	SessionToken *string
+}
+
 // RemoveGrantsPayload is the payload type of the access service removeGrants
 // method.
 type RemoveGrantsPayload struct {
@@ -93,10 +110,8 @@ type RemoveGrantsPayload struct {
 	SessionToken *string
 }
 
-// UpsertGrantPayload is the payload type of the access service upsertGrant
-// method.
-type UpsertGrantPayload struct {
-	SessionToken *string
+// Form for creating or updating a principal grant.
+type UpsertGrantForm struct {
 	// The principal URN (e.g. "user:user_abc", "role:admin").
 	PrincipalUrn string
 	// The scope to grant (e.g. "build:read", "mcp:connect").
@@ -104,6 +119,21 @@ type UpsertGrantPayload struct {
 	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
 	// access.
 	Resource string
+}
+
+// UpsertGrantsPayload is the payload type of the access service upsertGrants
+// method.
+type UpsertGrantsPayload struct {
+	// The list of grants to upsert.
+	Grants       []*UpsertGrantForm
+	SessionToken *string
+}
+
+// UpsertGrantsResult is the result type of the access service upsertGrants
+// method.
+type UpsertGrantsResult struct {
+	// The list of grants that were added or updated.
+	Grants []*Grant
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

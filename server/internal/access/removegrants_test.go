@@ -16,33 +16,14 @@ func TestRemoveGrants_RemovesAllForPrincipal(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 
 	// Create multiple grants for the same principal
-	_, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-		SessionToken: nil,
-		PrincipalUrn: "user:user_abc",
-		Scope:        "build:read",
-		Resource:     "*",
-	})
-	require.NoError(t, err)
-
-	_, err = ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-		SessionToken: nil,
-		PrincipalUrn: "user:user_abc",
-		Scope:        "mcp:connect",
-		Resource:     "*",
-	})
-	require.NoError(t, err)
+	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
+	upsertGrant(t, ctx, ti.service, "user:user_abc", "mcp:connect", "*")
 
 	// Create a grant for a different principal
-	_, err = ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-		SessionToken: nil,
-		PrincipalUrn: "role:admin",
-		Scope:        "org:admin",
-		Resource:     "*",
-	})
-	require.NoError(t, err)
+	upsertGrant(t, ctx, ti.service, "role:admin", "org:admin", "*")
 
 	// Remove grants for user:user_abc
-	err = ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
+	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		SessionToken: nil,
 		PrincipalUrn: "user:user_abc",
 	})

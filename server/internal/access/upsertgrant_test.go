@@ -9,20 +9,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func TestUpsertGrant_CreatesNewGrant(t *testing.T) {
+func TestUpsertGrants_CreatesNewGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 
-	grant, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		PrincipalUrn: "user:user_abc",
-		Scope:        "build:read",
-		Resource:     "*",
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+		},
 	})
 	require.NoError(t, err)
-	require.NotNil(t, grant)
+	require.Len(t, result.Grants, 1)
 
+	grant := result.Grants[0]
 	require.NotEmpty(t, grant.ID)
 	require.Equal(t, "user:user_abc", grant.PrincipalUrn)
 	require.Equal(t, "user", grant.PrincipalType)
@@ -33,77 +34,74 @@ func TestUpsertGrant_CreatesNewGrant(t *testing.T) {
 	require.NotEmpty(t, grant.OrganizationID)
 }
 
-func TestUpsertGrant_IdempotentForSameTuple(t *testing.T) {
+func TestUpsertGrants_BatchCreatesMultipleGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 
-	grant1, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		PrincipalUrn: "user:user_abc",
-		Scope:        "build:read",
-		Resource:     "*",
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: "user:user_abc", Scope: "mcp:connect", Resource: "*"},
+			{PrincipalUrn: "role:admin", Scope: "org:admin", Resource: "*"},
+		},
 	})
 	require.NoError(t, err)
+	require.Len(t, result.Grants, 3)
 
-	grant2, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
-		SessionToken: nil,
-		PrincipalUrn: "user:user_abc",
-		Scope:        "build:read",
-		Resource:     "*",
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, grant1.ID, grant2.ID)
-	require.Equal(t, grant1.CreatedAt, grant2.CreatedAt)
+	require.Equal(t, "build:read", result.Grants[0].Scope)
+	require.Equal(t, "mcp:connect", result.Grants[1].Scope)
+	require.Equal(t, "role:admin", result.Grants[2].PrincipalUrn)
 }
 
-func TestUpsertGrant_UniqueTuplesCreateSeparateGrants(t *testing.T) {
+func TestUpsertGrants_IdempotentForSameTuple(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	result1, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		SessionToken: nil,
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+		},
+	})
+	require.NoError(t, err)
+
+	result2, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		SessionToken: nil,
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+		},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, result1.Grants[0].ID, result2.Grants[0].ID)
+	require.Equal(t, result1.Grants[0].CreatedAt, result2.Grants[0].CreatedAt)
+}
+
+func TestUpsertGrants_UniqueTuplesCreateSeparateGrants(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name   string
-		grant1 gen.UpsertGrantPayload
-		grant2 gen.UpsertGrantPayload
+		grant1 gen.UpsertGrantForm
+		grant2 gen.UpsertGrantForm
 	}{
 		{
-			name: "different scopes",
-			grant1: gen.UpsertGrantPayload{
-				PrincipalUrn: "user:user_abc",
-				Scope:        "build:read",
-				Resource:     "*",
-			},
-			grant2: gen.UpsertGrantPayload{
-				PrincipalUrn: "user:user_abc",
-				Scope:        "build:write",
-				Resource:     "*",
-			},
+			name:   "different scopes",
+			grant1: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			grant2: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:write", Resource: "*"},
 		},
 		{
-			name: "different resources",
-			grant1: gen.UpsertGrantPayload{
-				PrincipalUrn: "user:user_abc",
-				Scope:        "build:read",
-				Resource:     "project-1",
-			},
-			grant2: gen.UpsertGrantPayload{
-				PrincipalUrn: "user:user_abc",
-				Scope:        "build:read",
-				Resource:     "project-2",
-			},
+			name:   "different resources",
+			grant1: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "project-1"},
+			grant2: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "project-2"},
 		},
 		{
-			name: "different principals",
-			grant1: gen.UpsertGrantPayload{
-				PrincipalUrn: "user:user_abc",
-				Scope:        "build:read",
-				Resource:     "*",
-			},
-			grant2: gen.UpsertGrantPayload{
-				PrincipalUrn: "user:user_def",
-				Scope:        "build:read",
-				Resource:     "*",
-			},
+			name:   "different principals",
+			grant1: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			grant2: gen.UpsertGrantForm{PrincipalUrn: "user:user_def", Scope: "build:read", Resource: "*"},
 		},
 	}
 
@@ -113,44 +111,43 @@ func TestUpsertGrant_UniqueTuplesCreateSeparateGrants(t *testing.T) {
 
 			ctx, ti := newTestAccessService(t)
 
-			g1, err := ti.service.UpsertGrant(ctx, &tt.grant1)
+			result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+				Grants: []*gen.UpsertGrantForm{&tt.grant1, &tt.grant2},
+			})
 			require.NoError(t, err)
-
-			g2, err := ti.service.UpsertGrant(ctx, &tt.grant2)
-			require.NoError(t, err)
-
-			require.NotEqual(t, g1.ID, g2.ID)
+			require.Len(t, result.Grants, 2)
+			require.NotEqual(t, result.Grants[0].ID, result.Grants[1].ID)
 		})
 	}
 }
 
-func TestUpsertGrant_RolePrincipalType(t *testing.T) {
+func TestUpsertGrants_RolePrincipalType(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 
-	grant, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		PrincipalUrn: "role:project:admin",
-		Scope:        "org:admin",
-		Resource:     "*",
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: "role:project:admin", Scope: "org:admin", Resource: "*"},
+		},
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, "role:project:admin", grant.PrincipalUrn)
-	require.Equal(t, "role", grant.PrincipalType)
+	require.Equal(t, "role:project:admin", result.Grants[0].PrincipalUrn)
+	require.Equal(t, "role", result.Grants[0].PrincipalType)
 }
 
-func TestUpsertGrant_InvalidPrincipalURN(t *testing.T) {
+func TestUpsertGrants_InvalidPrincipalURN(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 
-	_, err := ti.service.UpsertGrant(ctx, &gen.UpsertGrantPayload{
+	_, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		PrincipalUrn: "invalid",
-		Scope:        "build:read",
-		Resource:     "*",
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: "invalid", Scope: "build:read", Resource: "*"},
+		},
 	})
 	require.Error(t, err)
 
@@ -159,15 +156,33 @@ func TestUpsertGrant_InvalidPrincipalURN(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
-func TestUpsertGrant_UnauthorizedWithoutAuthContext(t *testing.T) {
+func TestUpsertGrants_FailsOnFirstInvalidURNInBatch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	_, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: "user:valid", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: "invalid", Scope: "build:read", Resource: "*"},
+		},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestUpsertGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestAccessService(t)
 
-	_, err := ti.service.UpsertGrant(t.Context(), &gen.UpsertGrantPayload{
-		PrincipalUrn: "user:user_abc",
-		Scope:        "build:read",
-		Resource:     "*",
+	_, err := ti.service.UpsertGrants(t.Context(), &gen.UpsertGrantsPayload{
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+		},
 	})
 	require.Error(t, err)
 

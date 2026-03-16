@@ -253,13 +253,13 @@ func DecodeListGrantsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
-// BuildUpsertGrantRequest instantiates a HTTP request object with method and
-// path set to call the "access" service "upsertGrant" endpoint
-func (c *Client) BuildUpsertGrantRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertGrantAccessPath()}
+// BuildUpsertGrantsRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "upsertGrants" endpoint
+func (c *Client) BuildUpsertGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertGrantsAccessPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("access", "upsertGrant", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("access", "upsertGrants", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -268,30 +268,30 @@ func (c *Client) BuildUpsertGrantRequest(ctx context.Context, v any) (*http.Requ
 	return req, nil
 }
 
-// EncodeUpsertGrantRequest returns an encoder for requests sent to the access
-// upsertGrant server.
-func EncodeUpsertGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeUpsertGrantsRequest returns an encoder for requests sent to the access
+// upsertGrants server.
+func EncodeUpsertGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*access.UpsertGrantPayload)
+		p, ok := v.(*access.UpsertGrantsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("access", "upsertGrant", "*access.UpsertGrantPayload", v)
+			return goahttp.ErrInvalidType("access", "upsertGrants", "*access.UpsertGrantsPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewUpsertGrantRequestBody(p)
+		body := NewUpsertGrantsRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("access", "upsertGrant", err)
+			return goahttp.ErrEncodingError("access", "upsertGrants", err)
 		}
 		return nil
 	}
 }
 
-// DecodeUpsertGrantResponse returns a decoder for responses returned by the
-// access upsertGrant endpoint. restoreBody controls whether the response body
+// DecodeUpsertGrantsResponse returns a decoder for responses returned by the
+// access upsertGrants endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
-// DecodeUpsertGrantResponse may return the following errors:
+// DecodeUpsertGrantsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -303,7 +303,7 @@ func EncodeUpsertGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeUpsertGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeUpsertGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -320,169 +320,391 @@ func DecodeUpsertGrantResponse(decoder func(*http.Response) goahttp.Decoder, res
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body UpsertGrantResponseBody
+				body UpsertGrantsResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantResponseBody(&body)
+			err = ValidateUpsertGrantsResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			res := NewUpsertGrantGrantOK(&body)
+			res := NewUpsertGrantsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body UpsertGrantUnauthorizedResponseBody
+				body UpsertGrantsUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantUnauthorizedResponseBody(&body)
+			err = ValidateUpsertGrantsUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			return nil, NewUpsertGrantUnauthorized(&body)
+			return nil, NewUpsertGrantsUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body UpsertGrantForbiddenResponseBody
+				body UpsertGrantsForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantForbiddenResponseBody(&body)
+			err = ValidateUpsertGrantsForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			return nil, NewUpsertGrantForbidden(&body)
+			return nil, NewUpsertGrantsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body UpsertGrantBadRequestResponseBody
+				body UpsertGrantsBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantBadRequestResponseBody(&body)
+			err = ValidateUpsertGrantsBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			return nil, NewUpsertGrantBadRequest(&body)
+			return nil, NewUpsertGrantsBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body UpsertGrantNotFoundResponseBody
+				body UpsertGrantsNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantNotFoundResponseBody(&body)
+			err = ValidateUpsertGrantsNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			return nil, NewUpsertGrantNotFound(&body)
+			return nil, NewUpsertGrantsNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body UpsertGrantConflictResponseBody
+				body UpsertGrantsConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantConflictResponseBody(&body)
+			err = ValidateUpsertGrantsConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			return nil, NewUpsertGrantConflict(&body)
+			return nil, NewUpsertGrantsConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body UpsertGrantUnsupportedMediaResponseBody
+				body UpsertGrantsUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantUnsupportedMediaResponseBody(&body)
+			err = ValidateUpsertGrantsUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			return nil, NewUpsertGrantUnsupportedMedia(&body)
+			return nil, NewUpsertGrantsUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body UpsertGrantInvalidResponseBody
+				body UpsertGrantsInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantInvalidResponseBody(&body)
+			err = ValidateUpsertGrantsInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			return nil, NewUpsertGrantInvalid(&body)
+			return nil, NewUpsertGrantsInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body UpsertGrantInvariantViolationResponseBody
+					body UpsertGrantsInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+					return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 				}
-				err = ValidateUpsertGrantInvariantViolationResponseBody(&body)
+				err = ValidateUpsertGrantsInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+					return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 				}
-				return nil, NewUpsertGrantInvariantViolation(&body)
+				return nil, NewUpsertGrantsInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body UpsertGrantUnexpectedResponseBody
+					body UpsertGrantsUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+					return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 				}
-				err = ValidateUpsertGrantUnexpectedResponseBody(&body)
+				err = ValidateUpsertGrantsUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+					return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 				}
-				return nil, NewUpsertGrantUnexpected(&body)
+				return nil, NewUpsertGrantsUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("access", "upsertGrant", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("access", "upsertGrants", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body UpsertGrantGatewayErrorResponseBody
+				body UpsertGrantsGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrant", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
 			}
-			err = ValidateUpsertGrantGatewayErrorResponseBody(&body)
+			err = ValidateUpsertGrantsGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrant", err)
+				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
 			}
-			return nil, NewUpsertGrantGatewayError(&body)
+			return nil, NewUpsertGrantsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("access", "upsertGrant", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("access", "upsertGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRemoveGrantRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "removeGrant" endpoint
+func (c *Client) BuildRemoveGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemoveGrantAccessPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "removeGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRemoveGrantRequest returns an encoder for requests sent to the access
+// removeGrant server.
+func EncodeRemoveGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.RemoveGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "removeGrant", "*access.RemoveGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("principal_urn", p.PrincipalUrn)
+		values.Add("scope", p.Scope)
+		values.Add("resource", p.Resource)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRemoveGrantResponse returns a decoder for responses returned by the
+// access removeGrant endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeRemoveGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRemoveGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body RemoveGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+			}
+			err = ValidateRemoveGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+			}
+			return nil, NewRemoveGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RemoveGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+			}
+			err = ValidateRemoveGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+			}
+			return nil, NewRemoveGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RemoveGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+			}
+			err = ValidateRemoveGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+			}
+			return nil, NewRemoveGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RemoveGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+			}
+			err = ValidateRemoveGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+			}
+			return nil, NewRemoveGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RemoveGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+			}
+			err = ValidateRemoveGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+			}
+			return nil, NewRemoveGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RemoveGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+			}
+			err = ValidateRemoveGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+			}
+			return nil, NewRemoveGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RemoveGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+			}
+			err = ValidateRemoveGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+			}
+			return nil, NewRemoveGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RemoveGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+				}
+				err = ValidateRemoveGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+				}
+				return nil, NewRemoveGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RemoveGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+				}
+				err = ValidateRemoveGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+				}
+				return nil, NewRemoveGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "removeGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RemoveGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
+			}
+			err = ValidateRemoveGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
+			}
+			return nil, NewRemoveGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "removeGrant", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -719,6 +941,44 @@ func unmarshalGrantResponseBodyToAccessGrant(v *GrantResponseBody) *access.Grant
 		Resource:       *v.Resource,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody builds a value of
+// type *UpsertGrantFormRequestBody from a value of type
+// *access.UpsertGrantForm.
+func marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody(v *access.UpsertGrantForm) *UpsertGrantFormRequestBody {
+	res := &UpsertGrantFormRequestBody{
+		PrincipalUrn: v.PrincipalUrn,
+		Scope:        v.Scope,
+		Resource:     v.Resource,
+	}
+	{
+		var zero string
+		if res.Resource == zero {
+			res.Resource = "*"
+		}
+	}
+
+	return res
+}
+
+// marshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm builds a value of
+// type *access.UpsertGrantForm from a value of type
+// *UpsertGrantFormRequestBody.
+func marshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm(v *UpsertGrantFormRequestBody) *access.UpsertGrantForm {
+	res := &access.UpsertGrantForm{
+		PrincipalUrn: v.PrincipalUrn,
+		Scope:        v.Scope,
+		Resource:     v.Resource,
+	}
+	{
+		var zero string
+		if res.Resource == zero {
+			res.Resource = "*"
+		}
 	}
 
 	return res

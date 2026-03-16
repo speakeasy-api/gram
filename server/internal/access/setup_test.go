@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -39,6 +40,21 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	service *access.Service
 	conn    *pgxpool.Pool
+}
+
+// upsertGrant is a test helper that upserts a single grant via the batch API.
+func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, principalUrn, scope, resource string) *gen.Grant {
+	t.Helper()
+
+	result, err := svc.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: principalUrn, Scope: scope, Resource: resource},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 1)
+
+	return result.Grants[0]
 }
 
 func newTestAccessService(t *testing.T) (context.Context, *testInstance) {

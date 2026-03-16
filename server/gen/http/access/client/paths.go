@@ -12,9 +12,14 @@ func ListGrantsAccessPath() string {
 	return "/rpc/access.listGrants"
 }
 
-// UpsertGrantAccessPath returns the URL path to the access service upsertGrant HTTP endpoint.
-func UpsertGrantAccessPath() string {
-	return "/rpc/access.upsertGrant"
+// UpsertGrantsAccessPath returns the URL path to the access service upsertGrants HTTP endpoint.
+func UpsertGrantsAccessPath() string {
+	return "/rpc/access.upsertGrants"
+}
+
+// RemoveGrantAccessPath returns the URL path to the access service removeGrant HTTP endpoint.
+func RemoveGrantAccessPath() string {
+	return "/rpc/access.removeGrant"
 }
 
 // RemoveGrantsAccessPath returns the URL path to the access service removeGrants HTTP endpoint.

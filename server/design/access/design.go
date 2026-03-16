@@ -33,28 +33,70 @@ var _ = Service("access", func() {
 
 		Meta("openapi:operationId", "listGrants")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListGrants"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Grants"}`)
 	})
 
-	Method("upsertGrant", func() {
-		Description("Create or update a principal grant. If a grant with the same (org, principal, scope, resource) already exists, the record is kept as is.")
+	Method("upsertGrants", func() {
+		Description("Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.")
 
 		Payload(func() {
-			Extend(UpsertGrantForm)
+			Attribute("grants", ArrayOf(UpsertGrantForm), func() {
+				Description("The list of grants to upsert.")
+				MinLength(1)
+				MaxLength(100)
+			})
+			Required("grants")
 			security.SessionPayload()
 		})
 
-		Result(Grant)
+		Result(UpsertGrantsResult)
 
 		HTTP(func() {
-			POST("/rpc/access.upsertGrant")
+			POST("/rpc/access.upsertGrants")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "upsertGrant")
+		Meta("openapi:operationId", "upsertGrants")
 		Meta("openapi:extension:x-speakeasy-name-override", "upsert")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertGrant"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertGrants"}`)
+	})
+
+	Method("removeGrant", func() {
+		Description("Remove a single grant matching the exact (principal, scope, resource) tuple within the organization.")
+
+		Payload(func() {
+			Attribute("principal_urn", String, func() {
+				Description("The principal URN of the grant to remove (e.g. \"user:user_abc\", \"role:admin\").")
+				MinLength(3)
+				MaxLength(260)
+			})
+			Attribute("scope", String, func() {
+				Description("The scope of the grant to remove (e.g. \"build:read\").")
+				MinLength(3)
+				MaxLength(60)
+			})
+			Attribute("resource", String, func() {
+				Description("The resource of the grant to remove (e.g. \"*\" or a specific resource ID).")
+				MaxLength(260)
+				Default("*")
+			})
+			Required("principal_urn", "scope")
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/access.removeGrant")
+			Param("principal_urn")
+			Param("scope")
+			Param("resource")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "removeGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "removeOne")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveGrant"}`)
 	})
 
 	Method("removeGrants", func() {
@@ -78,7 +120,7 @@ var _ = Service("access", func() {
 		})
 
 		Meta("openapi:operationId", "removeGrants")
-		Meta("openapi:extension:x-speakeasy-name-override", "remove")
+		Meta("openapi:extension:x-speakeasy-name-override", "removeAll")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveGrants"}`)
 	})
 })
@@ -138,4 +180,9 @@ var Grant = Type("Grant", func() {
 var ListGrantsResult = Type("ListGrantsResult", func() {
 	Required("grants")
 	Attribute("grants", ArrayOf(Grant), "The list of grants.")
+})
+
+var UpsertGrantsResult = Type("UpsertGrantsResult", func() {
+	Required("grants")
+	Attribute("grants", ArrayOf(Grant), "The list of grants that were added or updated.")
 })
