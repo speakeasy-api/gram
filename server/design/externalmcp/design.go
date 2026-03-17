@@ -15,6 +15,46 @@ var _ = Service("mcpRegistries", func() {
 	})
 	shared.DeclareErrorResponses()
 
+	Method("publish", func() {
+		Description("Publish toolsets as an internal MCP registry catalog")
+
+		Payload(func() {
+			Attribute("name", String, "Display name for the catalog", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("slug", String, "URL-friendly identifier for the catalog", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("toolset_ids", ArrayOf(String), "IDs of the toolsets to include", func() {
+				MinLength(1)
+			})
+			Attribute("visibility", String, "Visibility of the catalog", func() {
+				Enum("public", "private")
+				Default("private")
+			})
+			Required("name", "slug", "toolset_ids")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(MCPRegistry)
+
+		HTTP(func() {
+			POST("/rpc/mcpRegistries.publish")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusCreated)
+		})
+
+		Meta("openapi:operationId", "publishMCPRegistry")
+		Meta("openapi:extension:x-speakeasy-name-override", "publish")
+	})
+
 	Method("clearCache", func() {
 		Description("Clear the registry cache for a specific registry (admin only)")
 
@@ -43,7 +83,7 @@ var _ = Service("mcpRegistries", func() {
 	})
 
 	Method("listRegistries", func() {
-		Description("List all MCP registries (admin only)")
+		Description("List MCP registries accessible to the current organization")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -69,15 +109,14 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPRegistries"}`)
 	})
 
-	Method("listCatalog", func() {
-		Description("List available MCP servers from configured registries")
+	Method("serve", func() {
+		Description("Serve MCP servers from a specific registry by slug")
 
 		Payload(func() {
-			Attribute("registry_id", String, "Filter to a specific registry", func() {
-				Format(FormatUUID)
-			})
+			Attribute("registry_slug", String, "Slug of the registry to serve")
 			Attribute("search", String, "Search query to filter servers by name")
 			Attribute("cursor", String, "Pagination cursor")
+			Required("registry_slug")
 
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -91,19 +130,19 @@ var _ = Service("mcpRegistries", func() {
 		})
 
 		HTTP(func() {
-			GET("/rpc/mcpRegistries.listCatalog")
+			GET("/rpc/mcpRegistries.serve")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
-			Param("registry_id")
+			Param("registry_slug")
 			Param("search")
 			Param("cursor")
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "listMCPCatalog")
-		Meta("openapi:extension:x-speakeasy-name-override", "listCatalog")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPCatalog"}`)
+		Meta("openapi:operationId", "serveMCPRegistry")
+		Meta("openapi:extension:x-speakeasy-name-override", "serve")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ServeMCPRegistry"}`)
 	})
 
 	Method("getServerDetails", func() {
@@ -175,8 +214,16 @@ var MCPRegistry = Type("MCPRegistry", func() {
 	})
 	Attribute("name", String, "Display name for the registry")
 	Attribute("url", String, "URL of the registry")
+	Attribute("slug", String, "URL-friendly identifier for the registry")
+	Attribute("source", String, "Source type of the registry", func() {
+		Enum("internal", "external")
+	})
+	Attribute("visibility", String, "Visibility of the registry", func() {
+		Enum("public", "private")
+	})
+	Attribute("organization_id", String, "Owning organization ID")
 
-	Required("id", "name", "url")
+	Required("id", "name")
 })
 
 var ExternalMCPTool = Type("ExternalMCPTool", func() {

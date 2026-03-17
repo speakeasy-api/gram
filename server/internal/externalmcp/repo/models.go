@@ -3,3 +3,15 @@
 //   sqlc v1.29.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type McpRegistryToolsetLink struct {
+	ID         uuid.UUID
+	RegistryID uuid.UUID
+	ToolsetID  uuid.UUID
+	CreatedAt  pgtype.Timestamptz
+}

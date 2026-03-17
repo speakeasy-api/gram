@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listCatalog mcpRegistries
+ * serve mcpRegistries
  *
  * @remarks
- * List available MCP servers from configured registries
+ * Serve MCP servers from a specific registry by slug
  */
-export function mcpRegistriesListCatalog(
+export function mcpRegistriesServe(
   client: GramCore,
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+  request: operations.ServeMCPRegistryRequest,
+  security?: operations.ServeMCPRegistrySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListCatalogResponseBody,
+    components.ServeResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function mcpRegistriesListCatalog(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+  request: operations.ServeMCPRegistryRequest,
+  security?: operations.ServeMCPRegistrySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListCatalogResponseBody,
+      components.ServeResponseBody,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,10 +85,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.ListMCPCatalogRequest$outboundSchema),
-        value,
-      ),
+      z.parse(operations.ServeMCPRegistryRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -97,25 +94,25 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/mcpRegistries.listCatalog")();
+  const path = pathToFunc("/rpc/mcpRegistries.serve")();
 
   const query = encodeFormQuery({
-    "cursor": payload?.cursor,
-    "registry_id": payload?.registry_id,
-    "search": payload?.search,
+    "cursor": payload.cursor,
+    "registry_slug": payload.registry_slug,
+    "search": payload.search,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -151,7 +148,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listMCPCatalog",
+    operationID: "serveMCPRegistry",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -207,7 +204,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListCatalogResponseBody,
+    components.ServeResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -218,7 +215,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListCatalogResponseBody$inboundSchema),
+    M.json(200, components.ServeResponseBody$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

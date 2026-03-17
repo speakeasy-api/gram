@@ -1,13 +1,54 @@
 -- name: ListMCPRegistries :many
-SELECT id, name, url, created_at, updated_at
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
 WHERE deleted IS FALSE
 ORDER BY name ASC;
 
 -- name: GetMCPRegistryByID :one
-SELECT id, name, url, created_at, updated_at
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
 WHERE id = @id AND deleted IS FALSE;
+
+-- name: GetMCPRegistryBySlug :one
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
+FROM mcp_registries
+WHERE slug = @slug AND deleted IS FALSE;
+
+-- name: CreateInternalRegistry :one
+INSERT INTO mcp_registries (name, slug, source, visibility, organization_id, project_id)
+VALUES (@name, @slug, 'internal', @visibility, @organization_id, @project_id)
+RETURNING id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at;
+
+-- name: SetRegistryToolsets :exec
+WITH deleted AS (
+  DELETE FROM mcp_registry_toolset_links WHERE registry_id = @registry_id
+)
+INSERT INTO mcp_registry_toolset_links (registry_id, toolset_id)
+SELECT @registry_id, unnest(@toolset_ids::uuid[]);
+
+-- name: ListRegistryToolsetLinks :many
+SELECT id, registry_id, toolset_id, created_at
+FROM mcp_registry_toolset_links
+WHERE registry_id = @registry_id
+ORDER BY created_at ASC;
+
+-- name: ListRegistriesForOrganization :many
+SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.project_id, r.created_at, r.updated_at
+FROM mcp_registries r
+WHERE r.deleted IS FALSE
+  AND (r.visibility = 'public' OR r.organization_id = @organization_id)
+ORDER BY r.name ASC;
+
+-- name: GetToolsetForServe :one
+SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
+FROM toolsets t
+WHERE t.id = @id AND t.deleted IS FALSE;
+
+-- name: GetRegistryToolsetByMCPSlug :one
+SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
+FROM toolsets t
+JOIN mcp_registry_toolset_links l ON l.toolset_id = t.id
+WHERE l.registry_id = @registry_id AND t.mcp_slug = @mcp_slug AND t.deleted IS FALSE;
 
 -- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)

@@ -59,7 +59,9 @@ type ClaudeHookPayload struct {
 	// The response from the tool (PostToolUse only)
 	ToolResponse any
 	// The error from the tool (PostToolUseFailure only)
-	ToolError any
+	Error any
+	// Whether the failure was caused by user interruption (PostToolUseFailure only)
+	IsInterrupt *bool
 	// The Claude Code session ID
 	SessionID *string
 	// Additional hook-specific data

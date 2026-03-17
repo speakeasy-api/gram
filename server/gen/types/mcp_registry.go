@@ -7,12 +7,20 @@
 
 package types
 
-// An MCP registry
+// MCPRegistry is the result type of the mcpRegistries service publish method.
 type MCPRegistry struct {
 	// Registry ID
 	ID string
 	// Display name for the registry
 	Name string
 	// URL of the registry
-	URL string
+	URL *string
+	// URL-friendly identifier for the registry
+	Slug *string
+	// Source type of the registry
+	Source *string
+	// Visibility of the registry
+	Visibility *string
+	// Owning organization ID
+	OrganizationID *string
 }

@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildListMCPCatalogQuery,
-  ListMCPCatalogQueryData,
-  prefetchListMCPCatalog,
-  queryKeyListMCPCatalog,
-} from "./listMCPCatalog.core.js";
+  buildServeMCPRegistryQuery,
+  prefetchServeMCPRegistry,
+  queryKeyServeMCPRegistry,
+  ServeMCPRegistryQueryData,
+} from "./serveMCPRegistry.core.js";
 export {
-  buildListMCPCatalogQuery,
-  type ListMCPCatalogQueryData,
-  prefetchListMCPCatalog,
-  queryKeyListMCPCatalog,
+  buildServeMCPRegistryQuery,
+  prefetchServeMCPRegistry,
+  queryKeyServeMCPRegistry,
+  type ServeMCPRegistryQueryData,
 };
 
-export type ListMCPCatalogQueryError =
+export type ServeMCPRegistryQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,19 +53,22 @@ export type ListMCPCatalogQueryError =
   | SDKValidationError;
 
 /**
- * listCatalog mcpRegistries
+ * serve mcpRegistries
  *
  * @remarks
- * List available MCP servers from configured registries
+ * Serve MCP servers from a specific registry by slug
  */
-export function useListMCPCatalog(
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
-  options?: QueryHookOptions<ListMCPCatalogQueryData, ListMCPCatalogQueryError>,
-): UseQueryResult<ListMCPCatalogQueryData, ListMCPCatalogQueryError> {
+export function useServeMCPRegistry(
+  request: operations.ServeMCPRegistryRequest,
+  security?: operations.ServeMCPRegistrySecurity | undefined,
+  options?: QueryHookOptions<
+    ServeMCPRegistryQueryData,
+    ServeMCPRegistryQueryError
+  >,
+): UseQueryResult<ServeMCPRegistryQueryData, ServeMCPRegistryQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildListMCPCatalogQuery(
+    ...buildServeMCPRegistryQuery(
       client,
       request,
       security,
@@ -76,22 +79,25 @@ export function useListMCPCatalog(
 }
 
 /**
- * listCatalog mcpRegistries
+ * serve mcpRegistries
  *
  * @remarks
- * List available MCP servers from configured registries
+ * Serve MCP servers from a specific registry by slug
  */
-export function useListMCPCatalogSuspense(
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+export function useServeMCPRegistrySuspense(
+  request: operations.ServeMCPRegistryRequest,
+  security?: operations.ServeMCPRegistrySecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    ListMCPCatalogQueryData,
-    ListMCPCatalogQueryError
+    ServeMCPRegistryQueryData,
+    ServeMCPRegistryQueryError
   >,
-): UseSuspenseQueryResult<ListMCPCatalogQueryData, ListMCPCatalogQueryError> {
+): UseSuspenseQueryResult<
+  ServeMCPRegistryQueryData,
+  ServeMCPRegistryQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildListMCPCatalogQuery(
+    ...buildServeMCPRegistryQuery(
       client,
       request,
       security,
@@ -101,11 +107,11 @@ export function useListMCPCatalogSuspense(
   });
 }
 
-export function setListMCPCatalogData(
+export function setServeMCPRegistryData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      registryId?: string | undefined;
+      registrySlug: string;
       search?: string | undefined;
       cursor?: string | undefined;
       gramSession?: string | undefined;
@@ -113,18 +119,18 @@ export function setListMCPCatalogData(
       gramProject?: string | undefined;
     },
   ],
-  data: ListMCPCatalogQueryData,
-): ListMCPCatalogQueryData | undefined {
-  const key = queryKeyListMCPCatalog(...queryKeyBase);
+  data: ServeMCPRegistryQueryData,
+): ServeMCPRegistryQueryData | undefined {
+  const key = queryKeyServeMCPRegistry(...queryKeyBase);
 
-  return client.setQueryData<ListMCPCatalogQueryData>(key, data);
+  return client.setQueryData<ServeMCPRegistryQueryData>(key, data);
 }
 
-export function invalidateListMCPCatalog(
+export function invalidateServeMCPRegistry(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      registryId?: string | undefined;
+      registrySlug: string;
       search?: string | undefined;
       cursor?: string | undefined;
       gramSession?: string | undefined;
@@ -136,16 +142,16 @@ export function invalidateListMCPCatalog(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "mcpRegistries", "listCatalog", ...queryKeyBase],
+    queryKey: ["@gram/client", "mcpRegistries", "serve", ...queryKeyBase],
   });
 }
 
-export function invalidateAllListMCPCatalog(
+export function invalidateAllServeMCPRegistry(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "mcpRegistries", "listCatalog"],
+    queryKey: ["@gram/client", "mcpRegistries", "serve"],
   });
 }

@@ -23,7 +23,7 @@ func BuildClaudePayload(hooksClaudeBody string) (*hooks.ClaudeHookPayload, error
 	{
 		err = json.Unmarshal([]byte(hooksClaudeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"hook_event_name\": \"PreToolUse\",\n      \"session_id\": \"abc123\",\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
 		}
 		if !(body.HookEventName == "SessionStart" || body.HookEventName == "PreToolUse" || body.HookEventName == "PostToolUse" || body.HookEventName == "PostToolUseFailure") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure"}))
@@ -38,7 +38,8 @@ func BuildClaudePayload(hooksClaudeBody string) (*hooks.ClaudeHookPayload, error
 		ToolUseID:     body.ToolUseID,
 		ToolInput:     body.ToolInput,
 		ToolResponse:  body.ToolResponse,
-		ToolError:     body.ToolError,
+		Error:         body.Error,
+		IsInterrupt:   body.IsInterrupt,
 		SessionID:     body.SessionID,
 	}
 	if body.AdditionalData != nil {

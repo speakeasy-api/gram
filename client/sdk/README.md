@@ -242,8 +242,9 @@ run();
 
 * [clearCache](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 * [getServerDetails](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
-* [listCatalog](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 * [listRegistries](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+* [publish](docs/sdks/mcpregistries/README.md#publish) - publish mcpRegistries
+* [serve](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
 
 ### [Packages](docs/sdks/packages/README.md)
 
@@ -417,8 +418,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`mcpRegistriesClearCache`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 - [`mcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
-- [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`mcpRegistriesListRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+- [`mcpRegistriesPublish`](docs/sdks/mcpregistries/README.md#publish) - publish mcpRegistries
+- [`mcpRegistriesServe`](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -571,7 +573,6 @@ To learn about this feature and how to get started, check
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
-- [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
@@ -585,6 +586,7 @@ To learn about this feature and how to get started, check
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
+- [`useMcpRegistriesPublishMutation`](docs/sdks/mcpregistries/README.md#publish) - publish mcpRegistries
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
@@ -602,6 +604,7 @@ To learn about this feature and how to get started, check
 - [`useServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
+- [`useServeMCPRegistry`](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects

@@ -1255,23 +1255,50 @@ CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
 ON agent_executions (project_id, started_at)
 WHERE deleted IS FALSE;
 
--- External MCP registries (e.g., mcp.run, self-hosted)
+-- External MCP registries (e.g., mcp.run, self-hosted) and internal catalogs
 CREATE TABLE IF NOT EXISTS mcp_registries (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
-  url TEXT NOT NULL CHECK (url <> '' AND CHAR_LENGTH(url) <= 500),
+  name TEXT NOT NULL,
+  url TEXT,
+  slug TEXT,
+  source TEXT,
+  visibility TEXT NOT NULL DEFAULT 'private',
+  organization_id TEXT,
+  project_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT mcp_registries_pkey PRIMARY KEY (id)
+  CONSTRAINT mcp_registries_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_registries_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE SET NULL,
+  CONSTRAINT mcp_registries_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_registries_url_key
 ON mcp_registries (url)
-WHERE deleted IS FALSE;
+WHERE url IS NOT NULL AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_registries_slug_key
+ON mcp_registries (slug)
+WHERE slug IS NOT NULL AND deleted IS FALSE;
+
+-- Many-to-many relationship between internal registries and toolsets
+CREATE TABLE IF NOT EXISTS mcp_registry_toolset_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  registry_id uuid NOT NULL,
+  toolset_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_registry_toolset_links_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_registry_toolset_links_registry_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE CASCADE,
+  CONSTRAINT mcp_registry_toolset_links_toolset_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_toolset_links_registry_toolset_key
+ON mcp_registry_toolset_links (registry_id, toolset_id);
 
 CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

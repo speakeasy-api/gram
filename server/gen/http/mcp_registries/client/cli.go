@@ -8,9 +8,92 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+	"unicode/utf8"
+
 	mcpregistries "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildPublishPayload builds the payload for the mcpRegistries publish
+// endpoint from CLI flags.
+func BuildPublishPayload(mcpRegistriesPublishBody string, mcpRegistriesPublishSessionToken string, mcpRegistriesPublishApikeyToken string, mcpRegistriesPublishProjectSlugInput string) (*mcpregistries.PublishPayload, error) {
+	var err error
+	var body PublishRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpRegistriesPublishBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }'")
+		}
+		if body.ToolsetIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_ids", "body"))
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
+		}
+		if utf8.RuneCountInString(body.Slug) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 1, true))
+		}
+		if utf8.RuneCountInString(body.Slug) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 100, false))
+		}
+		if len(body.ToolsetIds) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_ids", body.ToolsetIds, len(body.ToolsetIds), 1, true))
+		}
+		if !(body.Visibility == "public" || body.Visibility == "private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesPublishSessionToken != "" {
+			sessionToken = &mcpRegistriesPublishSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesPublishApikeyToken != "" {
+			apikeyToken = &mcpRegistriesPublishApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesPublishProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesPublishProjectSlugInput
+		}
+	}
+	v := &mcpregistries.PublishPayload{
+		Name:       body.Name,
+		Slug:       body.Slug,
+		Visibility: body.Visibility,
+	}
+	if body.ToolsetIds != nil {
+		v.ToolsetIds = make([]string, len(body.ToolsetIds))
+		for i, val := range body.ToolsetIds {
+			v.ToolsetIds[i] = val
+		}
+	} else {
+		v.ToolsetIds = []string{}
+	}
+	{
+		var zero string
+		if v.Visibility == zero {
+			v.Visibility = "private"
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
 
 // BuildClearCachePayload builds the payload for the mcpRegistries clearCache
 // endpoint from CLI flags.
@@ -80,52 +163,45 @@ func BuildListRegistriesPayload(mcpRegistriesListRegistriesSessionToken string, 
 	return v, nil
 }
 
-// BuildListCatalogPayload builds the payload for the mcpRegistries listCatalog
-// endpoint from CLI flags.
-func BuildListCatalogPayload(mcpRegistriesListCatalogRegistryID string, mcpRegistriesListCatalogSearch string, mcpRegistriesListCatalogCursor string, mcpRegistriesListCatalogSessionToken string, mcpRegistriesListCatalogApikeyToken string, mcpRegistriesListCatalogProjectSlugInput string) (*mcpregistries.ListCatalogPayload, error) {
-	var err error
-	var registryID *string
+// BuildServePayload builds the payload for the mcpRegistries serve endpoint
+// from CLI flags.
+func BuildServePayload(mcpRegistriesServeRegistrySlug string, mcpRegistriesServeSearch string, mcpRegistriesServeCursor string, mcpRegistriesServeSessionToken string, mcpRegistriesServeApikeyToken string, mcpRegistriesServeProjectSlugInput string) (*mcpregistries.ServePayload, error) {
+	var registrySlug string
 	{
-		if mcpRegistriesListCatalogRegistryID != "" {
-			registryID = &mcpRegistriesListCatalogRegistryID
-			err = goa.MergeErrors(err, goa.ValidateFormat("registry_id", *registryID, goa.FormatUUID))
-			if err != nil {
-				return nil, err
-			}
-		}
+		registrySlug = mcpRegistriesServeRegistrySlug
 	}
 	var search *string
 	{
-		if mcpRegistriesListCatalogSearch != "" {
-			search = &mcpRegistriesListCatalogSearch
+		if mcpRegistriesServeSearch != "" {
+			search = &mcpRegistriesServeSearch
 		}
 	}
 	var cursor *string
 	{
-		if mcpRegistriesListCatalogCursor != "" {
-			cursor = &mcpRegistriesListCatalogCursor
+		if mcpRegistriesServeCursor != "" {
+			cursor = &mcpRegistriesServeCursor
 		}
 	}
 	var sessionToken *string
 	{
-		if mcpRegistriesListCatalogSessionToken != "" {
-			sessionToken = &mcpRegistriesListCatalogSessionToken
+		if mcpRegistriesServeSessionToken != "" {
+			sessionToken = &mcpRegistriesServeSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if mcpRegistriesListCatalogApikeyToken != "" {
-			apikeyToken = &mcpRegistriesListCatalogApikeyToken
+		if mcpRegistriesServeApikeyToken != "" {
+			apikeyToken = &mcpRegistriesServeApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if mcpRegistriesListCatalogProjectSlugInput != "" {
-			projectSlugInput = &mcpRegistriesListCatalogProjectSlugInput
+		if mcpRegistriesServeProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesServeProjectSlugInput
 		}
 	}
-	v := &mcpregistries.ListCatalogPayload{}
-	v.RegistryID = registryID
+	v := &mcpregistries.ServePayload{}
+	v.RegistrySlug = registrySlug
 	v.Search = search
 	v.Cursor = cursor
 	v.SessionToken = sessionToken

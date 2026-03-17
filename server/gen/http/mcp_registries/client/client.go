@@ -17,6 +17,10 @@ import (
 
 // Client lists the mcpRegistries service endpoint HTTP clients.
 type Client struct {
+	// Publish Doer is the HTTP client used to make requests to the publish
+	// endpoint.
+	PublishDoer goahttp.Doer
+
 	// ClearCache Doer is the HTTP client used to make requests to the clearCache
 	// endpoint.
 	ClearCacheDoer goahttp.Doer
@@ -25,9 +29,8 @@ type Client struct {
 	// listRegistries endpoint.
 	ListRegistriesDoer goahttp.Doer
 
-	// ListCatalog Doer is the HTTP client used to make requests to the listCatalog
-	// endpoint.
-	ListCatalogDoer goahttp.Doer
+	// Serve Doer is the HTTP client used to make requests to the serve endpoint.
+	ServeDoer goahttp.Doer
 
 	// GetServerDetails Doer is the HTTP client used to make requests to the
 	// getServerDetails endpoint.
@@ -54,15 +57,40 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		PublishDoer:          doer,
 		ClearCacheDoer:       doer,
 		ListRegistriesDoer:   doer,
-		ListCatalogDoer:      doer,
+		ServeDoer:            doer,
 		GetServerDetailsDoer: doer,
 		RestoreResponseBody:  restoreBody,
 		scheme:               scheme,
 		host:                 host,
 		decoder:              dec,
 		encoder:              enc,
+	}
+}
+
+// Publish returns an endpoint that makes HTTP requests to the mcpRegistries
+// service publish server.
+func (c *Client) Publish() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePublishRequest(c.encoder)
+		decodeResponse = DecodePublishResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPublishRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PublishDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "publish", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -114,15 +142,15 @@ func (c *Client) ListRegistries() goa.Endpoint {
 	}
 }
 
-// ListCatalog returns an endpoint that makes HTTP requests to the
-// mcpRegistries service listCatalog server.
-func (c *Client) ListCatalog() goa.Endpoint {
+// Serve returns an endpoint that makes HTTP requests to the mcpRegistries
+// service serve server.
+func (c *Client) Serve() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListCatalogRequest(c.encoder)
-		decodeResponse = DecodeListCatalogResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeServeRequest(c.encoder)
+		decodeResponse = DecodeServeResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListCatalogRequest(ctx, v)
+		req, err := c.BuildServeRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -130,9 +158,9 @@ func (c *Client) ListCatalog() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListCatalogDoer.Do(req)
+		resp, err := c.ServeDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("mcpRegistries", "listCatalog", err)
+			return nil, goahttp.ErrRequestError("mcpRegistries", "serve", err)
 		}
 		return decodeResponse(resp)
 	}

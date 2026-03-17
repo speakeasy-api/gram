@@ -208,9 +208,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
 	temporalWorker.RegisterActivity(activities.LoadAgentTools)
 	temporalWorker.RegisterActivity(activities.RecordAgentExecution)
-	temporalWorker.RegisterActivity(activities.GenerateNameMapping)
-	temporalWorker.RegisterActivity(activities.UpdateClickHouseToolSource)
-
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
@@ -224,7 +221,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
-	temporalWorker.RegisterWorkflow(ProcessNameMappingWorkflow)
 	// Agent runner related workflows
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)
