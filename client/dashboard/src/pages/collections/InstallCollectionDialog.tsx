@@ -4,8 +4,9 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useOrganization } from "@/contexts/Auth";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Check, FolderOpen, Loader2 } from "lucide-react";
+import { ArrowRight, Check, FolderOpen, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { useInstallCollection } from "./hooks";
 import type { Collection } from "./types";
 
@@ -21,6 +22,7 @@ export function InstallCollectionDialog({
   onOpenChange,
 }: InstallCollectionDialogProps) {
   const organization = useOrganization();
+  const navigate = useNavigate();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
   );
@@ -77,7 +79,21 @@ export function InstallCollectionDialog({
                 with {collection.servers.length} MCP servers.
               </Type>
             </Stack>
-            <Button variant="secondary" onClick={() => handleClose(false)}>
+            {selectedProject?.slug && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  handleClose(false);
+                  navigate(
+                    `/${organization.slug}/projects/${selectedProject.slug}/mcp`,
+                  );
+                }}
+              >
+                Go to MCP
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => handleClose(false)}>
               Done
             </Button>
           </Stack>
