@@ -305,7 +305,7 @@ export default function CreateCollection() {
                               <div
                                 className={`size-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
                                   isSelected
-                                    ? "border-primary bg-primary"
+                                    ? "border-[#1DA1F2] bg-[#1DA1F2]"
                                     : "border-muted-foreground/30"
                                 }`}
                               >
