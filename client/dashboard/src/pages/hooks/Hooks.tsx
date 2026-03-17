@@ -268,24 +268,15 @@ function HooksContent() {
   const logFilters = useMemo(() => {
     const filters: LogFilter[] = [];
 
-    // Add filters from active filter chips
-    // Group by path to create OR conditions for same-path filters
-    const filtersByPath = new Map<string, string[]>();
-
+    // Each chip becomes its own filter entry to preserve operator semantics:
+    // - Single-value chips (from search input) use "contains" (substring match)
+    // - Multi-value chips (from table clicks with grouped servers) use "in" (exact match)
     for (const chip of activeFilters) {
-      const existing = filtersByPath.get(chip.path) || [];
-      filtersByPath.set(chip.path, [...existing, ...chip.filters]);
-    }
-
-    // Convert to LogFilter array with OR logic (multiple values in one filter)
-    for (const [path, values] of filtersByPath.entries()) {
-      if (values.length > 0) {
-        filters.push({
-          path,
-          operator: values.length > 1 ? "in" : "contains",
-          values,
-        });
-      }
+      filters.push({
+        path: chip.path,
+        operator: chip.filters.length > 1 ? "in" : "contains",
+        values: chip.filters,
+      });
     }
 
     // Hide local tool calls (filter out empty gram.tool_call.source)
@@ -1194,7 +1185,7 @@ function HooksServerTable({
         onItemSelect={handleItemSelect}
         onItemEdit={handleEditClick}
         sortItems={(items) =>
-          items.sort((a, b) => {
+          [...items].sort((a, b) => {
             // Sort by tool call count descending
             return b.toolCallCount - a.toolCallCount;
           })
@@ -1271,7 +1262,7 @@ function HooksUserTable({
       items={items}
       onItemSelect={handleItemSelect}
       sortItems={(items) =>
-        items.sort((a, b) => {
+        [...items].sort((a, b) => {
           return b.toolCallCount - a.toolCallCount;
         })
       }
