@@ -42,6 +42,10 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	}
 
 	var err error
+	defer func() {
+		s.logAuthContext(ctx, err, scheme.Name)
+	}()
+
 	switch scheme.Name {
 	case constants.KeySecurityScheme:
 		ctx, err = s.keys.KeyBasedAuth(ctx, key, scheme.RequiredScopes)
@@ -55,8 +59,6 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	if err != nil {
 		return ctx, err
 	}
-
-	s.logAuthContext(ctx, err, scheme.Name)
 
 	return ctx, nil
 }
