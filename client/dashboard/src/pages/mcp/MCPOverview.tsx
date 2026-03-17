@@ -35,7 +35,6 @@ const BUILT_IN_SERVERS = [
 function CollectionCard({ registry }: { registry: MCPRegistry }) {
   const [open, setOpen] = useState(false);
   const client = useSdkClient();
-  const routes = useRoutes();
 
   const { data: serversData } = useQuery({
     queryKey: ["serveMCPRegistry", registry.slug],
@@ -152,13 +151,7 @@ function CollectionCard({ registry }: { registry: MCPRegistry }) {
                 {servers.map((server, i) => (
                   <div
                     key={server.registrySpecifier}
-                    className="cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (server.registrySpecifier) {
-                        routes.mcp.details.goTo(server.registrySpecifier);
-                      }
-                    }}
+                    onClick={(e) => e.stopPropagation()}
                     style={{
                       animation: `collection-server-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${i * 60}ms both`,
                     }}
