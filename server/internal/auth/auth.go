@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -35,21 +36,29 @@ func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Aut
 	}
 }
 
-func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	if schema == nil {
+func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+	if scheme == nil {
 		panic("Goa has not passed a schema") // TODO: figure something out here
 	}
 
-	switch schema.Name {
+	var err error
+	switch scheme.Name {
 	case constants.KeySecurityScheme:
-		return s.keys.KeyBasedAuth(ctx, key, schema.RequiredScopes)
+		ctx, err = s.keys.KeyBasedAuth(ctx, key, scheme.RequiredScopes)
 	case constants.SessionSecurityScheme:
-		return s.sessions.Authenticate(ctx, key)
+		ctx, err = s.sessions.Authenticate(ctx, key)
 	case constants.ProjectSlugSecuritySchema:
-		return s.checkProjectAccess(ctx, s.logger, key)
+		ctx, err = s.checkProjectAccess(ctx, s.logger, key)
 	default:
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme")
 	}
+	if err != nil {
+		return ctx, err
+	}
+
+	s.logAuthContext(ctx, err, scheme.Name)
+
+	return ctx, nil
 }
 
 func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, projectSlug string) (context.Context, error) {
@@ -117,4 +126,45 @@ func (s *Auth) CheckProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	}
 
 	return nil
+}
+
+func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok {
+		return
+	}
+
+	attrs := []any{
+		attr.SlogAuthScheme(scheme),
+		attr.SlogAuthOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogAuthOrganizationSlug(authCtx.OrganizationSlug),
+		attr.SlogAuthAccountType(authCtx.AccountType),
+	}
+	if err != nil {
+		attrs = append(attrs, attr.SlogError(err))
+	}
+	if authCtx.UserID != "" {
+		attrs = append(attrs, attr.SlogAuthUserID(authCtx.UserID))
+	}
+	if authCtx.ExternalUserID != "" {
+		attrs = append(attrs, attr.SlogAuthUserExternalID(authCtx.ExternalUserID))
+	}
+	if authCtx.APIKeyID != "" {
+		attrs = append(attrs, attr.SlogAuthAPIKeyID(authCtx.APIKeyID))
+	}
+	if authCtx.SessionID != nil {
+		attrs = append(attrs, attr.SlogAuthSessionID(*authCtx.SessionID))
+	}
+	if authCtx.ProjectID != nil {
+		attrs = append(attrs, attr.SlogAuthProjectID(authCtx.ProjectID.String()))
+	}
+	if authCtx.ProjectSlug != nil {
+		attrs = append(attrs, attr.SlogAuthProjectSlug(*authCtx.ProjectSlug))
+	}
+
+	if err != nil {
+		s.logger.ErrorContext(ctx, fmt.Sprintf("%s auth scheme check failed", scheme), attrs...)
+	} else {
+		s.logger.InfoContext(ctx, fmt.Sprintf("%s auth scheme check passed", scheme), attrs...)
+	}
 }
