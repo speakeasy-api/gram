@@ -35,6 +35,59 @@ type ClaudeRequestBody struct {
 	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
 }
 
+// CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
+// request body.
+type CursorRequestBody struct {
+	// The type of hook event
+	HookEventName string `form:"hook_event_name" json:"hook_event_name" xml:"hook_event_name"`
+	// Cursor conversation ID
+	ConversationID *string `form:"conversation_id,omitempty" json:"conversation_id,omitempty" xml:"conversation_id,omitempty"`
+	// Cursor generation ID
+	GenerationID *string `form:"generation_id,omitempty" json:"generation_id,omitempty" xml:"generation_id,omitempty"`
+	// Model being used
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Cursor version
+	CursorVersion *string `form:"cursor_version,omitempty" json:"cursor_version,omitempty" xml:"cursor_version,omitempty"`
+	// Workspace root paths
+	WorkspaceRoots []string `form:"workspace_roots,omitempty" json:"workspace_roots,omitempty" xml:"workspace_roots,omitempty"`
+	// User email
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Path to conversation transcript
+	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
+	// The name of the tool (for tool-related events)
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// The unique ID for this tool use
+	ToolUseID *string `form:"tool_use_id,omitempty" json:"tool_use_id,omitempty" xml:"tool_use_id,omitempty"`
+	// The input to the tool
+	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
+	// The response from the tool (postToolUse only)
+	ToolResponse any `form:"tool_response,omitempty" json:"tool_response,omitempty" xml:"tool_response,omitempty"`
+	// The error from the tool (postToolUseFailure only)
+	Error any `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Shell command being executed
+	Command *string `form:"command,omitempty" json:"command,omitempty" xml:"command,omitempty"`
+	// Current working directory
+	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
+	// Path to file being accessed or edited
+	FilePath *string `form:"file_path,omitempty" json:"file_path,omitempty" xml:"file_path,omitempty"`
+	// Content of the file
+	FileContent *string `form:"file_content,omitempty" json:"file_content,omitempty" xml:"file_content,omitempty"`
+	// MCP server name
+	McpServer *string `form:"mcp_server,omitempty" json:"mcp_server,omitempty" xml:"mcp_server,omitempty"`
+	// MCP tool name
+	McpTool *string `form:"mcp_tool,omitempty" json:"mcp_tool,omitempty" xml:"mcp_tool,omitempty"`
+	// Subagent identifier
+	SubagentID *string `form:"subagent_id,omitempty" json:"subagent_id,omitempty" xml:"subagent_id,omitempty"`
+	// Prompt given to subagent
+	SubagentPrompt *string `form:"subagent_prompt,omitempty" json:"subagent_prompt,omitempty" xml:"subagent_prompt,omitempty"`
+	// Agent response text
+	ResponseText *string `form:"response_text,omitempty" json:"response_text,omitempty" xml:"response_text,omitempty"`
+	// Agent thought/reasoning text
+	ThoughtText *string `form:"thought_text,omitempty" json:"thought_text,omitempty" xml:"thought_text,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
+}
+
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
 // request body.
 type LogsRequestBody struct {
@@ -51,6 +104,23 @@ type ClaudeResponseBody struct {
 	StopReason *string `form:"stopReason,omitempty" json:"stopReason,omitempty" xml:"stopReason,omitempty"`
 	// Hook-specific output as JSON object
 	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
+}
+
+// CursorResponseBody is the type of the "hooks" service "cursor" endpoint HTTP
+// response body.
+type CursorResponseBody struct {
+	// Permission decision: allow, deny, or ask
+	Permission *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
+	// Optional message to display to user
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Optional message to send to agent
+	AgentMessage *string `form:"agent_message,omitempty" json:"agent_message,omitempty" xml:"agent_message,omitempty"`
+	// Environment variables to inject
+	Env map[string]string `form:"env,omitempty" json:"env,omitempty" xml:"env,omitempty"`
+	// Additional context for the agent
+	AdditionalContext *string `form:"additional_context,omitempty" json:"additional_context,omitempty" xml:"additional_context,omitempty"`
+	// Auto-submit this message (stop/subagentStop hooks)
+	FollowupMessage *string `form:"followup_message,omitempty" json:"followup_message,omitempty" xml:"followup_message,omitempty"`
 }
 
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
@@ -218,6 +288,186 @@ type ClaudeUnexpectedResponseBody struct {
 // ClaudeGatewayErrorResponseBody is the type of the "hooks" service "claude"
 // endpoint HTTP response body for the "gateway_error" error.
 type ClaudeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorUnauthorizedResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "unauthorized" error.
+type CursorUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorForbiddenResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "forbidden" error.
+type CursorForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorBadRequestResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "bad_request" error.
+type CursorBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorNotFoundResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "not_found" error.
+type CursorNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorConflictResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "conflict" error.
+type CursorConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorUnsupportedMediaResponseBody is the type of the "hooks" service
+// "cursor" endpoint HTTP response body for the "unsupported_media" error.
+type CursorUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorInvalidResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "invalid" error.
+type CursorInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorInvariantViolationResponseBody is the type of the "hooks" service
+// "cursor" endpoint HTTP response body for the "invariant_violation" error.
+type CursorInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorUnexpectedResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "unexpected" error.
+type CursorUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CursorGatewayErrorResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "gateway_error" error.
+type CursorGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -514,6 +764,50 @@ func NewClaudeRequestBody(p *hooks.ClaudeHookPayload) *ClaudeRequestBody {
 	return body
 }
 
+// NewCursorRequestBody builds the HTTP request body from the payload of the
+// "cursor" endpoint of the "hooks" service.
+func NewCursorRequestBody(p *hooks.CursorHookPayload) *CursorRequestBody {
+	body := &CursorRequestBody{
+		HookEventName:  p.HookEventName,
+		ConversationID: p.ConversationID,
+		GenerationID:   p.GenerationID,
+		Model:          p.Model,
+		CursorVersion:  p.CursorVersion,
+		UserEmail:      p.UserEmail,
+		TranscriptPath: p.TranscriptPath,
+		ToolName:       p.ToolName,
+		ToolUseID:      p.ToolUseID,
+		ToolInput:      p.ToolInput,
+		ToolResponse:   p.ToolResponse,
+		Error:          p.Error,
+		Command:        p.Command,
+		Cwd:            p.Cwd,
+		FilePath:       p.FilePath,
+		FileContent:    p.FileContent,
+		McpServer:      p.McpServer,
+		McpTool:        p.McpTool,
+		SubagentID:     p.SubagentID,
+		SubagentPrompt: p.SubagentPrompt,
+		ResponseText:   p.ResponseText,
+		ThoughtText:    p.ThoughtText,
+	}
+	if p.WorkspaceRoots != nil {
+		body.WorkspaceRoots = make([]string, len(p.WorkspaceRoots))
+		for i, val := range p.WorkspaceRoots {
+			body.WorkspaceRoots[i] = val
+		}
+	}
+	if p.AdditionalData != nil {
+		body.AdditionalData = make(map[string]any, len(p.AdditionalData))
+		for key, val := range p.AdditionalData {
+			tk := key
+			tv := val
+			body.AdditionalData[tk] = tv
+		}
+	}
+	return body
+}
+
 // NewLogsRequestBody builds the HTTP request body from the payload of the
 // "logs" endpoint of the "hooks" service.
 func NewLogsRequestBody(p *hooks.LogsPayload) *LogsRequestBody {
@@ -689,6 +983,172 @@ func NewClaudeGatewayError(body *ClaudeGatewayErrorResponseBody) *goa.ServiceErr
 	return v
 }
 
+// NewCursorHookResultOK builds a "hooks" service "cursor" endpoint result from
+// a HTTP "OK" response.
+func NewCursorHookResultOK(body *CursorResponseBody) *hooks.CursorHookResult {
+	v := &hooks.CursorHookResult{
+		Permission:        body.Permission,
+		UserMessage:       body.UserMessage,
+		AgentMessage:      body.AgentMessage,
+		AdditionalContext: body.AdditionalContext,
+		FollowupMessage:   body.FollowupMessage,
+	}
+	if body.Env != nil {
+		v.Env = make(map[string]string, len(body.Env))
+		for key, val := range body.Env {
+			tk := key
+			tv := val
+			v.Env[tk] = tv
+		}
+	}
+
+	return v
+}
+
+// NewCursorUnauthorized builds a hooks service cursor endpoint unauthorized
+// error.
+func NewCursorUnauthorized(body *CursorUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorForbidden builds a hooks service cursor endpoint forbidden error.
+func NewCursorForbidden(body *CursorForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorBadRequest builds a hooks service cursor endpoint bad_request error.
+func NewCursorBadRequest(body *CursorBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorNotFound builds a hooks service cursor endpoint not_found error.
+func NewCursorNotFound(body *CursorNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorConflict builds a hooks service cursor endpoint conflict error.
+func NewCursorConflict(body *CursorConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorUnsupportedMedia builds a hooks service cursor endpoint
+// unsupported_media error.
+func NewCursorUnsupportedMedia(body *CursorUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorInvalid builds a hooks service cursor endpoint invalid error.
+func NewCursorInvalid(body *CursorInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorInvariantViolation builds a hooks service cursor endpoint
+// invariant_violation error.
+func NewCursorInvariantViolation(body *CursorInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorUnexpected builds a hooks service cursor endpoint unexpected error.
+func NewCursorUnexpected(body *CursorUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCursorGatewayError builds a hooks service cursor endpoint gateway_error
+// error.
+func NewCursorGatewayError(body *CursorGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewLogsUnauthorized builds a hooks service logs endpoint unauthorized error.
 func NewLogsUnauthorized(body *LogsUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
@@ -829,6 +1289,16 @@ func NewLogsGatewayError(body *LogsGatewayErrorResponseBody) *goa.ServiceError {
 	}
 
 	return v
+}
+
+// ValidateCursorResponseBody runs the validations defined on CursorResponseBody
+func ValidateCursorResponseBody(body *CursorResponseBody) (err error) {
+	if body.Permission != nil {
+		if !(*body.Permission == "allow" || *body.Permission == "deny" || *body.Permission == "ask") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.permission", *body.Permission, []any{"allow", "deny", "ask"}))
+		}
+	}
+	return
 }
 
 // ValidateClaudeUnauthorizedResponseBody runs the validations defined on
@@ -1050,6 +1520,246 @@ func ValidateClaudeUnexpectedResponseBody(body *ClaudeUnexpectedResponseBody) (e
 // ValidateClaudeGatewayErrorResponseBody runs the validations defined on
 // claude_gateway_error_response_body
 func ValidateClaudeGatewayErrorResponseBody(body *ClaudeGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorUnauthorizedResponseBody runs the validations defined on
+// cursor_unauthorized_response_body
+func ValidateCursorUnauthorizedResponseBody(body *CursorUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorForbiddenResponseBody runs the validations defined on
+// cursor_forbidden_response_body
+func ValidateCursorForbiddenResponseBody(body *CursorForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorBadRequestResponseBody runs the validations defined on
+// cursor_bad_request_response_body
+func ValidateCursorBadRequestResponseBody(body *CursorBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorNotFoundResponseBody runs the validations defined on
+// cursor_not_found_response_body
+func ValidateCursorNotFoundResponseBody(body *CursorNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorConflictResponseBody runs the validations defined on
+// cursor_conflict_response_body
+func ValidateCursorConflictResponseBody(body *CursorConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorUnsupportedMediaResponseBody runs the validations defined on
+// cursor_unsupported_media_response_body
+func ValidateCursorUnsupportedMediaResponseBody(body *CursorUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorInvalidResponseBody runs the validations defined on
+// cursor_invalid_response_body
+func ValidateCursorInvalidResponseBody(body *CursorInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorInvariantViolationResponseBody runs the validations defined on
+// cursor_invariant_violation_response_body
+func ValidateCursorInvariantViolationResponseBody(body *CursorInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorUnexpectedResponseBody runs the validations defined on
+// cursor_unexpected_response_body
+func ValidateCursorUnexpectedResponseBody(body *CursorUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCursorGatewayErrorResponseBody runs the validations defined on
+// cursor_gateway_error_response_body
+func ValidateCursorGatewayErrorResponseBody(body *CursorGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

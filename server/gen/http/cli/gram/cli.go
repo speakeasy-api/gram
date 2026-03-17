@@ -62,7 +62,7 @@ func UsageCommands() []string {
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|logs)",
+		"hooks (claude|cursor|logs)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -455,6 +455,9 @@ func ParseEndpoint(
 
 		hooksClaudeFlags    = flag.NewFlagSet("claude", flag.ExitOnError)
 		hooksClaudeBodyFlag = hooksClaudeFlags.String("body", "REQUIRED", "")
+
+		hooksCursorFlags    = flag.NewFlagSet("cursor", flag.ExitOnError)
+		hooksCursorBodyFlag = hooksCursorFlags.String("body", "REQUIRED", "")
 
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
@@ -944,6 +947,7 @@ func ParseEndpoint(
 
 	hooksFlags.Usage = hooksUsage
 	hooksClaudeFlags.Usage = hooksClaudeUsage
+	hooksCursorFlags.Usage = hooksCursorUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 
 	instancesFlags.Usage = instancesUsage
@@ -1358,6 +1362,9 @@ func ParseEndpoint(
 			switch epn {
 			case "claude":
 				epf = hooksClaudeFlags
+
+			case "cursor":
+				epf = hooksCursorFlags
 
 			case "logs":
 				epf = hooksLogsFlags
@@ -1887,6 +1894,9 @@ func ParseEndpoint(
 			case "claude":
 				endpoint = c.Claude()
 				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag)
+			case "cursor":
+				endpoint = c.Cursor()
+				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -3700,6 +3710,7 @@ func hooksUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] hooks COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    claude: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
+	fmt.Fprintln(os.Stderr, `    cursor: Unified endpoint for all Cursor hook events. Handles all Cursor hook types including sessionStart, preToolUse, postToolUse, and many others.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -3721,6 +3732,24 @@ func hooksClaudeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
+}
+
+func hooksCursorUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks cursor", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Unified endpoint for all Cursor hook events. Handles all Cursor hook types including sessionStart, preToolUse, postToolUse, and many others.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks cursor --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"command\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"file_content\": \"abc123\",\n      \"file_path\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"sessionEnd\",\n      \"mcp_server\": \"abc123\",\n      \"mcp_tool\": \"abc123\",\n      \"model\": \"abc123\",\n      \"response_text\": \"abc123\",\n      \"subagent_id\": \"abc123\",\n      \"subagent_prompt\": \"abc123\",\n      \"thought_text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\",\n      \"workspace_roots\": [\n         \"abc123\"\n      ]\n   }'")
 }
 
 func hooksLogsUsage() {

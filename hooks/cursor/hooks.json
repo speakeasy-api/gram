@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "./send_hook.sh"
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "./send_hook.sh"
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "./send_hook.sh"
+      }
+    ]
+  }
+}

@@ -31,6 +31,80 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
 })
 
+// Unified Cursor hook payload
+var CursorHookPayload = Type("CursorHookPayload", func() {
+	Description("Unified payload for all Cursor hook events")
+	Required("hook_event_name")
+	Attribute("hook_event_name", String, "The type of hook event", func() {
+		Enum(
+			"sessionStart", "sessionEnd",
+			"preToolUse", "postToolUse", "postToolUseFailure",
+			"subagentStart", "subagentStop",
+			"beforeShellExecution", "afterShellExecution",
+			"beforeMCPExecution", "afterMCPExecution",
+			"beforeReadFile", "afterFileEdit",
+			"beforeSubmitPrompt", "preCompact", "stop",
+			"afterAgentResponse", "afterAgentThought",
+			"beforeTabFileRead", "afterTabFileEdit",
+		)
+	})
+	Attribute("conversation_id", String, "Cursor conversation ID")
+	Attribute("generation_id", String, "Cursor generation ID")
+	Attribute("model", String, "Model being used")
+	Attribute("cursor_version", String, "Cursor version")
+	Attribute("workspace_roots", ArrayOf(String), "Workspace root paths")
+	Attribute("user_email", String, "User email")
+	Attribute("transcript_path", String, "Path to conversation transcript")
+
+	// Tool-related fields
+	Attribute("tool_name", String, "The name of the tool (for tool-related events)")
+	Attribute("tool_use_id", String, "The unique ID for this tool use")
+	Attribute("tool_input", Any, "The input to the tool")
+	Attribute("tool_response", Any, "The response from the tool (postToolUse only)")
+	Attribute("error", Any, "The error from the tool (postToolUseFailure only)")
+
+	// Shell execution fields
+	Attribute("command", String, "Shell command being executed")
+	Attribute("cwd", String, "Current working directory")
+
+	// File operation fields
+	Attribute("file_path", String, "Path to file being accessed or edited")
+	Attribute("file_content", String, "Content of the file")
+
+	// MCP execution fields
+	Attribute("mcp_server", String, "MCP server name")
+	Attribute("mcp_tool", String, "MCP tool name")
+
+	// Subagent fields
+	Attribute("subagent_id", String, "Subagent identifier")
+	Attribute("subagent_prompt", String, "Prompt given to subagent")
+
+	// Response/thought fields
+	Attribute("response_text", String, "Agent response text")
+	Attribute("thought_text", String, "Agent thought/reasoning text")
+
+	// Additional hook-specific data
+	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+})
+
+// Unified Cursor hook result
+var CursorHookResult = Type("CursorHookResult", func() {
+	Description("Unified result for all Cursor hook events")
+	// Permission-based response
+	Attribute("permission", String, "Permission decision: allow, deny, or ask", func() {
+		Enum("allow", "deny", "ask")
+	})
+	Attribute("user_message", String, "Optional message to display to user")
+	Attribute("agent_message", String, "Optional message to send to agent")
+
+	// Environment and context
+	Attribute("env", MapOf(String, String), "Environment variables to inject")
+	Attribute("additional_context", String, "Additional context for the agent")
+
+	// Loop continuation
+	Attribute("followup_message", String, "Auto-submit this message (stop/subagentStop hooks)")
+})
+
 // Server name override types
 var ServerNameOverride = Type("ServerNameOverride", func() {
 	Description("User-defined display name for a hooks server")
@@ -52,6 +126,16 @@ var _ = Service("hooks", func() {
 		Result(ClaudeHookResult)
 		HTTP(func() {
 			POST("/rpc/hooks.claude")
+		})
+	})
+
+	Method("cursor", func() {
+		Description("Unified endpoint for all Cursor hook events. Handles all Cursor hook types including sessionStart, preToolUse, postToolUse, and many others.")
+
+		Payload(CursorHookPayload)
+		Result(CursorHookResult)
+		HTTP(func() {
+			POST("/rpc/hooks.cursor")
 		})
 	})
 

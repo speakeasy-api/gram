@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "hooks" service endpoints.
 type Endpoints struct {
 	Claude goa.Endpoint
+	Cursor goa.Endpoint
 	Logs   goa.Endpoint
 }
 
@@ -26,6 +27,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Claude: NewClaudeEndpoint(s),
+		Cursor: NewCursorEndpoint(s),
 		Logs:   NewLogsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -33,6 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "hooks" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Claude = m(e.Claude)
+	e.Cursor = m(e.Cursor)
 	e.Logs = m(e.Logs)
 }
 
@@ -42,6 +45,15 @@ func NewClaudeEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ClaudeHookPayload)
 		return s.Claude(ctx, p)
+	}
+}
+
+// NewCursorEndpoint returns an endpoint function that calls the method
+// "cursor" of service "hooks".
+func NewCursorEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CursorHookPayload)
+		return s.Cursor(ctx, p)
 	}
 }
 

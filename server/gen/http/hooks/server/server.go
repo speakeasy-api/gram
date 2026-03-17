@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts []*MountPoint
 	Claude http.Handler
+	Cursor http.Handler
 	Logs   http.Handler
 }
 
@@ -51,9 +52,11 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Claude", "POST", "/rpc/hooks.claude"},
+			{"Cursor", "POST", "/rpc/hooks.cursor"},
 			{"Logs", "POST", "/rpc/hooks.otel/v1/logs"},
 		},
 		Claude: NewClaudeHandler(e.Claude, mux, decoder, encoder, errhandler, formatter),
+		Cursor: NewCursorHandler(e.Cursor, mux, decoder, encoder, errhandler, formatter),
 		Logs:   NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -64,6 +67,7 @@ func (s *Server) Service() string { return "hooks" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Claude = m(s.Claude)
+	s.Cursor = m(s.Cursor)
 	s.Logs = m(s.Logs)
 }
 
@@ -73,6 +77,7 @@ func (s *Server) MethodNames() []string { return hooks.MethodNames[:] }
 // Mount configures the mux to serve the hooks endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountClaudeHandler(mux, h.Claude)
+	MountCursorHandler(mux, h.Cursor)
 	MountLogsHandler(mux, h.Logs)
 }
 
@@ -111,6 +116,59 @@ func NewClaudeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "claude")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCursorHandler configures the mux to serve the "hooks" service "cursor"
+// endpoint.
+func MountCursorHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/hooks.cursor", f)
+}
+
+// NewCursorHandler creates a HTTP handler which loads the HTTP request and
+// calls the "hooks" service "cursor" endpoint.
+func NewCursorHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCursorRequest(mux, decoder)
+		encodeResponse = EncodeCursorResponse(encoder)
+		encodeError    = EncodeCursorError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "cursor")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
 		payload, err := decodeRequest(r)
 		if err != nil {

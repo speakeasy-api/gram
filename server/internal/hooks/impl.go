@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -279,6 +280,33 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 	}
 }
 
+// Cursor is the unified endpoint for all Cursor hook events
+func (s *Service) Cursor(ctx context.Context, payload *gen.CursorHookPayload) (*gen.CursorHookResult, error) {
+	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Cursor: %s", payload.HookEventName),
+		attr.SlogEvent("cursor_hook"),
+		attr.SlogValueAny(map[string]any{
+			"hookEventName":  payload.HookEventName,
+			"toolName":       payload.ToolName,
+			"conversationId": payload.ConversationID,
+		}),
+	)
+
+	s.recordCursorToolEvent(ctx, payload)
+
+	// Route to appropriate handler based on hook type
+	switch payload.HookEventName {
+	case "preToolUse":
+		return s.handleCursorPreToolUse(ctx, payload)
+	case "postToolUse":
+		return s.handleCursorPostToolUse(ctx, payload)
+	case "postToolUseFailure":
+		return s.handleCursorPostToolUseFailure(ctx, payload)
+	default:
+		s.logger.ErrorContext(ctx, fmt.Sprintf("Unknown Cursor hook event: %s", payload.HookEventName))
+		return &gen.CursorHookResult{}, nil //nolint:exhaustruct // optional fields
+	}
+}
+
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow sessions to start
 	continueVal := true
@@ -420,4 +448,75 @@ func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 	}
 
 	return data
+}
+
+// Cursor-specific handler methods
+
+// recordCursorToolEvent records a Cursor tool event directly to ClickHouse
+func (s *Service) recordCursorToolEvent(ctx context.Context, payload *gen.CursorHookPayload) {
+	if payload.ConversationID == nil || *payload.ConversationID == "" {
+		s.logger.WarnContext(ctx, "Cursor tool event called without conversation ID")
+		return
+	}
+
+	// Get auth context
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.WarnContext(ctx, "Cursor hook called without auth context")
+		return
+	}
+
+	// Build hook attributes
+	hookAttrs := s.buildCursorHookAttributes(ctx, payload, authCtx.ProjectID.String(), authCtx.ActiveOrganizationID)
+
+	projectID, err := uuid.Parse(authCtx.ProjectID.String())
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Invalid project ID in auth context", attr.SlogError(err))
+		return
+	}
+
+	// Build ToolInfo
+	toolInfo := telemetry.ToolInfo{
+		Name:           hookAttrs.toolName,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID.String(),
+		ID:             "",
+		URN:            "",
+		DeploymentID:   "",
+		FunctionID:     nil,
+	}
+
+	// Write directly to ClickHouse
+	if s.telemetryService != nil {
+		s.telemetryService.CreateLog(telemetry.LogParams{
+			Timestamp:  time.Now(),
+			ToolInfo:   toolInfo,
+			Attributes: hookAttrs.toAttrs(),
+		})
+
+		s.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
+			attr.SlogEvent("cursor_hook_written"),
+		)
+	}
+}
+
+// handleCursorPreToolUse handles preToolUse hook (permission-based)
+func (s *Service) handleCursorPreToolUse(ctx context.Context, payload *gen.CursorHookPayload) (*gen.CursorHookResult, error) {
+	// For now, always allow tools
+	permission := "allow"
+	return &gen.CursorHookResult{ //nolint:exhaustruct // optional fields
+		Permission: &permission,
+	}, nil
+}
+
+// handleCursorPostToolUse handles postToolUse hook (observational)
+func (s *Service) handleCursorPostToolUse(ctx context.Context, payload *gen.CursorHookPayload) (*gen.CursorHookResult, error) {
+	// Observational hook - just log and return
+	return &gen.CursorHookResult{}, nil //nolint:exhaustruct // optional fields
+}
+
+// handleCursorPostToolUseFailure handles postToolUseFailure hook (observational)
+func (s *Service) handleCursorPostToolUseFailure(ctx context.Context, payload *gen.CursorHookPayload) (*gen.CursorHookResult, error) {
+	// Observational hook - just log and return
+	return &gen.CursorHookResult{}, nil //nolint:exhaustruct // optional fields
 }

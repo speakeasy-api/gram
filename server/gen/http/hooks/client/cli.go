@@ -54,6 +54,65 @@ func BuildClaudePayload(hooksClaudeBody string) (*hooks.ClaudeHookPayload, error
 	return v, nil
 }
 
+// BuildCursorPayload builds the payload for the hooks cursor endpoint from CLI
+// flags.
+func BuildCursorPayload(hooksCursorBody string) (*hooks.CursorHookPayload, error) {
+	var err error
+	var body CursorRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksCursorBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"command\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"file_content\": \"abc123\",\n      \"file_path\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"sessionEnd\",\n      \"mcp_server\": \"abc123\",\n      \"mcp_tool\": \"abc123\",\n      \"model\": \"abc123\",\n      \"response_text\": \"abc123\",\n      \"subagent_id\": \"abc123\",\n      \"subagent_prompt\": \"abc123\",\n      \"thought_text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\",\n      \"workspace_roots\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if !(body.HookEventName == "sessionStart" || body.HookEventName == "sessionEnd" || body.HookEventName == "preToolUse" || body.HookEventName == "postToolUse" || body.HookEventName == "postToolUseFailure" || body.HookEventName == "subagentStart" || body.HookEventName == "subagentStop" || body.HookEventName == "beforeShellExecution" || body.HookEventName == "afterShellExecution" || body.HookEventName == "beforeMCPExecution" || body.HookEventName == "afterMCPExecution" || body.HookEventName == "beforeReadFile" || body.HookEventName == "afterFileEdit" || body.HookEventName == "beforeSubmitPrompt" || body.HookEventName == "preCompact" || body.HookEventName == "stop" || body.HookEventName == "afterAgentResponse" || body.HookEventName == "afterAgentThought" || body.HookEventName == "beforeTabFileRead" || body.HookEventName == "afterTabFileEdit") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"sessionStart", "sessionEnd", "preToolUse", "postToolUse", "postToolUseFailure", "subagentStart", "subagentStop", "beforeShellExecution", "afterShellExecution", "beforeMCPExecution", "afterMCPExecution", "beforeReadFile", "afterFileEdit", "beforeSubmitPrompt", "preCompact", "stop", "afterAgentResponse", "afterAgentThought", "beforeTabFileRead", "afterTabFileEdit"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &hooks.CursorHookPayload{
+		HookEventName:  body.HookEventName,
+		ConversationID: body.ConversationID,
+		GenerationID:   body.GenerationID,
+		Model:          body.Model,
+		CursorVersion:  body.CursorVersion,
+		UserEmail:      body.UserEmail,
+		TranscriptPath: body.TranscriptPath,
+		ToolName:       body.ToolName,
+		ToolUseID:      body.ToolUseID,
+		ToolInput:      body.ToolInput,
+		ToolResponse:   body.ToolResponse,
+		Error:          body.Error,
+		Command:        body.Command,
+		Cwd:            body.Cwd,
+		FilePath:       body.FilePath,
+		FileContent:    body.FileContent,
+		McpServer:      body.McpServer,
+		McpTool:        body.McpTool,
+		SubagentID:     body.SubagentID,
+		SubagentPrompt: body.SubagentPrompt,
+		ResponseText:   body.ResponseText,
+		ThoughtText:    body.ThoughtText,
+	}
+	if body.WorkspaceRoots != nil {
+		v.WorkspaceRoots = make([]string, len(body.WorkspaceRoots))
+		for i, val := range body.WorkspaceRoots {
+			v.WorkspaceRoots[i] = val
+		}
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
+	}
+
+	return v, nil
+}
+
 // BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
 // flags.
 func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {

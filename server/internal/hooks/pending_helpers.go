@@ -31,12 +31,7 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 
 // writeHookToClickHouseWithMetadata writes a hook event to ClickHouse with full session context
 func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
-	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
-	toolName, ok := attrs[attr.ToolNameKey].(string) //  Make sure this comes from here so that we get the parsed tool name
-	if !ok {
-		s.logger.ErrorContext(ctx, "Tool name not found in attributes")
-		return
-	}
+	hookAttrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
@@ -46,7 +41,7 @@ func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload
 
 	// Build ToolInfo
 	toolInfo := telemetry.ToolInfo{
-		Name:           toolName,
+		Name:           hookAttrs.toolName,
 		OrganizationID: metadata.GramOrgID,
 		ProjectID:      projectID.String(),
 		ID:             "",
@@ -59,75 +54,13 @@ func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload
 		s.telemetryService.CreateLog(telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
-			Attributes: attrs,
+			Attributes: hookAttrs.toAttrs(),
 		})
 
 		s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
 			attr.SlogEvent("hook_written"),
 		)
 	}
-}
-
-// buildTelemetryAttributesWithMetadata creates attributes for a hook event with session metadata
-func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) map[attr.Key]any {
-	toolName := ""
-	if payload.ToolName != nil {
-		toolName = *payload.ToolName
-	}
-
-	hookSource := "claude"
-	if metadata.ServiceName != "" {
-		hookSource = metadata.ServiceName
-	}
-
-	attrs := map[attr.Key]any{
-		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.ToolNameKey:       toolName,
-		attr.HookEventKey:      payload.HookEventName,
-		attr.SpanIDKey:         generateSpanID(),
-		attr.TraceIDKey:        generateTraceID(),
-		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
-		attr.UserEmailKey:      metadata.UserEmail,
-		attr.ProjectIDKey:      metadata.ProjectID,
-		attr.OrganizationIDKey: metadata.GramOrgID,
-		attr.HookSourceKey:     hookSource,
-	}
-
-	if payload.Error != nil {
-		attrs[attr.HookErrorKey] = payload.Error
-	}
-
-	if payload.IsInterrupt != nil {
-		attrs[attr.HookIsInterruptKey] = *payload.IsInterrupt
-	}
-
-	// Parse MCP tool names
-	if strings.HasPrefix(toolName, "mcp__") {
-		parts := strings.SplitN(toolName, "__", 3)
-		if len(parts) == 3 {
-			attrs[attr.ToolCallSourceKey] = parts[1]
-			attrs[attr.ToolNameKey] = parts[2]
-		}
-	}
-
-	// Hash toolUseID to create trace ID if available
-	if payload.ToolUseID != nil && *payload.ToolUseID != "" {
-		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.ToolUseID)
-	}
-	if payload.SessionID != nil {
-		attrs[attr.GenAIConversationIDKey] = *payload.SessionID
-	}
-	if payload.ToolUseID != nil {
-		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
-	}
-	if payload.ToolInput != nil {
-		attrs[attr.GenAIToolCallArgumentsKey] = payload.ToolInput
-	}
-	if payload.ToolResponse != nil {
-		attrs[attr.GenAIToolCallResultKey] = payload.ToolResponse
-	}
-
-	return attrs
 }
 
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse

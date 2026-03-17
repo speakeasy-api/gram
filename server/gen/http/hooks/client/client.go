@@ -20,6 +20,9 @@ type Client struct {
 	// Claude Doer is the HTTP client used to make requests to the claude endpoint.
 	ClaudeDoer goahttp.Doer
 
+	// Cursor Doer is the HTTP client used to make requests to the cursor endpoint.
+	CursorDoer goahttp.Doer
+
 	// Logs Doer is the HTTP client used to make requests to the logs endpoint.
 	LogsDoer goahttp.Doer
 
@@ -44,6 +47,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ClaudeDoer:          doer,
+		CursorDoer:          doer,
 		LogsDoer:            doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -72,6 +76,30 @@ func (c *Client) Claude() goa.Endpoint {
 		resp, err := c.ClaudeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("hooks", "claude", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Cursor returns an endpoint that makes HTTP requests to the hooks service
+// cursor server.
+func (c *Client) Cursor() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCursorRequest(c.encoder)
+		decodeResponse = DecodeCursorResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCursorRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CursorDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "cursor", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -19,6 +19,9 @@ type Service interface {
 	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
 	Claude(context.Context, *ClaudeHookPayload) (res *ClaudeHookResult, err error)
+	// Unified endpoint for all Cursor hook events. Handles all Cursor hook types
+	// including sessionStart, preToolUse, postToolUse, and many others.
+	Cursor(context.Context, *CursorHookPayload) (res *CursorHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -44,7 +47,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"claude", "logs"}
+var MethodNames = [3]string{"claude", "cursor", "logs"}
 
 // ClaudeHookPayload is the payload type of the hooks service claude method.
 type ClaudeHookPayload struct {
@@ -76,6 +79,74 @@ type ClaudeHookResult struct {
 	StopReason *string
 	// Hook-specific output as JSON object
 	HookSpecificOutput any
+}
+
+// CursorHookPayload is the payload type of the hooks service cursor method.
+type CursorHookPayload struct {
+	// The type of hook event
+	HookEventName string
+	// Cursor conversation ID
+	ConversationID *string
+	// Cursor generation ID
+	GenerationID *string
+	// Model being used
+	Model *string
+	// Cursor version
+	CursorVersion *string
+	// Workspace root paths
+	WorkspaceRoots []string
+	// User email
+	UserEmail *string
+	// Path to conversation transcript
+	TranscriptPath *string
+	// The name of the tool (for tool-related events)
+	ToolName *string
+	// The unique ID for this tool use
+	ToolUseID *string
+	// The input to the tool
+	ToolInput any
+	// The response from the tool (postToolUse only)
+	ToolResponse any
+	// The error from the tool (postToolUseFailure only)
+	Error any
+	// Shell command being executed
+	Command *string
+	// Current working directory
+	Cwd *string
+	// Path to file being accessed or edited
+	FilePath *string
+	// Content of the file
+	FileContent *string
+	// MCP server name
+	McpServer *string
+	// MCP tool name
+	McpTool *string
+	// Subagent identifier
+	SubagentID *string
+	// Prompt given to subagent
+	SubagentPrompt *string
+	// Agent response text
+	ResponseText *string
+	// Agent thought/reasoning text
+	ThoughtText *string
+	// Additional hook-specific data
+	AdditionalData map[string]any
+}
+
+// CursorHookResult is the result type of the hooks service cursor method.
+type CursorHookResult struct {
+	// Permission decision: allow, deny, or ask
+	Permission *string
+	// Optional message to display to user
+	UserMessage *string
+	// Optional message to send to agent
+	AgentMessage *string
+	// Environment variables to inject
+	Env map[string]string
+	// Additional context for the agent
+	AdditionalContext *string
+	// Auto-submit this message (stop/subagentStop hooks)
+	FollowupMessage *string
 }
 
 // LogsPayload is the payload type of the hooks service logs method.
