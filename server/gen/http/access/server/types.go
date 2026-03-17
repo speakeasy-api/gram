@@ -21,6 +21,14 @@ type UpsertGrantsRequestBody struct {
 	Grants []*UpsertGrantFormRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
+// RemoveGrantsRequestBody is the type of the "access" service "removeGrants"
+// endpoint HTTP request body.
+type RemoveGrantsRequestBody struct {
+	// The list of grants to remove, each identified by (principal_urn, scope,
+	// resource).
+	Grants []*RemoveGrantEntryRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
+}
+
 // ListGrantsResponseBody is the type of the "access" service "listGrants"
 // endpoint HTTP response body.
 type ListGrantsResponseBody struct {
@@ -396,187 +404,6 @@ type UpsertGrantsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveGrantUnauthorizedResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "unauthorized" error.
-type RemoveGrantUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantForbiddenResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "forbidden" error.
-type RemoveGrantForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantBadRequestResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "bad_request" error.
-type RemoveGrantBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantNotFoundResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "not_found" error.
-type RemoveGrantNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantConflictResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "conflict" error.
-type RemoveGrantConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantUnsupportedMediaResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "unsupported_media" error.
-type RemoveGrantUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantInvalidResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "invalid" error.
-type RemoveGrantInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantInvariantViolationResponseBody is the type of the "access"
-// service "removeGrant" endpoint HTTP response body for the
-// "invariant_violation" error.
-type RemoveGrantInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantUnexpectedResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "unexpected" error.
-type RemoveGrantUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveGrantGatewayErrorResponseBody is the type of the "access" service
-// "removeGrant" endpoint HTTP response body for the "gateway_error" error.
-type RemoveGrantGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // RemoveGrantsUnauthorizedResponseBody is the type of the "access" service
 // "removeGrants" endpoint HTTP response body for the "unauthorized" error.
 type RemoveGrantsUnauthorizedResponseBody struct {
@@ -758,6 +585,195 @@ type RemoveGrantsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RemovePrincipalGrantsUnauthorizedResponseBody is the type of the "access"
+// service "removePrincipalGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type RemovePrincipalGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsForbiddenResponseBody is the type of the "access"
+// service "removePrincipalGrants" endpoint HTTP response body for the
+// "forbidden" error.
+type RemovePrincipalGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsBadRequestResponseBody is the type of the "access"
+// service "removePrincipalGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type RemovePrincipalGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsNotFoundResponseBody is the type of the "access"
+// service "removePrincipalGrants" endpoint HTTP response body for the
+// "not_found" error.
+type RemovePrincipalGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsConflictResponseBody is the type of the "access"
+// service "removePrincipalGrants" endpoint HTTP response body for the
+// "conflict" error.
+type RemovePrincipalGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsUnsupportedMediaResponseBody is the type of the
+// "access" service "removePrincipalGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RemovePrincipalGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsInvalidResponseBody is the type of the "access" service
+// "removePrincipalGrants" endpoint HTTP response body for the "invalid" error.
+type RemovePrincipalGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsInvariantViolationResponseBody is the type of the
+// "access" service "removePrincipalGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RemovePrincipalGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsUnexpectedResponseBody is the type of the "access"
+// service "removePrincipalGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type RemovePrincipalGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePrincipalGrantsGatewayErrorResponseBody is the type of the "access"
+// service "removePrincipalGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type RemovePrincipalGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GrantResponseBody is used to define fields on response body types.
 type GrantResponseBody struct {
 	// Unique identifier of the grant.
@@ -787,6 +803,16 @@ type UpsertGrantFormRequestBody struct {
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
 	// access.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+}
+
+// RemoveGrantEntryRequestBody is used to define fields on request body types.
+type RemoveGrantEntryRequestBody struct {
+	// The principal URN (e.g. "user:user_abc", "role:admin").
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// The scope of the grant (e.g. "build:read").
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// The resource of the grant. Defaults to "*".
 	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 }
 
@@ -1108,146 +1134,6 @@ func NewUpsertGrantsGatewayErrorResponseBody(res *goa.ServiceError) *UpsertGrant
 	return body
 }
 
-// NewRemoveGrantUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantUnauthorizedResponseBody(res *goa.ServiceError) *RemoveGrantUnauthorizedResponseBody {
-	body := &RemoveGrantUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantForbiddenResponseBody builds the HTTP response body from the
-// result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantForbiddenResponseBody(res *goa.ServiceError) *RemoveGrantForbiddenResponseBody {
-	body := &RemoveGrantForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantBadRequestResponseBody builds the HTTP response body from the
-// result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantBadRequestResponseBody(res *goa.ServiceError) *RemoveGrantBadRequestResponseBody {
-	body := &RemoveGrantBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantNotFoundResponseBody builds the HTTP response body from the
-// result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantNotFoundResponseBody(res *goa.ServiceError) *RemoveGrantNotFoundResponseBody {
-	body := &RemoveGrantNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantConflictResponseBody builds the HTTP response body from the
-// result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantConflictResponseBody(res *goa.ServiceError) *RemoveGrantConflictResponseBody {
-	body := &RemoveGrantConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantUnsupportedMediaResponseBody(res *goa.ServiceError) *RemoveGrantUnsupportedMediaResponseBody {
-	body := &RemoveGrantUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantInvalidResponseBody builds the HTTP response body from the
-// result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantInvalidResponseBody(res *goa.ServiceError) *RemoveGrantInvalidResponseBody {
-	body := &RemoveGrantInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantInvariantViolationResponseBody(res *goa.ServiceError) *RemoveGrantInvariantViolationResponseBody {
-	body := &RemoveGrantInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantUnexpectedResponseBody builds the HTTP response body from the
-// result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantUnexpectedResponseBody(res *goa.ServiceError) *RemoveGrantUnexpectedResponseBody {
-	body := &RemoveGrantUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveGrantGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "removeGrant" endpoint of the "access" service.
-func NewRemoveGrantGatewayErrorResponseBody(res *goa.ServiceError) *RemoveGrantGatewayErrorResponseBody {
-	body := &RemoveGrantGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewRemoveGrantsUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "removeGrants" endpoint of the "access" service.
 func NewRemoveGrantsUnauthorizedResponseBody(res *goa.ServiceError) *RemoveGrantsUnauthorizedResponseBody {
@@ -1388,6 +1274,156 @@ func NewRemoveGrantsGatewayErrorResponseBody(res *goa.ServiceError) *RemoveGrant
 	return body
 }
 
+// NewRemovePrincipalGrantsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "removePrincipalGrants" endpoint of the "access"
+// service.
+func NewRemovePrincipalGrantsUnauthorizedResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsUnauthorizedResponseBody {
+	body := &RemovePrincipalGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsForbiddenResponseBody builds the HTTP response body
+// from the result of the "removePrincipalGrants" endpoint of the "access"
+// service.
+func NewRemovePrincipalGrantsForbiddenResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsForbiddenResponseBody {
+	body := &RemovePrincipalGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsBadRequestResponseBody builds the HTTP response body
+// from the result of the "removePrincipalGrants" endpoint of the "access"
+// service.
+func NewRemovePrincipalGrantsBadRequestResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsBadRequestResponseBody {
+	body := &RemovePrincipalGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsNotFoundResponseBody builds the HTTP response body
+// from the result of the "removePrincipalGrants" endpoint of the "access"
+// service.
+func NewRemovePrincipalGrantsNotFoundResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsNotFoundResponseBody {
+	body := &RemovePrincipalGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsConflictResponseBody builds the HTTP response body
+// from the result of the "removePrincipalGrants" endpoint of the "access"
+// service.
+func NewRemovePrincipalGrantsConflictResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsConflictResponseBody {
+	body := &RemovePrincipalGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "removePrincipalGrants" endpoint of the
+// "access" service.
+func NewRemovePrincipalGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsUnsupportedMediaResponseBody {
+	body := &RemovePrincipalGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsInvalidResponseBody builds the HTTP response body
+// from the result of the "removePrincipalGrants" endpoint of the "access"
+// service.
+func NewRemovePrincipalGrantsInvalidResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsInvalidResponseBody {
+	body := &RemovePrincipalGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "removePrincipalGrants" endpoint of the
+// "access" service.
+func NewRemovePrincipalGrantsInvariantViolationResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsInvariantViolationResponseBody {
+	body := &RemovePrincipalGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "removePrincipalGrants" endpoint of the "access"
+// service.
+func NewRemovePrincipalGrantsUnexpectedResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsUnexpectedResponseBody {
+	body := &RemovePrincipalGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "removePrincipalGrants" endpoint of the "access"
+// service.
+func NewRemovePrincipalGrantsGatewayErrorResponseBody(res *goa.ServiceError) *RemovePrincipalGrantsGatewayErrorResponseBody {
+	body := &RemovePrincipalGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListGrantsPayload builds a access service listGrants endpoint payload.
 func NewListGrantsPayload(principalUrn *string, sessionToken *string) *access.ListGrantsPayload {
 	v := &access.ListGrantsPayload{}
@@ -1413,20 +1449,26 @@ func NewUpsertGrantsPayload(body *UpsertGrantsRequestBody, sessionToken *string)
 	return v
 }
 
-// NewRemoveGrantPayload builds a access service removeGrant endpoint payload.
-func NewRemoveGrantPayload(principalUrn string, scope string, resource string, sessionToken *string) *access.RemoveGrantPayload {
-	v := &access.RemoveGrantPayload{}
-	v.PrincipalUrn = principalUrn
-	v.Scope = scope
-	v.Resource = resource
+// NewRemoveGrantsPayload builds a access service removeGrants endpoint payload.
+func NewRemoveGrantsPayload(body *RemoveGrantsRequestBody, sessionToken *string) *access.RemoveGrantsPayload {
+	v := &access.RemoveGrantsPayload{}
+	v.Grants = make([]*access.RemoveGrantEntry, len(body.Grants))
+	for i, val := range body.Grants {
+		if val == nil {
+			v.Grants[i] = nil
+			continue
+		}
+		v.Grants[i] = unmarshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(val)
+	}
 	v.SessionToken = sessionToken
 
 	return v
 }
 
-// NewRemoveGrantsPayload builds a access service removeGrants endpoint payload.
-func NewRemoveGrantsPayload(principalUrn string, sessionToken *string) *access.RemoveGrantsPayload {
-	v := &access.RemoveGrantsPayload{}
+// NewRemovePrincipalGrantsPayload builds a access service
+// removePrincipalGrants endpoint payload.
+func NewRemovePrincipalGrantsPayload(principalUrn string, sessionToken *string) *access.RemovePrincipalGrantsPayload {
+	v := &access.RemovePrincipalGrantsPayload{}
 	v.PrincipalUrn = principalUrn
 	v.SessionToken = sessionToken
 
@@ -1455,9 +1497,68 @@ func ValidateUpsertGrantsRequestBody(body *UpsertGrantsRequestBody) (err error) 
 	return
 }
 
+// ValidateRemoveGrantsRequestBody runs the validations defined on
+// RemoveGrantsRequestBody
+func ValidateRemoveGrantsRequestBody(body *RemoveGrantsRequestBody) (err error) {
+	if body.Grants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
+	}
+	if len(body.Grants) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.grants", body.Grants, len(body.Grants), 1, true))
+	}
+	if len(body.Grants) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.grants", body.Grants, len(body.Grants), 100, false))
+	}
+	for _, e := range body.Grants {
+		if e != nil {
+			if err2 := ValidateRemoveGrantEntryRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateUpsertGrantFormRequestBody runs the validations defined on
 // UpsertGrantFormRequestBody
 func ValidateUpsertGrantFormRequestBody(body *UpsertGrantFormRequestBody) (err error) {
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.PrincipalUrn != nil {
+		if utf8.RuneCountInString(*body.PrincipalUrn) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 3, true))
+		}
+	}
+	if body.PrincipalUrn != nil {
+		if utf8.RuneCountInString(*body.PrincipalUrn) > 260 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 260, false))
+		}
+	}
+	if body.Scope != nil {
+		if utf8.RuneCountInString(*body.Scope) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 3, true))
+		}
+	}
+	if body.Scope != nil {
+		if utf8.RuneCountInString(*body.Scope) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 60, false))
+		}
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) > 260 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 260, false))
+		}
+	}
+	return
+}
+
+// ValidateRemoveGrantEntryRequestBody runs the validations defined on
+// RemoveGrantEntryRequestBody
+func ValidateRemoveGrantEntryRequestBody(body *RemoveGrantEntryRequestBody) (err error) {
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}

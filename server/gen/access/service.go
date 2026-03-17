@@ -23,11 +23,10 @@ type Service interface {
 	// one with the same (org, principal, scope, resource) already exists, the
 	// record is kept as is.
 	UpsertGrants(context.Context, *UpsertGrantsPayload) (res *UpsertGrantsResult, err error)
-	// Remove a single grant matching the exact (principal, scope, resource) tuple
-	// within the organization.
-	RemoveGrant(context.Context, *RemoveGrantPayload) (err error)
-	// Remove all grants for a specific principal within the organization.
+	// Remove one or more grants by their exact (principal, scope, resource) tuples.
 	RemoveGrants(context.Context, *RemoveGrantsPayload) (err error)
+	// Remove all grants for a specific principal within the organization.
+	RemovePrincipalGrants(context.Context, *RemovePrincipalGrantsPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -50,7 +49,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"listGrants", "upsertGrants", "removeGrant", "removeGrants"}
+var MethodNames = [4]string{"listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants"}
 
 // A principal grant representing a single RBAC permission.
 type Grant struct {
@@ -88,22 +87,29 @@ type ListGrantsResult struct {
 	Grants []*Grant
 }
 
-// RemoveGrantPayload is the payload type of the access service removeGrant
-// method.
-type RemoveGrantPayload struct {
-	// The principal URN of the grant to remove (e.g. "user:user_abc",
-	// "role:admin").
+// Identifies a single grant to remove by its (principal, scope, resource)
+// tuple.
+type RemoveGrantEntry struct {
+	// The principal URN (e.g. "user:user_abc", "role:admin").
 	PrincipalUrn string
-	// The scope of the grant to remove (e.g. "build:read").
+	// The scope of the grant (e.g. "build:read").
 	Scope string
-	// The resource of the grant to remove (e.g. "*" or a specific resource ID).
-	Resource     string
-	SessionToken *string
+	// The resource of the grant. Defaults to "*".
+	Resource string
 }
 
 // RemoveGrantsPayload is the payload type of the access service removeGrants
 // method.
 type RemoveGrantsPayload struct {
+	// The list of grants to remove, each identified by (principal_urn, scope,
+	// resource).
+	Grants       []*RemoveGrantEntry
+	SessionToken *string
+}
+
+// RemovePrincipalGrantsPayload is the payload type of the access service
+// removePrincipalGrants method.
+type RemovePrincipalGrantsPayload struct {
 	// The principal URN whose grants should be removed (e.g. "user:user_abc",
 	// "role:admin").
 	PrincipalUrn string

@@ -92,75 +92,31 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsS
 	return v, nil
 }
 
-// BuildRemoveGrantPayload builds the payload for the access removeGrant
-// endpoint from CLI flags.
-func BuildRemoveGrantPayload(accessRemoveGrantPrincipalUrn string, accessRemoveGrantScope string, accessRemoveGrantResource string, accessRemoveGrantSessionToken string) (*access.RemoveGrantPayload, error) {
-	var err error
-	var principalUrn string
-	{
-		principalUrn = accessRemoveGrantPrincipalUrn
-		if utf8.RuneCountInString(principalUrn) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 3, true))
-		}
-		if utf8.RuneCountInString(principalUrn) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 260, false))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var scope string
-	{
-		scope = accessRemoveGrantScope
-		if utf8.RuneCountInString(scope) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("scope", scope, utf8.RuneCountInString(scope), 3, true))
-		}
-		if utf8.RuneCountInString(scope) > 60 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("scope", scope, utf8.RuneCountInString(scope), 60, false))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var resource string
-	{
-		if accessRemoveGrantResource != "" {
-			resource = accessRemoveGrantResource
-			if utf8.RuneCountInString(resource) > 260 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("resource", resource, utf8.RuneCountInString(resource), 260, false))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var sessionToken *string
-	{
-		if accessRemoveGrantSessionToken != "" {
-			sessionToken = &accessRemoveGrantSessionToken
-		}
-	}
-	v := &access.RemoveGrantPayload{}
-	v.PrincipalUrn = principalUrn
-	v.Scope = scope
-	v.Resource = resource
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
 // BuildRemoveGrantsPayload builds the payload for the access removeGrants
 // endpoint from CLI flags.
-func BuildRemoveGrantsPayload(accessRemoveGrantsPrincipalUrn string, accessRemoveGrantsSessionToken string) (*access.RemoveGrantsPayload, error) {
+func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsSessionToken string) (*access.RemoveGrantsPayload, error) {
 	var err error
-	var principalUrn string
+	var body RemoveGrantsRequestBody
 	{
-		principalUrn = accessRemoveGrantsPrincipalUrn
-		if utf8.RuneCountInString(principalUrn) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 3, true))
+		err = json.Unmarshal([]byte(accessRemoveGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }'")
 		}
-		if utf8.RuneCountInString(principalUrn) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 260, false))
+		if body.Grants == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
+		}
+		if len(body.Grants) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.grants", body.Grants, len(body.Grants), 1, true))
+		}
+		if len(body.Grants) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.grants", body.Grants, len(body.Grants), 100, false))
+		}
+		for _, e := range body.Grants {
+			if e != nil {
+				if err2 := ValidateRemoveGrantEntryRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -173,6 +129,47 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsPrincipalUrn string, accessRemov
 		}
 	}
 	v := &access.RemoveGrantsPayload{}
+	if body.Grants != nil {
+		v.Grants = make([]*access.RemoveGrantEntry, len(body.Grants))
+		for i, val := range body.Grants {
+			if val == nil {
+				v.Grants[i] = nil
+				continue
+			}
+			v.Grants[i] = marshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(val)
+		}
+	} else {
+		v.Grants = []*access.RemoveGrantEntry{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRemovePrincipalGrantsPayload builds the payload for the access
+// removePrincipalGrants endpoint from CLI flags.
+func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsPrincipalUrn string, accessRemovePrincipalGrantsSessionToken string) (*access.RemovePrincipalGrantsPayload, error) {
+	var err error
+	var principalUrn string
+	{
+		principalUrn = accessRemovePrincipalGrantsPrincipalUrn
+		if utf8.RuneCountInString(principalUrn) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 3, true))
+		}
+		if utf8.RuneCountInString(principalUrn) > 260 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 260, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessRemovePrincipalGrantsSessionToken != "" {
+			sessionToken = &accessRemovePrincipalGrantsSessionToken
+		}
+	}
+	v := &access.RemovePrincipalGrantsPayload{}
 	v.PrincipalUrn = principalUrn
 	v.SessionToken = sessionToken
 

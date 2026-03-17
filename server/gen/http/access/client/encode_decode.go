@@ -487,233 +487,11 @@ func DecodeUpsertGrantsResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
-// BuildRemoveGrantRequest instantiates a HTTP request object with method and
-// path set to call the "access" service "removeGrant" endpoint
-func (c *Client) BuildRemoveGrantRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemoveGrantAccessPath()}
-	req, err := http.NewRequest("DELETE", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("access", "removeGrant", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeRemoveGrantRequest returns an encoder for requests sent to the access
-// removeGrant server.
-func EncodeRemoveGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*access.RemoveGrantPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("access", "removeGrant", "*access.RemoveGrantPayload", v)
-		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		values := req.URL.Query()
-		values.Add("principal_urn", p.PrincipalUrn)
-		values.Add("scope", p.Scope)
-		values.Add("resource", p.Resource)
-		req.URL.RawQuery = values.Encode()
-		return nil
-	}
-}
-
-// DecodeRemoveGrantResponse returns a decoder for responses returned by the
-// access removeGrant endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-// DecodeRemoveGrantResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeRemoveGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusNoContent:
-			return nil, nil
-		case http.StatusUnauthorized:
-			var (
-				body RemoveGrantUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-			}
-			err = ValidateRemoveGrantUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-			}
-			return nil, NewRemoveGrantUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body RemoveGrantForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-			}
-			err = ValidateRemoveGrantForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-			}
-			return nil, NewRemoveGrantForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body RemoveGrantBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-			}
-			err = ValidateRemoveGrantBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-			}
-			return nil, NewRemoveGrantBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body RemoveGrantNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-			}
-			err = ValidateRemoveGrantNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-			}
-			return nil, NewRemoveGrantNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body RemoveGrantConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-			}
-			err = ValidateRemoveGrantConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-			}
-			return nil, NewRemoveGrantConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body RemoveGrantUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-			}
-			err = ValidateRemoveGrantUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-			}
-			return nil, NewRemoveGrantUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body RemoveGrantInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-			}
-			err = ValidateRemoveGrantInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-			}
-			return nil, NewRemoveGrantInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body RemoveGrantInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-				}
-				err = ValidateRemoveGrantInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-				}
-				return nil, NewRemoveGrantInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body RemoveGrantUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-				}
-				err = ValidateRemoveGrantUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-				}
-				return nil, NewRemoveGrantUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("access", "removeGrant", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body RemoveGrantGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrant", err)
-			}
-			err = ValidateRemoveGrantGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrant", err)
-			}
-			return nil, NewRemoveGrantGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("access", "removeGrant", resp.StatusCode, string(body))
-		}
-	}
-}
-
 // BuildRemoveGrantsRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "removeGrants" endpoint
 func (c *Client) BuildRemoveGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemoveGrantsAccessPath()}
-	req, err := http.NewRequest("DELETE", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("access", "removeGrants", u.String(), err)
 	}
@@ -736,9 +514,10 @@ func EncodeRemoveGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		values := req.URL.Query()
-		values.Add("principal_urn", p.PrincipalUrn)
-		req.URL.RawQuery = values.Encode()
+		body := NewRemoveGrantsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "removeGrants", err)
+		}
 		return nil
 	}
 }
@@ -929,6 +708,227 @@ func DecodeRemoveGrantsResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildRemovePrincipalGrantsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "removePrincipalGrants"
+// endpoint
+func (c *Client) BuildRemovePrincipalGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemovePrincipalGrantsAccessPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "removePrincipalGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRemovePrincipalGrantsRequest returns an encoder for requests sent to
+// the access removePrincipalGrants server.
+func EncodeRemovePrincipalGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.RemovePrincipalGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "removePrincipalGrants", "*access.RemovePrincipalGrantsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("principal_urn", p.PrincipalUrn)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRemovePrincipalGrantsResponse returns a decoder for responses returned
+// by the access removePrincipalGrants endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeRemovePrincipalGrantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRemovePrincipalGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body RemovePrincipalGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+			}
+			err = ValidateRemovePrincipalGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+			}
+			return nil, NewRemovePrincipalGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RemovePrincipalGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+			}
+			err = ValidateRemovePrincipalGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+			}
+			return nil, NewRemovePrincipalGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RemovePrincipalGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+			}
+			err = ValidateRemovePrincipalGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+			}
+			return nil, NewRemovePrincipalGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RemovePrincipalGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+			}
+			err = ValidateRemovePrincipalGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+			}
+			return nil, NewRemovePrincipalGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RemovePrincipalGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+			}
+			err = ValidateRemovePrincipalGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+			}
+			return nil, NewRemovePrincipalGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RemovePrincipalGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+			}
+			err = ValidateRemovePrincipalGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+			}
+			return nil, NewRemovePrincipalGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RemovePrincipalGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+			}
+			err = ValidateRemovePrincipalGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+			}
+			return nil, NewRemovePrincipalGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RemovePrincipalGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				}
+				err = ValidateRemovePrincipalGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				}
+				return nil, NewRemovePrincipalGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RemovePrincipalGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				}
+				err = ValidateRemovePrincipalGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				}
+				return nil, NewRemovePrincipalGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "removePrincipalGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RemovePrincipalGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+			}
+			err = ValidateRemovePrincipalGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+			}
+			return nil, NewRemovePrincipalGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "removePrincipalGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalGrantResponseBodyToAccessGrant builds a value of type *access.Grant
 // from a value of type *GrantResponseBody.
 func unmarshalGrantResponseBodyToAccessGrant(v *GrantResponseBody) *access.Grant {
@@ -970,6 +970,44 @@ func marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody(v *access.UpsertGr
 // *UpsertGrantFormRequestBody.
 func marshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm(v *UpsertGrantFormRequestBody) *access.UpsertGrantForm {
 	res := &access.UpsertGrantForm{
+		PrincipalUrn: v.PrincipalUrn,
+		Scope:        v.Scope,
+		Resource:     v.Resource,
+	}
+	{
+		var zero string
+		if res.Resource == zero {
+			res.Resource = "*"
+		}
+	}
+
+	return res
+}
+
+// marshalAccessRemoveGrantEntryToRemoveGrantEntryRequestBody builds a value of
+// type *RemoveGrantEntryRequestBody from a value of type
+// *access.RemoveGrantEntry.
+func marshalAccessRemoveGrantEntryToRemoveGrantEntryRequestBody(v *access.RemoveGrantEntry) *RemoveGrantEntryRequestBody {
+	res := &RemoveGrantEntryRequestBody{
+		PrincipalUrn: v.PrincipalUrn,
+		Scope:        v.Scope,
+		Resource:     v.Resource,
+	}
+	{
+		var zero string
+		if res.Resource == zero {
+			res.Resource = "*"
+		}
+	}
+
+	return res
+}
+
+// marshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry builds a value of
+// type *access.RemoveGrantEntry from a value of type
+// *RemoveGrantEntryRequestBody.
+func marshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(v *RemoveGrantEntryRequestBody) *access.RemoveGrantEntry {
+	res := &access.RemoveGrantEntry{
 		PrincipalUrn: v.PrincipalUrn,
 		Scope:        v.Scope,
 		Resource:     v.Resource,

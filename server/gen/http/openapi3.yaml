@@ -94,40 +94,11 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: Grants
-    /rpc/access.removeGrant:
-        delete:
-            description: Remove a single grant matching the exact (principal, scope, resource) tuple within the organization.
-            operationId: removeGrant
+    /rpc/access.removeGrants:
+        post:
+            description: Remove one or more grants by their exact (principal, scope, resource) tuples.
+            operationId: removeGrants
             parameters:
-                - allowEmptyValue: true
-                  description: The principal URN of the grant to remove (e.g. "user:user_abc", "role:admin").
-                  in: query
-                  name: principal_urn
-                  required: true
-                  schema:
-                    description: The principal URN of the grant to remove (e.g. "user:user_abc", "role:admin").
-                    maxLength: 260
-                    minLength: 3
-                    type: string
-                - allowEmptyValue: true
-                  description: The scope of the grant to remove (e.g. "build:read").
-                  in: query
-                  name: scope
-                  required: true
-                  schema:
-                    description: The scope of the grant to remove (e.g. "build:read").
-                    maxLength: 60
-                    minLength: 3
-                    type: string
-                - allowEmptyValue: true
-                  description: The resource of the grant to remove (e.g. "*" or a specific resource ID).
-                  in: query
-                  name: resource
-                  schema:
-                    default: '*'
-                    description: The resource of the grant to remove (e.g. "*" or a specific resource ID).
-                    maxLength: 260
-                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -135,6 +106,12 @@ paths:
                   schema:
                     description: Session header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertGrantsRequestBody'
+                required: true
             responses:
                 "204":
                     description: No Content response.
@@ -194,16 +171,16 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
-            summary: removeGrant access
+            summary: removeGrants access
             tags:
                 - access
-            x-speakeasy-name-override: removeOne
+            x-speakeasy-name-override: remove
             x-speakeasy-react-hook:
-                name: RemoveGrant
-    /rpc/access.removeGrants:
+                name: RemoveGrants
+    /rpc/access.removePrincipalGrants:
         delete:
             description: Remove all grants for a specific principal within the organization.
-            operationId: removeGrants
+            operationId: removePrincipalGrants
             parameters:
                 - allowEmptyValue: true
                   description: The principal URN whose grants should be removed (e.g. "user:user_abc", "role:admin").
@@ -281,12 +258,12 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
-            summary: removeGrants access
+            summary: removePrincipalGrants access
             tags:
                 - access
-            x-speakeasy-name-override: removeAll
+            x-speakeasy-name-override: removePrincipal
             x-speakeasy-react-hook:
-                name: RemoveGrants
+                name: RemovePrincipalGrants
     /rpc/access.upsertGrants:
         post:
             description: Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.
@@ -17463,6 +17440,28 @@ components:
                     description: The name of the org to register
             required:
                 - org_name
+        RemoveGrantEntry:
+            type: object
+            properties:
+                principal_urn:
+                    type: string
+                    description: The principal URN (e.g. "user:user_abc", "role:admin").
+                    minLength: 3
+                    maxLength: 260
+                resource:
+                    type: string
+                    description: The resource of the grant. Defaults to "*".
+                    default: '*'
+                    maxLength: 260
+                scope:
+                    type: string
+                    description: The scope of the grant (e.g. "build:read").
+                    minLength: 3
+                    maxLength: 60
+            description: Identifies a single grant to remove by its (principal, scope, resource) tuple.
+            required:
+                - principal_urn
+                - scope
         RenderTemplateByIDRequestBody:
             type: object
             properties:

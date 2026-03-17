@@ -62,44 +62,31 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertGrants"}`)
 	})
 
-	Method("removeGrant", func() {
-		Description("Remove a single grant matching the exact (principal, scope, resource) tuple within the organization.")
+	Method("removeGrants", func() {
+		Description("Remove one or more grants by their exact (principal, scope, resource) tuples.")
 
 		Payload(func() {
-			Attribute("principal_urn", String, func() {
-				Description("The principal URN of the grant to remove (e.g. \"user:user_abc\", \"role:admin\").")
-				MinLength(3)
-				MaxLength(260)
+			Attribute("grants", ArrayOf(RemoveGrantEntry), func() {
+				Description("The list of grants to remove, each identified by (principal_urn, scope, resource).")
+				MinLength(1)
+				MaxLength(100)
 			})
-			Attribute("scope", String, func() {
-				Description("The scope of the grant to remove (e.g. \"build:read\").")
-				MinLength(3)
-				MaxLength(60)
-			})
-			Attribute("resource", String, func() {
-				Description("The resource of the grant to remove (e.g. \"*\" or a specific resource ID).")
-				MaxLength(260)
-				Default("*")
-			})
-			Required("principal_urn", "scope")
+			Required("grants")
 			security.SessionPayload()
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/access.removeGrant")
-			Param("principal_urn")
-			Param("scope")
-			Param("resource")
+			POST("/rpc/access.removeGrants")
 			security.SessionHeader()
 			Response(StatusNoContent)
 		})
 
-		Meta("openapi:operationId", "removeGrant")
-		Meta("openapi:extension:x-speakeasy-name-override", "removeOne")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveGrant"}`)
+		Meta("openapi:operationId", "removeGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "remove")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveGrants"}`)
 	})
 
-	Method("removeGrants", func() {
+	Method("removePrincipalGrants", func() {
 		Description("Remove all grants for a specific principal within the organization.")
 
 		Payload(func() {
@@ -113,15 +100,36 @@ var _ = Service("access", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/access.removeGrants")
+			DELETE("/rpc/access.removePrincipalGrants")
 			Param("principal_urn")
 			security.SessionHeader()
 			Response(StatusNoContent)
 		})
 
-		Meta("openapi:operationId", "removeGrants")
-		Meta("openapi:extension:x-speakeasy-name-override", "removeAll")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveGrants"}`)
+		Meta("openapi:operationId", "removePrincipalGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "removePrincipal")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemovePrincipalGrants"}`)
+	})
+})
+
+var RemoveGrantEntry = Type("RemoveGrantEntry", func() {
+	Description("Identifies a single grant to remove by its (principal, scope, resource) tuple.")
+	Required("principal_urn", "scope")
+
+	Attribute("principal_urn", String, func() {
+		Description("The principal URN (e.g. \"user:user_abc\", \"role:admin\").")
+		MinLength(3)
+		MaxLength(260)
+	})
+	Attribute("scope", String, func() {
+		Description("The scope of the grant (e.g. \"build:read\").")
+		MinLength(3)
+		MaxLength(60)
+	})
+	Attribute("resource", String, func() {
+		Description("The resource of the grant. Defaults to \"*\".")
+		Default("*")
+		MaxLength(260)
 	})
 })
 

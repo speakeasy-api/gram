@@ -113,35 +113,33 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 	return &gen.UpsertGrantsResult{Grants: grants}, nil
 }
 
-func (s *Service) RemoveGrant(ctx context.Context, payload *gen.RemoveGrantPayload) error {
+func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	principal, err := urn.ParsePrincipal(payload.PrincipalUrn)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
-	}
+	for _, entry := range payload.Grants {
+		principal, err := urn.ParsePrincipal(entry.PrincipalUrn)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
+		}
 
-	rows, err := s.repo.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		PrincipalUrn:   principal,
-		Scope:          payload.Scope,
-		Resource:       payload.Resource,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove principal grant").Log(ctx, s.logger)
-	}
-
-	if rows == 0 {
-		return oops.C(oops.CodeNotFound)
+		_, err = s.repo.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PrincipalUrn:   principal,
+			Scope:          entry.Scope,
+			Resource:       entry.Resource,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "remove grant").Log(ctx, s.logger)
+		}
 	}
 
 	return nil
 }
 
-func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPayload) error {
+func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.RemovePrincipalGrantsPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)

@@ -18,11 +18,11 @@ import (
 
 // Server lists the access service endpoint HTTP handlers.
 type Server struct {
-	Mounts       []*MountPoint
-	ListGrants   http.Handler
-	UpsertGrants http.Handler
-	RemoveGrant  http.Handler
-	RemoveGrants http.Handler
+	Mounts                []*MountPoint
+	ListGrants            http.Handler
+	UpsertGrants          http.Handler
+	RemoveGrants          http.Handler
+	RemovePrincipalGrants http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -54,13 +54,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
 			{"UpsertGrants", "POST", "/rpc/access.upsertGrants"},
-			{"RemoveGrant", "DELETE", "/rpc/access.removeGrant"},
-			{"RemoveGrants", "DELETE", "/rpc/access.removeGrants"},
+			{"RemoveGrants", "POST", "/rpc/access.removeGrants"},
+			{"RemovePrincipalGrants", "DELETE", "/rpc/access.removePrincipalGrants"},
 		},
-		ListGrants:   NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
-		UpsertGrants: NewUpsertGrantsHandler(e.UpsertGrants, mux, decoder, encoder, errhandler, formatter),
-		RemoveGrant:  NewRemoveGrantHandler(e.RemoveGrant, mux, decoder, encoder, errhandler, formatter),
-		RemoveGrants: NewRemoveGrantsHandler(e.RemoveGrants, mux, decoder, encoder, errhandler, formatter),
+		ListGrants:            NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
+		UpsertGrants:          NewUpsertGrantsHandler(e.UpsertGrants, mux, decoder, encoder, errhandler, formatter),
+		RemoveGrants:          NewRemoveGrantsHandler(e.RemoveGrants, mux, decoder, encoder, errhandler, formatter),
+		RemovePrincipalGrants: NewRemovePrincipalGrantsHandler(e.RemovePrincipalGrants, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -71,8 +71,8 @@ func (s *Server) Service() string { return "access" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListGrants = m(s.ListGrants)
 	s.UpsertGrants = m(s.UpsertGrants)
-	s.RemoveGrant = m(s.RemoveGrant)
 	s.RemoveGrants = m(s.RemoveGrants)
+	s.RemovePrincipalGrants = m(s.RemovePrincipalGrants)
 }
 
 // MethodNames returns the methods served.
@@ -82,8 +82,8 @@ func (s *Server) MethodNames() []string { return access.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListGrantsHandler(mux, h.ListGrants)
 	MountUpsertGrantsHandler(mux, h.UpsertGrants)
-	MountRemoveGrantHandler(mux, h.RemoveGrant)
 	MountRemoveGrantsHandler(mux, h.RemoveGrants)
+	MountRemovePrincipalGrantsHandler(mux, h.RemovePrincipalGrants)
 }
 
 // Mount configures the mux to serve the access endpoints.
@@ -197,21 +197,21 @@ func NewUpsertGrantsHandler(
 	})
 }
 
-// MountRemoveGrantHandler configures the mux to serve the "access" service
-// "removeGrant" endpoint.
-func MountRemoveGrantHandler(mux goahttp.Muxer, h http.Handler) {
+// MountRemoveGrantsHandler configures the mux to serve the "access" service
+// "removeGrants" endpoint.
+func MountRemoveGrantsHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/access.removeGrant", f)
+	mux.Handle("POST", "/rpc/access.removeGrants", f)
 }
 
-// NewRemoveGrantHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "removeGrant" endpoint.
-func NewRemoveGrantHandler(
+// NewRemoveGrantsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "removeGrants" endpoint.
+func NewRemoveGrantsHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -220,13 +220,13 @@ func NewRemoveGrantHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeRemoveGrantRequest(mux, decoder)
-		encodeResponse = EncodeRemoveGrantResponse(encoder)
-		encodeError    = EncodeRemoveGrantError(encoder, formatter)
+		decodeRequest  = DecodeRemoveGrantsRequest(mux, decoder)
+		encodeResponse = EncodeRemoveGrantsResponse(encoder)
+		encodeError    = EncodeRemoveGrantsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "removeGrant")
+		ctx = context.WithValue(ctx, goa.MethodKey, "removeGrants")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -250,21 +250,21 @@ func NewRemoveGrantHandler(
 	})
 }
 
-// MountRemoveGrantsHandler configures the mux to serve the "access" service
-// "removeGrants" endpoint.
-func MountRemoveGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountRemovePrincipalGrantsHandler configures the mux to serve the "access"
+// service "removePrincipalGrants" endpoint.
+func MountRemovePrincipalGrantsHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/access.removeGrants", f)
+	mux.Handle("DELETE", "/rpc/access.removePrincipalGrants", f)
 }
 
-// NewRemoveGrantsHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "removeGrants" endpoint.
-func NewRemoveGrantsHandler(
+// NewRemovePrincipalGrantsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "removePrincipalGrants" endpoint.
+func NewRemovePrincipalGrantsHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -273,13 +273,13 @@ func NewRemoveGrantsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeRemoveGrantsRequest(mux, decoder)
-		encodeResponse = EncodeRemoveGrantsResponse(encoder)
-		encodeError    = EncodeRemoveGrantsError(encoder, formatter)
+		decodeRequest  = DecodeRemovePrincipalGrantsRequest(mux, decoder)
+		encodeResponse = EncodeRemovePrincipalGrantsResponse(encoder)
+		encodeError    = EncodeRemovePrincipalGrantsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "removeGrants")
+		ctx = context.WithValue(ctx, goa.MethodKey, "removePrincipalGrants")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
