@@ -200,6 +200,8 @@ linters:
         - "(go.temporal.io/sdk/internal.ActivityInboundInterceptor).ExecuteActivity("
         - "(go.temporal.io/sdk/internal.Future).Get("
 
+        - "github.com/speakeasy-api/gram/server/internal/oops.C("
+        - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
