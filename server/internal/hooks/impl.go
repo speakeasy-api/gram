@@ -35,10 +35,6 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
 )
 
-type NameMapper interface {
-	GetMappedName(attrs map[attr.Key]any) (*string, error)
-}
-
 type Service struct {
 	tracer           trace.Tracer
 	logger           *slog.Logger
@@ -46,7 +42,6 @@ type Service struct {
 	telemetryService *telemetry.Service
 	auth             *auth.Auth
 	cache            cache.Cache
-	nameMapper       NameMapper
 	temporalEnv      *tenv.Environment
 	repo             *repo.Queries
 }
@@ -82,14 +77,6 @@ func NewService(
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 ) *Service {
-	// Use async name mapper when temporalEnv is available, otherwise fall back to sync
-	var nameMapper NameMapper
-	if temporalEnv != nil {
-		nameMapper = NewAsyncNameMapper(cacheAdapter, temporalEnv, logger)
-	} else {
-		nameMapper = NewNameMapper(cacheAdapter, completionsClient, logger)
-	}
-
 	return &Service{
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:           logger.With(attr.SlogComponent("hooks")),
@@ -97,7 +84,6 @@ func NewService(
 		telemetryService: telemetryService,
 		auth:             auth.New(logger, db, sessionsMgr),
 		cache:            cacheAdapter,
-		nameMapper:       nameMapper,
 		temporalEnv:      temporalEnv,
 		repo:             repo.New(db),
 	}

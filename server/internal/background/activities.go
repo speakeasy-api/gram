@@ -61,8 +61,6 @@ type Activities struct {
 	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
 	analyzeSegment                *resolution_activities.AnalyzeSegment
 	getUserFeedbackForChat        *resolution_activities.GetUserFeedbackForChat
-	generateNameMapping           *activities.GenerateNameMapping
-	updateClickHouseToolSource    *activities.UpdateClickHouseToolSource
 }
 
 func NewActivities(
@@ -122,8 +120,6 @@ func NewActivities(
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryService),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
-		generateNameMapping:           activities.NewGenerateNameMapping(logger, cacheAdapter, chatClient),
-		updateClickHouseToolSource:    activities.NewUpdateClickHouseToolSource(logger, telemetryService),
 	}
 }
 
@@ -255,12 +251,4 @@ func (a *Activities) GetUserFeedbackForChat(ctx context.Context, input resolutio
 		return nil, fmt.Errorf("get user feedback for chat: %w", err)
 	}
 	return result, nil
-}
-
-func (a *Activities) GenerateNameMapping(ctx context.Context, args activities.GenerateNameMappingArgs) (*activities.GenerateNameMappingResult, error) {
-	return a.generateNameMapping.Do(ctx, args)
-}
-
-func (a *Activities) UpdateClickHouseToolSource(ctx context.Context, args activities.UpdateClickHouseToolSourceArgs) error {
-	return a.updateClickHouseToolSource.Do(ctx, args)
 }
