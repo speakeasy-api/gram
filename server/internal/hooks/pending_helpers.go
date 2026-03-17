@@ -94,8 +94,12 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.HookSourceKey:     hookSource,
 	}
 
-	if payload.ToolError != nil {
-		attrs[attr.HookErrorKey] = payload.ToolError
+	if payload.Error != nil {
+		attrs[attr.HookErrorKey] = payload.Error
+	}
+
+	if payload.IsInterrupt != nil {
+		attrs[attr.HookIsInterruptKey] = *payload.IsInterrupt
 	}
 
 	isMCP := false

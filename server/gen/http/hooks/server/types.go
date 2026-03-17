@@ -26,7 +26,9 @@ type ClaudeRequestBody struct {
 	// The response from the tool (PostToolUse only)
 	ToolResponse any `form:"tool_response,omitempty" json:"tool_response,omitempty" xml:"tool_response,omitempty"`
 	// The error from the tool (PostToolUseFailure only)
-	ToolError any `form:"tool_error,omitempty" json:"tool_error,omitempty" xml:"tool_error,omitempty"`
+	Error any `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Whether the failure was caused by user interruption (PostToolUseFailure only)
+	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// The Claude Code session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	// Additional hook-specific data
@@ -787,7 +789,8 @@ func NewClaudeHookPayload(body *ClaudeRequestBody) *hooks.ClaudeHookPayload {
 		ToolUseID:     body.ToolUseID,
 		ToolInput:     body.ToolInput,
 		ToolResponse:  body.ToolResponse,
-		ToolError:     body.ToolError,
+		Error:         body.Error,
+		IsInterrupt:   body.IsInterrupt,
 		SessionID:     body.SessionID,
 	}
 	if body.AdditionalData != nil {
