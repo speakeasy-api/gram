@@ -6,10 +6,11 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import { Badge } from "@/components/ui/badge";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import {
   Check,
   Eye,
+  FolderOpen,
   Loader2,
   Lock,
   Plus,
@@ -33,7 +34,7 @@ export default function CreateCollection() {
   const orgRoutes = useOrgRoutes();
   const client = useSdkClient();
   const organization = useOrganization();
-  const defaultProjectSlug = organization.projects?.[0]?.slug;
+  const projects = organization.projects ?? [];
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -47,12 +48,41 @@ export default function CreateCollection() {
 
   const createMutation = useCreateCollection();
 
-  const { data: toolsetsData, isLoading: toolsetsLoading } = useQuery({
-    queryKey: ["toolsets", "list", defaultProjectSlug],
-    queryFn: () => client.toolsets.list({ gramProject: defaultProjectSlug }),
-    enabled: !!defaultProjectSlug,
+  // Fetch toolsets from every project the user has access to
+  const toolsetQueries = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ["toolsets", "list", project.slug],
+      queryFn: () => client.toolsets.list({ gramProject: project.slug }),
+      enabled: !!project.slug,
+    })),
   });
-  const toolsets = toolsetsData?.toolsets ?? [];
+
+  const toolsetsLoading = toolsetQueries.some((q) => q.isLoading);
+
+  // Merge toolsets from all projects, tagging each with its project info
+  const toolsets = useMemo(() => {
+    const all: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      projectName: string;
+      projectSlug: string;
+    }> = [];
+    for (let i = 0; i < projects.length; i++) {
+      const project = projects[i];
+      const data = toolsetQueries[i]?.data;
+      for (const t of data?.toolsets ?? []) {
+        all.push({
+          id: t.id,
+          name: t.name,
+          description: t.description ?? undefined,
+          projectName: project.name,
+          projectSlug: project.slug,
+        });
+      }
+    }
+    return all;
+  }, [projects, toolsetQueries]);
 
   const filteredToolsets = useMemo(() => {
     if (!serverSearch) return toolsets;
@@ -60,7 +90,8 @@ export default function CreateCollection() {
     return toolsets.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
-        (t.description && t.description.toLowerCase().includes(q)),
+        (t.description && t.description.toLowerCase().includes(q)) ||
+        t.projectName.toLowerCase().includes(q),
     );
   }, [toolsets, serverSearch]);
 
@@ -265,6 +296,12 @@ export default function CreateCollection() {
                               >
                                 {toolset.name}
                               </Type>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <FolderOpen className="w-3 h-3 text-muted-foreground shrink-0" />
+                                <Type small muted className="text-xs truncate">
+                                  {toolset.projectName}
+                                </Type>
+                              </div>
                               {toolset.description && (
                                 <Type small muted className="line-clamp-1">
                                   {toolset.description}
