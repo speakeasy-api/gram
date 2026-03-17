@@ -249,7 +249,7 @@ export function EditServerNameDialog({
               )}
 
               {/* Display name input */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label htmlFor="display-name" className="text-sm font-medium">
                   Display Name
                 </Label>
@@ -266,7 +266,7 @@ export function EditServerNameDialog({
                     }
                   }}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground mt-3">
                   This name will be shown in the UI instead of the raw server
                   name
                 </p>
