@@ -485,13 +485,25 @@ type McpMetadatum struct {
 }
 
 type McpRegistry struct {
-	ID        uuid.UUID
-	Name      string
-	Url       string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type McpRegistryToolsetLink struct {
+	ID         uuid.UUID
+	RegistryID uuid.UUID
+	ToolsetID  uuid.UUID
+	CreatedAt  pgtype.Timestamptz
 }
 
 type OauthProxyClientInfo struct {

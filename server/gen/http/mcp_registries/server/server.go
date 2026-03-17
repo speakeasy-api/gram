@@ -19,9 +19,10 @@ import (
 // Server lists the mcpRegistries service endpoint HTTP handlers.
 type Server struct {
 	Mounts           []*MountPoint
+	Publish          http.Handler
 	ClearCache       http.Handler
 	ListRegistries   http.Handler
-	ListCatalog      http.Handler
+	Serve            http.Handler
 	GetServerDetails http.Handler
 }
 
@@ -52,14 +53,16 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"Publish", "POST", "/rpc/mcpRegistries.publish"},
 			{"ClearCache", "DELETE", "/rpc/mcpRegistries.clearCache"},
 			{"ListRegistries", "GET", "/rpc/mcpRegistries.listRegistries"},
-			{"ListCatalog", "GET", "/rpc/mcpRegistries.listCatalog"},
+			{"Serve", "GET", "/rpc/mcpRegistries.serve"},
 			{"GetServerDetails", "GET", "/rpc/mcpRegistries.getServerDetails"},
 		},
+		Publish:          NewPublishHandler(e.Publish, mux, decoder, encoder, errhandler, formatter),
 		ClearCache:       NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
 		ListRegistries:   NewListRegistriesHandler(e.ListRegistries, mux, decoder, encoder, errhandler, formatter),
-		ListCatalog:      NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
+		Serve:            NewServeHandler(e.Serve, mux, decoder, encoder, errhandler, formatter),
 		GetServerDetails: NewGetServerDetailsHandler(e.GetServerDetails, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -69,9 +72,10 @@ func (s *Server) Service() string { return "mcpRegistries" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.Publish = m(s.Publish)
 	s.ClearCache = m(s.ClearCache)
 	s.ListRegistries = m(s.ListRegistries)
-	s.ListCatalog = m(s.ListCatalog)
+	s.Serve = m(s.Serve)
 	s.GetServerDetails = m(s.GetServerDetails)
 }
 
@@ -80,15 +84,69 @@ func (s *Server) MethodNames() []string { return mcpregistries.MethodNames[:] }
 
 // Mount configures the mux to serve the mcpRegistries endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountPublishHandler(mux, h.Publish)
 	MountClearCacheHandler(mux, h.ClearCache)
 	MountListRegistriesHandler(mux, h.ListRegistries)
-	MountListCatalogHandler(mux, h.ListCatalog)
+	MountServeHandler(mux, h.Serve)
 	MountGetServerDetailsHandler(mux, h.GetServerDetails)
 }
 
 // Mount configures the mux to serve the mcpRegistries endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountPublishHandler configures the mux to serve the "mcpRegistries" service
+// "publish" endpoint.
+func MountPublishHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpRegistries.publish", f)
+}
+
+// NewPublishHandler creates a HTTP handler which loads the HTTP request and
+// calls the "mcpRegistries" service "publish" endpoint.
+func NewPublishHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePublishRequest(mux, decoder)
+		encodeResponse = EncodePublishResponse(encoder)
+		encodeError    = EncodePublishError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "publish")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountClearCacheHandler configures the mux to serve the "mcpRegistries"
@@ -197,21 +255,21 @@ func NewListRegistriesHandler(
 	})
 }
 
-// MountListCatalogHandler configures the mux to serve the "mcpRegistries"
-// service "listCatalog" endpoint.
-func MountListCatalogHandler(mux goahttp.Muxer, h http.Handler) {
+// MountServeHandler configures the mux to serve the "mcpRegistries" service
+// "serve" endpoint.
+func MountServeHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/mcpRegistries.listCatalog", f)
+	mux.Handle("GET", "/rpc/mcpRegistries.serve", f)
 }
 
-// NewListCatalogHandler creates a HTTP handler which loads the HTTP request
-// and calls the "mcpRegistries" service "listCatalog" endpoint.
-func NewListCatalogHandler(
+// NewServeHandler creates a HTTP handler which loads the HTTP request and
+// calls the "mcpRegistries" service "serve" endpoint.
+func NewServeHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -220,13 +278,13 @@ func NewListCatalogHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeListCatalogRequest(mux, decoder)
-		encodeResponse = EncodeListCatalogResponse(encoder)
-		encodeError    = EncodeListCatalogError(encoder, formatter)
+		decodeRequest  = DecodeServeRequest(mux, decoder)
+		encodeResponse = EncodeServeResponse(encoder)
+		encodeError    = EncodeServeError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listCatalog")
+		ctx = context.WithValue(ctx, goa.MethodKey, "serve")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
 		payload, err := decodeRequest(r)
 		if err != nil {

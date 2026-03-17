@@ -7,7 +7,10 @@ import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
-import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import {
+  type Server,
+  useInfiniteServeMCPRegistry,
+} from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
@@ -57,7 +60,7 @@ export default function Catalog() {
     hasNextPage,
     isFetchingNextPage,
     debouncedSearch,
-  } = useInfiniteListMCPCatalog(serverSideSearch);
+  } = useInfiniteServeMCPRegistry(serverSideSearch);
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;

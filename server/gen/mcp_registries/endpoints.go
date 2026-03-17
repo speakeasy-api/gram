@@ -16,9 +16,10 @@ import (
 
 // Endpoints wraps the "mcpRegistries" service endpoints.
 type Endpoints struct {
+	Publish          goa.Endpoint
 	ClearCache       goa.Endpoint
 	ListRegistries   goa.Endpoint
-	ListCatalog      goa.Endpoint
+	Serve            goa.Endpoint
 	GetServerDetails goa.Endpoint
 }
 
@@ -27,9 +28,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		Publish:          NewPublishEndpoint(s, a.APIKeyAuth),
 		ClearCache:       NewClearCacheEndpoint(s, a.APIKeyAuth),
 		ListRegistries:   NewListRegistriesEndpoint(s, a.APIKeyAuth),
-		ListCatalog:      NewListCatalogEndpoint(s, a.APIKeyAuth),
+		Serve:            NewServeEndpoint(s, a.APIKeyAuth),
 		GetServerDetails: NewGetServerDetailsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -37,10 +39,70 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "mcpRegistries" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.Publish = m(e.Publish)
 	e.ClearCache = m(e.ClearCache)
 	e.ListRegistries = m(e.ListRegistries)
-	e.ListCatalog = m(e.ListCatalog)
+	e.Serve = m(e.Serve)
 	e.GetServerDetails = m(e.GetServerDetails)
+}
+
+// NewPublishEndpoint returns an endpoint function that calls the method
+// "publish" of service "mcpRegistries".
+func NewPublishEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PublishPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Publish(ctx, p)
+	}
 }
 
 // NewClearCacheEndpoint returns an endpoint function that calls the method
@@ -161,11 +223,11 @@ func NewListRegistriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 	}
 }
 
-// NewListCatalogEndpoint returns an endpoint function that calls the method
-// "listCatalog" of service "mcpRegistries".
-func NewListCatalogEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewServeEndpoint returns an endpoint function that calls the method "serve"
+// of service "mcpRegistries".
+func NewServeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListCatalogPayload)
+		p := req.(*ServePayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -216,7 +278,7 @@ func NewListCatalogEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			return nil, err
 		}
-		return s.ListCatalog(ctx, p)
+		return s.Serve(ctx, p)
 	}
 }
 

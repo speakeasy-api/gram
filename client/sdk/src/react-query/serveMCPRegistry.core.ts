@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { mcpRegistriesListCatalog } from "../funcs/mcpRegistriesListCatalog.js";
+import { mcpRegistriesServe } from "../funcs/mcpRegistriesServe.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListMCPCatalogQueryData = components.ListCatalogResponseBody;
+export type ServeMCPRegistryQueryData = components.ServeResponseBody;
 
-export function prefetchListMCPCatalog(
+export function prefetchServeMCPRegistry(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+  request: operations.ServeMCPRegistryRequest,
+  security?: operations.ServeMCPRegistrySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildListMCPCatalogQuery(
+    ...buildServeMCPRegistryQuery(
       client$,
       request,
       security,
@@ -33,27 +33,29 @@ export function prefetchListMCPCatalog(
   });
 }
 
-export function buildListMCPCatalogQuery(
+export function buildServeMCPRegistryQuery(
   client$: GramCore,
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+  request: operations.ServeMCPRegistryRequest,
+  security?: operations.ServeMCPRegistrySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListMCPCatalogQueryData>;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<ServeMCPRegistryQueryData>;
 } {
   return {
-    queryKey: queryKeyListMCPCatalog({
-      registryId: request?.registryId,
-      search: request?.search,
-      cursor: request?.cursor,
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
+    queryKey: queryKeyServeMCPRegistry({
+      registrySlug: request.registrySlug,
+      search: request.search,
+      cursor: request.cursor,
+      gramSession: request.gramSession,
+      gramKey: request.gramKey,
+      gramProject: request.gramProject,
     }),
-    queryFn: async function listMCPCatalogQueryFn(
+    queryFn: async function serveMCPRegistryQueryFn(
       ctx,
-    ): Promise<ListMCPCatalogQueryData> {
+    ): Promise<ServeMCPRegistryQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -65,7 +67,7 @@ export function buildListMCPCatalogQuery(
         signal: sig,
       };
 
-      return unwrapAsync(mcpRegistriesListCatalog(
+      return unwrapAsync(mcpRegistriesServe(
         client$,
         request,
         security,
@@ -75,9 +77,9 @@ export function buildListMCPCatalogQuery(
   };
 }
 
-export function queryKeyListMCPCatalog(
+export function queryKeyServeMCPRegistry(
   parameters: {
-    registryId?: string | undefined;
+    registrySlug: string;
     search?: string | undefined;
     cursor?: string | undefined;
     gramSession?: string | undefined;
@@ -85,5 +87,5 @@ export function queryKeyListMCPCatalog(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "mcpRegistries", "listCatalog", parameters];
+  return ["@gram/client", "mcpRegistries", "serve", parameters];
 }

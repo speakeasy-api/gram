@@ -56,7 +56,7 @@ export type ListMCPRegistriesQueryError =
  * listRegistries mcpRegistries
  *
  * @remarks
- * List all MCP registries (admin only)
+ * List MCP registries accessible to the current organization
  */
 export function useListMCPRegistries(
   request?: operations.ListMCPRegistriesRequest | undefined,
@@ -82,7 +82,7 @@ export function useListMCPRegistries(
  * listRegistries mcpRegistries
  *
  * @remarks
- * List all MCP registries (admin only)
+ * List MCP registries accessible to the current organization
  */
 export function useListMCPRegistriesSuspense(
   request?: operations.ListMCPRegistriesRequest | undefined,

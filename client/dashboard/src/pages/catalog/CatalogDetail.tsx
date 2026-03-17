@@ -4,7 +4,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { Server, useInfiniteServeMCPRegistry } from "@/pages/catalog/hooks";
+import {
+  parseServerMetadata,
+  resolveVersionMeta,
+} from "@/pages/catalog/hooks/serverMetadata";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
@@ -41,7 +45,7 @@ export default function CatalogDetail() {
   const { serverSpecifier } = useParams<{ serverSpecifier: string }>();
   const routes = useRoutes();
   const client = useSdkClient();
-  const { data, isLoading } = useInfiniteListMCPCatalog();
+  const { data, isLoading } = useInfiniteServeMCPRegistry();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
   const { data: deploymentResult, refetch: refetchDeployment } =
@@ -87,10 +91,10 @@ export default function CatalogDetail() {
     },
   });
 
-  const meta = server?.meta["com.pulsemcp/server"];
-  const versionMeta = server?.meta["com.pulsemcp/server-version"];
-  const isOfficial = meta?.isOfficial;
-  const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
+  const parsed = server ? parseServerMetadata(server) : null;
+  const versionMeta = server
+    ? resolveVersionMeta(server.meta as Server["meta"])
+    : undefined;
   const decodedSpecifier = serverSpecifier
     ? decodeURIComponent(serverSpecifier)
     : "";
@@ -161,8 +165,8 @@ export default function CatalogDetail() {
     );
   }
 
-  const weeklyUsage = meta?.visitorsEstimateMostRecentWeek;
-  const totalUsage = meta?.visitorsEstimateTotal;
+  const weeklyUsage = parsed?.visitorsWeek;
+  const totalUsage = parsed?.visitorsTotal;
 
   return (
     <Page>
@@ -198,10 +202,8 @@ export default function CatalogDetail() {
                   className="mb-2"
                 >
                   <h1 className="text-2xl font-bold">{displayName}</h1>
-                  {isOfficial && <Badge>Official</Badge>}
-                  {versionMeta?.isLatest && (
-                    <Badge variant="neutral">Latest</Badge>
-                  )}
+                  {parsed?.isOfficial && <Badge>Official</Badge>}
+                  {parsed?.isLatest && <Badge variant="neutral">Latest</Badge>}
                 </Stack>
                 {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
                   <a
@@ -271,7 +273,7 @@ export default function CatalogDetail() {
           {/* Right Column - Info */}
           <div className="space-y-4">
             {/* Usage Stats */}
-            {(weeklyUsage || visitorsTotal || totalUsage) && (
+            {(weeklyUsage || parsed?.visitorsMonth || totalUsage) && (
               <Card>
                 <Card.Header>
                   <Card.Title>Usage</Card.Title>
@@ -288,16 +290,17 @@ export default function CatalogDetail() {
                         </Type>
                       </div>
                     )}
-                    {visitorsTotal !== undefined && visitorsTotal > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Type small muted>
-                          Monthly
-                        </Type>
-                        <Type className="font-medium">
-                          {visitorsTotal.toLocaleString()}
-                        </Type>
-                      </div>
-                    )}
+                    {parsed?.visitorsMonth !== undefined &&
+                      parsed?.visitorsMonth > 0 && (
+                        <div className="flex justify-between gap-4">
+                          <Type small muted>
+                            Monthly
+                          </Type>
+                          <Type className="font-medium">
+                            {parsed?.visitorsMonth.toLocaleString()}
+                          </Type>
+                        </div>
+                      )}
                     {totalUsage !== undefined && totalUsage > 0 && (
                       <div className="flex justify-between gap-4">
                         <Type small muted>

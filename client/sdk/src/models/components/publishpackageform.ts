@@ -9,14 +9,16 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * The visibility of the package version
  */
-export const Visibility = {
+export const PublishPackageFormVisibility = {
   Public: "public",
   Private: "private",
 } as const;
 /**
  * The visibility of the package version
  */
-export type Visibility = ClosedEnum<typeof Visibility>;
+export type PublishPackageFormVisibility = ClosedEnum<
+  typeof PublishPackageFormVisibility
+>;
 
 export type PublishPackageForm = {
   /**
@@ -34,12 +36,13 @@ export type PublishPackageForm = {
   /**
    * The visibility of the package version
    */
-  visibility: Visibility;
+  visibility: PublishPackageFormVisibility;
 };
 
 /** @internal */
-export const Visibility$outboundSchema: z.ZodMiniEnum<typeof Visibility> = z
-  .enum(Visibility);
+export const PublishPackageFormVisibility$outboundSchema: z.ZodMiniEnum<
+  typeof PublishPackageFormVisibility
+> = z.enum(PublishPackageFormVisibility);
 
 /** @internal */
 export type PublishPackageForm$Outbound = {
@@ -58,7 +61,7 @@ export const PublishPackageForm$outboundSchema: z.ZodMiniType<
     deploymentId: z.string(),
     name: z.string(),
     version: z.string(),
-    visibility: Visibility$outboundSchema,
+    visibility: PublishPackageFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

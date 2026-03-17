@@ -17,12 +17,14 @@ import (
 
 // External MCP registry operations
 type Service interface {
+	// Publish toolsets as an internal MCP registry catalog
+	Publish(context.Context, *PublishPayload) (res *types.MCPRegistry, err error)
 	// Clear the registry cache for a specific registry (admin only)
 	ClearCache(context.Context, *ClearCachePayload) (err error)
-	// List all MCP registries (admin only)
+	// List MCP registries accessible to the current organization
 	ListRegistries(context.Context, *ListRegistriesPayload) (res *ListRegistriesResult, err error)
-	// List available MCP servers from configured registries
-	ListCatalog(context.Context, *ListCatalogPayload) (res *ListCatalogResult, err error)
+	// Serve MCP servers from a specific registry by slug
+	Serve(context.Context, *ServePayload) (res *ServeResult, err error)
 	// Get detailed information about an MCP server including remotes
 	GetServerDetails(context.Context, *GetServerDetailsPayload) (res *types.ExternalMCPServer, err error)
 }
@@ -47,7 +49,7 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"clearCache", "listRegistries", "listCatalog", "getServerDetails"}
+var MethodNames = [5]string{"publish", "clearCache", "listRegistries", "serve", "getServerDetails"}
 
 // ClearCachePayload is the payload type of the mcpRegistries service
 // clearCache method.
@@ -71,29 +73,6 @@ type GetServerDetailsPayload struct {
 	ProjectSlugInput *string
 }
 
-// ListCatalogPayload is the payload type of the mcpRegistries service
-// listCatalog method.
-type ListCatalogPayload struct {
-	// Filter to a specific registry
-	RegistryID *string
-	// Search query to filter servers by name
-	Search *string
-	// Pagination cursor
-	Cursor           *string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-}
-
-// ListCatalogResult is the result type of the mcpRegistries service
-// listCatalog method.
-type ListCatalogResult struct {
-	// List of available MCP servers
-	Servers []*types.ExternalMCPServer
-	// Pagination cursor for the next page
-	NextCursor *string
-}
-
 // ListRegistriesPayload is the payload type of the mcpRegistries service
 // listRegistries method.
 type ListRegistriesPayload struct {
@@ -107,6 +86,43 @@ type ListRegistriesPayload struct {
 type ListRegistriesResult struct {
 	// List of MCP registries
 	Registries []*types.MCPRegistry
+}
+
+// PublishPayload is the payload type of the mcpRegistries service publish
+// method.
+type PublishPayload struct {
+	// Display name for the catalog
+	Name string
+	// URL-friendly identifier for the catalog
+	Slug string
+	// IDs of the toolsets to include
+	ToolsetIds []string
+	// Visibility of the catalog
+	Visibility       string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ServePayload is the payload type of the mcpRegistries service serve method.
+type ServePayload struct {
+	// Slug of the registry to serve
+	RegistrySlug string
+	// Search query to filter servers by name
+	Search *string
+	// Pagination cursor
+	Cursor           *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ServeResult is the result type of the mcpRegistries service serve method.
+type ServeResult struct {
+	// List of available MCP servers
+	Servers []*types.ExternalMCPServer
+	// Pagination cursor for the next page
+	NextCursor *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -211,6 +211,57 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 	return i, err
 }
 
+const createInternalRegistry = `-- name: CreateInternalRegistry :one
+INSERT INTO mcp_registries (name, slug, source, visibility, organization_id, project_id)
+VALUES ($1, $2, 'internal', $3, $4, $5)
+RETURNING id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
+`
+
+type CreateInternalRegistryParams struct {
+	Name           string
+	Slug           pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+}
+
+type CreateInternalRegistryRow struct {
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) CreateInternalRegistry(ctx context.Context, arg CreateInternalRegistryParams) (CreateInternalRegistryRow, error) {
+	row := q.db.QueryRow(ctx, createInternalRegistry,
+		arg.Name,
+		arg.Slug,
+		arg.Visibility,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i CreateInternalRegistryRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.Slug,
+		&i.Source,
+		&i.Visibility,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getExternalMCPToolDefinitionByURN = `-- name: GetExternalMCPToolDefinitionByURN :one
 WITH deployment AS (
     SELECT d.id
@@ -446,17 +497,22 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 }
 
 const getMCPRegistryByID = `-- name: GetMCPRegistryByID :one
-SELECT id, name, url, created_at, updated_at
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
 WHERE id = $1 AND deleted IS FALSE
 `
 
 type GetMCPRegistryByIDRow struct {
-	ID        uuid.UUID
-	Name      string
-	Url       string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPRegistryByIDRow, error) {
@@ -466,8 +522,122 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 		&i.ID,
 		&i.Name,
 		&i.Url,
+		&i.Slug,
+		&i.Source,
+		&i.Visibility,
+		&i.OrganizationID,
+		&i.ProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getMCPRegistryBySlug = `-- name: GetMCPRegistryBySlug :one
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
+FROM mcp_registries
+WHERE slug = $1 AND deleted IS FALSE
+`
+
+type GetMCPRegistryBySlugRow struct {
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetMCPRegistryBySlug(ctx context.Context, slug pgtype.Text) (GetMCPRegistryBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getMCPRegistryBySlug, slug)
+	var i GetMCPRegistryBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.Slug,
+		&i.Source,
+		&i.Visibility,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRegistryToolsetByMCPSlug = `-- name: GetRegistryToolsetByMCPSlug :one
+SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
+FROM toolsets t
+JOIN mcp_registry_toolset_links l ON l.toolset_id = t.id
+WHERE l.registry_id = $1 AND t.mcp_slug = $2 AND t.deleted IS FALSE
+`
+
+type GetRegistryToolsetByMCPSlugParams struct {
+	RegistryID uuid.UUID
+	McpSlug    pgtype.Text
+}
+
+type GetRegistryToolsetByMCPSlugRow struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	McpSlug        pgtype.Text
+	McpEnabled     bool
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetRegistryToolsetByMCPSlug(ctx context.Context, arg GetRegistryToolsetByMCPSlugParams) (GetRegistryToolsetByMCPSlugRow, error) {
+	row := q.db.QueryRow(ctx, getRegistryToolsetByMCPSlug, arg.RegistryID, arg.McpSlug)
+	var i GetRegistryToolsetByMCPSlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.McpSlug,
+		&i.McpEnabled,
+		&i.OrganizationID,
+		&i.ProjectID,
+	)
+	return i, err
+}
+
+const getToolsetForServe = `-- name: GetToolsetForServe :one
+SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organization_id, t.project_id
+FROM toolsets t
+WHERE t.id = $1 AND t.deleted IS FALSE
+`
+
+type GetToolsetForServeRow struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	McpSlug        pgtype.Text
+	McpEnabled     bool
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetToolsetForServe(ctx context.Context, id uuid.UUID) (GetToolsetForServeRow, error) {
+	row := q.db.QueryRow(ctx, getToolsetForServe, id)
+	var i GetToolsetForServeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.McpSlug,
+		&i.McpEnabled,
+		&i.OrganizationID,
+		&i.ProjectID,
 	)
 	return i, err
 }
@@ -638,18 +808,23 @@ func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deployment
 }
 
 const listMCPRegistries = `-- name: ListMCPRegistries :many
-SELECT id, name, url, created_at, updated_at
+SELECT id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at
 FROM mcp_registries
 WHERE deleted IS FALSE
 ORDER BY name ASC
 `
 
 type ListMCPRegistriesRow struct {
-	ID        uuid.UUID
-	Name      string
-	Url       string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow, error) {
@@ -665,6 +840,11 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 			&i.ID,
 			&i.Name,
 			&i.Url,
+			&i.Slug,
+			&i.Source,
+			&i.Visibility,
+			&i.OrganizationID,
+			&i.ProjectID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -676,4 +856,106 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 		return nil, err
 	}
 	return items, nil
+}
+
+const listRegistriesForOrganization = `-- name: ListRegistriesForOrganization :many
+SELECT r.id, r.name, r.url, r.slug, r.source, r.visibility, r.organization_id, r.project_id, r.created_at, r.updated_at
+FROM mcp_registries r
+WHERE r.deleted IS FALSE
+  AND (r.visibility = 'public' OR r.organization_id = $1)
+ORDER BY r.name ASC
+`
+
+type ListRegistriesForOrganizationRow struct {
+	ID             uuid.UUID
+	Name           string
+	Url            pgtype.Text
+	Slug           pgtype.Text
+	Source         pgtype.Text
+	Visibility     string
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListRegistriesForOrganization(ctx context.Context, organizationID pgtype.Text) ([]ListRegistriesForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listRegistriesForOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRegistriesForOrganizationRow
+	for rows.Next() {
+		var i ListRegistriesForOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Url,
+			&i.Slug,
+			&i.Source,
+			&i.Visibility,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRegistryToolsetLinks = `-- name: ListRegistryToolsetLinks :many
+SELECT id, registry_id, toolset_id, created_at
+FROM mcp_registry_toolset_links
+WHERE registry_id = $1
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListRegistryToolsetLinks(ctx context.Context, registryID uuid.UUID) ([]McpRegistryToolsetLink, error) {
+	rows, err := q.db.Query(ctx, listRegistryToolsetLinks, registryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpRegistryToolsetLink
+	for rows.Next() {
+		var i McpRegistryToolsetLink
+		if err := rows.Scan(
+			&i.ID,
+			&i.RegistryID,
+			&i.ToolsetID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setRegistryToolsets = `-- name: SetRegistryToolsets :exec
+WITH deleted AS (
+  DELETE FROM mcp_registry_toolset_links WHERE registry_id = $1
+)
+INSERT INTO mcp_registry_toolset_links (registry_id, toolset_id)
+SELECT $1, unnest($2::uuid[])
+`
+
+type SetRegistryToolsetsParams struct {
+	RegistryID uuid.UUID
+	ToolsetIds []uuid.UUID
+}
+
+func (q *Queries) SetRegistryToolsets(ctx context.Context, arg SetRegistryToolsetsParams) error {
+	_, err := q.db.Exec(ctx, setRegistryToolsets, arg.RegistryID, arg.ToolsetIds)
+	return err
 }

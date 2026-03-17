@@ -1,13 +1,15 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSdkClient } from "@/contexts/Sdk";
 import {
   useLatestDeployment,
-  useListMCPCatalog,
+  useListMCPRegistries,
   useEvolveDeploymentMutation,
 } from "@gram/client/react-query";
 import type { ExternalMCPServer } from "@gram/client/models/components";
 import { Input } from "@speakeasy-api/moonshine";
 import { SearchIcon, ServerIcon, Loader2Icon } from "lucide-react";
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 function generateSlug(name: string): string {
@@ -85,6 +87,7 @@ interface ImportMCPTabContentProps {
 export default function ImportMCPTabContent({
   onSuccess,
 }: ImportMCPTabContentProps) {
+  const client = useSdkClient();
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
@@ -104,9 +107,27 @@ export default function ImportMCPTabContent({
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, error } = useListMCPCatalog(
-    debouncedSearch ? { search: debouncedSearch } : undefined,
-  );
+  const { data: registriesData } = useListMCPRegistries();
+  const registries = registriesData?.registries ?? [];
+  const registrySlugs = registries
+    .map((r) => r.slug)
+    .filter((s): s is string => s != null);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["importMCPServers", registrySlugs, debouncedSearch],
+    queryFn: async () => {
+      const results = await Promise.all(
+        registrySlugs.map((slug) =>
+          client.mcpRegistries.serve({
+            registrySlug: slug,
+            ...(debouncedSearch ? { search: debouncedSearch } : {}),
+          }),
+        ),
+      );
+      return results.flatMap((r) => r.servers);
+    },
+    enabled: registrySlugs.length > 0,
+  });
 
   const handleImport = async (server: ExternalMCPServer) => {
     const serverKey = `${server.registryId}-${server.registrySpecifier}`;
@@ -145,7 +166,7 @@ export default function ImportMCPTabContent({
   return (
     <div className="flex flex-col gap-4 p-4">
       <div className="relative">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
+        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           type="text"
           placeholder="Search MCP servers..."
@@ -169,7 +190,7 @@ export default function ImportMCPTabContent({
         </div>
       )}
 
-      {data && data.servers.length === 0 && (
+      {data && data.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <ServerIcon className="h-12 w-12 mb-4" />
           <p>No MCP servers found</p>
@@ -179,9 +200,9 @@ export default function ImportMCPTabContent({
         </div>
       )}
 
-      {data && data.servers.length > 0 && (
+      {data && data.length > 0 && (
         <div className="grid gap-3 max-h-[400px] overflow-y-auto">
-          {data.servers.map((server) => {
+          {data.map((server) => {
             const serverKey = `${server.registryId}-${server.registrySpecifier}`;
             return (
               <MCPServerCard

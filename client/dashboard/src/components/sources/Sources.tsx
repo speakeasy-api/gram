@@ -3,7 +3,7 @@ import { DotTable } from "@/components/ui/dot-table";
 import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { useInfiniteServeMCPRegistry } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -80,7 +80,7 @@ export function useDeploymentIsEmpty() {
 }
 
 export const useCatalogIconMap = () => {
-  const { data: catalogData } = useInfiniteListMCPCatalog();
+  const { data: catalogData } = useInfiniteServeMCPRegistry();
   return useMemo(() => {
     if (!catalogData?.pages) {
       return new Map<string, string>();

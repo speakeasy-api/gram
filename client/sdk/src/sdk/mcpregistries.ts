@@ -4,8 +4,9 @@
 
 import { mcpRegistriesClearCache } from "../funcs/mcpRegistriesClearCache.js";
 import { mcpRegistriesGetServerDetails } from "../funcs/mcpRegistriesGetServerDetails.js";
-import { mcpRegistriesListCatalog } from "../funcs/mcpRegistriesListCatalog.js";
 import { mcpRegistriesListRegistries } from "../funcs/mcpRegistriesListRegistries.js";
+import { mcpRegistriesPublish } from "../funcs/mcpRegistriesPublish.js";
+import { mcpRegistriesServe } from "../funcs/mcpRegistriesServe.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -51,17 +52,17 @@ export class McpRegistries extends ClientSDK {
   }
 
   /**
-   * listCatalog mcpRegistries
+   * listRegistries mcpRegistries
    *
    * @remarks
-   * List available MCP servers from configured registries
+   * List MCP registries accessible to the current organization
    */
-  async listCatalog(
-    request?: operations.ListMCPCatalogRequest | undefined,
-    security?: operations.ListMCPCatalogSecurity | undefined,
+  async listRegistries(
+    request?: operations.ListMCPRegistriesRequest | undefined,
+    security?: operations.ListMCPRegistriesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListCatalogResponseBody> {
-    return unwrapAsync(mcpRegistriesListCatalog(
+  ): Promise<components.ListRegistriesResponseBody> {
+    return unwrapAsync(mcpRegistriesListRegistries(
       this,
       request,
       security,
@@ -70,17 +71,36 @@ export class McpRegistries extends ClientSDK {
   }
 
   /**
-   * listRegistries mcpRegistries
+   * publish mcpRegistries
    *
    * @remarks
-   * List all MCP registries (admin only)
+   * Publish toolsets as an internal MCP registry catalog
    */
-  async listRegistries(
-    request?: operations.ListMCPRegistriesRequest | undefined,
-    security?: operations.ListMCPRegistriesSecurity | undefined,
+  async publish(
+    request: operations.PublishMCPRegistryRequest,
+    security?: operations.PublishMCPRegistrySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRegistriesResponseBody> {
-    return unwrapAsync(mcpRegistriesListRegistries(
+  ): Promise<components.MCPRegistry> {
+    return unwrapAsync(mcpRegistriesPublish(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * serve mcpRegistries
+   *
+   * @remarks
+   * Serve MCP servers from a specific registry by slug
+   */
+  async serve(
+    request: operations.ServeMCPRegistryRequest,
+    security?: operations.ServeMCPRegistrySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ServeResponseBody> {
+    return unwrapAsync(mcpRegistriesServe(
       this,
       request,
       security,

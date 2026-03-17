@@ -1,4 +1,4 @@
-import type { Server } from "../hooks";
+import type { Server, ServerMetaServer, ServerMetaVersion } from "../hooks";
 import type { FilterState } from "./useFilterState";
 
 interface ToolAnnotations {
@@ -11,6 +11,26 @@ interface ToolInfo {
   name: string;
   description?: string;
   annotations?: ToolAnnotations;
+}
+
+/**
+ * Resolve the server-level meta from either PulseMCP or Gram prefixed keys.
+ */
+export function resolveServerMeta(
+  meta: Server["meta"],
+): ServerMetaServer | undefined {
+  return meta["com.pulsemcp/server"] ?? meta["ai.getgram/server"];
+}
+
+/**
+ * Resolve the version-level meta from either PulseMCP or Gram prefixed keys.
+ */
+export function resolveVersionMeta(
+  meta: Server["meta"],
+): ServerMetaVersion | undefined {
+  return (
+    meta["com.pulsemcp/server-version"] ?? meta["ai.getgram/server-version"]
+  );
 }
 
 /**
@@ -46,7 +66,7 @@ export interface ParsedServerMetadata {
  * Extract the authentication type from server metadata.
  */
 function extractAuthType(server: Server): string {
-  const versionMeta = server.meta["com.pulsemcp/server-version"];
+  const versionMeta = resolveVersionMeta(server.meta);
   const remote = versionMeta?.["remotes[0]"];
   const authInfo = remote?.auth;
 
@@ -91,7 +111,7 @@ function extractToolMetadata(server: Server): {
   toolCount: number;
   isReadOnly: boolean;
 } {
-  const versionMeta = server.meta["com.pulsemcp/server-version"];
+  const versionMeta = resolveVersionMeta(server.meta);
   const remote = versionMeta?.["remotes[0]"];
   const metaTools = remote?.tools ?? [];
   const serverTools: ToolInfo[] = (server.tools ?? []) as ToolInfo[];
@@ -137,8 +157,8 @@ function estimateWeeklyData(
  * Parse all relevant metadata from a server.
  */
 export function parseServerMetadata(server: Server): ParsedServerMetadata {
-  const serverMeta = server.meta["com.pulsemcp/server"];
-  const versionMeta = server.meta["com.pulsemcp/server-version"];
+  const serverMeta = resolveServerMeta(server.meta);
+  const versionMeta = resolveVersionMeta(server.meta);
 
   const visitorsWeek = serverMeta?.visitorsEstimateMostRecentWeek ?? 0;
   const visitorsMonth = serverMeta?.visitorsEstimateLastFourWeeks ?? 0;
