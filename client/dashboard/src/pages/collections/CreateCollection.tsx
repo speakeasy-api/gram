@@ -271,7 +271,7 @@ export default function CreateCollection() {
                       </Type>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto pr-1">
+                    <div className="grid grid-cols-1 gap-2 max-h-[400px] overflow-y-auto pr-1 rounded-lg bg-muted/30 p-2">
                       {filteredToolsets.map((toolset) => {
                         const isSelected = selectedToolsetIds.has(toolset.id);
                         return (
@@ -282,7 +282,7 @@ export default function CreateCollection() {
                             className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
                               isSelected
                                 ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                                : "border-border hover:border-foreground/30"
+                                : "border-border bg-card hover:border-foreground/30"
                             }`}
                           >
                             <div className="w-8 h-8 rounded-md bg-muted/50 flex items-center justify-center shrink-0">
@@ -302,11 +302,6 @@ export default function CreateCollection() {
                                   {toolset.projectName}
                                 </Type>
                               </div>
-                              {toolset.description && (
-                                <Type small muted className="line-clamp-1">
-                                  {toolset.description}
-                                </Type>
-                              )}
                             </div>
                             <div
                               className={`size-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
