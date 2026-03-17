@@ -19,7 +19,7 @@ import {
 } from "@gram/client/react-query";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Link, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
@@ -700,6 +700,25 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         your backend needs. Use the state button to set each variable as User
         Provided (set at runtime), System (set here), or Omitted (not included).
       </p>
+
+      {/* Attached environment badge */}
+      {attachedEnvironment ? (
+        <Badge variant="information">
+          <Badge.LeftIcon>
+            <Link className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          <Badge.Text>
+            Attached:{" "}
+            {attachedEnvironment.slug === "default"
+              ? "Default"
+              : attachedEnvironment.name}
+          </Badge.Text>
+        </Badge>
+      ) : (
+        <Badge variant="neutral">
+          <Badge.Text>No environment attached</Badge.Text>
+        </Badge>
+      )}
 
       {/* All Variables Section */}
       <div className="space-y-4">
