@@ -225,104 +225,104 @@ export default function CreateCollection() {
                 </Stack>
 
                 {/* Toolset picker */}
-                <Stack gap={2}>
-                  <Stack
-                    direction="horizontal"
-                    justify="space-between"
-                    align="center"
-                  >
+                <div className="rounded-lg bg-muted/30 p-4">
+                  <Stack gap={3}>
                     <label className="text-sm font-medium">
                       MCP Servers ({selectedToolsetIds.size} selected)
                     </label>
-                  </Stack>
 
-                  <div className="relative w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search servers..."
-                      value={serverSearch}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setServerSearch(e.target.value)
-                      }
-                      className="pl-10 pr-9 h-10"
-                    />
-                    {serverSearch && (
-                      <button
-                        onClick={() => setServerSearch("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label="Clear search"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+                    <div className="relative w-full">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search servers..."
+                        value={serverSearch}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setServerSearch(e.target.value)
+                        }
+                        className="pl-10 pr-9 h-10 bg-card"
+                      />
+                      {serverSearch && (
+                        <button
+                          onClick={() => setServerSearch("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Clear search"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
 
-                  {toolsetsLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : filteredToolsets.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <ServerIcon className="w-8 h-8 text-muted-foreground mb-2" />
-                      <Type small muted>
-                        {serverSearch
-                          ? "No servers match your search"
-                          : "No MCP servers available. Create one first."}
-                      </Type>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 max-h-[400px] overflow-y-auto pr-1 rounded-lg bg-muted/30 p-2">
-                      {filteredToolsets.map((toolset) => {
-                        const isSelected = selectedToolsetIds.has(toolset.id);
-                        return (
-                          <button
-                            key={toolset.id}
-                            type="button"
-                            onClick={() => toggleToolset(toolset.id)}
-                            className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
-                              isSelected
-                                ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                                : "border-border bg-card hover:border-foreground/30"
-                            }`}
-                          >
-                            <div className="w-8 h-8 rounded-md bg-muted/50 flex items-center justify-center shrink-0">
-                              <ServerIcon className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <Type
-                                variant="subheading"
-                                as="div"
-                                className="text-sm truncate"
-                              >
-                                {toolset.name}
-                              </Type>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <FolderOpen className="w-3 h-3 text-muted-foreground shrink-0" />
-                                <Type small muted className="text-xs truncate">
-                                  {toolset.projectName}
-                                </Type>
-                              </div>
-                            </div>
-                            <div
-                              className={`size-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                    {toolsetsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : filteredToolsets.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <ServerIcon className="w-8 h-8 text-muted-foreground mb-2" />
+                        <Type small muted>
+                          {serverSearch
+                            ? "No servers match your search"
+                            : "No MCP servers available. Create one first."}
+                        </Type>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2 max-h-[400px] overflow-y-auto pr-1">
+                        {filteredToolsets.map((toolset) => {
+                          const isSelected = selectedToolsetIds.has(toolset.id);
+                          return (
+                            <button
+                              key={toolset.id}
+                              type="button"
+                              onClick={() => toggleToolset(toolset.id)}
+                              className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
                                 isSelected
-                                  ? "border-primary bg-primary"
-                                  : "border-muted-foreground/30"
+                                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                                  : "border-border bg-card hover:border-foreground/30"
                               }`}
                             >
-                              {isSelected && (
-                                <Check
-                                  className="size-3 text-white"
-                                  strokeWidth={3}
-                                />
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Stack>
+                              <div className="w-8 h-8 rounded-md bg-muted/50 flex items-center justify-center shrink-0">
+                                <ServerIcon className="w-4 h-4 text-muted-foreground" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <Type
+                                  variant="subheading"
+                                  as="div"
+                                  className="text-sm truncate"
+                                >
+                                  {toolset.name}
+                                </Type>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <FolderOpen className="w-3 h-3 text-muted-foreground shrink-0" />
+                                  <Type
+                                    small
+                                    muted
+                                    className="text-xs truncate"
+                                  >
+                                    {toolset.projectName}
+                                  </Type>
+                                </div>
+                              </div>
+                              <div
+                                className={`size-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                                  isSelected
+                                    ? "border-primary bg-primary"
+                                    : "border-muted-foreground/30"
+                                }`}
+                              >
+                                {isSelected && (
+                                  <Check
+                                    className="size-3 text-white"
+                                    strokeWidth={3}
+                                  />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Stack>
+                </div>
               </div>
 
               {/* Right — preview sidebar */}
