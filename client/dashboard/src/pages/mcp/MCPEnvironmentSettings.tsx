@@ -91,7 +91,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       vars
         .map((v) => {
           const valueGroupsHash = v.valueGroups
-            .map((vg) => `${vg.environments.toSorted().join(",")}`)
+            .map((vg) => `${[...vg.environments].sort().join(",")}`)
             .join("|");
           return `${v.key}:${v.state}:${valueGroupsHash}`;
         })
