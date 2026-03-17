@@ -217,11 +217,11 @@ export default function CreateCollection() {
                       Private
                     </button>
                   </Stack>
-                  {visibility === "private" && (
-                    <Type small muted>
-                      Private collections are only visible to your organization.
-                    </Type>
-                  )}
+                  <Type small muted>
+                    {visibility === "public"
+                      ? "Public collections are visible to anyone and can be discovered by other organizations."
+                      : "Private collections are only visible to your organization."}
+                  </Type>
                 </Stack>
 
                 {/* Toolset picker */}
