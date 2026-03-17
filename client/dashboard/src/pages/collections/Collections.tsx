@@ -20,7 +20,9 @@ export default function Collections() {
 
   const { data: collections } = useCollections(tab, searchQuery);
   const { data: orgCollections } = useCollections("org");
+  const { data: discoverCollections } = useCollections("discover");
   const orgCount = orgCollections.length;
+  const discoverCount = discoverCollections.length;
 
   return (
     <Page>
@@ -59,7 +61,12 @@ export default function Collections() {
                       {orgCount}
                     </span>
                   </TabsTrigger>
-                  <TabsTrigger value="discover">Discover</TabsTrigger>
+                  <TabsTrigger value="discover">
+                    Discover
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-muted-foreground/10 text-xs font-medium tabular-nums">
+                      {discoverCount}
+                    </span>
+                  </TabsTrigger>
                 </TabsList>
 
                 <div className="relative w-64">

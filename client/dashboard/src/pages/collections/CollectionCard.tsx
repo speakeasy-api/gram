@@ -3,21 +3,16 @@ import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
 import { Badge } from "@/components/ui/badge";
 import { Button, Stack } from "@speakeasy-api/moonshine";
-import {
-  ArrowRight,
-  Download,
-  Eye,
-  LayoutGrid,
-  Lock,
-  Server,
-} from "lucide-react";
+import { ArrowRight, Eye, LayoutGrid, Lock, Server } from "lucide-react";
 import { Link, useNavigate } from "react-router";
+import { useCollectionServers } from "./hooks";
 import type { Collection } from "./types";
 
 export function CollectionCard({ collection }: { collection: Collection }) {
   const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
-  const serverCount = collection.servers.length;
+  const { servers } = useCollectionServers(collection.slug);
+  const serverCount = servers.length;
   const detailHref = orgRoutes.collections.detail.href(collection.id);
 
   return (
@@ -52,9 +47,6 @@ export function CollectionCard({ collection }: { collection: Collection }) {
           >
             {collection.name}
           </Type>
-          <Type small muted className="truncate">
-            {collection.author.orgName}
-          </Type>
         </div>
         <Badge variant="secondary">
           <Server className="w-3 h-3 mr-1" />
@@ -63,38 +55,27 @@ export function CollectionCard({ collection }: { collection: Collection }) {
       </div>
 
       {/* Description */}
-      <Type small muted className="line-clamp-2 mb-3">
-        {collection.description}
-      </Type>
+      {collection.description && (
+        <Type small muted className="line-clamp-2 mb-3">
+          {collection.description}
+        </Type>
+      )}
 
       {/* Footer */}
-      <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-        <Stack direction="horizontal" gap={3} align="center">
+      <div className="flex items-center justify-end gap-2 mt-auto pt-2">
+        {collection.visibility === "public" && (
           <Stack
             direction="horizontal"
             gap={1}
             align="center"
-            className="text-muted-foreground"
+            className="text-muted-foreground mr-auto"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Eye className="w-3.5 h-3.5" />
             <Type small muted>
-              {collection.installCount.toLocaleString()}
+              Public
             </Type>
           </Stack>
-          {collection.visibility === "public" && (
-            <Stack
-              direction="horizontal"
-              gap={1}
-              align="center"
-              className="text-muted-foreground"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <Type small muted>
-                Public
-              </Type>
-            </Stack>
-          )}
-        </Stack>
+        )}
 
         <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
           <Button variant="secondary" size="sm">

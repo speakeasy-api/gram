@@ -19,7 +19,6 @@ import {
   Lock,
   MessageSquare,
   Server,
-  Sparkles,
   Wrench,
 } from "lucide-react";
 import { useState } from "react";
@@ -137,12 +136,8 @@ export default function CollectionDetail() {
                         Install servers
                       </DropdownMenuItem>
                       <DropdownMenuItem>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Install Claude Plugin
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
                         <MessageSquare className="w-4 h-4 mr-2" />
-                        Install Slack App
+                        Install Slack App (beta)
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

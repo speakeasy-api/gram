@@ -1,9 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
+import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import { Badge } from "@/components/ui/badge";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { useQuery } from "@tanstack/react-query";
 import {
   Check,
   Eye,
@@ -12,69 +15,94 @@ import {
   Plus,
   Search,
   Server as ServerIcon,
-  Wrench,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  type CatalogServer,
-  useCatalogServers,
-  useCreateCollection,
-} from "./hooks";
-import type { CollectionServer, CollectionVisibility } from "./types";
+import { useCreateCollection } from "./hooks";
+import type { CollectionVisibility } from "./types";
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 export default function CreateCollection() {
   const orgRoutes = useOrgRoutes();
+  const client = useSdkClient();
+  const organization = useOrganization();
+  const defaultProjectSlug = organization.projects?.[0]?.slug;
+
   const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState<CollectionVisibility>("public");
-  const [selectedServers, setSelectedServers] = useState<
-    Map<string, CollectionServer>
-  >(new Map());
+  const [visibility, setVisibility] = useState<CollectionVisibility>("private");
+  const [selectedToolsetIds, setSelectedToolsetIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [serverSearch, setServerSearch] = useState("");
 
-  const { mutate: createCollection, isPending } = useCreateCollection();
+  const createMutation = useCreateCollection();
 
-  // Catalog servers for the picker (mock data — no project auth required)
-  const { data: catalogServers, isLoading: catalogLoading } = useCatalogServers(
-    serverSearch || undefined,
-  );
+  const { data: toolsetsData, isLoading: toolsetsLoading } = useQuery({
+    queryKey: ["toolsets", "list", defaultProjectSlug],
+    queryFn: () => client.toolsets.list({ gramProject: defaultProjectSlug }),
+    enabled: !!defaultProjectSlug,
+  });
+  const toolsets = toolsetsData?.toolsets ?? [];
 
-  const toggleServer = (server: CatalogServer) => {
-    const key = server.registrySpecifier;
-    setSelectedServers((prev) => {
-      const next = new Map(prev);
-      if (next.has(key)) {
-        next.delete(key);
+  const filteredToolsets = useMemo(() => {
+    if (!serverSearch) return toolsets;
+    const q = serverSearch.toLowerCase();
+    return toolsets.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        (t.description && t.description.toLowerCase().includes(q)),
+    );
+  }, [toolsets, serverSearch]);
+
+  const toggleToolset = (id: string) => {
+    setSelectedToolsetIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
       } else {
-        next.set(key, {
-          registrySpecifier: server.registrySpecifier,
-          title: server.title,
-          description: server.description,
-          iconUrl: server.iconUrl,
-          toolCount: server.toolCount,
-        });
+        next.add(id);
       }
       return next;
     });
   };
 
-  const handleCreate = () => {
-    if (!name.trim()) return;
-
-    createCollection({
-      name: name.trim(),
-      description: description.trim(),
-      visibility,
-      servers: Array.from(selectedServers.values()),
-      author: { orgName: "My Org", orgId: "org_current" },
-    });
-    toast.success("Collection created successfully");
-    orgRoutes.collections.goTo();
+  const handleNameChange = (value: string) => {
+    setName(value);
+    if (!slugManuallyEdited) {
+      setSlug(slugify(value));
+    }
   };
 
-  const isValid = name.trim().length > 0 && selectedServers.size > 0;
+  const handleCreate = () => {
+    if (!name.trim() || selectedToolsetIds.size === 0) return;
+
+    createMutation.mutate(
+      {
+        name: name.trim(),
+        slug: slug || slugify(name.trim()),
+        toolsetIds: Array.from(selectedToolsetIds),
+        visibility,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Collection created successfully");
+          orgRoutes.collections.goTo();
+        },
+      },
+    );
+  };
+
+  const isValid = name.trim().length > 0 && selectedToolsetIds.size > 0;
 
   return (
     <Page>
@@ -99,8 +127,22 @@ export default function CreateCollection() {
                     placeholder="e.g. Developer Productivity Suite"
                     value={name}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setName(e.target.value)
+                      handleNameChange(e.target.value)
                     }
+                    className="h-10"
+                  />
+                </Stack>
+
+                {/* Slug */}
+                <Stack gap={2}>
+                  <label className="text-sm font-medium">Slug</label>
+                  <Input
+                    placeholder="developer-productivity-suite"
+                    value={slug}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setSlug(e.target.value);
+                      setSlugManuallyEdited(true);
+                    }}
                     className="h-10"
                   />
                 </Stack>
@@ -147,12 +189,11 @@ export default function CreateCollection() {
                   {visibility === "private" && (
                     <Type small muted>
                       Private collections are only visible to your organization.
-                      Cross-org sharing coming soon.
                     </Type>
                   )}
                 </Stack>
 
-                {/* Server picker */}
+                {/* Toolset picker */}
                 <Stack gap={2}>
                   <Stack
                     direction="horizontal"
@@ -160,14 +201,14 @@ export default function CreateCollection() {
                     align="center"
                   >
                     <label className="text-sm font-medium">
-                      MCP Servers ({selectedServers.size} selected)
+                      MCP Servers ({selectedToolsetIds.size} selected)
                     </label>
                   </Stack>
 
                   <div className="relative w-full">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search catalog servers..."
+                      placeholder="Search servers..."
                       value={serverSearch}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         setServerSearch(e.target.value)
@@ -185,21 +226,28 @@ export default function CreateCollection() {
                     )}
                   </div>
 
-                  {catalogLoading ? (
+                  {toolsetsLoading ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                     </div>
+                  ) : filteredToolsets.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <ServerIcon className="w-8 h-8 text-muted-foreground mb-2" />
+                      <Type small muted>
+                        {serverSearch
+                          ? "No servers match your search"
+                          : "No MCP servers available. Create one first."}
+                      </Type>
+                    </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto pr-1">
-                      {catalogServers.slice(0, 20).map((server) => {
-                        const isSelected = selectedServers.has(
-                          server.registrySpecifier,
-                        );
-                        const displayName = server.title;
+                      {filteredToolsets.map((toolset) => {
+                        const isSelected = selectedToolsetIds.has(toolset.id);
                         return (
                           <button
-                            key={server.registrySpecifier}
-                            onClick={() => toggleServer(server)}
+                            key={toolset.id}
+                            type="button"
+                            onClick={() => toggleToolset(toolset.id)}
                             className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
                               isSelected
                                 ? "border-primary bg-primary/5 ring-1 ring-primary/20"
@@ -207,15 +255,7 @@ export default function CreateCollection() {
                             }`}
                           >
                             <div className="w-8 h-8 rounded-md bg-muted/50 flex items-center justify-center shrink-0">
-                              {server.iconUrl ? (
-                                <img
-                                  src={server.iconUrl}
-                                  alt={displayName}
-                                  className="w-5 h-5 object-contain"
-                                />
-                              ) : (
-                                <ServerIcon className="w-4 h-4 text-muted-foreground" />
-                              )}
+                              <ServerIcon className="w-4 h-4 text-muted-foreground" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <Type
@@ -223,11 +263,13 @@ export default function CreateCollection() {
                                 as="div"
                                 className="text-sm truncate"
                               >
-                                {displayName}
+                                {toolset.name}
                               </Type>
-                              <Type small muted className="line-clamp-1">
-                                {server.description}
-                              </Type>
+                              {toolset.description && (
+                                <Type small muted className="line-clamp-1">
+                                  {toolset.description}
+                                </Type>
+                              )}
                             </div>
                             <div
                               className={`size-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
@@ -249,23 +291,6 @@ export default function CreateCollection() {
                     </div>
                   )}
                 </Stack>
-
-                {/* Config placeholder */}
-                <Card>
-                  <Card.Header>
-                    <Card.Title>Configuration</Card.Title>
-                  </Card.Header>
-                  <Card.Content>
-                    <div className="flex items-center gap-3 p-4 rounded-lg border border-dashed text-muted-foreground">
-                      <Wrench className="w-5 h-5 shrink-0" />
-                      <Type small muted>
-                        Configuration options coming soon. You&apos;ll be able
-                        to define environment variables and server-level
-                        settings for your collections.
-                      </Type>
-                    </div>
-                  </Card.Content>
-                </Card>
               </div>
 
               {/* Right — preview sidebar */}
@@ -275,7 +300,7 @@ export default function CreateCollection() {
                     <Card.Title>Preview</Card.Title>
                   </Card.Header>
                   <Card.Content>
-                    {name || selectedServers.size > 0 ? (
+                    {name || selectedToolsetIds.size > 0 ? (
                       <Stack gap={3}>
                         <Type variant="subheading" as="div">
                           {name || "Untitled Collection"}
@@ -283,6 +308,11 @@ export default function CreateCollection() {
                         {description && (
                           <Type small muted className="line-clamp-3">
                             {description}
+                          </Type>
+                        )}
+                        {slug && (
+                          <Type small muted className="font-mono text-xs">
+                            {slug}
                           </Type>
                         )}
                         <Stack direction="horizontal" gap={2}>
@@ -296,15 +326,16 @@ export default function CreateCollection() {
                           </Badge>
                           <Badge variant="secondary">
                             <ServerIcon className="w-3 h-3 mr-1" />
-                            {selectedServers.size} servers
+                            {selectedToolsetIds.size} servers
                           </Badge>
                         </Stack>
-                        {selectedServers.size > 0 && (
+                        {selectedToolsetIds.size > 0 && (
                           <Stack gap={1.5} className="mt-2">
-                            {Array.from(selectedServers.values()).map(
-                              (server) => (
+                            {toolsets
+                              .filter((t) => selectedToolsetIds.has(t.id))
+                              .map((toolset) => (
                                 <Stack
-                                  key={server.registrySpecifier}
+                                  key={toolset.id}
                                   direction="horizontal"
                                   gap={2}
                                   align="center"
@@ -312,11 +343,10 @@ export default function CreateCollection() {
                                 >
                                   <ServerIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                                   <Type small className="truncate">
-                                    {server.title}
+                                    {toolset.name}
                                   </Type>
                                 </Stack>
-                              ),
-                            )}
+                              ))}
                           </Stack>
                         )}
                       </Stack>
@@ -331,9 +361,9 @@ export default function CreateCollection() {
                 <Button
                   className="w-full"
                   onClick={handleCreate}
-                  disabled={!isValid || isPending}
+                  disabled={!isValid || createMutation.isPending}
                 >
-                  {isPending ? (
+                  {createMutation.isPending ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       Creating...

@@ -1,416 +1,195 @@
-import { useMemo, useState } from "react";
-import type { Collection } from "./types";
+import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
+import type { Collection, CollectionServer } from "./types";
 
-const MOCK_COLLECTIONS: Collection[] = [
-  {
-    id: "col_1",
-    name: "Developer Productivity Suite",
-    description:
-      "Essential tools for developers — GitHub, Linear, and Sentry integrations for issue tracking, code management, and error monitoring.",
-    visibility: "public",
-    servers: [
-      {
-        registrySpecifier: "io.github.github/github-mcp-server",
-        title: "GitHub",
-        description: "Access repositories, issues, and pull requests",
-        iconUrl: "https://github.githubassets.com/favicons/favicon.svg",
-        toolCount: 12,
-      },
-      {
-        registrySpecifier: "app.linear/linear",
-        title: "Linear",
-        description: "Manage issues, projects, and teams",
-        iconUrl: "https://linear.app/favicon.ico",
-        toolCount: 8,
-      },
-      {
-        registrySpecifier: "io.github.getsentry/sentry-mcp",
-        title: "Sentry",
-        description: "Monitor errors and performance",
-        iconUrl: undefined,
-        toolCount: 6,
-      },
-    ],
-    author: { orgName: "Gram", orgId: "org_gram" },
-    installCount: 1842,
-    createdAt: "2025-11-01T00:00:00Z",
-    updatedAt: "2026-02-15T00:00:00Z",
-  },
-  {
-    id: "col_2",
-    name: "Design & Collaboration",
-    description:
-      "Bring design tools into your AI workflow. Figma for design systems and Notion for documentation and knowledge management.",
-    visibility: "public",
-    servers: [
-      {
-        registrySpecifier: "com.figma.mcp/mcp",
-        title: "Figma",
-        description: "Access design files, components, and styles",
-        iconUrl: "https://static.figma.com/app/icon/1/favicon.svg",
-        toolCount: 10,
-      },
-      {
-        registrySpecifier: "com.notion/mcp",
-        title: "Notion",
-        description: "Read and manage pages, databases, and content",
-        iconUrl: "https://www.notion.so/favicon.ico",
-        toolCount: 9,
-      },
-    ],
-    author: { orgName: "Gram", orgId: "org_gram" },
-    installCount: 956,
-    createdAt: "2025-12-10T00:00:00Z",
-    updatedAt: "2026-01-20T00:00:00Z",
-  },
-  {
-    id: "col_3",
-    name: "Data & Analytics",
-    description:
-      "Connect your data sources for AI-powered analytics. Query databases, explore dashboards, and generate insights.",
-    visibility: "public",
-    servers: [
-      {
-        registrySpecifier: "com.snowflake/mcp-server",
-        title: "Snowflake",
-        description: "Query data warehouses and manage tables",
-        toolCount: 7,
-      },
-      {
-        registrySpecifier: "io.github.datadog/mcp-server",
-        title: "Datadog",
-        description: "Monitor metrics, logs, and traces",
-        toolCount: 11,
-      },
-    ],
-    author: { orgName: "Gram", orgId: "org_gram" },
-    installCount: 621,
-    createdAt: "2026-01-05T00:00:00Z",
-    updatedAt: "2026-03-01T00:00:00Z",
-  },
-  {
-    id: "col_4",
-    name: "Customer Support Stack",
-    description:
-      "End-to-end customer support automation. Manage tickets, track conversations, and surface knowledge base articles.",
-    visibility: "public",
-    servers: [
-      {
-        registrySpecifier: "com.zendesk/mcp-server",
-        title: "Zendesk",
-        description: "Manage support tickets and customer data",
-        toolCount: 9,
-      },
-      {
-        registrySpecifier: "com.intercom/mcp-server",
-        title: "Intercom",
-        description: "Access conversations and user profiles",
-        toolCount: 7,
-      },
-      {
-        registrySpecifier: "io.github.confluence/mcp-server",
-        title: "Confluence",
-        description: "Search and manage knowledge base articles",
-        toolCount: 5,
-      },
-    ],
-    author: { orgName: "Acme Corp", orgId: "org_acme" },
-    installCount: 334,
-    createdAt: "2026-01-15T00:00:00Z",
-    updatedAt: "2026-02-28T00:00:00Z",
-  },
-  {
-    id: "col_5",
-    name: "Internal Tools",
-    description:
-      "Private collection for our engineering team. Custom MCP servers for internal APIs and automation workflows.",
-    visibility: "private",
-    servers: [
-      {
-        registrySpecifier: "internal/deploy-bot",
-        title: "Deploy Bot",
-        description: "Trigger and monitor deployments",
-        toolCount: 4,
-      },
-      {
-        registrySpecifier: "internal/feature-flags",
-        title: "Feature Flags",
-        description: "Manage feature flag configurations",
-        toolCount: 3,
-      },
-    ],
-    author: { orgName: "My Org", orgId: "org_current" },
-    installCount: 12,
-    createdAt: "2026-02-01T00:00:00Z",
-    updatedAt: "2026-03-10T00:00:00Z",
-  },
-  {
-    id: "col_6",
-    name: "Sales & CRM",
-    description:
-      "Supercharge your sales workflow with CRM access, email outreach, and pipeline management tools.",
-    visibility: "public",
-    servers: [
-      {
-        registrySpecifier: "com.salesforce/mcp-server",
-        title: "Salesforce",
-        description: "Manage leads, opportunities, and accounts",
-        toolCount: 14,
-      },
-      {
-        registrySpecifier: "com.hubspot/mcp-server",
-        title: "HubSpot",
-        description: "Access contacts, deals, and marketing data",
-        toolCount: 11,
-      },
-    ],
-    author: { orgName: "Gram", orgId: "org_gram" },
-    installCount: 478,
-    createdAt: "2026-01-20T00:00:00Z",
-    updatedAt: "2026-03-05T00:00:00Z",
-  },
-  {
-    id: "col_7",
-    name: "DevOps Essentials",
-    description:
-      "Infrastructure and deployment tooling. Monitor services, manage containers, and automate CI/CD pipelines.",
-    visibility: "public",
-    servers: [
-      {
-        registrySpecifier: "io.github.kubernetes/mcp-server",
-        title: "Kubernetes",
-        description: "Manage clusters, pods, and deployments",
-        toolCount: 15,
-      },
-      {
-        registrySpecifier: "com.pagerduty/mcp-server",
-        title: "PagerDuty",
-        description: "Manage incidents and on-call schedules",
-        toolCount: 6,
-      },
-      {
-        registrySpecifier: "io.github.terraform/mcp-server",
-        title: "Terraform",
-        description: "Plan and apply infrastructure changes",
-        toolCount: 5,
-      },
-    ],
-    author: { orgName: "Acme Corp", orgId: "org_acme" },
-    installCount: 892,
-    createdAt: "2025-11-20T00:00:00Z",
-    updatedAt: "2026-02-20T00:00:00Z",
-  },
-  {
-    id: "col_8",
-    name: "Shared QA Collection",
-    description:
-      "QA automation tools shared across our partner organizations. Includes testing frameworks and bug tracking.",
-    visibility: "private",
-    sharedWithOrgIds: ["org_partner1", "org_partner2"],
-    servers: [
-      {
-        registrySpecifier: "internal/test-runner",
-        title: "Test Runner",
-        description: "Execute and manage test suites",
-        toolCount: 6,
-      },
-      {
-        registrySpecifier: "internal/bug-tracker",
-        title: "Bug Tracker",
-        description: "Track and triage reported bugs",
-        toolCount: 4,
-      },
-    ],
-    author: { orgName: "My Org", orgId: "org_current" },
-    installCount: 28,
-    createdAt: "2026-02-10T00:00:00Z",
-    updatedAt: "2026-03-12T00:00:00Z",
-  },
-];
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
-const CURRENT_ORG_ID = "org_current";
+/**
+ * At the org level there's no project slug in the URL, so the SDK HTTP client
+ * won't set the Gram-Project header automatically. We grab the first project
+ * from the org and pass it explicitly in the request headers.
+ */
+function useDefaultProjectSlug(): string | undefined {
+  const organization = useOrganization();
+  return organization.projects?.[0]?.slug;
+}
+
+export function useCreateCollection() {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const projectSlug = useDefaultProjectSlug();
+
+  return useMutation({
+    mutationFn: (params: {
+      name: string;
+      slug?: string;
+      toolsetIds: string[];
+      visibility: "public" | "private";
+    }) =>
+      client.mcpRegistries.publish({
+        gramProject: projectSlug,
+        publishRequestBody: {
+          name: params.name,
+          slug: params.slug || slugify(params.name),
+          toolsetIds: params.toolsetIds,
+          visibility: params.visibility,
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["collections"],
+      });
+    },
+    onError: (err) => {
+      toast.error(`Failed to create collection: ${err.message}`);
+    },
+  });
+}
 
 export function useCollections(
-  tab: "discover" | "org",
+  tab?: "discover" | "org",
   search?: string,
 ): {
   data: Collection[];
   isLoading: boolean;
 } {
-  const data = useMemo(() => {
-    let filtered: Collection[];
+  const client = useSdkClient();
+  const projectSlug = useDefaultProjectSlug();
 
-    if (tab === "discover") {
-      filtered = MOCK_COLLECTIONS.filter(
-        (c) =>
-          c.visibility === "public" ||
-          c.sharedWithOrgIds?.includes(CURRENT_ORG_ID),
-      );
-    } else {
-      filtered = MOCK_COLLECTIONS.filter(
-        (c) => c.author.orgId === CURRENT_ORG_ID,
-      );
-    }
+  const { data: registriesData, isLoading: registriesLoading } = useQuery({
+    queryKey: ["collections", "list", projectSlug],
+    queryFn: () =>
+      client.mcpRegistries.listRegistries({ gramProject: projectSlug }),
+    enabled: !!projectSlug,
+  });
 
-    if (search) {
-      const q = search.toLowerCase();
-      filtered = filtered.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.description.toLowerCase().includes(q) ||
-          c.servers.some((s) => s.title.toLowerCase().includes(q)),
-      );
-    }
+  const registries = (registriesData?.registries ?? []).filter(
+    (r) => r.source === "internal",
+  );
 
-    return filtered;
-  }, [tab, search]);
+  const filtered =
+    tab === "discover"
+      ? registries.filter((r) => r.visibility === "public")
+      : registries;
 
-  return { data, isLoading: false };
+  const searched = search
+    ? filtered.filter(
+        (r) =>
+          r.name.toLowerCase().includes(search.toLowerCase()) ||
+          r.slug?.toLowerCase().includes(search.toLowerCase()),
+      )
+    : filtered;
+
+  const collections: Collection[] = searched.map((r) => ({
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    description: "",
+    visibility: (r.visibility as "public" | "private") ?? "private",
+    servers: [],
+    author: { orgName: "", orgId: r.organizationId ?? "" },
+    installCount: 0,
+    createdAt: "",
+    updatedAt: "",
+  }));
+
+  return { data: collections, isLoading: registriesLoading };
 }
 
-export function useCollectionDetail(id: string): {
+export function useCollectionDetail(idOrSlug: string): {
   data: Collection | null;
   isLoading: boolean;
 } {
-  const data = useMemo(() => {
-    return MOCK_COLLECTIONS.find((c) => c.id === id) ?? null;
-  }, [id]);
+  const client = useSdkClient();
+  const projectSlug = useDefaultProjectSlug();
 
-  return { data, isLoading: false };
-}
+  const { data: registriesData, isLoading: registriesLoading } = useQuery({
+    queryKey: ["collections", "list", projectSlug],
+    queryFn: () =>
+      client.mcpRegistries.listRegistries({ gramProject: projectSlug }),
+    enabled: !!projectSlug,
+  });
 
-export function useCreateCollection(): {
-  mutate: (
-    collection: Omit<
-      Collection,
-      "id" | "createdAt" | "updatedAt" | "installCount"
-    >,
-  ) => void;
-  isPending: boolean;
-} {
-  const [isPending, setIsPending] = useState(false);
+  const registry = (registriesData?.registries ?? []).find(
+    (r) => r.slug === idOrSlug || r.id === idOrSlug,
+  );
 
-  const mutate = (
-    _collection: Omit<
-      Collection,
-      "id" | "createdAt" | "updatedAt" | "installCount"
-    >,
-  ) => {
-    setIsPending(true);
-    setTimeout(() => {
-      setIsPending(false);
-    }, 1000);
+  const { data: serveData, isLoading: serveLoading } = useQuery({
+    queryKey: ["collections", "serve", registry?.slug, projectSlug],
+    queryFn: () =>
+      client.mcpRegistries.serve({
+        registrySlug: registry!.slug!,
+        gramProject: projectSlug,
+      }),
+    enabled: !!registry?.slug && !!projectSlug,
+  });
+
+  if (registriesLoading || serveLoading) {
+    return { data: null, isLoading: true };
+  }
+
+  if (!registry) {
+    return { data: null, isLoading: false };
+  }
+
+  const servers: CollectionServer[] = (serveData?.servers ?? []).map((s) => ({
+    registrySpecifier: s.registrySpecifier ?? "",
+    title: s.title ?? s.registrySpecifier ?? "",
+    description: s.description ?? "",
+    iconUrl: s.iconUrl ?? undefined,
+    toolCount: s.tools?.length ?? 0,
+  }));
+
+  const collection: Collection = {
+    id: registry.id,
+    name: registry.name,
+    slug: registry.slug,
+    description: "",
+    visibility: (registry.visibility as "public" | "private") ?? "private",
+    servers,
+    author: { orgName: "", orgId: registry.organizationId ?? "" },
+    installCount: 0,
+    createdAt: "",
+    updatedAt: "",
   };
 
-  return { mutate, isPending };
+  return { data: collection, isLoading: false };
 }
 
-/**
- * Mock catalog servers for the server picker on the create page.
- * Replaces useInfiniteListMCPCatalog which requires project-scoped auth.
- */
-const MOCK_CATALOG_SERVERS = [
-  {
-    registrySpecifier: "io.github.github/github-mcp-server",
-    title: "GitHub",
-    description: "Access repositories, issues, and pull requests",
-    iconUrl: "https://github.githubassets.com/favicons/favicon.svg",
-    toolCount: 12,
-  },
-  {
-    registrySpecifier: "app.linear/linear",
-    title: "Linear",
-    description: "Manage issues, projects, and teams",
-    iconUrl: "https://linear.app/favicon.ico",
-    toolCount: 8,
-  },
-  {
-    registrySpecifier: "com.figma.mcp/mcp",
-    title: "Figma",
-    description: "Access design files, components, and styles",
-    iconUrl: "https://static.figma.com/app/icon/1/favicon.svg",
-    toolCount: 10,
-  },
-  {
-    registrySpecifier: "com.notion/mcp",
-    title: "Notion",
-    description: "Read and manage pages, databases, and content",
-    iconUrl: "https://www.notion.so/favicon.ico",
-    toolCount: 9,
-  },
-  {
-    registrySpecifier: "com.snowflake/mcp-server",
-    title: "Snowflake",
-    description: "Query data warehouses and manage tables",
-    toolCount: 7,
-  },
-  {
-    registrySpecifier: "io.github.datadog/mcp-server",
-    title: "Datadog",
-    description: "Monitor metrics, logs, and traces",
-    toolCount: 11,
-  },
-  {
-    registrySpecifier: "com.salesforce/mcp-server",
-    title: "Salesforce",
-    description: "Manage leads, opportunities, and accounts",
-    toolCount: 14,
-  },
-  {
-    registrySpecifier: "com.hubspot/mcp-server",
-    title: "HubSpot",
-    description: "Access contacts, deals, and marketing data",
-    toolCount: 11,
-  },
-  {
-    registrySpecifier: "io.github.kubernetes/mcp-server",
-    title: "Kubernetes",
-    description: "Manage clusters, pods, and deployments",
-    toolCount: 15,
-  },
-  {
-    registrySpecifier: "com.pagerduty/mcp-server",
-    title: "PagerDuty",
-    description: "Manage incidents and on-call schedules",
-    toolCount: 6,
-  },
-  {
-    registrySpecifier: "com.zendesk/mcp-server",
-    title: "Zendesk",
-    description: "Manage support tickets and customer data",
-    toolCount: 9,
-  },
-  {
-    registrySpecifier: "io.github.terraform/mcp-server",
-    title: "Terraform",
-    description: "Plan and apply infrastructure changes",
-    toolCount: 5,
-  },
-];
-
-export interface CatalogServer {
-  registrySpecifier: string;
-  title: string;
-  description: string;
-  iconUrl?: string;
-  toolCount: number;
-}
-
-export function useCatalogServers(search?: string): {
-  data: CatalogServer[];
+export function useCollectionServers(slug: string | undefined): {
+  servers: CollectionServer[];
   isLoading: boolean;
 } {
-  const data = useMemo(() => {
-    if (!search) return MOCK_CATALOG_SERVERS;
-    const q = search.toLowerCase();
-    return MOCK_CATALOG_SERVERS.filter(
-      (s) =>
-        s.title.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q),
-    );
-  }, [search]);
+  const client = useSdkClient();
+  const projectSlug = useDefaultProjectSlug();
 
-  return { data, isLoading: false };
+  const { data, isLoading } = useQuery({
+    queryKey: ["collections", "serve", slug, projectSlug],
+    queryFn: () =>
+      client.mcpRegistries.serve({
+        registrySlug: slug!,
+        gramProject: projectSlug,
+      }),
+    enabled: !!slug && !!projectSlug,
+  });
+
+  const servers: CollectionServer[] = (data?.servers ?? []).map((s) => ({
+    registrySpecifier: s.registrySpecifier ?? "",
+    title: s.title ?? s.registrySpecifier ?? "",
+    description: s.description ?? "",
+    iconUrl: s.iconUrl ?? undefined,
+    toolCount: s.tools?.length ?? 0,
+  }));
+
+  return { servers, isLoading };
 }
 
 export function useInstallCollection(): {
@@ -422,6 +201,7 @@ export function useInstallCollection(): {
   const [isPending, setIsPending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  // TODO: Wire to real API when install endpoint is available
   const mutate = (_params: { collectionId: string; projectId: string }) => {
     setIsPending(true);
     setIsSuccess(false);
