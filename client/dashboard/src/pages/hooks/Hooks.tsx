@@ -1159,6 +1159,9 @@ function HooksServerTable({
       // Also include the display name itself if it exists as a raw server (no override to it)
       const allRawNames = new Set(mappedRawNames);
 
+      // Always include the item's actual raw name (e.g. "" for Local Tools)
+      allRawNames.add(item.name);
+
       // Check if the display name itself exists as a raw server name in the data
       // (this handles the case where "B" is both a display name and a raw server)
       const displayNameExistsAsRaw = servers.some(
