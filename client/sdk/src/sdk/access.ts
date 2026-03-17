@@ -3,8 +3,8 @@
  */
 
 import { accessList } from "../funcs/accessList.js";
-import { accessRemoveAll } from "../funcs/accessRemoveAll.js";
-import { accessRemoveOne } from "../funcs/accessRemoveOne.js";
+import { accessRemove } from "../funcs/accessRemove.js";
+import { accessRemovePrincipal } from "../funcs/accessRemovePrincipal.js";
 import { accessUpsert } from "../funcs/accessUpsert.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -32,17 +32,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * removeGrant access
+   * removeGrants access
    *
    * @remarks
-   * Remove a single grant matching the exact (principal, scope, resource) tuple within the organization.
+   * Remove one or more grants by their exact (principal, scope, resource) tuples.
    */
-  async removeOne(
-    request: operations.RemoveGrantRequest,
-    security?: operations.RemoveGrantSecurity | undefined,
+  async remove(
+    request: operations.RemoveGrantsRequest,
+    security?: operations.RemoveGrantsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
-    return unwrapAsync(accessRemoveOne(
+    return unwrapAsync(accessRemove(
       this,
       request,
       security,
@@ -51,17 +51,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * removeGrants access
+   * removePrincipalGrants access
    *
    * @remarks
    * Remove all grants for a specific principal within the organization.
    */
-  async removeAll(
-    request: operations.RemoveGrantsRequest,
-    security?: operations.RemoveGrantsSecurity | undefined,
+  async removePrincipal(
+    request: operations.RemovePrincipalGrantsRequest,
+    security?: operations.RemovePrincipalGrantsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
-    return unwrapAsync(accessRemoveAll(
+    return unwrapAsync(accessRemovePrincipal(
       this,
       request,
       security,

@@ -105,10 +105,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useUpsertGrantsMutation } from "@gram/client/react-query/accessUpsert.js";
+import { useRemoveGrantsMutation } from "@gram/client/react-query/accessRemove.js";
 
 export function Example() {
-  const { mutate, status } = useUpsertGrantsMutation();
+  const { mutate, status } = useRemoveGrantsMutation();
 
   return (
     <form
@@ -119,7 +119,12 @@ export function Example() {
 
         mutate({
           upsertGrantsRequestBody: {
-            grants: [],
+            grants: [
+              {
+                principalUrn: "<value>",
+                scope: "<value>",
+              },
+            ],
           },
         });
       }}
@@ -137,10 +142,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useUpsertGrantsMutation } from "@gram/client/react-query/accessUpsert.js";
+import { useRemoveGrantsMutation } from "@gram/client/react-query/accessRemove.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useUpsertGrantsMutation({
+  const { mutate, status } = useRemoveGrantsMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes

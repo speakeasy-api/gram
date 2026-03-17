@@ -27,15 +27,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * removeGrants access
+ * removePrincipalGrants access
  *
  * @remarks
  * Remove all grants for a specific principal within the organization.
  */
-export function accessRemoveAll(
+export function accessRemovePrincipal(
   client: GramCore,
-  request: operations.RemoveGrantsRequest,
-  security?: operations.RemoveGrantsSecurity | undefined,
+  request: operations.RemovePrincipalGrantsRequest,
+  security?: operations.RemovePrincipalGrantsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -61,8 +61,8 @@ export function accessRemoveAll(
 
 async function $do(
   client: GramCore,
-  request: operations.RemoveGrantsRequest,
-  security?: operations.RemoveGrantsSecurity | undefined,
+  request: operations.RemovePrincipalGrantsRequest,
+  security?: operations.RemovePrincipalGrantsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -83,7 +83,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.RemoveGrantsRequest$outboundSchema, value),
+    (value) =>
+      z.parse(operations.RemovePrincipalGrantsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -92,7 +93,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/access.removeGrants")();
+  const path = pathToFunc("/rpc/access.removePrincipalGrants")();
 
   const query = encodeFormQuery({
     "principal_urn": payload.principal_urn,
@@ -119,7 +120,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "removeGrants",
+    operationID: "removePrincipalGrants",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

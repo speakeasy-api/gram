@@ -124,8 +124,8 @@ run();
 ### [Access](docs/sdks/access/README.md)
 
 * [list](docs/sdks/access/README.md#list) - listGrants access
-* [removeOne](docs/sdks/access/README.md#removeone) - removeGrant access
-* [removeAll](docs/sdks/access/README.md#removeall) - removeGrants access
+* [remove](docs/sdks/access/README.md#remove) - removeGrants access
+* [removePrincipal](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 * [upsert](docs/sdks/access/README.md#upsert) - upsertGrants access
 
 ### [Agentworkflows](docs/sdks/agentworkflows/README.md)
@@ -351,8 +351,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 <summary>Available standalone functions</summary>
 
 - [`accessList`](docs/sdks/access/README.md#list) - listGrants access
-- [`accessRemoveAll`](docs/sdks/access/README.md#removeall) - removeGrants access
-- [`accessRemoveOne`](docs/sdks/access/README.md#removeone) - removeGrant access
+- [`accessRemove`](docs/sdks/access/README.md#remove) - removeGrants access
+- [`accessRemovePrincipal`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 - [`accessUpsert`](docs/sdks/access/README.md#upsert) - upsertGrants access
 - [`agentworkflowsCreateResponse`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`agentworkflowsDeleteResponse`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
@@ -597,9 +597,9 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
-- [`useRemoveGrantMutation`](docs/sdks/access/README.md#removeone) - removeGrant access
-- [`useRemoveGrantsMutation`](docs/sdks/access/README.md#removeall) - removeGrants access
+- [`useRemoveGrantsMutation`](docs/sdks/access/README.md#remove) - removeGrants access
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`useRemovePrincipalGrantsMutation`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys

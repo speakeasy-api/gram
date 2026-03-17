@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { accessRemoveAll } from "../funcs/accessRemoveAll.js";
+import { accessRemove } from "../funcs/accessRemove.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -50,7 +50,7 @@ export type RemoveGrantsMutationError =
  * removeGrants access
  *
  * @remarks
- * Remove all grants for a specific principal within the organization.
+ * Remove one or more grants by their exact (principal, scope, resource) tuples.
  */
 export function useRemoveGrantsMutation(
   options?: MutationHookOptions<
@@ -71,7 +71,7 @@ export function useRemoveGrantsMutation(
 }
 
 export function mutationKeyRemoveGrants(): MutationKey {
-  return ["@gram/client", "access", "removeAll"];
+  return ["@gram/client", "access", "remove"];
 }
 
 export function buildRemoveGrantsMutation(
@@ -102,7 +102,7 @@ export function buildRemoveGrantsMutation(
           ),
         },
       };
-      return unwrapAsync(accessRemoveAll(
+      return unwrapAsync(accessRemove(
         client$,
         request,
         security,

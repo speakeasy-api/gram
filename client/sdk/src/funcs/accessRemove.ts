@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -27,15 +27,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * removeGrant access
+ * removeGrants access
  *
  * @remarks
- * Remove a single grant matching the exact (principal, scope, resource) tuple within the organization.
+ * Remove one or more grants by their exact (principal, scope, resource) tuples.
  */
-export function accessRemoveOne(
+export function accessRemove(
   client: GramCore,
-  request: operations.RemoveGrantRequest,
-  security?: operations.RemoveGrantSecurity | undefined,
+  request: operations.RemoveGrantsRequest,
+  security?: operations.RemoveGrantsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -61,8 +61,8 @@ export function accessRemoveOne(
 
 async function $do(
   client: GramCore,
-  request: operations.RemoveGrantRequest,
-  security?: operations.RemoveGrantSecurity | undefined,
+  request: operations.RemoveGrantsRequest,
+  security?: operations.RemoveGrantsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -83,24 +83,21 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.RemoveGrantRequest$outboundSchema, value),
+    (value) => z.parse(operations.RemoveGrantsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
-
-  const path = pathToFunc("/rpc/access.removeGrant")();
-
-  const query = encodeFormQuery({
-    "principal_urn": payload.principal_urn,
-    "resource": payload.resource,
-    "scope": payload.scope,
+  const body = encodeJSON("body", payload.UpsertGrantsRequestBody, {
+    explode: true,
   });
 
+  const path = pathToFunc("/rpc/access.removeGrants")();
+
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
@@ -121,7 +118,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "removeGrant",
+    operationID: "removeGrants",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -135,11 +132,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "DELETE",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
