@@ -172,6 +172,11 @@ func TestUpsertGrants_FailsOnFirstInvalidURNInBatch(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	// Verify the first valid grant was rolled back (atomic batch)
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, result.Grants)
 }
 
 func TestUpsertGrants_UnauthorizedWithoutAuthContext(t *testing.T) {

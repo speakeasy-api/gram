@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -89,6 +90,14 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
 	grants := make([]*gen.Grant, 0, len(payload.Grants))
 
 	for _, form := range payload.Grants {
@@ -97,7 +106,7 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
 		}
 
-		row, err := s.repo.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		row, err := tr.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          form.Scope,
@@ -110,6 +119,10 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 		grants = append(grants, grantFromRow(row))
 	}
 
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit upsert grants").Log(ctx, s.logger)
+	}
+
 	return &gen.UpsertGrantsResult{Grants: grants}, nil
 }
 
@@ -119,13 +132,21 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
 	for _, entry := range payload.Grants {
 		principal, err := urn.ParsePrincipal(entry.PrincipalUrn)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
 		}
 
-		_, err = s.repo.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
+		_, err = tr.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          entry.Scope,
@@ -134,6 +155,10 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "remove grant").Log(ctx, s.logger)
 		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit remove grants").Log(ctx, s.logger)
 	}
 
 	return nil
