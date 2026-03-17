@@ -1,7 +1,6 @@
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { toast } from "sonner";
 import type { Collection, CollectionServer } from "./types";
 
@@ -192,29 +191,46 @@ export function useCollectionServers(slug: string | undefined): {
   return { servers, isLoading };
 }
 
-export function useInstallCollection(): {
-  mutate: (params: { collectionId: string; projectId: string }) => void;
-  isPending: boolean;
-  isSuccess: boolean;
-  reset: () => void;
-} {
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+export function useInstallCollection() {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
 
-  // TODO: Wire to real API when install endpoint is available
-  const mutate = (_params: { collectionId: string; projectId: string }) => {
-    setIsPending(true);
-    setIsSuccess(false);
-    setTimeout(() => {
-      setIsPending(false);
-      setIsSuccess(true);
-    }, 1500);
-  };
+  return useMutation({
+    mutationFn: async (params: {
+      collectionId: string;
+      collectionSlug: string;
+      projectSlug: string;
+    }) => {
+      // 1. Fetch servers in the collection
+      const serveResult = await client.mcpRegistries.serve({
+        registrySlug: params.collectionSlug,
+        gramProject: params.projectSlug,
+      });
 
-  const reset = () => {
-    setIsSuccess(false);
-    setIsPending(false);
-  };
+      const servers = serveResult.servers ?? [];
+      if (servers.length === 0) {
+        throw new Error("Collection has no servers to install");
+      }
 
-  return { mutate, isPending, isSuccess, reset };
+      // 2. Evolve the deployment with external MCP attachments
+      return client.deployments.evolveDeployment({
+        gramProject: params.projectSlug,
+        evolveForm: {
+          nonBlocking: true,
+          upsertExternalMcps: servers.map((server) => ({
+            registryId: params.collectionId,
+            name: server.title || server.registrySpecifier || "",
+            slug: server.registrySpecifier?.split("/").pop() || "",
+            registryServerSpecifier: server.registrySpecifier || "",
+          })),
+        },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deployments"] });
+    },
+    onError: (err) => {
+      toast.error(`Failed to install collection: ${err.message}`);
+    },
+  });
 }
