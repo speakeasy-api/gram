@@ -45,6 +45,11 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SourceDetails from "./pages/sources/SourceDetails";
+import CreateCollection from "./pages/collections/CreateCollection";
+import CollectionDetail, {
+  CollectionDetailRoot,
+} from "./pages/collections/CollectionDetail";
+import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
@@ -552,6 +557,26 @@ const ORG_ROUTE_STRUCTURE = {
     url: "admin-settings",
     icon: "shield-alert",
     component: OrgAdminSettings,
+  },
+  collections: {
+    title: "Collections",
+    url: "collections",
+    icon: "layout-grid",
+    component: CollectionsRoot,
+    indexComponent: Collections,
+    subPages: {
+      create: {
+        title: "Create Collection",
+        url: "create",
+        component: CreateCollection,
+      },
+      detail: {
+        title: "Collection Detail",
+        url: ":collectionId",
+        component: CollectionDetailRoot,
+        indexComponent: CollectionDetail,
+      },
+    },
   },
 } satisfies Record<string, RouteEntry>;
 

@@ -33,9 +33,9 @@ export function DotCard({
       )}
     >
       {/* Dot pattern sidebar */}
-      <div className="w-40 shrink-0 overflow-hidden border-r relative bg-muted/30 text-muted-foreground/20">
+      <div className="w-40 shrink-0 overflow-hidden border-r relative bg-muted/30 text-muted-foreground/20 isolate">
         <div
-          className="absolute inset-0 scroll-dots-target"
+          className="absolute inset-0 z-0 scroll-dots-target"
           style={{
             backgroundImage:
               "radial-gradient(circle, currentColor 1px, transparent 1px)",
@@ -43,13 +43,17 @@ export function DotCard({
           }}
         />
         {icon && (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 z-10 flex items-center justify-center">
             <div className="bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
               {icon}
             </div>
           </div>
         )}
-        {overlay}
+        {overlay && (
+          <div className="absolute inset-0 z-20 pointer-events-none [&>*]:pointer-events-auto">
+            {overlay}
+          </div>
+        )}
       </div>
 
       {/* Content area */}
