@@ -55,7 +55,7 @@ func New(
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
 			{"UpsertGrants", "POST", "/rpc/access.upsertGrants"},
 			{"RemoveGrants", "POST", "/rpc/access.removeGrants"},
-			{"RemovePrincipalGrants", "DELETE", "/rpc/access.removePrincipalGrants"},
+			{"RemovePrincipalGrants", "POST", "/rpc/access.removePrincipalGrants"},
 		},
 		ListGrants:            NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
 		UpsertGrants:          NewUpsertGrantsHandler(e.UpsertGrants, mux, decoder, encoder, errhandler, formatter),
@@ -259,7 +259,7 @@ func MountRemovePrincipalGrantsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/access.removePrincipalGrants", f)
+	mux.Handle("POST", "/rpc/access.removePrincipalGrants", f)
 }
 
 // NewRemovePrincipalGrantsHandler creates a HTTP handler which loads the HTTP

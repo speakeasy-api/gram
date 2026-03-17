@@ -29,6 +29,14 @@ type RemoveGrantsRequestBody struct {
 	Grants []*RemoveGrantEntryRequestBody `form:"grants" json:"grants" xml:"grants"`
 }
 
+// RemovePrincipalGrantsRequestBody is the type of the "access" service
+// "removePrincipalGrants" endpoint HTTP request body.
+type RemovePrincipalGrantsRequestBody struct {
+	// The principal URN whose grants should be removed (e.g. "user:user_abc",
+	// "role:admin").
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+}
+
 // ListGrantsResponseBody is the type of the "access" service "listGrants"
 // endpoint HTTP response body.
 type ListGrantsResponseBody struct {
@@ -850,6 +858,15 @@ func NewRemoveGrantsRequestBody(p *access.RemoveGrantsPayload) *RemoveGrantsRequ
 		}
 	} else {
 		body.Grants = []*RemoveGrantEntryRequestBody{}
+	}
+	return body
+}
+
+// NewRemovePrincipalGrantsRequestBody builds the HTTP request body from the
+// payload of the "removePrincipalGrants" endpoint of the "access" service.
+func NewRemovePrincipalGrantsRequestBody(p *access.RemovePrincipalGrantsPayload) *RemovePrincipalGrantsRequestBody {
+	body := &RemovePrincipalGrantsRequestBody{
+		PrincipalUrn: p.PrincipalUrn,
 	}
 	return body
 }

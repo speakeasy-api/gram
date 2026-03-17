@@ -148,16 +148,19 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsS
 
 // BuildRemovePrincipalGrantsPayload builds the payload for the access
 // removePrincipalGrants endpoint from CLI flags.
-func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsPrincipalUrn string, accessRemovePrincipalGrantsSessionToken string) (*access.RemovePrincipalGrantsPayload, error) {
+func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsBody string, accessRemovePrincipalGrantsSessionToken string) (*access.RemovePrincipalGrantsPayload, error) {
 	var err error
-	var principalUrn string
+	var body RemovePrincipalGrantsRequestBody
 	{
-		principalUrn = accessRemovePrincipalGrantsPrincipalUrn
-		if utf8.RuneCountInString(principalUrn) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 3, true))
+		err = json.Unmarshal([]byte(accessRemovePrincipalGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"principal_urn\": \"aaa\"\n   }'")
 		}
-		if utf8.RuneCountInString(principalUrn) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 260, false))
+		if utf8.RuneCountInString(body.PrincipalUrn) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 3, true))
+		}
+		if utf8.RuneCountInString(body.PrincipalUrn) > 260 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 260, false))
 		}
 		if err != nil {
 			return nil, err
@@ -169,8 +172,9 @@ func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsPrincipalUrn s
 			sessionToken = &accessRemovePrincipalGrantsSessionToken
 		}
 	}
-	v := &access.RemovePrincipalGrantsPayload{}
-	v.PrincipalUrn = principalUrn
+	v := &access.RemovePrincipalGrantsPayload{
+		PrincipalUrn: body.PrincipalUrn,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

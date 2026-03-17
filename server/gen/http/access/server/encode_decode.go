@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"unicode/utf8"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
 	goahttp "goa.design/goa/v3/http"
@@ -656,28 +655,33 @@ func DecodeRemovePrincipalGrantsRequest(mux goahttp.Muxer, decoder func(*http.Re
 	return func(r *http.Request) (*access.RemovePrincipalGrantsPayload, error) {
 		var payload *access.RemovePrincipalGrantsPayload
 		var (
-			principalUrn string
-			sessionToken *string
-			err          error
+			body RemovePrincipalGrantsRequestBody
+			err  error
 		)
-		principalUrn = r.URL.Query().Get("principal_urn")
-		if principalUrn == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "query string"))
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
 		}
-		if utf8.RuneCountInString(principalUrn) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 3, true))
+		err = ValidateRemovePrincipalGrantsRequestBody(&body)
+		if err != nil {
+			return payload, err
 		}
-		if utf8.RuneCountInString(principalUrn) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("principal_urn", principalUrn, utf8.RuneCountInString(principalUrn), 260, false))
-		}
+
+		var (
+			sessionToken *string
+		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewRemovePrincipalGrantsPayload(principalUrn, sessionToken)
+		payload = NewRemovePrincipalGrantsPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

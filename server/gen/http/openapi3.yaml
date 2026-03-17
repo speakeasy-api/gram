@@ -178,20 +178,10 @@ paths:
             x-speakeasy-react-hook:
                 name: RemoveGrants
     /rpc/access.removePrincipalGrants:
-        delete:
+        post:
             description: Remove all grants for a specific principal within the organization.
             operationId: removePrincipalGrants
             parameters:
-                - allowEmptyValue: true
-                  description: The principal URN whose grants should be removed (e.g. "user:user_abc", "role:admin").
-                  in: query
-                  name: principal_urn
-                  required: true
-                  schema:
-                    description: The principal URN whose grants should be removed (e.g. "user:user_abc", "role:admin").
-                    maxLength: 260
-                    minLength: 3
-                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -199,6 +189,12 @@ paths:
                   schema:
                     description: Session header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RemovePrincipalGrantsRequestBody'
+                required: true
             responses:
                 "204":
                     description: No Content response.
@@ -17462,6 +17458,16 @@ components:
             required:
                 - principal_urn
                 - scope
+        RemovePrincipalGrantsRequestBody:
+            type: object
+            properties:
+                principal_urn:
+                    type: string
+                    description: The principal URN whose grants should be removed (e.g. "user:user_abc", "role:admin").
+                    minLength: 3
+                    maxLength: 260
+            required:
+                - principal_urn
         RenderTemplateByIDRequestBody:
             type: object
             properties:

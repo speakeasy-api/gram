@@ -713,7 +713,7 @@ func DecodeRemoveGrantsResponse(decoder func(*http.Response) goahttp.Decoder, re
 // endpoint
 func (c *Client) BuildRemovePrincipalGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemovePrincipalGrantsAccessPath()}
-	req, err := http.NewRequest("DELETE", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("access", "removePrincipalGrants", u.String(), err)
 	}
@@ -736,9 +736,10 @@ func EncodeRemovePrincipalGrantsRequest(encoder func(*http.Request) goahttp.Enco
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		values := req.URL.Query()
-		values.Add("principal_urn", p.PrincipalUrn)
-		req.URL.RawQuery = values.Encode()
+		body := NewRemovePrincipalGrantsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "removePrincipalGrants", err)
+		}
 		return nil
 	}
 }

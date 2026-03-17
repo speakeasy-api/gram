@@ -29,6 +29,14 @@ type RemoveGrantsRequestBody struct {
 	Grants []*RemoveGrantEntryRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
+// RemovePrincipalGrantsRequestBody is the type of the "access" service
+// "removePrincipalGrants" endpoint HTTP request body.
+type RemovePrincipalGrantsRequestBody struct {
+	// The principal URN whose grants should be removed (e.g. "user:user_abc",
+	// "role:admin").
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+}
+
 // ListGrantsResponseBody is the type of the "access" service "listGrants"
 // endpoint HTTP response body.
 type ListGrantsResponseBody struct {
@@ -1467,9 +1475,10 @@ func NewRemoveGrantsPayload(body *RemoveGrantsRequestBody, sessionToken *string)
 
 // NewRemovePrincipalGrantsPayload builds a access service
 // removePrincipalGrants endpoint payload.
-func NewRemovePrincipalGrantsPayload(principalUrn string, sessionToken *string) *access.RemovePrincipalGrantsPayload {
-	v := &access.RemovePrincipalGrantsPayload{}
-	v.PrincipalUrn = principalUrn
+func NewRemovePrincipalGrantsPayload(body *RemovePrincipalGrantsRequestBody, sessionToken *string) *access.RemovePrincipalGrantsPayload {
+	v := &access.RemovePrincipalGrantsPayload{
+		PrincipalUrn: *body.PrincipalUrn,
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -1514,6 +1523,25 @@ func ValidateRemoveGrantsRequestBody(body *RemoveGrantsRequestBody) (err error) 
 			if err2 := ValidateRemoveGrantEntryRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateRemovePrincipalGrantsRequestBody runs the validations defined on
+// RemovePrincipalGrantsRequestBody
+func ValidateRemovePrincipalGrantsRequestBody(body *RemovePrincipalGrantsRequestBody) (err error) {
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.PrincipalUrn != nil {
+		if utf8.RuneCountInString(*body.PrincipalUrn) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 3, true))
+		}
+	}
+	if body.PrincipalUrn != nil {
+		if utf8.RuneCountInString(*body.PrincipalUrn) > 260 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 260, false))
 		}
 	}
 	return

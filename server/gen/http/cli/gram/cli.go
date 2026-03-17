@@ -122,7 +122,7 @@ func ParseEndpoint(
 		accessRemoveGrantsSessionTokenFlag = accessRemoveGrantsFlags.String("session-token", "", "")
 
 		accessRemovePrincipalGrantsFlags            = flag.NewFlagSet("remove-principal-grants", flag.ExitOnError)
-		accessRemovePrincipalGrantsPrincipalUrnFlag = accessRemovePrincipalGrantsFlags.String("principal-urn", "REQUIRED", "")
+		accessRemovePrincipalGrantsBodyFlag         = accessRemovePrincipalGrantsFlags.String("body", "REQUIRED", "")
 		accessRemovePrincipalGrantsSessionTokenFlag = accessRemovePrincipalGrantsFlags.String("session-token", "", "")
 
 		agentworkflowsFlags = flag.NewFlagSet("agentworkflows", flag.ContinueOnError)
@@ -1709,7 +1709,7 @@ func ParseEndpoint(
 				data, err = accessc.BuildRemoveGrantsPayload(*accessRemoveGrantsBodyFlag, *accessRemoveGrantsSessionTokenFlag)
 			case "remove-principal-grants":
 				endpoint = c.RemovePrincipalGrants()
-				data, err = accessc.BuildRemovePrincipalGrantsPayload(*accessRemovePrincipalGrantsPrincipalUrnFlag, *accessRemovePrincipalGrantsSessionTokenFlag)
+				data, err = accessc.BuildRemovePrincipalGrantsPayload(*accessRemovePrincipalGrantsBodyFlag, *accessRemovePrincipalGrantsSessionTokenFlag)
 			}
 		case "agentworkflows":
 			c := agentworkflowsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2322,7 +2322,7 @@ func accessRemoveGrantsUsage() {
 func accessRemovePrincipalGrantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access remove-principal-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -2331,12 +2331,12 @@ func accessRemovePrincipalGrantsUsage() {
 	fmt.Fprintln(os.Stderr, `Remove all grants for a specific principal within the organization.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-principal-grants --principal-urn \"aaa\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-principal-grants --body '{\n      \"principal_urn\": \"aaa\"\n   }' --session-token \"abc123\"")
 }
 
 // agentworkflowsUsage displays the usage of the agentworkflows command and its

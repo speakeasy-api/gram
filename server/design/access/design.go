@@ -100,8 +100,7 @@ var _ = Service("access", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/access.removePrincipalGrants")
-			Param("principal_urn")
+			POST("/rpc/access.removePrincipalGrants")
 			security.SessionHeader()
 			Response(StatusNoContent)
 		})
