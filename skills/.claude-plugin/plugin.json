@@ -1,0 +1,6 @@
+{
+  "name": "gram",
+  "version": "1.0.0",
+  "description": "Agent skills for deploying APIs, functions, and MCP servers with the Gram CLI",
+  "skills": "../skills/"
+}
