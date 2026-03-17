@@ -29,17 +29,21 @@ export type ClaudeHookPayload = {
    */
   additionalData?: { [k: string]: any } | undefined;
   /**
+   * The error from the tool (PostToolUseFailure only)
+   */
+  error?: any | undefined;
+  /**
    * The type of hook event
    */
   hookEventName: HookEventName;
   /**
+   * Whether the failure was caused by user interruption (PostToolUseFailure only)
+   */
+  isInterrupt?: boolean | undefined;
+  /**
    * The Claude Code session ID
    */
   sessionId?: string | undefined;
-  /**
-   * The error from the tool (PostToolUseFailure only)
-   */
-  toolError?: any | undefined;
   /**
    * The input to the tool
    */
@@ -65,9 +69,10 @@ export const HookEventName$outboundSchema: z.ZodMiniEnum<typeof HookEventName> =
 /** @internal */
 export type ClaudeHookPayload$Outbound = {
   additional_data?: { [k: string]: any } | undefined;
+  error?: any | undefined;
   hook_event_name: string;
+  is_interrupt?: boolean | undefined;
   session_id?: string | undefined;
-  tool_error?: any | undefined;
   tool_input?: any | undefined;
   tool_name?: string | undefined;
   tool_response?: any | undefined;
@@ -81,9 +86,10 @@ export const ClaudeHookPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     additionalData: z.optional(z.record(z.string(), z.any())),
+    error: z.optional(z.any()),
     hookEventName: HookEventName$outboundSchema,
+    isInterrupt: z.optional(z.boolean()),
     sessionId: z.optional(z.string()),
-    toolError: z.optional(z.any()),
     toolInput: z.optional(z.any()),
     toolName: z.optional(z.string()),
     toolResponse: z.optional(z.any()),
@@ -93,8 +99,8 @@ export const ClaudeHookPayload$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       additionalData: "additional_data",
       hookEventName: "hook_event_name",
+      isInterrupt: "is_interrupt",
       sessionId: "session_id",
-      toolError: "tool_error",
       toolInput: "tool_input",
       toolName: "tool_name",
       toolResponse: "tool_response",
