@@ -90,7 +90,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpsertGrantsRequestBody, {
+  const body = encodeJSON("body", payload.RemoveGrantsRequestBody, {
     explode: true,
   });
 

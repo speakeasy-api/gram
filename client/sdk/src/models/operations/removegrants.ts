@@ -15,7 +15,7 @@ export type RemoveGrantsRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  upsertGrantsRequestBody: components.UpsertGrantsRequestBody;
+  removeGrantsRequestBody: components.RemoveGrantsRequestBody;
 };
 
 /** @internal */
@@ -49,7 +49,7 @@ export function removeGrantsSecurityToJSON(
 /** @internal */
 export type RemoveGrantsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  UpsertGrantsRequestBody: components.UpsertGrantsRequestBody$Outbound;
+  RemoveGrantsRequestBody: components.RemoveGrantsRequestBody$Outbound;
 };
 
 /** @internal */
@@ -59,12 +59,12 @@ export const RemoveGrantsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    upsertGrantsRequestBody: components.UpsertGrantsRequestBody$outboundSchema,
+    removeGrantsRequestBody: components.RemoveGrantsRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      upsertGrantsRequestBody: "UpsertGrantsRequestBody",
+      removeGrantsRequestBody: "RemoveGrantsRequestBody",
     });
   }),
 );

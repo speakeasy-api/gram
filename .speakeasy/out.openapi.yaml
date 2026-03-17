@@ -111,7 +111,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertGrantsRequestBody'
+              $ref: '#/components/schemas/RemoveGrantsRequestBody'
         required: true
       responses:
         "204":
@@ -19906,6 +19906,18 @@ components:
       required:
         - name
         - description
+    RemoveGrantsRequestBody:
+      type: object
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemoveGrantEntry"
+          description: The list of grants to remove, each identified by (principal_urn, scope, resource).
+          minItems: 1
+          maxItems: 100
+      required:
+        - grants
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey
