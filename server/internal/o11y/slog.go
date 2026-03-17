@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/plog"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 var temporalKeys = map[string]attr.Key{
@@ -120,6 +121,15 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 		record.Add(attr.SlogSpanID(id))
 		if h.DataDogAttr {
 			record.Add(attr.SlogDataDogSpanID(id))
+		}
+	}
+
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		if authCtx.ActiveOrganizationID != "" {
+			record.Add(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		}
+		if authCtx.UserID != "" {
+			record.Add(attr.SlogUserID(authCtx.UserID))
 		}
 	}
 

@@ -218,7 +218,10 @@ func handleToolsCall(
 
 	descriptor := plan.Descriptor
 
-	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
+	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug, descriptor.URN.String())
+	logger = logger.With(
+		attr.SlogToolsetID(toolset.ID),
+	)
 
 	rw := &toolCallResponseWriter{
 		headers:    make(http.Header),
@@ -306,6 +309,11 @@ func handleToolsCall(
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
+
+	logger.InfoContext(ctx, "mcp tool call",
+		attr.SlogHTTPResponseStatusCode(rw.statusCode),
+	)
+
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").Log(ctx, logger)
 	}
