@@ -9,13 +9,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"goa.design/goa/v3/security"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"goa.design/goa/v3/security"
 )
 
 type Auth struct {
@@ -54,7 +55,7 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	case constants.ProjectSlugSecuritySchema:
 		ctx, err = s.checkProjectAccess(ctx, s.logger, key)
 	default:
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme")
+		err = oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme")
 	}
 	if err != nil {
 		return ctx, err
@@ -151,6 +152,9 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 	if authCtx.ExternalUserID != "" {
 		attrs = append(attrs, attr.SlogAuthUserExternalID(authCtx.ExternalUserID))
 	}
+	if authCtx.Email != nil {
+		attrs = append(attrs, attr.SlogAuthUserEmail(*authCtx.Email))
+	}
 	if authCtx.APIKeyID != "" {
 		attrs = append(attrs, attr.SlogAuthAPIKeyID(authCtx.APIKeyID))
 	}
@@ -165,8 +169,8 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 	}
 
 	if err != nil {
-		s.logger.ErrorContext(ctx, fmt.Sprintf("%s auth scheme check failed", scheme), attrs...)
+		s.logger.ErrorContext(ctx, fmt.Sprintf("auth scheme check failed (%s)", scheme), attrs...)
 	} else {
-		s.logger.InfoContext(ctx, fmt.Sprintf("%s auth scheme check passed", scheme), attrs...)
+		s.logger.InfoContext(ctx, fmt.Sprintf("auth scheme check passed (%s)", scheme), attrs...)
 	}
 }
