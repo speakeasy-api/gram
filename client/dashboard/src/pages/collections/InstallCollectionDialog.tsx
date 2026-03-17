@@ -26,28 +26,31 @@ export function InstallCollectionDialog({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
   );
-  const {
-    mutate: install,
-    isPending,
-    isSuccess,
-    reset,
-  } = useInstallCollection();
+  const installMutation = useInstallCollection();
 
   const projects = organization.projects ?? [];
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
   const handleInstall = () => {
-    if (!selectedProjectId) return;
-    install({ collectionId: collection.id, projectId: selectedProjectId });
+    if (!selectedProjectId || !selectedProject?.slug || !collection.slug)
+      return;
+    installMutation.mutate({
+      collectionId: collection.id,
+      collectionSlug: collection.slug,
+      projectSlug: selectedProject.slug,
+    });
   };
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
-      reset();
+      installMutation.reset();
       setSelectedProjectId(null);
     }
     onOpenChange(nextOpen);
   };
+
+  const isPending = installMutation.isPending;
+  const isSuccess = installMutation.isSuccess;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
