@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -102,14 +101,12 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attrs[attr.HookIsInterruptKey] = *payload.IsInterrupt
 	}
 
-	isMCP := false
 	// Parse MCP tool names
 	if strings.HasPrefix(toolName, "mcp__") {
 		parts := strings.SplitN(toolName, "__", 3)
 		if len(parts) == 3 {
 			attrs[attr.ToolCallSourceKey] = parts[1]
 			attrs[attr.ToolNameKey] = parts[2]
-			isMCP = true
 		}
 	}
 
@@ -130,52 +127,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attrs[attr.GenAIToolCallResultKey] = payload.ToolResponse
 	}
 
-	// Only map MCP servers to human-readable names
-	if isMCP {
-		// Check cache for existing mapping
-		source, ok := attrs[attr.ToolCallSourceKey].(string)
-		if ok && source != "" {
-			key := nameMappingCacheKey(source)
-			var cachedName string
-			err := s.cache.Get(ctx, key, &cachedName)
-			if err == nil && cachedName != "" {
-				// Use cached mapping
-				attrs[attr.ToolCallSourceKey] = cachedName
-			} else if s.temporalEnv != nil {
-				// No cached mapping - trigger async workflow to generate one
-				// Fire-and-forget - don't block hook processing
-				toolCallAttrs := convertAttrsToMap(attrs)
-				go func() {
-					bgCtx := context.WithoutCancel(ctx)
-					_, err := background.ExecuteProcessNameMappingWorkflow(bgCtx, s.temporalEnv, background.ProcessNameMappingWorkflowParams{
-						ServerName:    source,
-						ToolCallAttrs: toolCallAttrs,
-						OrgID:         metadata.GramOrgID,
-						ProjectID:     metadata.ProjectID,
-					})
-					if err != nil {
-						s.logger.ErrorContext(bgCtx, fmt.Sprintf("failed to start name mapping workflow: server_name=%s err=%v", source, err))
-					}
-				}()
-			}
-		}
-	}
-
 	return attrs
-}
-
-// nameMappingCacheKey generates the Redis key for a server name mapping
-func nameMappingCacheKey(serverName string) string {
-	return fmt.Sprintf("hooks:name_mapping:%s", serverName)
-}
-
-// convertAttrsToMap converts attr.Key map to string map for workflow params
-func convertAttrsToMap(attrs map[attr.Key]any) map[string]any {
-	result := make(map[string]any, len(attrs))
-	for k, v := range attrs {
-		result[string(k)] = v
-	}
-	return result
 }
 
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse
