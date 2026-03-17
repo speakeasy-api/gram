@@ -11,10 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	polargo "github.com/polarsource/polar-go"
+	"github.com/polarsource/polar-go/models/apierrors"
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	polarOperations "github.com/polarsource/polar-go/models/operations"
 	"github.com/redis/go-redis/v9"
@@ -483,24 +483,13 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 		polarCustomerState = customerState.CustomerState
 	} else {
 		externalCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
-		notFoundErrors := []string{
-			"resourcenotfound",
-			"not found",
-		}
-		containsNotFoundError := func(err error) bool {
-			for _, notFoundError := range notFoundErrors {
-				if strings.Contains(strings.ToLower(err.Error()), notFoundError) {
-					return true
-				}
-			}
-			return false
-		}
+		var notFound *apierrors.ResourceNotFound
+		isNotFoundError := errors.As(err, &notFound) ||
+			(externalCustomerState != nil &&
+				externalCustomerState.HTTPMeta.Response != nil &&
+				externalCustomerState.HTTPMeta.Response.StatusCode == http.StatusNotFound)
 
-		isNotFoundError := externalCustomerState != nil &&
-			externalCustomerState.HTTPMeta.Response != nil &&
-			externalCustomerState.HTTPMeta.Response.StatusCode == http.StatusNotFound
-
-		if err != nil && !isNotFoundError && !containsNotFoundError(err) {
+		if err != nil && !isNotFoundError {
 			return nil, fmt.Errorf("query polar customer state: %w", err)
 		}
 
