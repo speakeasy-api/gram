@@ -68,6 +68,10 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 		return nil, oops.E(oops.CodeBadRequest, nil, "project_id required")
 	}
 
+	if payload.RawServerName == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "raw_server_name cannot be empty")
+	}
+
 	if payload.DisplayName == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "display_name cannot be empty")
 	}
