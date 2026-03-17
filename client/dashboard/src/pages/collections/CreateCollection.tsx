@@ -276,7 +276,7 @@ export default function CreateCollection() {
                               onClick={() => toggleToolset(toolset.id)}
                               className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
                                 isSelected
-                                  ? "border-[#1DA1F2] bg-card ring-1 ring-[#1DA1F2]/20"
+                                  ? "border-border bg-card"
                                   : "border-border bg-card hover:border-foreground/30"
                               }`}
                             >
