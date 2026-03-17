@@ -3873,7 +3873,7 @@ func hooksClaudeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"hook_event_name\": \"PreToolUse\",\n      \"session_id\": \"abc123\",\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
 }
 
 func hooksLogsUsage() {

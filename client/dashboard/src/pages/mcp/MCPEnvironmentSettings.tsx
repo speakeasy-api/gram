@@ -19,7 +19,7 @@ import {
 } from "@gram/client/react-query";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Link, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
@@ -91,7 +91,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       vars
         .map((v) => {
           const valueGroupsHash = v.valueGroups
-            .map((vg) => `${vg.environments.sort().join(",")}`)
+            .map((vg) => `${[...vg.environments].sort().join(",")}`)
             .join("|");
           return `${v.key}:${v.state}:${valueGroupsHash}`;
         })
@@ -124,10 +124,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     }
   }, [mcpAttachedEnvironmentSlug]);
 
-  // Get attached environment and its available variables
+  // Get attached environment and its available variables — only if explicitly set
   const attachedEnvironment = mcpMetadata?.defaultEnvironmentId
-    ? environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId)
-    : environments.find((e) => e.slug === "default") || null;
+    ? (environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId) ??
+      null)
+    : null;
 
   const environmentConfigs = mcpMetadata?.environmentConfigs || [];
   const availableEnvVarsFromAttached =
@@ -200,7 +201,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to update default environment",
+          : "Failed to update attached environment",
       );
     },
   });
@@ -573,8 +574,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         request: {
           setMcpMetadataRequestBody: {
             toolsetSlug: toolset.slug,
-            defaultEnvironmentId:
-              mcpMetadata?.defaultEnvironmentId || targetEnv.id,
+            defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
             environmentConfigs: environmentConfigsToSave,
             externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
             instructions: mcpMetadata?.instructions,
@@ -664,7 +664,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       },
     });
 
-    toast.success(`Set ${targetEnv.name} as default environment`);
+    toast.success(`Set ${targetEnv.name} as attached environment`);
   };
 
   return (
@@ -701,6 +701,25 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         Provided (set at runtime), System (set here), or Omitted (not included).
       </p>
 
+      {/* Attached environment badge */}
+      {attachedEnvironment ? (
+        <Badge variant="information">
+          <Badge.LeftIcon>
+            <Link className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          <Badge.Text>
+            Attached:{" "}
+            {attachedEnvironment.slug === "default"
+              ? "Default"
+              : attachedEnvironment.name}
+          </Badge.Text>
+        </Badge>
+      ) : (
+        <Badge variant="neutral">
+          <Badge.Text>No environment attached</Badge.Text>
+        </Badge>
+      )}
+
       {/* All Variables Section */}
       <div className="space-y-4">
         {/* Variables List */}
@@ -731,9 +750,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 totalCount={envVars.length}
                 selectedEnvironmentView={selectedEnvironmentView}
                 mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
-                defaultEnvironmentSlug={
-                  toolset.defaultEnvironmentSlug || "default"
-                }
                 environmentConfigs={environmentConfigs}
                 editingState={editingState}
                 editingHeaderId={editingHeaderId}

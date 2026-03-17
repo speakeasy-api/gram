@@ -259,7 +259,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}
 	authCtx.ActiveOrganizationID = selectedOrg
 
-	if err := s.sessions.UpdateSession(ctx, sessions.Session{
+	if err := s.sessions.StoreSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,

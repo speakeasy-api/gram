@@ -1,4 +1,4 @@
-h1:V3hnbL8BE2R5LgltzMRfJCyVZRHqOMhnXG58Ee3aP5A=
+h1:LbtnE9SLkhHeSDxa5O9tB/z6FqvzmmUe0cJJRYBQb94=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -23,3 +23,4 @@ h1:V3hnbL8BE2R5LgltzMRfJCyVZRHqOMhnXG58Ee3aP5A=
 20260226021049_exclude-uuid-urns-from-trace-summaries-mv.up.sql h1:csrm4iWyxmLe9mJEZP965zGkmaq2Ub9mwLdX7gGTpMg=
 20260226021105_add-tool-event-source-cols.up.sql h1:7PSYOXvC/BDETPvcx1okvs/UhhW5Xkhl5Vmb4ORfZ24=
 20260312103223_fix-mv-chat-id-consistency.up.sql h1:k3UBif7E2UdGpZCACyncsA2N6SE39LLhkFLilFf2cSQ=
+20260317141706_add-toolset-slug-materialized-col.up.sql h1:778pwTDG4f/5PCdBTr0z4G5Pye8AAVAe9EUCRArY3/w=

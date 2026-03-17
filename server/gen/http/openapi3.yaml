@@ -13713,6 +13713,8 @@ components:
                     type: object
                     description: Additional hook-specific data
                     additionalProperties: true
+                error:
+                    description: The error from the tool (PostToolUseFailure only)
                 hook_event_name:
                     type: string
                     description: The type of hook event
@@ -13721,11 +13723,12 @@ components:
                         - PreToolUse
                         - PostToolUse
                         - PostToolUseFailure
+                is_interrupt:
+                    type: boolean
+                    description: Whether the failure was caused by user interruption (PostToolUseFailure only)
                 session_id:
                     type: string
                     description: The Claude Code session ID
-                tool_error:
-                    description: The error from the tool (PostToolUseFailure only)
                 tool_input:
                     description: The input to the tool
                 tool_name:

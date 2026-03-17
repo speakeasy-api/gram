@@ -39,6 +39,7 @@ import OrgApiKeys from "./pages/org/OrgApiKeys";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgLogs from "./pages/org/OrgLogs";
 import OrgHome from "./pages/org/OrgHome";
+import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 // OrgTeam is managed externally via Speakeasy IDP for now
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
@@ -545,6 +546,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
+  },
+  adminSettings: {
+    title: "Super Admin",
+    url: "admin-settings",
+    icon: "shield-alert",
+    component: OrgAdminSettings,
   },
 } satisfies Record<string, RouteEntry>;
 

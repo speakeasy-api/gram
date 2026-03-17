@@ -207,9 +207,10 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	// Optional filters
+	// Optional filters — use prefix matching so URN prefixes like "tools:http:gram"
+	// match fully-qualified URNs like "tools:http:gram:my_tool".
 	if len(arg.GramURNs) > 0 {
-		sb = sb.Where("has(?, gram_urn)", arg.GramURNs)
+		sb = sb.Where("arrayExists(x -> startsWith(gram_urn, concat(x, ':')) OR gram_urn = x, ?)", arg.GramURNs)
 	}
 	if arg.TraceID != "" {
 		sb = sb.Where(squirrel.Eq{"trace_id": arg.TraceID})
