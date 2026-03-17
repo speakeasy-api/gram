@@ -4,6 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import * as components from "../components/index.js";
 
 export type RemovePrincipalGrantsSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -11,13 +12,10 @@ export type RemovePrincipalGrantsSecurity = {
 
 export type RemovePrincipalGrantsRequest = {
   /**
-   * The principal URN whose grants should be removed (e.g. "user:user_abc", "role:admin").
-   */
-  principalUrn: string;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
+  removePrincipalGrantsRequestBody: components.RemovePrincipalGrantsRequestBody;
 };
 
 /** @internal */
@@ -52,8 +50,9 @@ export function removePrincipalGrantsSecurityToJSON(
 
 /** @internal */
 export type RemovePrincipalGrantsRequest$Outbound = {
-  principal_urn: string;
   "Gram-Session"?: string | undefined;
+  RemovePrincipalGrantsRequestBody:
+    components.RemovePrincipalGrantsRequestBody$Outbound;
 };
 
 /** @internal */
@@ -62,13 +61,14 @@ export const RemovePrincipalGrantsRequest$outboundSchema: z.ZodMiniType<
   RemovePrincipalGrantsRequest
 > = z.pipe(
   z.object({
-    principalUrn: z.string(),
     gramSession: z.optional(z.string()),
+    removePrincipalGrantsRequestBody:
+      components.RemovePrincipalGrantsRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      principalUrn: "principal_urn",
       gramSession: "Gram-Session",
+      removePrincipalGrantsRequestBody: "RemovePrincipalGrantsRequestBody",
     });
   }),
 );

@@ -162,6 +162,7 @@ export * from "./publishpackageresult.js";
 export * from "./redeployrequestbody.js";
 export * from "./redeployresult.js";
 export * from "./registerrequestbody.js";
+export * from "./removeprincipalgrantsrequestbody.js";
 export * from "./rendertemplatebyidrequestbody.js";
 export * from "./rendertemplaterequestbody.js";
 export * from "./rendertemplateresult.js";
