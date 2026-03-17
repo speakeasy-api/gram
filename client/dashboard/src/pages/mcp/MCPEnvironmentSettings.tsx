@@ -201,7 +201,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to update default environment",
+          : "Failed to update attached environment",
       );
     },
   });
@@ -665,7 +665,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       },
     });
 
-    toast.success(`Set ${targetEnv.name} as default environment`);
+    toast.success(`Set ${targetEnv.name} as attached environment`);
   };
 
   return (
