@@ -136,7 +136,7 @@ export function PromptEditor({
                 name="name"
                 pattern={PROMPT_NAME_PATTERN}
                 placeholder="my-prompt-name"
-                title="Only lowercase letters, numbers, hyphens, and underscores (max 128 characters)"
+                title="Only lowercase letters, numbers, hyphens, and underscores (max 40 characters)"
                 required
               />
             </div>
@@ -244,7 +244,9 @@ export function PromptEditor({
         <div className="pt-6">
           {error ? (
             <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
-              <p className="text-red-700 text-sm">{error.message}</p>
+              <p className="text-red-700 text-sm">
+                {formatPromptError(error.message)}
+              </p>
             </div>
           ) : null}
           <Button type="submit" disabled={isPending} size="md">
@@ -292,6 +294,16 @@ export function PromptEditor({
       </aside>
     </div>
   );
+}
+
+function formatPromptError(message: string): string {
+  if (message.includes("name") && message.includes("match")) {
+    return "Prompt name can only contain lowercase letters, numbers, hyphens, and underscores.";
+  }
+  if (message.includes("name") && message.includes("length")) {
+    return "Prompt name must be 40 characters or fewer.";
+  }
+  return message;
 }
 
 const ArgumentEntry = ({
