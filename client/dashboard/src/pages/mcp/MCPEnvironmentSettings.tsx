@@ -91,7 +91,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       vars
         .map((v) => {
           const valueGroupsHash = v.valueGroups
-            .map((vg) => `${vg.environments.sort().join(",")}`)
+            .map((vg) => `${vg.environments.toSorted().join(",")}`)
             .join("|");
           return `${v.key}:${v.state}:${valueGroupsHash}`;
         })
@@ -574,8 +574,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         request: {
           setMcpMetadataRequestBody: {
             toolsetSlug: toolset.slug,
-            defaultEnvironmentId:
-              mcpMetadata?.defaultEnvironmentId || targetEnv.id,
+            defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
             environmentConfigs: environmentConfigsToSave,
             externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
             instructions: mcpMetadata?.instructions,
