@@ -18,4 +18,5 @@ var materializedColumns = map[string]string{
 	"gram.tool.name":                "tool_name",
 	"gram.tool_call.source":         "tool_source",
 	"gram.event.source":             "event_source",
+	"gram.toolset.slug":             "toolset_slug",
 }

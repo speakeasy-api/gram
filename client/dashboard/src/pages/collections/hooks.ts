@@ -70,6 +70,9 @@ export function useCollections(
     enabled: !!projectSlug,
   });
 
+  const organization = useOrganization();
+  const orgId = organization.id;
+
   const registries = (registriesData?.registries ?? []).filter(
     (r) => r.source === "internal",
   );
@@ -77,7 +80,7 @@ export function useCollections(
   const filtered =
     tab === "discover"
       ? registries.filter((r) => r.visibility === "public")
-      : registries;
+      : registries.filter((r) => r.organizationId === orgId);
 
   const searched = search
     ? filtered.filter(

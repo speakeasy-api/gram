@@ -96,6 +96,10 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).Log(ctx, logger)
 	}
 
+	if !registry.Url.Valid {
+		return oops.E(oops.CodeUnexpected, nil, "[%s] registry %s has no external URL", task.MCP.Name, registry.ID).Log(ctx, logger)
+	}
+
 	serverDetails, err := te.registryClient.GetServerDetails(ctx, Registry{
 		ID:  registry.ID,
 		URL: registry.Url.String,

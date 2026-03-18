@@ -110,6 +110,7 @@ export default function ImportMCPTabContent({
   const { data: registriesData } = useListMCPRegistries();
   const registries = registriesData?.registries ?? [];
   const registrySlugs = registries
+    .filter((r) => r.source !== "internal")
     .map((r) => r.slug)
     .filter((s): s is string => s != null);
 

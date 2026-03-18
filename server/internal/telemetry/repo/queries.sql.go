@@ -548,7 +548,7 @@ type GetTimeSeriesMetricsParams struct {
 	IntervalSeconds int64  // Bucket interval in seconds
 	ExternalUserID  string // Optional filter
 	APIKeyID        string // Optional filter
-	ToolsetID       string // Optional filter - filters by toolset/MCP server
+	ToolsetSlug     string // Optional filter - filters by toolset/MCP server slug
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -592,9 +592,8 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
-	if arg.ToolsetID != "" {
-		// ToolsetID is a URN prefix like "tools:http:gram"; append ":" to match the full prefix segment
-		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
+	if arg.ToolsetSlug != "" {
+		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
 	}
 
 	// ClickHouse fills missing buckets with zeros via WITH FILL.
@@ -638,7 +637,7 @@ type GetToolMetricsBreakdownParams struct {
 	TimeEnd        int64
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
-	ToolsetID      string // Optional filter - filters by toolset/MCP server
+	ToolsetSlug    string // Optional filter - filters by toolset/MCP server slug
 	Limit          int
 	SortBy         string // "count" or "failure_rate"
 }
@@ -668,9 +667,8 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
-	if arg.ToolsetID != "" {
-		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
-		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
+	if arg.ToolsetSlug != "" {
+		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -718,7 +716,7 @@ type GetOverviewSummaryParams struct {
 	TimeEnd        int64
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
-	ToolsetID      string // Optional filter - filters by toolset/MCP server
+	ToolsetSlug    string // Optional filter - filters by toolset/MCP server slug
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -727,7 +725,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetID != ""
+	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -813,9 +811,8 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
-	if arg.ToolsetID != "" {
-		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
-		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
+	if arg.ToolsetSlug != "" {
+		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
 	}
 
 	return sb

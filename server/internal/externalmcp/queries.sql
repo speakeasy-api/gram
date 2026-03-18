@@ -19,10 +19,10 @@ INSERT INTO mcp_registries (name, slug, source, visibility, organization_id, pro
 VALUES (@name, @slug, 'internal', @visibility, @organization_id, @project_id)
 RETURNING id, name, url, slug, source, visibility, organization_id, project_id, created_at, updated_at;
 
--- name: SetRegistryToolsets :exec
-WITH deleted AS (
-  DELETE FROM mcp_registry_toolset_links WHERE registry_id = @registry_id
-)
+-- name: DeleteRegistryToolsetLinks :exec
+DELETE FROM mcp_registry_toolset_links WHERE registry_id = @registry_id;
+
+-- name: InsertRegistryToolsetLinks :exec
 INSERT INTO mcp_registry_toolset_links (registry_id, toolset_id)
 SELECT @registry_id, unnest(@toolset_ids::uuid[]);
 
@@ -49,6 +49,13 @@ SELECT t.id, t.name, t.slug, t.description, t.mcp_slug, t.mcp_enabled, t.organiz
 FROM toolsets t
 JOIN mcp_registry_toolset_links l ON l.toolset_id = t.id
 WHERE l.registry_id = @registry_id AND t.mcp_slug = @mcp_slug AND t.deleted IS FALSE;
+
+-- name: CountToolsetsOwnedByOrg :one
+SELECT COUNT(*) AS count
+FROM toolsets
+WHERE id = ANY(@toolset_ids::uuid[])
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
 
 -- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)

@@ -287,6 +287,8 @@ func handleToolsCall(
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
+		logAttrs.RecordToolsetSlug(payload.toolset)
+		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{

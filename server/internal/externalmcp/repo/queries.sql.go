@@ -13,6 +13,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 )
 
+const countToolsetsOwnedByOrg = `-- name: CountToolsetsOwnedByOrg :one
+SELECT COUNT(*) AS count
+FROM toolsets
+WHERE id = ANY($1::uuid[])
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type CountToolsetsOwnedByOrgParams struct {
+	ToolsetIds     []uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountToolsetsOwnedByOrg(ctx context.Context, arg CountToolsetsOwnedByOrgParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countToolsetsOwnedByOrg, arg.ToolsetIds, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createExternalMCPAttachment = `-- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
 VALUES ($1, $2, $3, $4, $5)
@@ -260,6 +280,15 @@ func (q *Queries) CreateInternalRegistry(ctx context.Context, arg CreateInternal
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteRegistryToolsetLinks = `-- name: DeleteRegistryToolsetLinks :exec
+DELETE FROM mcp_registry_toolset_links WHERE registry_id = $1
+`
+
+func (q *Queries) DeleteRegistryToolsetLinks(ctx context.Context, registryID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRegistryToolsetLinks, registryID)
+	return err
 }
 
 const getExternalMCPToolDefinitionByURN = `-- name: GetExternalMCPToolDefinitionByURN :one
@@ -642,6 +671,21 @@ func (q *Queries) GetToolsetForServe(ctx context.Context, id uuid.UUID) (GetTool
 	return i, err
 }
 
+const insertRegistryToolsetLinks = `-- name: InsertRegistryToolsetLinks :exec
+INSERT INTO mcp_registry_toolset_links (registry_id, toolset_id)
+SELECT $1, unnest($2::uuid[])
+`
+
+type InsertRegistryToolsetLinksParams struct {
+	RegistryID uuid.UUID
+	ToolsetIds []uuid.UUID
+}
+
+func (q *Queries) InsertRegistryToolsetLinks(ctx context.Context, arg InsertRegistryToolsetLinksParams) error {
+	_, err := q.db.Exec(ctx, insertRegistryToolsetLinks, arg.RegistryID, arg.ToolsetIds)
+	return err
+}
+
 const listExternalMCPAttachments = `-- name: ListExternalMCPAttachments :many
 SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
 FROM external_mcp_attachments
@@ -940,22 +984,4 @@ func (q *Queries) ListRegistryToolsetLinks(ctx context.Context, registryID uuid.
 		return nil, err
 	}
 	return items, nil
-}
-
-const setRegistryToolsets = `-- name: SetRegistryToolsets :exec
-WITH deleted AS (
-  DELETE FROM mcp_registry_toolset_links WHERE registry_id = $1
-)
-INSERT INTO mcp_registry_toolset_links (registry_id, toolset_id)
-SELECT $1, unnest($2::uuid[])
-`
-
-type SetRegistryToolsetsParams struct {
-	RegistryID uuid.UUID
-	ToolsetIds []uuid.UUID
-}
-
-func (q *Queries) SetRegistryToolsets(ctx context.Context, arg SetRegistryToolsetsParams) error {
-	_, err := q.db.Exec(ctx, setRegistryToolsets, arg.RegistryID, arg.ToolsetIds)
-	return err
 }

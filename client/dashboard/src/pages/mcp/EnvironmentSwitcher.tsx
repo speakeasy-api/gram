@@ -42,12 +42,12 @@ export function EnvironmentSwitcher({
   onSetDefaultEnvironment,
   onCreateEnvironment,
 }: EnvironmentSwitcherProps) {
-  // Sort environments with attached environment first
-  const attachedEnvSlug =
+  // Sort environments with attached environment first, falling back to default for sort order only
+  const sortSlug =
     mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default";
   const sortedEnvironments = [...environments].sort((a, b) => {
-    if (a.slug === attachedEnvSlug) return -1;
-    if (b.slug === attachedEnvSlug) return 1;
+    if (a.slug === sortSlug) return -1;
+    if (b.slug === sortSlug) return 1;
     return 0;
   });
 
@@ -57,11 +57,15 @@ export function EnvironmentSwitcher({
     return env.name;
   };
 
-  const isViewingNonDefault = selectedEnvironmentView !== attachedEnvSlug;
-  const hasAllRequired = environmentHasAllRequiredVariables(
-    attachedEnvSlug,
-    requiredVars,
-  );
+  const isViewingNonAttached = mcpAttachedEnvironmentSlug
+    ? selectedEnvironmentView !== mcpAttachedEnvironmentSlug
+    : true; // If nothing is attached, every environment is "non-attached"
+  const hasAllRequired = mcpAttachedEnvironmentSlug
+    ? environmentHasAllRequiredVariables(
+        mcpAttachedEnvironmentSlug,
+        requiredVars,
+      )
+    : false;
 
   if (environments.length === 0) {
     return null;
@@ -72,7 +76,9 @@ export function EnvironmentSwitcher({
       {/* Environment tabs */}
       {sortedEnvironments.map((env) => {
         const isSelected = selectedEnvironmentView === env.slug;
-        const isAttachedEnv = env.slug === attachedEnvSlug;
+        const isAttachedEnv =
+          mcpAttachedEnvironmentSlug != null &&
+          env.slug === mcpAttachedEnvironmentSlug;
         const envHasAllRequired = environmentHasAllRequiredVariables(
           env.slug,
           requiredVars,
@@ -138,8 +144,8 @@ export function EnvironmentSwitcher({
               <span className="text-xs text-muted-foreground">
                 Fill in required values to save
               </span>
-            ) : isViewingNonDefault ? (
-              // Viewing non-default env - show Make Default
+            ) : isViewingNonAttached ? (
+              // Viewing non-attached env - show Attach
               <SimpleTooltip tooltip="Attach this environment to this MCP server">
                 <Button
                   onClick={onSetDefaultEnvironment}

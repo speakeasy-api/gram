@@ -94,6 +94,20 @@ func (s *Service) Publish(ctx context.Context, payload *gen.PublishPayload) (*ty
 		toolsetIDs = append(toolsetIDs, id)
 	}
 
+	// Validate all toolsets belong to the caller's organization
+	if len(toolsetIDs) > 0 {
+		count, err := s.repo.CountToolsetsOwnedByOrg(ctx, repo.CountToolsetsOwnedByOrgParams{
+			ToolsetIds:     toolsetIDs,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "validate toolset ownership").Log(ctx, s.logger)
+		}
+		if count != int64(len(toolsetIDs)) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "one or more toolset IDs do not belong to your organization").Log(ctx, s.logger)
+		}
+	}
+
 	var projectID uuid.NullUUID
 	if authCtx.ProjectID != nil {
 		projectID = uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
@@ -118,11 +132,16 @@ func (s *Service) Publish(ctx context.Context, payload *gen.PublishPayload) (*ty
 		return nil, oops.E(oops.CodeUnexpected, err, "create internal registry").Log(ctx, s.logger)
 	}
 
-	if err := txRepo.SetRegistryToolsets(ctx, repo.SetRegistryToolsetsParams{
-		RegistryID: registry.ID,
-		ToolsetIds: toolsetIDs,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "set registry toolsets").Log(ctx, s.logger)
+	if err := txRepo.DeleteRegistryToolsetLinks(ctx, registry.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "delete existing registry toolset links").Log(ctx, s.logger)
+	}
+	if len(toolsetIDs) > 0 {
+		if err := txRepo.InsertRegistryToolsetLinks(ctx, repo.InsertRegistryToolsetLinksParams{
+			RegistryID: registry.ID,
+			ToolsetIds: toolsetIDs,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "insert registry toolset links").Log(ctx, s.logger)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -262,6 +281,11 @@ func (s *Service) serveInternalRegistry(ctx context.Context, registry repo.GetMC
 			return nil, oops.E(oops.CodeUnexpected, err, "get toolset for serve").Log(ctx, s.logger)
 		}
 
+		// Skip toolsets without mcp_slug — they can't be served
+		if !toolset.McpSlug.Valid {
+			continue
+		}
+
 		// Apply search filter
 		if payload.Search != nil && *payload.Search != "" {
 			if !strings.Contains(strings.ToLower(toolset.Name), strings.ToLower(*payload.Search)) {
@@ -329,10 +353,6 @@ func (s *Service) serveInternalRegistry(ctx context.Context, registry repo.GetMC
 					"tools": metaTools,
 				},
 			},
-		}
-
-		if !toolset.McpSlug.Valid {
-			return nil, oops.E(oops.CodeUnexpected, nil, "toolset %s missing mcp_slug", toolset.Slug).Log(ctx, s.logger)
 		}
 
 		servers = append(servers, &types.ExternalMCPServer{
