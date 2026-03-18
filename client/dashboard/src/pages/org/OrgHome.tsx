@@ -100,7 +100,7 @@ export default function OrgHome() {
                 icon={
                   <Plus className="h-10 w-10 text-muted-foreground group-hover:text-primary transition-colors" />
                 }
-                className="border-dashed !border-foreground/5 hover:!border-foreground/20"
+                className="border-dashed !border-foreground/10 hover:!border-foreground/20"
               >
                 <Type
                   variant="subheading"

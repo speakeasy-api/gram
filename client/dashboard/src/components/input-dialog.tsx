@@ -1,4 +1,5 @@
 import { Stack } from "@speakeasy-api/moonshine";
+import { useState } from "react";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -40,7 +41,7 @@ export function InputDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit?: () => void;
+  onSubmit?: () => void | Promise<void>;
   title: string;
   inputs: InputProps[] | InputProps;
   description?: string;
@@ -48,15 +49,23 @@ export function InputDialog({
 }) {
   const inputsArray = Array.isArray(inputs) ? inputs : [inputs];
   inputsArray.sort((a, b) => (a.optional ? 1 : b.optional ? -1 : 0));
+  const [pending, setPending] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     inputsArray.forEach((input) => {
       if (!input.optional || input.value !== "") {
         input.onSubmit?.(input.value);
       }
     });
-    onSubmit?.();
-    onOpenChange(false);
+    try {
+      setPending(true);
+      await onSubmit?.();
+      onOpenChange(false);
+    } catch {
+      // Let the caller handle errors; keep the dialog open so the user can retry
+    } finally {
+      setPending(false);
+    }
   };
 
   const formValid =
@@ -119,8 +128,8 @@ export function InputDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Back
           </Button>
-          <Button onClick={submit} disabled={!formValid}>
-            {submitButtonText}
+          <Button onClick={submit} disabled={!formValid || pending}>
+            {pending ? "Submitting…" : submitButtonText}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
