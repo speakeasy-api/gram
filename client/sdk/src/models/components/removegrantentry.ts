@@ -14,9 +14,9 @@ export type RemoveGrantEntry = {
    */
   principalUrn: string;
   /**
-   * The resource of the grant. Defaults to "*".
+   * The resource the grant applies to. Use "*" for unrestricted access.
    */
-  resource?: string | undefined;
+  resource: string;
   /**
    * The scope of the grant (e.g. "build:read").
    */
@@ -37,7 +37,7 @@ export const RemoveGrantEntry$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     principalUrn: z.string(),
-    resource: z._default(z.string(), "*"),
+    resource: z.string(),
     scope: z.string(),
   }),
   z.transform((v) => {

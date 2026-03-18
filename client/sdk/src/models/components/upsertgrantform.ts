@@ -14,9 +14,9 @@ export type UpsertGrantForm = {
    */
   principalUrn: string;
   /**
-   * The resource ID this grant applies to. Omit or set to "*" for unrestricted access.
+   * The resource this grant applies to. Use "*" for unrestricted access.
    */
-  resource?: string | undefined;
+  resource: string;
   /**
    * The scope to grant (e.g. "build:read", "mcp:connect").
    */
@@ -37,7 +37,7 @@ export const UpsertGrantForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     principalUrn: z.string(),
-    resource: z._default(z.string(), "*"),
+    resource: z.string(),
     scope: z.string(),
   }),
   z.transform((v) => {

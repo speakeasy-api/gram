@@ -122,6 +122,7 @@ export function Example() {
             grants: [
               {
                 principalUrn: "<value>",
+                resource: "*",
                 scope: "<value>",
               },
             ],
