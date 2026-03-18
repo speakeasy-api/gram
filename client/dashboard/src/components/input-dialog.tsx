@@ -53,6 +53,7 @@ export function InputDialog({
   const [pending, setPending] = useState(false);
 
   const submit = async () => {
+    if (pending) return;
     inputsArray.forEach((input) => {
       if (!input.optional || input.value !== "") {
         input.onSubmit?.(input.value);
@@ -81,7 +82,12 @@ export function InputDialog({
     }) && inputsArray.some((input) => input.value !== "");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!pending) onOpenChange(v);
+      }}
+    >
       <Dialog.Content>
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
