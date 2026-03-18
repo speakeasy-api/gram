@@ -119,8 +119,8 @@ type GetObservabilityOverviewRequestBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// Optional API key ID filter
 	APIKeyID *string `form:"api_key_id,omitempty" json:"api_key_id,omitempty" xml:"api_key_id,omitempty"`
-	// Optional toolset/MCP server ID filter
-	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Optional toolset/MCP server slug filter
+	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
 }
@@ -4678,7 +4678,7 @@ func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBod
 		To:             *body.To,
 		ExternalUserID: body.ExternalUserID,
 		APIKeyID:       body.APIKeyID,
-		ToolsetID:      body.ToolsetID,
+		ToolsetSlug:    body.ToolsetSlug,
 	}
 	if body.IncludeTimeSeries != nil {
 		v.IncludeTimeSeries = *body.IncludeTimeSeries
