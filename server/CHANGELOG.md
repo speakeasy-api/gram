@@ -1,5 +1,11 @@
 # server
 
+## 0.29.0
+
+### Minor Changes
+
+- 9c75407: Updated the Gram Function runners to run with 1GB of memory instead of 512MB providing more headroom for memory-intensive operations.
+
 ## 0.28.1
 
 ### Patch Changes

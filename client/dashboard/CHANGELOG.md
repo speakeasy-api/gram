@@ -1,5 +1,16 @@
 # dashboard
 
+## 0.34.0
+
+### Minor Changes
+
+- 30036db: Add table view toggle for list pages (MCP, Sources, Catalog) with grid/table switching, animated dot-pattern rows, and localStorage persistence
+
+### Patch Changes
+
+- 17788a8: fix: MCP environments section shows wrong default when none attached
+- b0120d4: Prevent double-back-button on detail pages
+
 ## 0.33.2
 
 ### Patch Changes
