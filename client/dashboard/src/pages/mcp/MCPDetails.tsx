@@ -168,33 +168,12 @@ export function MCPDetailPage() {
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
 
-  // Update URL hash when tab changes
-  useEffect(() => {
-    if (activeTab) {
-      window.location.hash = activeTab;
-    }
-  }, [activeTab]);
-
-  // Listen for hash changes (e.g., browser back/forward)
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.slice(1);
-      const validTabs = [
-        "overview",
-        "tools",
-        "resources",
-        "prompts",
-        "settings",
-        "authentication",
-      ];
-      if (hash && validTabs.includes(hash)) {
-        setActiveTab(hash);
-      }
-    };
-
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    const url = new URL(window.location.href);
+    url.hash = value;
+    window.history.replaceState(null, "", url.toString());
+  };
 
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
@@ -315,7 +294,7 @@ export function MCPDetailPage() {
         {/* Sub-navigation tabs */}
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={handleTabChange}
           className="w-full flex-1 flex flex-col"
         >
           <div className="border-b">
