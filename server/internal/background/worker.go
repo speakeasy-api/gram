@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -54,6 +55,7 @@ type WorkerOptions struct {
 	RagService          *rag.ToolsetVectorStore
 	AgentsService       *agents.Service
 	MCPRegistryClient   *externalmcp.RegistryClient
+	ServerURL           *url.URL
 	TelemetryService    *telemetry.Service
 }
 
@@ -73,6 +75,7 @@ func ForDeploymentProcessing(
 		FunctionsDeployer:   deployer,
 		FunctionsVersion:    "local", // Test deployers don't use baked versions
 		MCPRegistryClient:   mcpRegistryClient,
+		ServerURL:           nil,
 		SlackClient:         nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
@@ -115,6 +118,7 @@ func NewTemporalWorker(
 		RagService:          nil,
 		AgentsService:       nil,
 		MCPRegistryClient:   nil,
+		ServerURL:           nil,
 		TelemetryService:    nil,
 		CacheAdapter:        nil,
 	}
@@ -139,6 +143,7 @@ func NewTemporalWorker(
 			RagService:          conv.Default(o.RagService, opts.RagService),
 			AgentsService:       conv.Default(o.AgentsService, opts.AgentsService),
 			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			ServerURL:           conv.Default(o.ServerURL, opts.ServerURL),
 			TelemetryService:    conv.Default(o.TelemetryService, opts.TelemetryService),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
 		}
@@ -173,6 +178,7 @@ func NewTemporalWorker(
 		opts.RagService,
 		opts.AgentsService,
 		opts.MCPRegistryClient,
+		opts.ServerURL,
 		env.Client(),
 		opts.TelemetryService,
 		opts.CacheAdapter,

@@ -562,6 +562,7 @@ func newWorkerCommand() *cli.Command {
 				RagService:          ragService,
 				AgentsService:       agentsService,
 				MCPRegistryClient:   mcpRegistryClient,
+				ServerURL:           serverURL,
 				TelemetryService:    telemetryService,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 			})

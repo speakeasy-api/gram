@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,6 +27,7 @@ type ToolExtractor struct {
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	registryClient *RegistryClient
+	serverURL      *url.URL
 	repo           *repo.Queries
 }
 
@@ -33,11 +35,13 @@ func NewToolExtractor(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	registryClient *RegistryClient,
+	serverURL *url.URL,
 ) *ToolExtractor {
 	return &ToolExtractor{
 		logger:         logger,
 		db:             db,
 		registryClient: registryClient,
+		serverURL:      serverURL,
 		repo:           repo.New(db),
 	}
 }
@@ -96,12 +100,29 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).Log(ctx, logger)
 	}
 
-	serverDetails, err := te.registryClient.GetServerDetails(ctx, Registry{
-		ID:  registry.ID,
-		URL: registry.Url.String,
-	}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).Log(ctx, logger)
+	// Resolve server details: internal registries point at our own MCP endpoints,
+	// external registries fetch from the registry API.
+	var serverDetails *ServerDetails
+	isInternal := registry.Source.Valid && registry.Source.String == string(types.RegistrySourceInternal)
+	if isInternal {
+		remoteURL := fmt.Sprintf("%s/mcp/%s", te.serverURL.String(), task.MCP.RegistryServerSpecifier)
+		serverDetails = &ServerDetails{
+			Name:          task.MCP.Name,
+			Description:   "",
+			Version:       "",
+			RemoteURL:     remoteURL,
+			TransportType: types.TransportTypeStreamableHTTP,
+			Tools:         nil,
+			Headers:       nil,
+		}
+	} else {
+		serverDetails, err = te.registryClient.GetServerDetails(ctx, Registry{
+			ID:  registry.ID,
+			URL: registry.Url.String,
+		}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).Log(ctx, logger)
+		}
 	}
 
 	var requiresOAuth bool
@@ -189,8 +210,10 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		}
 	}
 
-	// Create tool definitions based on what's available
-	if len(serverDetails.Tools) > 0 {
+	// Create tool definitions based on what's available.
+	// Internal registries always use proxy mode — individual tool enumeration
+	// will be handled in a follow-up.
+	if !isInternal && len(serverDetails.Tools) > 0 {
 		// Create individual tool definitions for each tool from the registry
 		for _, tool := range serverDetails.Tools {
 			toolURN := urn.Tool{
