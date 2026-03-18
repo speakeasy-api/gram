@@ -810,8 +810,7 @@ type UpsertGrantFormRequestBody struct {
 	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// The scope to grant (e.g. "build:read", "mcp:connect").
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
-	// access.
+	// The resource this grant applies to. Use "*" for unrestricted access.
 	Resource string `form:"resource" json:"resource" xml:"resource"`
 }
 
@@ -821,7 +820,7 @@ type RemoveGrantEntryRequestBody struct {
 	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// The scope of the grant (e.g. "build:read").
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// The resource of the grant. Defaults to "*".
+	// The resource the grant applies to. Use "*" for unrestricted access.
 	Resource string `form:"resource" json:"resource" xml:"resource"`
 }
 

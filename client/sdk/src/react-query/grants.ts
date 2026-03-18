@@ -103,6 +103,7 @@ export function setGrantsData(
   queryKeyBase: [
     parameters: {
       principalUrn?: string | undefined;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -118,6 +119,7 @@ export function invalidateGrants(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       principalUrn?: string | undefined;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]
   >,

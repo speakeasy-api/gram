@@ -922,12 +922,7 @@ func unmarshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm(v *UpsertGrantFo
 	res := &access.UpsertGrantForm{
 		PrincipalUrn: *v.PrincipalUrn,
 		Scope:        *v.Scope,
-	}
-	if v.Resource != nil {
-		res.Resource = *v.Resource
-	}
-	if v.Resource == nil {
-		res.Resource = "*"
+		Resource:     *v.Resource,
 	}
 
 	return res
@@ -940,12 +935,7 @@ func unmarshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(v *RemoveGrant
 	res := &access.RemoveGrantEntry{
 		PrincipalUrn: *v.PrincipalUrn,
 		Scope:        *v.Scope,
-	}
-	if v.Resource != nil {
-		res.Resource = *v.Resource
-	}
-	if v.Resource == nil {
-		res.Resource = "*"
+		Resource:     *v.Resource,
 	}
 
 	return res

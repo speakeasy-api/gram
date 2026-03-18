@@ -972,12 +972,6 @@ func marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody(v *access.UpsertGr
 		Scope:        v.Scope,
 		Resource:     v.Resource,
 	}
-	{
-		var zero string
-		if res.Resource == zero {
-			res.Resource = "*"
-		}
-	}
 
 	return res
 }
@@ -990,12 +984,6 @@ func marshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm(v *UpsertGrantForm
 		PrincipalUrn: v.PrincipalUrn,
 		Scope:        v.Scope,
 		Resource:     v.Resource,
-	}
-	{
-		var zero string
-		if res.Resource == zero {
-			res.Resource = "*"
-		}
 	}
 
 	return res
@@ -1010,12 +998,6 @@ func marshalAccessRemoveGrantEntryToRemoveGrantEntryRequestBody(v *access.Remove
 		Scope:        v.Scope,
 		Resource:     v.Resource,
 	}
-	{
-		var zero string
-		if res.Resource == zero {
-			res.Resource = "*"
-		}
-	}
 
 	return res
 }
@@ -1028,12 +1010,6 @@ func marshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(v *RemoveGrantEn
 		PrincipalUrn: v.PrincipalUrn,
 		Scope:        v.Scope,
 		Resource:     v.Resource,
-	}
-	{
-		var zero string
-		if res.Resource == zero {
-			res.Resource = "*"
-		}
 	}
 
 	return res

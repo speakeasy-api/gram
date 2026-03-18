@@ -6,6 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ListGrantsSecurity = {
+  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -15,6 +16,10 @@ export type ListGrantsRequest = {
    */
   principalUrn?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -22,6 +27,7 @@ export type ListGrantsRequest = {
 
 /** @internal */
 export type ListGrantsSecurity$Outbound = {
+  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -31,10 +37,12 @@ export const ListGrantsSecurity$outboundSchema: z.ZodMiniType<
   ListGrantsSecurity
 > = z.pipe(
   z.object({
+    apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -51,6 +59,7 @@ export function listGrantsSecurityToJSON(
 /** @internal */
 export type ListGrantsRequest$Outbound = {
   principal_urn?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -61,11 +70,13 @@ export const ListGrantsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     principalUrn: z.optional(z.string()),
+    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       principalUrn: "principal_urn",
+      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });
   }),

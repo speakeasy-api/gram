@@ -7,10 +7,15 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
 export type RemoveGrantsSecurity = {
+  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
 export type RemoveGrantsRequest = {
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -20,6 +25,7 @@ export type RemoveGrantsRequest = {
 
 /** @internal */
 export type RemoveGrantsSecurity$Outbound = {
+  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -29,10 +35,12 @@ export const RemoveGrantsSecurity$outboundSchema: z.ZodMiniType<
   RemoveGrantsSecurity
 > = z.pipe(
   z.object({
+    apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -48,6 +56,7 @@ export function removeGrantsSecurityToJSON(
 
 /** @internal */
 export type RemoveGrantsRequest$Outbound = {
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   RemoveGrantsRequestBody: components.RemoveGrantsRequestBody$Outbound;
 };
@@ -58,11 +67,13 @@ export const RemoveGrantsRequest$outboundSchema: z.ZodMiniType<
   RemoveGrantsRequest
 > = z.pipe(
   z.object({
+    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     removeGrantsRequestBody: components.RemoveGrantsRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       removeGrantsRequestBody: "RemoveGrantsRequestBody",
     });

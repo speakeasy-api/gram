@@ -45,6 +45,7 @@ export function buildGrantsQuery(
   return {
     queryKey: queryKeyGrants({
       principalUrn: request?.principalUrn,
+      gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
     queryFn: async function grantsQueryFn(ctx): Promise<GrantsQueryData> {
@@ -72,6 +73,7 @@ export function buildGrantsQuery(
 export function queryKeyGrants(
   parameters: {
     principalUrn?: string | undefined;
+    gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

@@ -124,7 +124,7 @@ var _ = Service("access", func() {
 
 var RemoveGrantEntry = Type("RemoveGrantEntry", func() {
 	Description("Identifies a single grant to remove by its (principal, scope, resource) tuple.")
-	Required("principal_urn", "scope")
+	Required("principal_urn", "scope", "resource")
 
 	Attribute("principal_urn", String, func() {
 		Description("The principal URN (e.g. \"user:user_abc\", \"role:admin\").")
@@ -136,15 +136,14 @@ var RemoveGrantEntry = Type("RemoveGrantEntry", func() {
 		MaxLength(60)
 	})
 	Attribute("resource", String, func() {
-		Description("The resource of the grant. Defaults to \"*\".")
-		Default("*")
+		Description("The resource the grant applies to. Use \"*\" for unrestricted access.")
 		MaxLength(260)
 	})
 })
 
 var UpsertGrantForm = Type("UpsertGrantForm", func() {
 	Description("Form for creating or updating a principal grant.")
-	Required("principal_urn", "scope")
+	Required("principal_urn", "scope", "resource")
 
 	Attribute("principal_urn", String, func() {
 		Description("The principal URN (e.g. \"user:user_abc\", \"role:admin\").")
@@ -156,8 +155,7 @@ var UpsertGrantForm = Type("UpsertGrantForm", func() {
 		MaxLength(60)
 	})
 	Attribute("resource", String, func() {
-		Description("The resource ID this grant applies to. Omit or set to \"*\" for unrestricted access.")
-		Default("*")
+		Description("The resource this grant applies to. Use \"*\" for unrestricted access.")
 		MaxLength(260)
 	})
 })

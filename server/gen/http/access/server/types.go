@@ -810,8 +810,7 @@ type UpsertGrantFormRequestBody struct {
 	PrincipalUrn *urn.Principal `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The scope to grant (e.g. "build:read", "mcp:connect").
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
-	// access.
+	// The resource this grant applies to. Use "*" for unrestricted access.
 	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 }
 
@@ -821,7 +820,7 @@ type RemoveGrantEntryRequestBody struct {
 	PrincipalUrn *urn.Principal `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The scope of the grant (e.g. "build:read").
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// The resource of the grant. Defaults to "*".
+	// The resource the grant applies to. Use "*" for unrestricted access.
 	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 }
 
@@ -1561,6 +1560,9 @@ func ValidateUpsertGrantFormRequestBody(body *UpsertGrantFormRequestBody) (err e
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
+	if body.Resource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
+	}
 	if body.Scope != nil {
 		if utf8.RuneCountInString(*body.Scope) < 3 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 3, true))
@@ -1587,6 +1589,9 @@ func ValidateRemoveGrantEntryRequestBody(body *RemoveGrantEntryRequestBody) (err
 	}
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Resource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
 	}
 	if body.Scope != nil {
 		if utf8.RuneCountInString(*body.Scope) < 3 {

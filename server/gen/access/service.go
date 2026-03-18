@@ -96,7 +96,7 @@ type RemoveGrantEntry struct {
 	PrincipalUrn urn.Principal
 	// The scope of the grant (e.g. "build:read").
 	Scope string
-	// The resource of the grant. Defaults to "*".
+	// The resource the grant applies to. Use "*" for unrestricted access.
 	Resource string
 }
 
@@ -126,8 +126,7 @@ type UpsertGrantForm struct {
 	PrincipalUrn urn.Principal
 	// The scope to grant (e.g. "build:read", "mcp:connect").
 	Scope string
-	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
-	// access.
+	// The resource this grant applies to. Use "*" for unrestricted access.
 	Resource string
 }
 
