@@ -1,5 +1,6 @@
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -61,8 +62,8 @@ export function InputDialog({
       setPending(true);
       await onSubmit?.();
       onOpenChange(false);
-    } catch {
-      // Let the caller handle errors; keep the dialog open so the user can retry
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setPending(false);
     }
@@ -103,7 +104,7 @@ export function InputDialog({
                   value={input.value}
                   onChange={input.onChange}
                   onEnter={submit}
-                  disabled={input.disabled}
+                  disabled={input.disabled || pending}
                   validate={input.validate}
                   lines={input.lines}
                 />
@@ -125,11 +126,15 @@ export function InputDialog({
           ))}
         </Stack>
         <Dialog.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
             Back
           </Button>
           <Button onClick={submit} disabled={!formValid || pending}>
-            {pending ? "Submitting…" : submitButtonText}
+            {pending ? "Submitting\u2026" : submitButtonText}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
