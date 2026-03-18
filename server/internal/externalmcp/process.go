@@ -102,6 +102,11 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 	// Resolve server details: internal registries point at our own MCP endpoints,
 	// external registries fetch from the registry API.
+	//
+	// WORKAROUND: This is an intermediary approach to support internal registries
+	// in the deployment processing flow while we move the external MCP implementation
+	// to pipe mode. Internal registries skip the registry client and resolve directly
+	// to our MCP endpoint, always running as proxy tools.
 	var serverDetails *ServerDetails
 	isInternal := registry.Source.Valid && registry.Source.String == string(types.RegistrySourceInternal)
 	if isInternal {
@@ -211,8 +216,8 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	}
 
 	// Create tool definitions based on what's available.
-	// Internal registries always use proxy mode — individual tool enumeration
-	// will be handled in a follow-up.
+	// WORKAROUND: Internal registries are forced into proxy mode as an intermediary
+	// step while we move the external MCP implementation to pipe mode.
 	if !isInternal && len(serverDetails.Tools) > 0 {
 		// Create individual tool definitions for each tool from the registry
 		for _, tool := range serverDetails.Tools {
