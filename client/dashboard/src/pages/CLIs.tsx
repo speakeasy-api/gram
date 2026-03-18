@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ButtonRainbow } from "@/components/ui/button-rainbow";
 import { Type } from "@/components/ui/type";
 import { TerminalSquare } from "lucide-react";
 
@@ -17,9 +18,15 @@ export default function CLIs() {
             Coming Soon
           </Type>
           <Type muted className="max-w-md text-center">
-            Build and distribute CLI tools powered by your MCP servers. Stay
-            tuned!
+            Build and distribute CLI tools for your API sources. Secure with
+            OAuth and track usage alongside your MCP insights and logs.
           </Type>
+          <ButtonRainbow
+            href="https://www.speakeasy.com/book-demo"
+            className="mt-6"
+          >
+            Book a Demo
+          </ButtonRainbow>
         </div>
       </Page.Body>
     </Page>
