@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -806,7 +807,7 @@ type GrantResponseBody struct {
 // UpsertGrantFormRequestBody is used to define fields on request body types.
 type UpsertGrantFormRequestBody struct {
 	// The principal URN (e.g. "user:user_abc", "role:admin").
-	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	PrincipalUrn *urn.Principal `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The scope to grant (e.g. "build:read", "mcp:connect").
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
@@ -817,7 +818,7 @@ type UpsertGrantFormRequestBody struct {
 // RemoveGrantEntryRequestBody is used to define fields on request body types.
 type RemoveGrantEntryRequestBody struct {
 	// The principal URN (e.g. "user:user_abc", "role:admin").
-	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	PrincipalUrn *urn.Principal `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The scope of the grant (e.g. "build:read").
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// The resource of the grant. Defaults to "*".
@@ -1433,16 +1434,17 @@ func NewRemovePrincipalGrantsGatewayErrorResponseBody(res *goa.ServiceError) *Re
 }
 
 // NewListGrantsPayload builds a access service listGrants endpoint payload.
-func NewListGrantsPayload(principalUrn *string, sessionToken *string) *access.ListGrantsPayload {
+func NewListGrantsPayload(principalUrn *string, apikeyToken *string, sessionToken *string) *access.ListGrantsPayload {
 	v := &access.ListGrantsPayload{}
 	v.PrincipalUrn = principalUrn
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewUpsertGrantsPayload builds a access service upsertGrants endpoint payload.
-func NewUpsertGrantsPayload(body *UpsertGrantsRequestBody, sessionToken *string) *access.UpsertGrantsPayload {
+func NewUpsertGrantsPayload(body *UpsertGrantsRequestBody, apikeyToken *string, sessionToken *string) *access.UpsertGrantsPayload {
 	v := &access.UpsertGrantsPayload{}
 	v.Grants = make([]*access.UpsertGrantForm, len(body.Grants))
 	for i, val := range body.Grants {
@@ -1452,13 +1454,14 @@ func NewUpsertGrantsPayload(body *UpsertGrantsRequestBody, sessionToken *string)
 		}
 		v.Grants[i] = unmarshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm(val)
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewRemoveGrantsPayload builds a access service removeGrants endpoint payload.
-func NewRemoveGrantsPayload(body *RemoveGrantsRequestBody, sessionToken *string) *access.RemoveGrantsPayload {
+func NewRemoveGrantsPayload(body *RemoveGrantsRequestBody, apikeyToken *string, sessionToken *string) *access.RemoveGrantsPayload {
 	v := &access.RemoveGrantsPayload{}
 	v.Grants = make([]*access.RemoveGrantEntry, len(body.Grants))
 	for i, val := range body.Grants {
@@ -1468,6 +1471,7 @@ func NewRemoveGrantsPayload(body *RemoveGrantsRequestBody, sessionToken *string)
 		}
 		v.Grants[i] = unmarshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(val)
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -1475,10 +1479,11 @@ func NewRemoveGrantsPayload(body *RemoveGrantsRequestBody, sessionToken *string)
 
 // NewRemovePrincipalGrantsPayload builds a access service
 // removePrincipalGrants endpoint payload.
-func NewRemovePrincipalGrantsPayload(body *RemovePrincipalGrantsRequestBody, sessionToken *string) *access.RemovePrincipalGrantsPayload {
+func NewRemovePrincipalGrantsPayload(body *RemovePrincipalGrantsRequestBody, apikeyToken *string, sessionToken *string) *access.RemovePrincipalGrantsPayload {
 	v := &access.RemovePrincipalGrantsPayload{
 		PrincipalUrn: *body.PrincipalUrn,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -1556,16 +1561,6 @@ func ValidateUpsertGrantFormRequestBody(body *UpsertGrantFormRequestBody) (err e
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
-	if body.PrincipalUrn != nil {
-		if utf8.RuneCountInString(*body.PrincipalUrn) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 3, true))
-		}
-	}
-	if body.PrincipalUrn != nil {
-		if utf8.RuneCountInString(*body.PrincipalUrn) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 260, false))
-		}
-	}
 	if body.Scope != nil {
 		if utf8.RuneCountInString(*body.Scope) < 3 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 3, true))
@@ -1592,16 +1587,6 @@ func ValidateRemoveGrantEntryRequestBody(body *RemoveGrantEntryRequestBody) (err
 	}
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
-	}
-	if body.PrincipalUrn != nil {
-		if utf8.RuneCountInString(*body.PrincipalUrn) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 3, true))
-		}
-	}
-	if body.PrincipalUrn != nil {
-		if utf8.RuneCountInString(*body.PrincipalUrn) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 260, false))
-		}
 	}
 	if body.Scope != nil {
 		if utf8.RuneCountInString(*body.Scope) < 3 {

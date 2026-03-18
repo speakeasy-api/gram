@@ -101,14 +101,9 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 	grants := make([]*gen.Grant, 0, len(payload.Grants))
 
 	for _, form := range payload.Grants {
-		principal, err := urn.ParsePrincipal(form.PrincipalUrn)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
-		}
-
 		row, err := tr.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
-			PrincipalUrn:   principal,
+			PrincipalUrn:   form.PrincipalUrn,
 			Scope:          form.Scope,
 			Resource:       form.Resource,
 		})
@@ -141,14 +136,9 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 	tr := s.repo.WithTx(dbtx)
 
 	for _, entry := range payload.Grants {
-		principal, err := urn.ParsePrincipal(entry.PrincipalUrn)
-		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
-		}
-
 		_, err = tr.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
-			PrincipalUrn:   principal,
+			PrincipalUrn:   entry.PrincipalUrn,
 			Scope:          entry.Scope,
 			Resource:       entry.Resource,
 		})

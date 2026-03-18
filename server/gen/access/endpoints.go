@@ -49,15 +49,27 @@ func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		p := req.(*ListGrantsPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -72,15 +84,27 @@ func NewUpsertGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		p := req.(*UpsertGrantsPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -95,15 +119,27 @@ func NewRemoveGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		p := req.(*RemoveGrantsPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -118,15 +154,27 @@ func NewRemovePrincipalGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		p := req.(*RemovePrincipalGrantsPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}

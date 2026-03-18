@@ -41,6 +41,10 @@ func EncodeListGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		if !ok {
 			return goahttp.ErrInvalidType("access", "listGrants", "*access.ListGrantsPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -276,6 +280,10 @@ func EncodeUpsertGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if !ok {
 			return goahttp.ErrInvalidType("access", "upsertGrants", "*access.UpsertGrantsPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -510,6 +518,10 @@ func EncodeRemoveGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if !ok {
 			return goahttp.ErrInvalidType("access", "removeGrants", "*access.RemoveGrantsPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -731,6 +743,10 @@ func EncodeRemovePrincipalGrantsRequest(encoder func(*http.Request) goahttp.Enco
 		p, ok := v.(*access.RemovePrincipalGrantsPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("access", "removePrincipalGrants", "*access.RemovePrincipalGrantsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

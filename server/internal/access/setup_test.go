@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -43,12 +44,15 @@ type testInstance struct {
 }
 
 // upsertGrant is a test helper that upserts a single grant via the batch API.
-func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, principalUrn, scope, resource string) *gen.Grant {
+func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, principalUrnStr, scope, resource string) *gen.Grant {
 	t.Helper()
+
+	principal, err := urn.ParsePrincipal(principalUrnStr)
+	require.NoError(t, err)
 
 	result, err := svc.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: principalUrn, Scope: scope, Resource: resource},
+			{PrincipalUrn: principal, Scope: scope, Resource: resource},
 		},
 	})
 	require.NoError(t, err)

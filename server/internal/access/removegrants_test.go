@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestRemoveGrants_RemovesSingleGrant(t *testing.T) {
@@ -22,7 +23,7 @@ func TestRemoveGrants_RemovesSingleGrant(t *testing.T) {
 	// Remove only the build:read grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
@@ -49,8 +50,8 @@ func TestRemoveGrants_BatchRemovesMultipleGrants(t *testing.T) {
 	// Remove two of three grants in a single batch call
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
-			{PrincipalUrn: "user:user_abc", Scope: "mcp:connect", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "mcp:connect", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
@@ -76,7 +77,7 @@ func TestRemoveGrants_DoesNotAffectOtherPrincipals(t *testing.T) {
 	// Remove only user_abc's grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
@@ -103,7 +104,7 @@ func TestRemoveGrants_MatchesExactResourceScope(t *testing.T) {
 	// Remove only the project-specific grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "project-1"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "project-1"},
 		},
 	})
 	require.NoError(t, err)
@@ -126,12 +127,15 @@ func TestRemoveGrants_NoOpForNonExistentGrant(t *testing.T) {
 	// Removing a grant that doesn't exist is a silent no-op (batch semantics)
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
 }
 
+// TestRemoveGrants_InvalidPrincipalURN verifies that a zero-value Principal
+// (invalid URN) is rejected. URN format validation now happens during JSON
+// deserialization at the HTTP layer via urn.Principal.UnmarshalJSON.
 func TestRemoveGrants_InvalidPrincipalURN(t *testing.T) {
 	t.Parallel()
 
@@ -139,14 +143,10 @@ func TestRemoveGrants_InvalidPrincipalURN(t *testing.T) {
 
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: "invalid", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: urn.Principal{}, Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
 func TestRemoveGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
@@ -156,7 +156,7 @@ func TestRemoveGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 
 	err := ti.service.RemoveGrants(t.Context(), &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.Error(t, err)

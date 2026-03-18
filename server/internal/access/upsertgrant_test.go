@@ -7,7 +7,15 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func mustParsePrincipal(t *testing.T, s string) urn.Principal {
+	t.Helper()
+	p, err := urn.ParsePrincipal(s)
+	require.NoError(t, err)
+	return p
+}
 
 func TestUpsertGrants_CreatesNewGrant(t *testing.T) {
 	t.Parallel()
@@ -17,7 +25,7 @@ func TestUpsertGrants_CreatesNewGrant(t *testing.T) {
 	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
@@ -42,9 +50,9 @@ func TestUpsertGrants_BatchCreatesMultipleGrants(t *testing.T) {
 	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
-			{PrincipalUrn: "user:user_abc", Scope: "mcp:connect", Resource: "*"},
-			{PrincipalUrn: "role:admin", Scope: "org:admin", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "mcp:connect", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "role:admin"), Scope: "org:admin", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
@@ -63,7 +71,7 @@ func TestUpsertGrants_IdempotentForSameTuple(t *testing.T) {
 	result1, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
@@ -71,7 +79,7 @@ func TestUpsertGrants_IdempotentForSameTuple(t *testing.T) {
 	result2, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
@@ -90,18 +98,18 @@ func TestUpsertGrants_UniqueTuplesCreateSeparateGrants(t *testing.T) {
 	}{
 		{
 			name:   "different scopes",
-			grant1: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
-			grant2: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:write", Resource: "*"},
+			grant1: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+			grant2: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:write", Resource: "*"},
 		},
 		{
 			name:   "different resources",
-			grant1: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "project-1"},
-			grant2: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "project-2"},
+			grant1: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "project-1"},
+			grant2: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "project-2"},
 		},
 		{
 			name:   "different principals",
-			grant1: gen.UpsertGrantForm{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
-			grant2: gen.UpsertGrantForm{PrincipalUrn: "user:user_def", Scope: "build:read", Resource: "*"},
+			grant1: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+			grant2: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_def"), Scope: "build:read", Resource: "*"},
 		},
 	}
 
@@ -129,7 +137,7 @@ func TestUpsertGrants_RolePrincipalType(t *testing.T) {
 	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: "role:project:admin", Scope: "org:admin", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "role:project:admin"), Scope: "org:admin", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
@@ -138,6 +146,11 @@ func TestUpsertGrants_RolePrincipalType(t *testing.T) {
 	require.Equal(t, "role", result.Grants[0].PrincipalType)
 }
 
+// TestUpsertGrants_InvalidPrincipalURN verifies that an invalid URN (zero-value
+// Principal) is rejected by the database layer. URN format validation now
+// happens during JSON deserialization at the HTTP layer via
+// urn.Principal.UnmarshalJSON, so this test exercises the service with a
+// zero-value Principal to confirm the database rejects it.
 func TestUpsertGrants_InvalidPrincipalURN(t *testing.T) {
 	t.Parallel()
 
@@ -146,14 +159,10 @@ func TestUpsertGrants_InvalidPrincipalURN(t *testing.T) {
 	_, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: "invalid", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: urn.Principal{}, Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
 func TestUpsertGrants_FailsOnFirstInvalidURNInBatch(t *testing.T) {
@@ -163,15 +172,11 @@ func TestUpsertGrants_FailsOnFirstInvalidURNInBatch(t *testing.T) {
 
 	_, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: "user:valid", Scope: "build:read", Resource: "*"},
-			{PrincipalUrn: "invalid", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:valid"), Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: urn.Principal{}, Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 
 	// Verify the first valid grant was rolled back (atomic batch)
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
@@ -186,7 +191,7 @@ func TestUpsertGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 
 	_, err := ti.service.UpsertGrants(t.Context(), &gen.UpsertGrantsPayload{
 		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: "user:user_abc", Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.Error(t, err)

@@ -9,6 +9,9 @@ import (
 
 var _ = Service("access", func() {
 	Description("Managing RBAC principal grants for an organization.")
+	Security(security.ByKey, func() {
+		Scope("producer")
+	})
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
@@ -19,6 +22,7 @@ var _ = Service("access", func() {
 			Attribute("principal_urn", String, func() {
 				Description("Optional principal URN to filter by (e.g. \"user:user_abc\", \"role:admin\"). Omit to list all grants.")
 			})
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -27,6 +31,7 @@ var _ = Service("access", func() {
 		HTTP(func() {
 			GET("/rpc/access.listGrants")
 			Param("principal_urn")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -46,6 +51,7 @@ var _ = Service("access", func() {
 				MaxLength(100)
 			})
 			Required("grants")
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -53,6 +59,7 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			POST("/rpc/access.upsertGrants")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -72,11 +79,13 @@ var _ = Service("access", func() {
 				MaxLength(100)
 			})
 			Required("grants")
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
 		HTTP(func() {
 			POST("/rpc/access.removeGrants")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusNoContent)
 		})
@@ -96,11 +105,13 @@ var _ = Service("access", func() {
 				MaxLength(260)
 			})
 			Required("principal_urn")
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
 		HTTP(func() {
 			POST("/rpc/access.removePrincipalGrants")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusNoContent)
 		})
@@ -117,8 +128,7 @@ var RemoveGrantEntry = Type("RemoveGrantEntry", func() {
 
 	Attribute("principal_urn", String, func() {
 		Description("The principal URN (e.g. \"user:user_abc\", \"role:admin\").")
-		MinLength(3)
-		MaxLength(260)
+		Meta("struct:field:type", "urn.Principal", "github.com/speakeasy-api/gram/server/internal/urn")
 	})
 	Attribute("scope", String, func() {
 		Description("The scope of the grant (e.g. \"build:read\").")
@@ -138,8 +148,7 @@ var UpsertGrantForm = Type("UpsertGrantForm", func() {
 
 	Attribute("principal_urn", String, func() {
 		Description("The principal URN (e.g. \"user:user_abc\", \"role:admin\").")
-		MinLength(3) // shortest valid: "x:y"
-		MaxLength(260)
+		Meta("struct:field:type", "urn.Principal", "github.com/speakeasy-api/gram/server/internal/urn")
 	})
 	Attribute("scope", String, func() {
 		Description("The scope to grant (e.g. \"build:read\", \"mcp:connect\").")

@@ -19,6 +19,13 @@ paths:
                     description: Optional principal URN to filter by (e.g. "user:user_abc", "role:admin"). Omit to list all grants.
                     type: string
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -87,6 +94,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listGrants access
             tags:
@@ -99,6 +107,13 @@ paths:
             description: Remove one or more grants by their exact (principal, scope, resource) tuples.
             operationId: removeGrants
             parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -170,6 +185,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: removeGrants access
             tags:
@@ -182,6 +198,13 @@ paths:
             description: Remove all grants for a specific principal within the organization.
             operationId: removePrincipalGrants
             parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -253,6 +276,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: removePrincipalGrants access
             tags:
@@ -265,6 +289,13 @@ paths:
             description: Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.
             operationId: upsertGrants
             parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -340,6 +371,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: upsertGrants access
             tags:
@@ -17445,8 +17477,6 @@ components:
                 principal_urn:
                     type: string
                     description: The principal URN (e.g. "user:user_abc", "role:admin").
-                    minLength: 3
-                    maxLength: 260
                 resource:
                     type: string
                     description: The resource of the grant. Defaults to "*".
@@ -19428,8 +19458,6 @@ components:
                 principal_urn:
                     type: string
                     description: The principal URN (e.g. "user:user_abc", "role:admin").
-                    minLength: 3
-                    maxLength: 260
                 resource:
                     type: string
                     description: The resource ID this grant applies to. Omit or set to "*" for unrestricted access.

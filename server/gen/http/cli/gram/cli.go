@@ -86,7 +86,7 @@ func UsageCommands() []string {
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
-		os.Args[0] + " " + "access list-grants --principal-urn \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "access list-grants --principal-urn \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auth callback --code \"abc123\" --state \"abc123\"" + "\n" +
@@ -111,18 +111,22 @@ func ParseEndpoint(
 
 		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
 		accessListGrantsPrincipalUrnFlag = accessListGrantsFlags.String("principal-urn", "", "")
+		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
 		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
 
 		accessUpsertGrantsFlags            = flag.NewFlagSet("upsert-grants", flag.ExitOnError)
 		accessUpsertGrantsBodyFlag         = accessUpsertGrantsFlags.String("body", "REQUIRED", "")
+		accessUpsertGrantsApikeyTokenFlag  = accessUpsertGrantsFlags.String("apikey-token", "", "")
 		accessUpsertGrantsSessionTokenFlag = accessUpsertGrantsFlags.String("session-token", "", "")
 
 		accessRemoveGrantsFlags            = flag.NewFlagSet("remove-grants", flag.ExitOnError)
 		accessRemoveGrantsBodyFlag         = accessRemoveGrantsFlags.String("body", "REQUIRED", "")
+		accessRemoveGrantsApikeyTokenFlag  = accessRemoveGrantsFlags.String("apikey-token", "", "")
 		accessRemoveGrantsSessionTokenFlag = accessRemoveGrantsFlags.String("session-token", "", "")
 
 		accessRemovePrincipalGrantsFlags            = flag.NewFlagSet("remove-principal-grants", flag.ExitOnError)
 		accessRemovePrincipalGrantsBodyFlag         = accessRemovePrincipalGrantsFlags.String("body", "REQUIRED", "")
+		accessRemovePrincipalGrantsApikeyTokenFlag  = accessRemovePrincipalGrantsFlags.String("apikey-token", "", "")
 		accessRemovePrincipalGrantsSessionTokenFlag = accessRemovePrincipalGrantsFlags.String("session-token", "", "")
 
 		agentworkflowsFlags = flag.NewFlagSet("agentworkflows", flag.ContinueOnError)
@@ -1700,16 +1704,16 @@ func ParseEndpoint(
 			switch epn {
 			case "list-grants":
 				endpoint = c.ListGrants()
-				data, err = accessc.BuildListGrantsPayload(*accessListGrantsPrincipalUrnFlag, *accessListGrantsSessionTokenFlag)
+				data, err = accessc.BuildListGrantsPayload(*accessListGrantsPrincipalUrnFlag, *accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
 			case "upsert-grants":
 				endpoint = c.UpsertGrants()
-				data, err = accessc.BuildUpsertGrantsPayload(*accessUpsertGrantsBodyFlag, *accessUpsertGrantsSessionTokenFlag)
+				data, err = accessc.BuildUpsertGrantsPayload(*accessUpsertGrantsBodyFlag, *accessUpsertGrantsApikeyTokenFlag, *accessUpsertGrantsSessionTokenFlag)
 			case "remove-grants":
 				endpoint = c.RemoveGrants()
-				data, err = accessc.BuildRemoveGrantsPayload(*accessRemoveGrantsBodyFlag, *accessRemoveGrantsSessionTokenFlag)
+				data, err = accessc.BuildRemoveGrantsPayload(*accessRemoveGrantsBodyFlag, *accessRemoveGrantsApikeyTokenFlag, *accessRemoveGrantsSessionTokenFlag)
 			case "remove-principal-grants":
 				endpoint = c.RemovePrincipalGrants()
-				data, err = accessc.BuildRemovePrincipalGrantsPayload(*accessRemovePrincipalGrantsBodyFlag, *accessRemovePrincipalGrantsSessionTokenFlag)
+				data, err = accessc.BuildRemovePrincipalGrantsPayload(*accessRemovePrincipalGrantsBodyFlag, *accessRemovePrincipalGrantsApikeyTokenFlag, *accessRemovePrincipalGrantsSessionTokenFlag)
 			}
 		case "agentworkflows":
 			c := agentworkflowsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2263,6 +2267,7 @@ func accessListGrantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])
 	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -2272,17 +2277,19 @@ func accessListGrantsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --principal-urn \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --principal-urn \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessUpsertGrantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access upsert-grants", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -2292,17 +2299,19 @@ func accessUpsertGrantsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access upsert-grants --body '{\n      \"grants\": [\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access upsert-grants --body '{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessRemoveGrantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access remove-grants", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -2312,17 +2321,19 @@ func accessRemoveGrantsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-grants --body '{\n      \"grants\": [\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-grants --body '{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessRemovePrincipalGrantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access remove-principal-grants", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -2332,11 +2343,12 @@ func accessRemovePrincipalGrantsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-principal-grants --body '{\n      \"principal_urn\": \"aaa\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-principal-grants --body '{\n      \"principal_urn\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // agentworkflowsUsage displays the usage of the agentworkflows command and its

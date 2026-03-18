@@ -18,11 +18,17 @@ import (
 
 // BuildListGrantsPayload builds the payload for the access listGrants endpoint
 // from CLI flags.
-func BuildListGrantsPayload(accessListGrantsPrincipalUrn string, accessListGrantsSessionToken string) (*access.ListGrantsPayload, error) {
+func BuildListGrantsPayload(accessListGrantsPrincipalUrn string, accessListGrantsApikeyToken string, accessListGrantsSessionToken string) (*access.ListGrantsPayload, error) {
 	var principalUrn *string
 	{
 		if accessListGrantsPrincipalUrn != "" {
 			principalUrn = &accessListGrantsPrincipalUrn
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessListGrantsApikeyToken != "" {
+			apikeyToken = &accessListGrantsApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -33,6 +39,7 @@ func BuildListGrantsPayload(accessListGrantsPrincipalUrn string, accessListGrant
 	}
 	v := &access.ListGrantsPayload{}
 	v.PrincipalUrn = principalUrn
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -40,13 +47,13 @@ func BuildListGrantsPayload(accessListGrantsPrincipalUrn string, accessListGrant
 
 // BuildUpsertGrantsPayload builds the payload for the access upsertGrants
 // endpoint from CLI flags.
-func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsSessionToken string) (*access.UpsertGrantsPayload, error) {
+func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsApikeyToken string, accessUpsertGrantsSessionToken string) (*access.UpsertGrantsPayload, error) {
 	var err error
 	var body UpsertGrantsRequestBody
 	{
 		err = json.Unmarshal([]byte(accessUpsertGrantsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }'")
 		}
 		if body.Grants == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
@@ -68,6 +75,12 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsS
 			return nil, err
 		}
 	}
+	var apikeyToken *string
+	{
+		if accessUpsertGrantsApikeyToken != "" {
+			apikeyToken = &accessUpsertGrantsApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if accessUpsertGrantsSessionToken != "" {
@@ -87,6 +100,7 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsS
 	} else {
 		v.Grants = []*access.UpsertGrantForm{}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -94,13 +108,13 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsS
 
 // BuildRemoveGrantsPayload builds the payload for the access removeGrants
 // endpoint from CLI flags.
-func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsSessionToken string) (*access.RemoveGrantsPayload, error) {
+func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsApikeyToken string, accessRemoveGrantsSessionToken string) (*access.RemoveGrantsPayload, error) {
 	var err error
 	var body RemoveGrantsRequestBody
 	{
 		err = json.Unmarshal([]byte(accessRemoveGrantsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"aaa\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }'")
 		}
 		if body.Grants == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
@@ -122,6 +136,12 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsS
 			return nil, err
 		}
 	}
+	var apikeyToken *string
+	{
+		if accessRemoveGrantsApikeyToken != "" {
+			apikeyToken = &accessRemoveGrantsApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if accessRemoveGrantsSessionToken != "" {
@@ -141,6 +161,7 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsS
 	} else {
 		v.Grants = []*access.RemoveGrantEntry{}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -148,7 +169,7 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsS
 
 // BuildRemovePrincipalGrantsPayload builds the payload for the access
 // removePrincipalGrants endpoint from CLI flags.
-func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsBody string, accessRemovePrincipalGrantsSessionToken string) (*access.RemovePrincipalGrantsPayload, error) {
+func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsBody string, accessRemovePrincipalGrantsApikeyToken string, accessRemovePrincipalGrantsSessionToken string) (*access.RemovePrincipalGrantsPayload, error) {
 	var err error
 	var body RemovePrincipalGrantsRequestBody
 	{
@@ -166,6 +187,12 @@ func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsBody string, a
 			return nil, err
 		}
 	}
+	var apikeyToken *string
+	{
+		if accessRemovePrincipalGrantsApikeyToken != "" {
+			apikeyToken = &accessRemovePrincipalGrantsApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if accessRemovePrincipalGrantsSessionToken != "" {
@@ -175,6 +202,7 @@ func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsBody string, a
 	v := &access.RemovePrincipalGrantsPayload{
 		PrincipalUrn: body.PrincipalUrn,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

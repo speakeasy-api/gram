@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -806,7 +807,7 @@ type GrantResponseBody struct {
 // UpsertGrantFormRequestBody is used to define fields on request body types.
 type UpsertGrantFormRequestBody struct {
 	// The principal URN (e.g. "user:user_abc", "role:admin").
-	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// The scope to grant (e.g. "build:read", "mcp:connect").
 	Scope string `form:"scope" json:"scope" xml:"scope"`
 	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
@@ -817,7 +818,7 @@ type UpsertGrantFormRequestBody struct {
 // RemoveGrantEntryRequestBody is used to define fields on request body types.
 type RemoveGrantEntryRequestBody struct {
 	// The principal URN (e.g. "user:user_abc", "role:admin").
-	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// The scope of the grant (e.g. "build:read").
 	Scope string `form:"scope" json:"scope" xml:"scope"`
 	// The resource of the grant. Defaults to "*".
@@ -2537,12 +2538,6 @@ func ValidateGrantResponseBody(body *GrantResponseBody) (err error) {
 // ValidateUpsertGrantFormRequestBody runs the validations defined on
 // UpsertGrantFormRequestBody
 func ValidateUpsertGrantFormRequestBody(body *UpsertGrantFormRequestBody) (err error) {
-	if utf8.RuneCountInString(body.PrincipalUrn) < 3 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 3, true))
-	}
-	if utf8.RuneCountInString(body.PrincipalUrn) > 260 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 260, false))
-	}
 	if utf8.RuneCountInString(body.Scope) < 3 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 3, true))
 	}
@@ -2558,12 +2553,6 @@ func ValidateUpsertGrantFormRequestBody(body *UpsertGrantFormRequestBody) (err e
 // ValidateRemoveGrantEntryRequestBody runs the validations defined on
 // RemoveGrantEntryRequestBody
 func ValidateRemoveGrantEntryRequestBody(body *RemoveGrantEntryRequestBody) (err error) {
-	if utf8.RuneCountInString(body.PrincipalUrn) < 3 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 3, true))
-	}
-	if utf8.RuneCountInString(body.PrincipalUrn) > 260 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 260, false))
-	}
 	if utf8.RuneCountInString(body.Scope) < 3 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 3, true))
 	}

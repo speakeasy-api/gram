@@ -10,6 +10,7 @@ package access
 import (
 	"context"
 
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -78,6 +79,7 @@ type ListGrantsPayload struct {
 	// Optional principal URN to filter by (e.g. "user:user_abc", "role:admin").
 	// Omit to list all grants.
 	PrincipalUrn *string
+	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -91,7 +93,7 @@ type ListGrantsResult struct {
 // tuple.
 type RemoveGrantEntry struct {
 	// The principal URN (e.g. "user:user_abc", "role:admin").
-	PrincipalUrn string
+	PrincipalUrn urn.Principal
 	// The scope of the grant (e.g. "build:read").
 	Scope string
 	// The resource of the grant. Defaults to "*".
@@ -104,6 +106,7 @@ type RemoveGrantsPayload struct {
 	// The list of grants to remove, each identified by (principal_urn, scope,
 	// resource).
 	Grants       []*RemoveGrantEntry
+	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -113,13 +116,14 @@ type RemovePrincipalGrantsPayload struct {
 	// The principal URN whose grants should be removed (e.g. "user:user_abc",
 	// "role:admin").
 	PrincipalUrn string
+	ApikeyToken  *string
 	SessionToken *string
 }
 
 // Form for creating or updating a principal grant.
 type UpsertGrantForm struct {
 	// The principal URN (e.g. "user:user_abc", "role:admin").
-	PrincipalUrn string
+	PrincipalUrn urn.Principal
 	// The scope to grant (e.g. "build:read", "mcp:connect").
 	Scope string
 	// The resource ID this grant applies to. Omit or set to "*" for unrestricted
@@ -132,6 +136,7 @@ type UpsertGrantForm struct {
 type UpsertGrantsPayload struct {
 	// The list of grants to upsert.
 	Grants       []*UpsertGrantForm
+	ApikeyToken  *string
 	SessionToken *string
 }
 
