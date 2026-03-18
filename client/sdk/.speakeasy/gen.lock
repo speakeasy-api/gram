@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 3e59ea1bde9fb74b320c5ada2bc63844
+  docChecksum: 9690c190f1b2d61a7209536d24a212ad
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.35
-  configChecksum: 6905bf84f7efe22c050fa588a57633bd
+  releaseVersion: 0.27.27
+  configChecksum: afb5bc5ec1d2d03baecc4d70348c05bb
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -243,7 +243,7 @@ trackedFiles:
   docs/models/components/getmetricssummaryresult.md:
     last_write_checksum: sha1:6bfda4882ff8e13207b6ddc0fb2901795472cf8a
   docs/models/components/getobservabilityoverviewpayload.md:
-    last_write_checksum: sha1:5911afc485814a6931d06d851a139b3bccd99c58
+    last_write_checksum: sha1:27be40158c7006f2af34510a31d9e19dc2c290a1
   docs/models/components/getobservabilityoverviewresult.md:
     last_write_checksum: sha1:61055d93b9018c980155bcad14da0479e4d7d918
   docs/models/components/getprojectmetricssummarypayload.md:
@@ -1532,11 +1532,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:2d33b56d73fff6b2dadd42afca911cd181ebeb71
+    last_write_checksum: sha1:db7c7002ff507ab668328c3f0b73a3b9bfaf9351
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:76793ab33b42c643d1bfd0f558d1221ab96b20a9
+    last_write_checksum: sha1:abf5be36899a3fd5d7daeec8b8bfa1f01b84cc5e
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2018,7 +2018,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:275852f84dd6694943d7653732c3d03b971e1c41
+    last_write_checksum: sha1:ee50183c45b204ffb7bd8d6a49aacb4bc7bf8013
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2353,7 +2353,7 @@ trackedFiles:
   src/models/components/getmetricssummaryresult.ts:
     last_write_checksum: sha1:5a47b03d97c320d6c11cd80f0401d5c42da3f011
   src/models/components/getobservabilityoverviewpayload.ts:
-    last_write_checksum: sha1:d8521ea3c54bcbe27ab03c784ec51c4b32275aed
+    last_write_checksum: sha1:fb6979490228e39c57d6c995a53cb2bdf6d8aac4
   src/models/components/getobservabilityoverviewresult.ts:
     last_write_checksum: sha1:0dbfa9a9afa50661ca0f7406e2ddc5e59aab954e
   src/models/components/getprojectmetricssummarypayload.ts:

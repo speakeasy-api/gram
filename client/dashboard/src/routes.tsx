@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import Billing from "./pages/billing/Billing";
+import CLIs from "./pages/CLIs";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import CatalogDetail, {
   CatalogDetailRoot,
@@ -250,6 +251,12 @@ const ROUTE_STRUCTURE = {
         component: SlackAppDetailPage,
       },
     },
+  },
+  clis: {
+    title: "CLIs",
+    url: "clis",
+    icon: "terminal",
+    component: CLIs,
   },
   mcp: {
     title: "MCP",

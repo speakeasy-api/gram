@@ -1,4 +1,6 @@
 import { Stack } from "@speakeasy-api/moonshine";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -40,7 +42,7 @@ export function InputDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit?: () => void;
+  onSubmit?: () => void | Promise<void>;
   title: string;
   inputs: InputProps[] | InputProps;
   description?: string;
@@ -48,15 +50,24 @@ export function InputDialog({
 }) {
   const inputsArray = Array.isArray(inputs) ? inputs : [inputs];
   inputsArray.sort((a, b) => (a.optional ? 1 : b.optional ? -1 : 0));
+  const [pending, setPending] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
+    if (pending) return;
     inputsArray.forEach((input) => {
       if (!input.optional || input.value !== "") {
         input.onSubmit?.(input.value);
       }
     });
-    onSubmit?.();
-    onOpenChange(false);
+    try {
+      setPending(true);
+      await onSubmit?.();
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setPending(false);
+    }
   };
 
   const formValid =
@@ -71,7 +82,12 @@ export function InputDialog({
     }) && inputsArray.some((input) => input.value !== "");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!pending) onOpenChange(v);
+      }}
+    >
       <Dialog.Content>
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
@@ -94,7 +110,7 @@ export function InputDialog({
                   value={input.value}
                   onChange={input.onChange}
                   onEnter={submit}
-                  disabled={input.disabled}
+                  disabled={input.disabled || pending}
                   validate={input.validate}
                   lines={input.lines}
                 />
@@ -116,11 +132,15 @@ export function InputDialog({
           ))}
         </Stack>
         <Dialog.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
             Back
           </Button>
-          <Button onClick={submit} disabled={!formValid}>
-            {submitButtonText}
+          <Button onClick={submit} disabled={!formValid || pending}>
+            {pending ? "Submitting\u2026" : submitButtonText}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

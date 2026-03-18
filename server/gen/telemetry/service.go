@@ -175,8 +175,8 @@ type GetObservabilityOverviewPayload struct {
 	ExternalUserID *string
 	// Optional API key ID filter
 	APIKeyID *string
-	// Optional toolset/MCP server ID filter
-	ToolsetID *string
+	// Optional toolset/MCP server slug filter
+	ToolsetSlug *string
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool
 }
