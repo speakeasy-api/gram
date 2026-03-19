@@ -34,7 +34,7 @@ type RemoveGrantsRequestBody struct {
 type RemovePrincipalGrantsRequestBody struct {
 	// The user or role to revoke all permissions from (e.g. "user:user_abc",
 	// "role:admin").
-	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 }
 
 // ListGrantsResponseBody is the type of the "access" service "listGrants"

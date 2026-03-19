@@ -114,8 +114,7 @@ var _ = Service("access", func() {
 		Payload(func() {
 			Attribute("principal_urn", String, func() {
 				Description("The user or role to revoke all permissions from (e.g. \"user:user_abc\", \"role:admin\").")
-				MinLength(3)
-				MaxLength(260)
+				Meta("struct:field:type", "urn.Principal", "github.com/speakeasy-api/gram/server/internal/urn")
 			})
 			Required("principal_urn")
 			security.ByKeyPayload()

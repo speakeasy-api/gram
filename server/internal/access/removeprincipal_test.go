@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestRemovePrincipalGrants_RemovesAllForPrincipal(t *testing.T) {
@@ -15,23 +16,24 @@ func TestRemovePrincipalGrants_RemovesAllForPrincipal(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
+	userURN := "user:user_abc"
+
 	// Create multiple grants for the same principal
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "mcp:connect", "*")
+	upsertGrant(t, ctx, ti.service, userURN, "build:read", "*")
+	upsertGrant(t, ctx, ti.service, userURN, "mcp:connect", "*")
 
 	// Create a grant for a different principal
 	upsertGrant(t, ctx, ti.service, "role:admin", "org:admin", "*")
 
 	// Remove all grants for user:user_abc
 	err := ti.service.RemovePrincipalGrants(ctx, &gen.RemovePrincipalGrantsPayload{
-		PrincipalUrn: "user:user_abc",
+		PrincipalUrn: mustParsePrincipal(t, userURN),
 	})
 	require.NoError(t, err)
 
 	// Verify user:user_abc grants are gone
-	urn := "user:user_abc"
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{
-		PrincipalUrn: conv.PtrEmpty(urn),
+		PrincipalUrn: conv.PtrEmpty(userURN),
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Grants)
@@ -52,24 +54,23 @@ func TestRemovePrincipalGrants_NoOpWhenPrincipalHasNoGrants(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 
 	err := ti.service.RemovePrincipalGrants(ctx, &gen.RemovePrincipalGrantsPayload{
-		PrincipalUrn: "user:nonexistent",
+		PrincipalUrn: mustParsePrincipal(t, "user:nonexistent"),
 	})
 	require.NoError(t, err)
 }
 
+// TestRemovePrincipalGrants_InvalidPrincipalURN verifies that a zero-value
+// Principal (invalid URN) is rejected. URN format validation now happens
+// during JSON deserialization at the HTTP layer via urn.Principal.UnmarshalJSON.
 func TestRemovePrincipalGrants_InvalidPrincipalURN(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 
 	err := ti.service.RemovePrincipalGrants(ctx, &gen.RemovePrincipalGrantsPayload{
-		PrincipalUrn: "invalid",
+		PrincipalUrn: urn.Principal{},
 	})
 	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
 func TestRemovePrincipalGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
@@ -78,7 +79,7 @@ func TestRemovePrincipalGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 	_, ti := newTestAccessService(t)
 
 	err := ti.service.RemovePrincipalGrants(t.Context(), &gen.RemovePrincipalGrantsPayload{
-		PrincipalUrn: "user:user_abc",
+		PrincipalUrn: mustParsePrincipal(t, "user:user_abc"),
 	})
 	require.Error(t, err)
 

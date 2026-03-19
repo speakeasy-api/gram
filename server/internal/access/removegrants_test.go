@@ -16,22 +16,23 @@ func TestRemoveGrants_RemovesSingleGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
+	userURN := "user:user_abc"
+
 	// Create two grants for the same principal
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "mcp:connect", "*")
+	upsertGrant(t, ctx, ti.service, userURN, "build:read", "*")
+	upsertGrant(t, ctx, ti.service, userURN, "mcp:connect", "*")
 
 	// Remove only the build:read grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
 
 	// Verify only one grant remains
-	urn := "user:user_abc"
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{
-		PrincipalUrn: conv.PtrEmpty(urn),
+		PrincipalUrn: conv.PtrEmpty(userURN),
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 1)
@@ -43,22 +44,23 @@ func TestRemoveGrants_BatchRemovesMultipleGrants(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "mcp:connect", "*")
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "org:admin", "*")
+	userURN := "user:user_abc"
+
+	upsertGrant(t, ctx, ti.service, userURN, "build:read", "*")
+	upsertGrant(t, ctx, ti.service, userURN, "mcp:connect", "*")
+	upsertGrant(t, ctx, ti.service, userURN, "org:admin", "*")
 
 	// Remove two of three grants in a single batch call
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
-			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "mcp:connect", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "mcp:connect", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
 
-	urn := "user:user_abc"
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{
-		PrincipalUrn: conv.PtrEmpty(urn),
+		PrincipalUrn: conv.PtrEmpty(userURN),
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 1)
@@ -70,26 +72,28 @@ func TestRemoveGrants_DoesNotAffectOtherPrincipals(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
+	abcURN := "user:user_abc"
+	defURN := "user:user_abc"
+
 	// Create identical scopes for different principals
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
-	upsertGrant(t, ctx, ti.service, "user:user_def", "build:read", "*")
+	upsertGrant(t, ctx, ti.service, abcURN, "build:read", "*")
+	upsertGrant(t, ctx, ti.service, defURN, "build:read", "*")
 
 	// Remove only user_abc's grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, abcURN), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
 
 	// Verify user_def's grant is untouched
-	urn := "user:user_def"
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{
-		PrincipalUrn: conv.PtrEmpty(urn),
+		PrincipalUrn: conv.PtrEmpty(defURN),
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 1)
-	require.Equal(t, "user:user_def", result.Grants[0].PrincipalUrn)
+	require.Equal(t, defURN, result.Grants[0].PrincipalUrn)
 }
 
 func TestRemoveGrants_MatchesExactResourceScope(t *testing.T) {
@@ -97,22 +101,23 @@ func TestRemoveGrants_MatchesExactResourceScope(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
+	userURN := "user:user_abc"
+
 	// Create grants with different resources for same principal+scope
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "project-1")
+	upsertGrant(t, ctx, ti.service, userURN, "build:read", "*")
+	upsertGrant(t, ctx, ti.service, userURN, "build:read", "project-1")
 
 	// Remove only the project-specific grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.RemoveGrantEntry{
-			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "project-1"},
+			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "build:read", Resource: "project-1"},
 		},
 	})
 	require.NoError(t, err)
 
 	// Verify the wildcard grant remains
-	urn := "user:user_abc"
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{
-		PrincipalUrn: conv.PtrEmpty(urn),
+		PrincipalUrn: conv.PtrEmpty(userURN),
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 1)

@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -90,13 +89,13 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	dbTX, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return dbTX.Rollback(ctx) })
 
-	tr := s.repo.WithTx(dbtx)
+	tr := s.repo.WithTx(dbTX)
 
 	grants := make([]*gen.Grant, 0, len(payload.Grants))
 
@@ -114,7 +113,7 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 		grants = append(grants, grantFromRow(row))
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
+	if err := dbTX.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit upsert grants").Log(ctx, s.logger)
 	}
 
@@ -127,13 +126,13 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	dbTX, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return dbTX.Rollback(ctx) })
 
-	tr := s.repo.WithTx(dbtx)
+	tr := s.repo.WithTx(dbTX)
 
 	for _, entry := range payload.Grants {
 		_, err = tr.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
@@ -147,7 +146,7 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 		}
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
+	if err := dbTX.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit remove grants").Log(ctx, s.logger)
 	}
 
@@ -160,14 +159,9 @@ func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.Remove
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	principal, err := urn.ParsePrincipal(payload.PrincipalUrn)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid principal URN").Log(ctx, s.logger)
-	}
-
-	_, err = s.repo.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+	_, err := s.repo.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		PrincipalUrn:   principal,
+		PrincipalUrn:   payload.PrincipalUrn,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove principal grants").Log(ctx, s.logger)

@@ -10,7 +10,6 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"unicode/utf8"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
 	goa "goa.design/goa/v3/pkg"
@@ -175,16 +174,7 @@ func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsBody string, a
 	{
 		err = json.Unmarshal([]byte(accessRemovePrincipalGrantsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"principal_urn\": \"aaa\"\n   }'")
-		}
-		if utf8.RuneCountInString(body.PrincipalUrn) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 3, true))
-		}
-		if utf8.RuneCountInString(body.PrincipalUrn) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", body.PrincipalUrn, utf8.RuneCountInString(body.PrincipalUrn), 260, false))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"principal_urn\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string

@@ -116,7 +116,7 @@ type RemoveGrantsPayload struct {
 type RemovePrincipalGrantsPayload struct {
 	// The user or role to revoke all permissions from (e.g. "user:user_abc",
 	// "role:admin").
-	PrincipalUrn string
+	PrincipalUrn urn.Principal
 	ApikeyToken  *string
 	SessionToken *string
 }

@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -43,24 +43,6 @@ type testInstance struct {
 	conn    *pgxpool.Pool
 }
 
-// upsertGrant is a test helper that upserts a single grant via the batch API.
-func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, principalUrnStr, scope, resource string) *gen.Grant {
-	t.Helper()
-
-	principal, err := urn.ParsePrincipal(principalUrnStr)
-	require.NoError(t, err)
-
-	result, err := svc.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
-		Grants: []*gen.UpsertGrantForm{
-			{PrincipalUrn: principal, Scope: scope, Resource: resource},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Grants, 1)
-
-	return result.Grants[0]
-}
-
 func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -87,4 +69,29 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 		service: svc,
 		conn:    conn,
 	}
+}
+
+// upsertGrant is a test helper that upserts a single grant via the batch API.
+func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, principalUrnStr, scope, resource string) *gen.Grant {
+	t.Helper()
+
+	principal, err := urn.ParsePrincipal(principalUrnStr)
+	require.NoError(t, err)
+
+	result, err := svc.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		Grants: []*gen.UpsertGrantForm{
+			{PrincipalUrn: principal, Scope: scope, Resource: resource},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 1)
+
+	return result.Grants[0]
+}
+
+func mustParsePrincipal(t *testing.T, s string) urn.Principal {
+	t.Helper()
+	p, err := urn.ParsePrincipal(s)
+	require.NoError(t, err)
+	return p
 }

@@ -43,17 +43,18 @@ func TestListGrants_FiltersByPrincipalURN(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
-	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
+	userURN := "user:user_abc"
+
+	upsertGrant(t, ctx, ti.service, userURN, "build:read", "*")
 	upsertGrant(t, ctx, ti.service, "role:admin", "org:admin", "*")
 
-	urn := "user:user_abc"
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{
 		SessionToken: nil,
-		PrincipalUrn: conv.PtrEmpty(urn),
+		PrincipalUrn: conv.PtrEmpty(userURN),
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 1)
-	require.Equal(t, "user:user_abc", result.Grants[0].PrincipalUrn)
+	require.Equal(t, userURN, result.Grants[0].PrincipalUrn)
 	require.Equal(t, "user", result.Grants[0].PrincipalType)
 	require.Equal(t, "build:read", result.Grants[0].Scope)
 }

@@ -10,13 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func mustParsePrincipal(t *testing.T, s string) urn.Principal {
-	t.Helper()
-	p, err := urn.ParsePrincipal(s)
-	require.NoError(t, err)
-	return p
-}
-
 func TestUpsertGrants_CreatesNewGrant(t *testing.T) {
 	t.Parallel()
 

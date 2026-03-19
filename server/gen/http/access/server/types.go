@@ -34,7 +34,7 @@ type RemoveGrantsRequestBody struct {
 type RemovePrincipalGrantsRequestBody struct {
 	// The user or role to revoke all permissions from (e.g. "user:user_abc",
 	// "role:admin").
-	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	PrincipalUrn *urn.Principal `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 }
 
 // ListGrantsResponseBody is the type of the "access" service "listGrants"
@@ -1538,16 +1538,6 @@ func ValidateRemoveGrantsRequestBody(body *RemoveGrantsRequestBody) (err error) 
 func ValidateRemovePrincipalGrantsRequestBody(body *RemovePrincipalGrantsRequestBody) (err error) {
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
-	}
-	if body.PrincipalUrn != nil {
-		if utf8.RuneCountInString(*body.PrincipalUrn) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 3, true))
-		}
-	}
-	if body.PrincipalUrn != nil {
-		if utf8.RuneCountInString(*body.PrincipalUrn) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.principal_urn", *body.PrincipalUrn, utf8.RuneCountInString(*body.PrincipalUrn), 260, false))
-		}
 	}
 	return
 }
