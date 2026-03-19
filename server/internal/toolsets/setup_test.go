@@ -16,6 +16,8 @@ import (
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
+	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -23,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -305,4 +308,64 @@ func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, t
 	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
 
 	return dep
+}
+
+func withProAccount(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	authCtx.AccountType = "pro"
+
+	return contextvalues.SetAuthContext(ctx, authCtx)
+}
+
+func createMinimalPrivateToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
+	t.Helper()
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Name:                   name,
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created)
+
+	return created
+}
+
+func createMinimalPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
+	t.Helper()
+
+	created := createMinimalPrivateToolset(t, ctx, ti, name)
+	public := true
+
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            &public,
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.NotNil(t, updated.McpIsPublic)
+	require.True(t, *updated.McpIsPublic)
+
+	return updated
 }

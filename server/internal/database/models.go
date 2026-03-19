@@ -56,6 +56,26 @@ type Asset struct {
 	Deleted       bool
 }
 
+type AuditLog struct {
+	ID                 uuid.UUID
+	Seq                int64
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ActorID            string
+	ActorType          string
+	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
+	Action             string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName pgtype.Text
+	SubjectSlug        pgtype.Text
+	BeforeSnapshot     []byte
+	AfterSnapshot      []byte
+	Metadata           []byte
+	CreatedAt          pgtype.Timestamptz
+}
+
 type Chat struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID

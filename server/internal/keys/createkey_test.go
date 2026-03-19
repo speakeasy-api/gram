@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -29,6 +31,8 @@ func TestKeysService_CreateKey(t *testing.T) {
 	t.Run("successful key creation with default scope", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
+		beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
 
 		name := "test-api-key" + randstr(6)
 
@@ -55,11 +59,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 		// Verify the key follows expected format
 		require.Contains(t, key.KeyPrefix, "gram_local_")
 		require.Greater(t, len(key.KeyPrefix), len("gram_local_"))
+
+		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount+1, afterCount)
 	})
 
 	t.Run("successful key creation with custom scope", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
+		beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
 
 		name := "test-api-key" + randstr(6)
 
@@ -86,11 +96,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 		// Verify the key follows expected format
 		require.Contains(t, key.KeyPrefix, "gram_local_")
 		require.Greater(t, len(key.KeyPrefix), len("gram_local_"))
+
+		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount+1, afterCount)
 	})
 
 	t.Run("successful key creation with multiple scopes", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
+		beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
 
 		name := "test-api-key" + randstr(6)
 
@@ -117,11 +133,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 		// Verify the key follows expected format
 		require.Contains(t, key.KeyPrefix, "gram_local_")
 		require.Greater(t, len(key.KeyPrefix), len("gram_local_"))
+
+		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount+1, afterCount)
 	})
 
 	t.Run("successful key creation with invalid scope", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
+		beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
 
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
@@ -133,11 +155,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 		require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 		require.Nil(t, key)
 
+		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount, afterCount)
+
 	})
 
 	t.Run("successful key creation with invalid scopes", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
+		beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
 
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
@@ -149,11 +177,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 		require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 		require.Nil(t, key)
 
+		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount, afterCount)
+
 	})
 
 	t.Run("key creation without project context", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
+		beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
 
 		// Ensure there's no project ID in the auth context
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -176,18 +210,24 @@ func TestKeysService_CreateKey(t *testing.T) {
 		require.Equal(t, "org-scoped-key", key.Name)
 		require.Nil(t, key.ProjectID)
 
+		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount+1, afterCount)
+
 		// Restore original project ID
 		authCtx.ProjectID = originalProjectID
 	})
 
 	t.Run("unauthorized without auth context", func(t *testing.T) {
 		t.Parallel()
-		_, ti := newTestKeysService(t)
+		ctx, ti := newTestKeysService(t)
+		beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
 
 		// Create a context without auth
 		ctxWithoutAuth := t.Context()
 
-		_, err := ti.service.CreateKey(ctxWithoutAuth, &gen.CreateKeyPayload{
+		_, err = ti.service.CreateKey(ctxWithoutAuth, &gen.CreateKeyPayload{
 			SessionToken: nil,
 			Name:         "unauthorized-key",
 			Scopes:       []string{"consumer"},
@@ -197,11 +237,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount, afterCount)
 	})
 
 	t.Run("multiple keys have unique tokens", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
+		beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
 
 		key1, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
@@ -220,5 +266,43 @@ func TestKeysService_CreateKey(t *testing.T) {
 		require.NotEqual(t, key1.ID, key2.ID)
 		require.NotEqual(t, *key1.Key, *key2.Key)
 		require.NotEqual(t, key1.KeyPrefix, key2.KeyPrefix)
+
+		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount+2, afterCount)
 	})
+}
+
+func TestKeysService_CreateKey_AuditLogMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	name := "audit-create-key-metadata" + randstr(6)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+	require.NoError(t, err)
+
+	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+		SessionToken: nil,
+		Name:         name,
+		Scopes:       []string{"producer", "consumer"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, key)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionKeyCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionKeyCreate), record.Action)
+	require.Equal(t, "api_key", record.SubjectType)
+	require.Equal(t, key.Name, record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, []any{"consumer", "producer"}, metadata["scopes"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }

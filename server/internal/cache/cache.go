@@ -49,6 +49,10 @@ func (d *TypedCacheObject[T]) fullKey(key string) string {
 	return key + ":" + d.keySuffix
 }
 
+func (d *TypedCacheObject[T]) SkipCache() TypedCacheObject[T] {
+	return TypedCacheObject[T]{logger: d.logger, cache: NoopCache, keySuffix: d.keySuffix}
+}
+
 func (d *TypedCacheObject[T]) Delete(ctx context.Context, obj T) error {
 	if d.cache == nil {
 		return nil
