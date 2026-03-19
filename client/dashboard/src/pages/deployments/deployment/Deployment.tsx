@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { memo, Suspense } from "react";
 import { useParams } from "react-router";
-import { useActiveDeployment } from "../useActiveDeployment";
+import { useActiveDeployment } from "@gram/client/react-query/index.js";
 import { useRedeployDeployment } from "../useRedeployDeployment";
 import { useFailedDeploymentSources } from "@/components/sources/useFailedDeploymentSources";
 import { invalidateAllDeployment } from "@gram/client/react-query/index.js";
@@ -127,7 +127,8 @@ const HeadingSection = () => {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const { data: activeDeployment } = useActiveDeployment();
+  const { data: activeDeploymentResult } = useActiveDeployment();
+  const activeDeployment = activeDeploymentResult?.deployment;
   const redeployMutation = useRedeployDeployment();
 
   const handleRedeploy = () => {

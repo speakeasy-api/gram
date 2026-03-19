@@ -10,7 +10,7 @@ import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
 import { Suspense, useState } from "react";
 import { DeploymentsEmptyState } from "../deployments/DeploymentsEmptyState";
-import { useActiveDeployment } from "../deployments/useActiveDeployment";
+import { useActiveDeployment } from "@gram/client/react-query/index.js";
 import { LogsTabContent } from "../deployments/deployment/LogsTabContent";
 
 // ─── Status dot ──────────────────────────────────────────────
@@ -200,7 +200,8 @@ export function SourceDeploymentsPanel({
 }) {
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
-  const { data: activeDeployment } = useActiveDeployment();
+  const { data: activeDeploymentResult } = useActiveDeployment();
+  const activeDeployment = activeDeploymentResult?.deployment;
   const routes = useRoutes();
 
   const [selectedId, setSelectedId] = useState<string | null>(

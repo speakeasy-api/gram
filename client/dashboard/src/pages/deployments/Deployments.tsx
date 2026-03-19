@@ -16,7 +16,7 @@ import {
 import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
-import { useActiveDeployment } from "./useActiveDeployment";
+import { useActiveDeployment } from "@gram/client/react-query/index.js";
 import { useRedeployDeployment } from "./useRedeployDeployment";
 
 export default function DeploymentsPage() {
@@ -123,7 +123,8 @@ export function DeploymentsTable({
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
 
-  const { data: activeDeployment } = useActiveDeployment();
+  const { data: activeDeploymentResult } = useActiveDeployment();
+  const activeDeployment = activeDeploymentResult?.deployment;
 
   if (deployments.length === 0) {
     return <DeploymentsEmptyState />;
@@ -171,7 +172,7 @@ export function DeploymentsTable({
             <DeploymentLink id={row.id} />
             <div className="flex gap-2">
               <p className="text-muted-foreground text-sm">{createdAt}</p>
-              {activeDeployment === row && (
+              {activeDeployment?.id === row.id && (
                 <Badge variant="success" className="py-0.25 px-1.5">
                   Active
                 </Badge>
