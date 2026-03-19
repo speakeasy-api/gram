@@ -66,6 +66,14 @@ export function useMcpUrl(
 }
 
 /**
+ * Wraps an MCP URL through the /mcp-proxy/ endpoint so cross-origin requests
+ * stay same-origin and the gram_session cookie is sent by the browser.
+ */
+export function mcpProxyUrl(mcpUrl: string): string {
+  return `${getServerURL()}/mcp-proxy/${mcpUrl.replace(/^https?:\/\//, "")}`;
+}
+
+/**
  * Returns an MCP URL that always uses the Gram domain, ignoring any custom domain.
  * Use this for internal tools like the playground where we want consistent routing.
  */
