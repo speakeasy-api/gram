@@ -50,7 +50,7 @@ export type RemoveGrantsMutationError =
  * removeGrants access
  *
  * @remarks
- * Remove one or more grants by their exact (principal, scope, resource) tuples.
+ * Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).
  */
 export function useRemoveGrantsMutation(
   options?: MutationHookOptions<

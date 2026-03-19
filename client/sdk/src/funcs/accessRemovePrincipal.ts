@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * removePrincipalGrants access
  *
  * @remarks
- * Remove all grants for a specific principal within the organization.
+ * Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.
  */
 export function accessRemovePrincipal(
   client: GramCore,

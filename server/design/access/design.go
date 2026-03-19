@@ -8,15 +8,16 @@ import (
 )
 
 var _ = Service("access", func() {
-	Description("Control who can do what in your organization. A grant gives a user or role permission to perform an action (scope) on a resource. Use \"*\" as the resource to grant access across everything.")
-	Security(security.ByKey, func() {
-		Scope("producer")
-	})
+	Description("Manage access permissions for users and roles across your organization.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
 	Method("listGrants", func() {
-		Description("List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.")
+		Description("List all permissions in your organization, optionally filtered to a specific user or role.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Attribute("principal_urn", String, func() {
@@ -43,6 +44,10 @@ var _ = Service("access", func() {
 
 	Method("upsertGrants", func() {
 		Description("Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Attribute("grants", ArrayOf(UpsertGrantForm), func() {
@@ -71,6 +76,10 @@ var _ = Service("access", func() {
 
 	Method("removeGrants", func() {
 		Description("Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Attribute("grants", ArrayOf(RemoveGrantEntry), func() {
@@ -96,7 +105,11 @@ var _ = Service("access", func() {
 	})
 
 	Method("removePrincipalGrants", func() {
-		Description("Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.")
+		Description("Revoke all permissions for a specific user or role.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Attribute("principal_urn", String, func() {

@@ -11,7 +11,7 @@ import {
 
 export type UpsertGrantsRequestBody = {
   /**
-   * The list of grants to upsert.
+   * The permissions to grant.
    */
   grants: Array<UpsertGrantForm>;
 };

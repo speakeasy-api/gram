@@ -15,12 +15,10 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Control who can do what in your organization. A grant gives a user or role
-// permission to perform an action (scope) on a resource. Use "*" as the
-// resource to grant access across everything.
+// Manage access permissions for users and roles across your organization.
 type Service interface {
-	// List all permissions in your organization. Optionally filter to a specific
-	// user or role by passing their identifier.
+	// List all permissions in your organization, optionally filtered to a specific
+	// user or role.
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListGrantsResult, err error)
 	// Grant permissions to one or more users or roles. Safe to call multiple times
 	// — if a permission already exists it is left unchanged.
@@ -28,8 +26,7 @@ type Service interface {
 	// Revoke specific permissions from users or roles. Each entry must exactly
 	// match an existing grant (who, what action, which resource).
 	RemoveGrants(context.Context, *RemoveGrantsPayload) (err error)
-	// Revoke all permissions for a specific user or role. Use this when
-	// offboarding a user or deleting a role.
+	// Revoke all permissions for a specific user or role.
 	RemovePrincipalGrants(context.Context, *RemovePrincipalGrantsPayload) (err error)
 }
 

@@ -6,19 +6,19 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Identifies a single grant to remove by its (principal, scope, resource) tuple.
+ * A permission to revoke, identified by who holds it, what action it covers, and which resource it applies to.
  */
 export type RemoveGrantEntry = {
   /**
-   * The principal URN (e.g. "user:user_abc", "role:admin").
+   * The user or role that holds this permission (e.g. "user:user_abc", "role:admin").
    */
   principalUrn: string;
   /**
-   * The resource the grant applies to. Use "*" for unrestricted access.
+   * The resource this permission applies to. Use "*" for unrestricted access.
    */
   resource: string;
   /**
-   * The scope of the grant (e.g. "build:read").
+   * The action being permitted (e.g. "build:read", "mcp:connect").
    */
   scope: string;
 };

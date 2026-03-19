@@ -51,7 +51,7 @@ export type UpsertGrantsMutationError =
  * upsertGrants access
  *
  * @remarks
- * Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.
+ * Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.
  */
 export function useUpsertGrantsMutation(
   options?: MutationHookOptions<

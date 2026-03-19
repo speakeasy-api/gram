@@ -6,19 +6,19 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Form for creating or updating a principal grant.
+ * A permission to grant: who gets it, what action they can perform, and which resource it applies to.
  */
 export type UpsertGrantForm = {
   /**
-   * The principal URN (e.g. "user:user_abc", "role:admin").
+   * The user or role receiving this permission (e.g. "user:user_abc", "role:admin").
    */
   principalUrn: string;
   /**
-   * The resource this grant applies to. Use "*" for unrestricted access.
+   * The resource this permission applies to. Use "*" for unrestricted access.
    */
   resource: string;
   /**
-   * The scope to grant (e.g. "build:read", "mcp:connect").
+   * The action being permitted (e.g. "build:read", "mcp:connect").
    */
   scope: string;
 };

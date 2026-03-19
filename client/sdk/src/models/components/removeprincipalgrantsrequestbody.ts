@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type RemovePrincipalGrantsRequestBody = {
   /**
-   * The principal URN whose grants should be removed (e.g. "user:user_abc", "role:admin").
+   * The user or role to revoke all permissions from (e.g. "user:user_abc", "role:admin").
    */
   principalUrn: string;
 };

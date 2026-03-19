@@ -12,7 +12,7 @@ export type ListGrantsSecurity = {
 
 export type ListGrantsRequest = {
   /**
-   * Optional principal URN to filter by (e.g. "user:user_abc", "role:admin"). Omit to list all grants.
+   * Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit to return all grants.
    */
   principalUrn?: string | undefined;
   /**

@@ -51,7 +51,7 @@ func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"producer"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
 		if p.ApikeyToken != nil {

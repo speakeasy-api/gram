@@ -10,7 +10,7 @@ import { Grant, Grant$inboundSchema } from "./grant.js";
 
 export type ListGrantsResult = {
   /**
-   * The list of grants.
+   * The permissions in your organization.
    */
   grants: Array<Grant>;
 };

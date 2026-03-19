@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * listGrants access
  *
  * @remarks
- * List all principal grants for an organization, optionally filtered by principal URN.
+ * List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.
  */
 export function accessList(
   client: GramCore,

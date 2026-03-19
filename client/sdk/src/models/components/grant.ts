@@ -9,39 +9,39 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A principal grant representing a single RBAC permission.
+ * A permission record giving a user or role the ability to perform an action on a resource.
  */
 export type Grant = {
   /**
-   * When the grant was created.
+   * When this permission was granted.
    */
   createdAt: Date;
   /**
-   * Unique identifier of the grant.
+   * Unique identifier of this permission.
    */
   id: string;
   /**
-   * The organization this grant belongs to.
+   * The organization this permission belongs to.
    */
   organizationId: string;
   /**
-   * The type portion of the principal URN (e.g. "user", "role"). Derived from principal_urn.
+   * Whether the principal is a user or a role.
    */
   principalType: string;
   /**
-   * The principal URN (e.g. "user:user_abc", "role:admin").
+   * The user or role that holds this permission (e.g. "user:user_abc", "role:admin").
    */
   principalUrn: string;
   /**
-   * The resource this grant applies to. "*" means unrestricted.
+   * The resource this permission applies to. "*" means all resources.
    */
   resource: string;
   /**
-   * The scope being granted (e.g. "build:read").
+   * The action this permission allows (e.g. "build:read", "mcp:connect").
    */
   scope: string;
   /**
-   * When the grant was last updated.
+   * When this permission was last updated.
    */
   updatedAt: Date;
 };

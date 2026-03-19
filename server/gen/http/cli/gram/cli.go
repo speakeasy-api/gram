@@ -2252,13 +2252,13 @@ func aboutOpenapiUsage() {
 
 // accessUsage displays the usage of the access command and its subcommands.
 func accessUsage() {
-	fmt.Fprintln(os.Stderr, `Control who can do what in your organization. A grant gives a user or role permission to perform an action (scope) on a resource. Use "*" as the resource to grant access across everything.`)
+	fmt.Fprintln(os.Stderr, `Manage access permissions for users and roles across your organization.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-grants: List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.`)
+	fmt.Fprintln(os.Stderr, `    list-grants: List all permissions in your organization, optionally filtered to a specific user or role.`)
 	fmt.Fprintln(os.Stderr, `    upsert-grants: Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.`)
 	fmt.Fprintln(os.Stderr, `    remove-grants: Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).`)
-	fmt.Fprintln(os.Stderr, `    remove-principal-grants: Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.`)
+	fmt.Fprintln(os.Stderr, `    remove-principal-grants: Revoke all permissions for a specific user or role.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
@@ -2273,7 +2273,7 @@ func accessListGrantsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.`)
+	fmt.Fprintln(os.Stderr, `List all permissions in your organization, optionally filtered to a specific user or role.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
@@ -2339,7 +2339,7 @@ func accessRemovePrincipalGrantsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.`)
+	fmt.Fprintln(os.Stderr, `Revoke all permissions for a specific user or role.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

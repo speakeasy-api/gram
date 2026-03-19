@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: d31b37619379f0c7aabb1c6336492e99
+  docChecksum: d026bfbd89b7ef8828325da58552a21f
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.28
-  configChecksum: 69bb01f89e560bff0749aeb1735fd03b
+  releaseVersion: 0.27.29
+  configChecksum: e06346b4318ac3978f079f8b1172a7bf
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -261,7 +261,7 @@ trackedFiles:
   docs/models/components/gramproductfeatures.md:
     last_write_checksum: sha1:e13a3260b468b705a4d29c806220a5dc2fce7677
   docs/models/components/grant.md:
-    last_write_checksum: sha1:cf6e308e3f1d377f7596f6f2a8439b193c3e0532
+    last_write_checksum: sha1:161a6ebe0b6edabb29c4ca4fa2237dd9a951f959
   docs/models/components/hookeventname.md:
     last_write_checksum: sha1:a65f76212e9e7d2ead94207d68b46748b276497a
   docs/models/components/hooksserversummary.md:
@@ -307,7 +307,7 @@ trackedFiles:
   docs/models/components/listfilteroptionsresult.md:
     last_write_checksum: sha1:0a7293c0f5068a8f829b94023ecce6c5449ff4c3
   docs/models/components/listgrantsresult.md:
-    last_write_checksum: sha1:eb5ad2faea27ba337753cf69d262fd1d00f8c9f2
+    last_write_checksum: sha1:a81cc566602e1d43a996812174e780ce0f94e9f0
   docs/models/components/listintegrationsresult.md:
     last_write_checksum: sha1:dbd19d7f8194a90e03634ec4a636f07d426409a1
   docs/models/components/listkeysresult.md:
@@ -423,11 +423,11 @@ trackedFiles:
   docs/models/components/registerrequestbody.md:
     last_write_checksum: sha1:7faa85fe815401c7992c699bbc4698f7e92c9f8e
   docs/models/components/removegrantentry.md:
-    last_write_checksum: sha1:3741cb08239890f558e0f01a79a5c2515fcc8fef
+    last_write_checksum: sha1:66ddbdd51a8f3a2e3d970ad753158ceffe873d00
   docs/models/components/removegrantsrequestbody.md:
     last_write_checksum: sha1:1e18b1ed0745079d37bb8d0ca98aa0b5d53b5f35
   docs/models/components/removeprincipalgrantsrequestbody.md:
-    last_write_checksum: sha1:26d9020cc8f3701f9198a416526959207ac495ec
+    last_write_checksum: sha1:d73bcbbc98d945b5cb815c07d7c7c00520e2c523
   docs/models/components/rendertemplatebyidrequestbody.md:
     last_write_checksum: sha1:ad6e6c8afec268d6643718221f65f4859bd8759d
   docs/models/components/rendertemplaterequestbody.md:
@@ -579,11 +579,11 @@ trackedFiles:
   docs/models/components/upsertglobaltoolvariationresult.md:
     last_write_checksum: sha1:a149a67059894f2c29a2653cd9fa5a66d7bbf31e
   docs/models/components/upsertgrantform.md:
-    last_write_checksum: sha1:da13deafaf094a059dee598b551138a053216dce
+    last_write_checksum: sha1:0bd581f078d636a4ee2189077b22008e091b9813
   docs/models/components/upsertgrantsrequestbody.md:
-    last_write_checksum: sha1:b8be0e06b6962d3ca81d7ef58599585632e5316a
+    last_write_checksum: sha1:1d97ecd6f9b74481bed7227e678e5e13fc23983f
   docs/models/components/upsertgrantsresult.md:
-    last_write_checksum: sha1:0236c008831d1525320b6e8a1d5fa18e17053aeb
+    last_write_checksum: sha1:7740caa78bd880f5a5b81be66eccf7264d2b5e24
   docs/models/components/upsertrequestbody.md:
     last_write_checksum: sha1:bbf2bdd2d8c070dafc9b41534f9168ac40d6aa1a
   docs/models/components/usagetiers.md:
@@ -1079,7 +1079,7 @@ trackedFiles:
   docs/models/operations/listglobalvariationssecurityoption2.md:
     last_write_checksum: sha1:d91f5de2acd14634482be659d42948c4af9e17b4
   docs/models/operations/listgrantsrequest.md:
-    last_write_checksum: sha1:836cd00d1a6480afb36ad3206fea28fab9375f8b
+    last_write_checksum: sha1:6bd83a9f6b025dd61979cb1be98aa577b0655522
   docs/models/operations/listgrantssecurity.md:
     last_write_checksum: sha1:db221d73399912c33428b3a06604b032a50b4054
   docs/models/operations/listintegrationsrequest.md:
@@ -1459,7 +1459,7 @@ trackedFiles:
   docs/models/operations/validateapikeysecurity.md:
     last_write_checksum: sha1:e62caf16f73dad337d51e180798d0a150fab3a71
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:55f0140df2c728b395853264bdd8503a2b8fb64f
+    last_write_checksum: sha1:4da23d4b9319b5e6dfe6b8ba867d41ce0e3a43d6
   docs/sdks/agentworkflows/README.md:
     last_write_checksum: sha1:394fbe8a3d99b3dd99e766a521c54982345ab648
   docs/sdks/assets/README.md:
@@ -1532,24 +1532,24 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:3600b64ef2424bfbf46b04a4fdd1df6f8dedf888
+    last_write_checksum: sha1:a7ee6bd3788606656ffd7edfe16da29b1f913284
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:5816acf2824d08762b29495cc78fef2ab96fcafa
+    last_write_checksum: sha1:1a6cbbaf3aed79149c2ff06f3530954e5ae0b6ef
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
     last_write_checksum: sha1:a753021efd93bddd574dea18c6bded2cd8f55aad
     pristine_git_object: a0ab28c6fceba8cd55703c01ec1d9a2f98b3442a
   src/funcs/accessList.ts:
-    last_write_checksum: sha1:435bfd4ac4a0de2567e65565321cbd6048f6206b
+    last_write_checksum: sha1:271fcd27d0a88b5e047e4441ccf2c682b283a7f7
   src/funcs/accessRemove.ts:
-    last_write_checksum: sha1:b161d189bdd74f53273a78c038df97f8a470789b
+    last_write_checksum: sha1:b5476e569dbb02df07e24b5592239118188aa936
   src/funcs/accessRemovePrincipal.ts:
-    last_write_checksum: sha1:8cace930143e2199b573f67ea15f50e6f7bb8e45
+    last_write_checksum: sha1:086568713ae69b0cdc9224d5c9461b017fb2c392
   src/funcs/accessUpsert.ts:
-    last_write_checksum: sha1:8ca5423071076f91fc40626f06d6765eb53b18b9
+    last_write_checksum: sha1:0aeaa9e3ac2d2509f36edfbe7ba475d55b017cca
   src/funcs/agentworkflowsCreateResponse.ts:
     last_write_checksum: sha1:0ec60e56af93598b63c90b2336522d0aa28a35e0
   src/funcs/agentworkflowsDeleteResponse.ts:
@@ -2018,7 +2018,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:7e6b143f76c27aaeaabfd09a202e8da7a128f163
+    last_write_checksum: sha1:2b8e24c3e6156cb62f4f269a5282485cacc9b8f4
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2377,7 +2377,7 @@ trackedFiles:
   src/models/components/gramproductfeatures.ts:
     last_write_checksum: sha1:53db3d8c6f6f23596dd8c8bf47b345bde94af207
   src/models/components/grant.ts:
-    last_write_checksum: sha1:674a04dd25cd355d387e35bc4d582dbd34c14050
+    last_write_checksum: sha1:2c2feaf972cbfb5411136a4a3e615ea46df4c26b
   src/models/components/hooksserversummary.ts:
     last_write_checksum: sha1:654233f904a052364881cbe25a2092a9fe85eb4c
   src/models/components/hooksusersummary.ts:
@@ -2447,7 +2447,7 @@ trackedFiles:
   src/models/components/listfilteroptionsresult.ts:
     last_write_checksum: sha1:9f85492fd003b62241e3b882703bca3bf7f5fafe
   src/models/components/listgrantsresult.ts:
-    last_write_checksum: sha1:bac211f7f96b0927f6ea7290095613734a4568fd
+    last_write_checksum: sha1:180af5c888122c54190f598157ff067c8162654d
   src/models/components/listintegrationsresult.ts:
     id: ebf76f602049
     last_write_checksum: sha1:6ebe0905ba888340ee36a5e0043288692d1cdcc1
@@ -2615,11 +2615,11 @@ trackedFiles:
     last_write_checksum: sha1:caa231f55474911b42f3ef9c54a7caaad14cdd6a
     pristine_git_object: 8ec0829c202393593f9bbeece50d478f4dbba5e1
   src/models/components/removegrantentry.ts:
-    last_write_checksum: sha1:9d344c3e9c8017222b047c60a7b974158e2adfee
+    last_write_checksum: sha1:cc48617af5cf92a3a848841e84e30f162c8232d3
   src/models/components/removegrantsrequestbody.ts:
     last_write_checksum: sha1:1cb551d4a9dae940a1bf645392aca6466013c4a1
   src/models/components/removeprincipalgrantsrequestbody.ts:
-    last_write_checksum: sha1:d50313132ff8cf1f82dca255873888b2e25b0854
+    last_write_checksum: sha1:c33a934daec547f93a1329b205cb9c34eff2d99e
   src/models/components/rendertemplatebyidrequestbody.ts:
     id: afe65fcb8c29
     last_write_checksum: sha1:d2108d0173adf5b778d496f5a1bb96833430f3cc
@@ -2829,11 +2829,11 @@ trackedFiles:
     last_write_checksum: sha1:e3c5f7017c05f7ae3a4de1a7106f8bf4f3e8f769
     pristine_git_object: 62ed75b93a4a67f700b56da8790f23a2bea70f3a
   src/models/components/upsertgrantform.ts:
-    last_write_checksum: sha1:55b224251793d7b34678d52291ac85340b459b74
+    last_write_checksum: sha1:d04cf69eb9ce22427dc321e1d6cacfe265a22c7e
   src/models/components/upsertgrantsrequestbody.ts:
-    last_write_checksum: sha1:193696c7286a748138979ed86fc7883f695494d5
+    last_write_checksum: sha1:2baf664dd3a7fd4a6f77a593f28a2773370139a3
   src/models/components/upsertgrantsresult.ts:
-    last_write_checksum: sha1:f421a959502764508f198d7df4d1f861eca0a66b
+    last_write_checksum: sha1:20708090d7f7898e990616cbc6a323a45400b0e3
   src/models/components/upsertrequestbody.ts:
     last_write_checksum: sha1:9a02a7dff6a8252dc973ecbfa0cf796453f42efa
   src/models/components/usagetiers.ts:
@@ -3143,7 +3143,7 @@ trackedFiles:
     last_write_checksum: sha1:a3a9c55cee4e7c1f3b62ebcafcbf3f53a401f92a
     pristine_git_object: b2b20fef9c9d4ffe03cf336550390c227f0fa7a3
   src/models/operations/listgrants.ts:
-    last_write_checksum: sha1:4c97cd3f1691a8cba6680164c31ab339ea05c50a
+    last_write_checksum: sha1:dfdd68585f6eb5b58ffe0c843664d8572dce399a
   src/models/operations/listintegrations.ts:
     id: 3875c615ae12
     last_write_checksum: sha1:d1f5efb2f10fa5721caffca10b95c3fa9834f1e0
@@ -3603,7 +3603,7 @@ trackedFiles:
   src/react-query/grants.core.ts:
     last_write_checksum: sha1:66a3a8d16f5a194b3680b90bdb9063a9dc234d8a
   src/react-query/grants.ts:
-    last_write_checksum: sha1:6270cc2647c55b3620b46a81752a23641b162f6b
+    last_write_checksum: sha1:82ab282fc60ab59c33ce1a94401349f0a5e2e000
   src/react-query/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:65daa7cbd33c503edad39c7ca638137b35727049
   src/react-query/hooksHooksNumberLogs.ts:
@@ -3823,13 +3823,13 @@ trackedFiles:
     last_write_checksum: sha1:b8b537914da02a5fcc7ff0d8721f23263d4c5f09
     pristine_git_object: 147b73b7e38e307d82853d28f27baf6a95449f9d
   src/react-query/removeGrants.ts:
-    last_write_checksum: sha1:7d56771d99e369aaf73fc55be9a92105db129af4
+    last_write_checksum: sha1:30bfb785308fae213ce0b2ec3cc6f224ca278a90
   src/react-query/removeOAuthServer.ts:
     id: 8a451126703b
     last_write_checksum: sha1:7379aef75e33f6ff7b9964466e5a11361be1450a
     pristine_git_object: a5e064397d9337ad9ba6f11e1c7bc2148bc56e25
   src/react-query/removePrincipalGrants.ts:
-    last_write_checksum: sha1:87709a1b86c4b66108b8b4fe7e50309d027286dd
+    last_write_checksum: sha1:d126512322d6a7c9df3ef9ab838c501266e2c7db
   src/react-query/renderTemplate.core.ts:
     id: dd751d28d8df
     last_write_checksum: sha1:baad0bd673c147a17e8a1b8f64c7c55cdd1829a8
@@ -4001,7 +4001,7 @@ trackedFiles:
     last_write_checksum: sha1:873ce2d2c26042ee63d7d009b3b59ea172310480
     pristine_git_object: 00360cead688c1c26edb6b02b73ee54c07d09037
   src/react-query/upsertGrants.ts:
-    last_write_checksum: sha1:d7f49c905ff05739c67ac9ee4a216ab743ea51d2
+    last_write_checksum: sha1:d5d883b15df0609f09a9bfdd21aaaab411979eb3
   src/react-query/validateAPIKey.core.ts:
     id: 40b36361d9bc
     last_write_checksum: sha1:c9dd808df5819032399b91a883c00b359077e3a7
@@ -4011,7 +4011,7 @@ trackedFiles:
     last_write_checksum: sha1:b4caae676913cbb7094eeb72f440a6b82a98b769
     pristine_git_object: 5329eedfb7bfe97abac782e76cbbc880737fc9fa
   src/sdk/access.ts:
-    last_write_checksum: sha1:b59a1d25dc97681fe61ab4125f51d3b398e29fcd
+    last_write_checksum: sha1:35872273a25d6d3aaf656c925c962ec7b080f6ca
   src/sdk/agentworkflows.ts:
     last_write_checksum: sha1:daba15d07c856e75492c52c90bc37284f31d8fcf
   src/sdk/assets.ts:

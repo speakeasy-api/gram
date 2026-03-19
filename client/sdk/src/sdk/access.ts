@@ -16,7 +16,7 @@ export class Access extends ClientSDK {
    * listGrants access
    *
    * @remarks
-   * List all principal grants for an organization, optionally filtered by principal URN.
+   * List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.
    */
   async list(
     request?: operations.ListGrantsRequest | undefined,
@@ -35,7 +35,7 @@ export class Access extends ClientSDK {
    * removeGrants access
    *
    * @remarks
-   * Remove one or more grants by their exact (principal, scope, resource) tuples.
+   * Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).
    */
   async remove(
     request: operations.RemoveGrantsRequest,
@@ -54,7 +54,7 @@ export class Access extends ClientSDK {
    * removePrincipalGrants access
    *
    * @remarks
-   * Remove all grants for a specific principal within the organization.
+   * Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.
    */
   async removePrincipal(
     request: operations.RemovePrincipalGrantsRequest,
@@ -73,7 +73,7 @@ export class Access extends ClientSDK {
    * upsertGrants access
    *
    * @remarks
-   * Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.
+   * Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.
    */
   async upsert(
     request: operations.UpsertGrantsRequest,

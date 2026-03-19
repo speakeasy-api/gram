@@ -10,7 +10,7 @@ import { Grant, Grant$inboundSchema } from "./grant.js";
 
 export type UpsertGrantsResult = {
   /**
-   * The list of grants that were added or updated.
+   * The permissions that were created or already existed.
    */
   grants: Array<Grant>;
 };
