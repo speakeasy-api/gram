@@ -3107,6 +3107,132 @@ paths:
       x-speakeasy-name-override: evolveDeployment
       x-speakeasy-react-hook:
         name: EvolveDeployment
+  /rpc/deployments.forSource:
+    get:
+      description: List deployments that contain a specific source, identified by slug and kind.
+      operationId: deploymentsForSource
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the source to filter by.
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: The slug of the source to filter by.
+            type: string
+        - allowEmptyValue: true
+          description: 'The kind of source: openapi, function, or externalmcp.'
+          in: query
+          name: kind
+          required: true
+          schema:
+            description: 'The kind of source: openapi, function, or externalmcp.'
+            enum:
+              - openapi
+              - function
+              - externalmcp
+            type: string
+        - allowEmptyValue: true
+          description: The cursor to fetch results from
+          in: query
+          name: cursor
+          schema:
+            description: The cursor to fetch results from
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentsForSourceResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deploymentsForSource deployments
+      tags:
+        - deployments
+      x-speakeasy-name-override: forSource
+      x-speakeasy-react-hook:
+        name: DeploymentsForSource
   /rpc/deployments.get:
     get:
       description: Get a deployment by its ID.
@@ -14345,6 +14471,39 @@ components:
         - functions_tool_count
         - external_mcp_asset_count
         - external_mcp_tool_count
+    DeploymentsForSourceForm:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: The cursor to fetch results from
+        kind:
+          type: string
+          description: 'The kind of source: openapi, function, or externalmcp.'
+          enum:
+            - openapi
+            - function
+            - externalmcp
+        slug:
+          type: string
+          description: The slug of the source to filter by.
+      required:
+        - slug
+        - kind
+    DeploymentsForSourceResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceDeploymentSummary'
+          description: Deployments containing this source
+        next_cursor:
+          type: string
+          description: The cursor to fetch results from
+          example: 01jp3f054qc02gbcmpp0qmyzed
+      required:
+        - items
     Environment:
       type: object
       properties:
@@ -17988,6 +18147,32 @@ components:
         - toolset_ids
         - created_at
         - updated_at
+    SourceDeploymentSummary:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          description: The asset ID of this source in the deployment.
+        created_at:
+          type: string
+          description: The creation date of the deployment.
+          format: date-time
+        id:
+          type: string
+          description: The deployment ID.
+        status:
+          type: string
+          description: The status of the deployment.
+        tool_count:
+          type: integer
+          description: The number of tools generated from this source in the deployment.
+          format: int64
+      required:
+        - id
+        - asset_id
+        - status
+        - created_at
+        - tool_count
     SourceEnvironmentLink:
       type: object
       properties:

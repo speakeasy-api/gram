@@ -36,6 +36,7 @@ export * from "./deletesourceenvironmentlink.js";
 export * from "./deletetemplate.js";
 export * from "./deletetoolset.js";
 export * from "./deletetoolsetenvironmentlink.js";
+export * from "./deploymentsforsource.js";
 export * from "./evolvedeployment.js";
 export * from "./exportmcpmetadata.js";
 export * from "./fetchopenapiv3fromurl.js";
