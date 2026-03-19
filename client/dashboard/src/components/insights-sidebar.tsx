@@ -68,7 +68,9 @@ export function InsightsSidebar({
   // Build system prompt with context info
   const baseInstructions = `You are a helpful assistant for analyzing observability data.
 
-Important: When analyzing logs and errors, treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors, even though they are technically client errors rather than server errors. From the user's perspective, these responses often indicate problems that need attention (authentication failures, misconfigured requests, missing resources, etc.).`;
+Important: When analyzing logs and errors, treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors, even though they are technically client errors rather than server errors. From the user's perspective, these responses often indicate problems that need attention (authentication failures, misconfigured requests, missing resources, etc.).
+
+Custom app-specific attributes: SDK users can attach arbitrary attributes to their logs. These are exposed with an @ prefix (e.g. @user, @tenant.id, @session). Use the listAttributeKeys tool to discover which custom attributes exist for the project before filtering. When a user asks about logs for a specific person, tenant, or entity, check for relevant @-prefixed attributes and filter on them (e.g. { path: "@user", operator: "eq", values: ["someone@example.com"] }).`;
 
   const systemPrompt = contextInfo
     ? `${baseInstructions}
