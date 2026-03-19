@@ -15,18 +15,21 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Managing RBAC principal grants for an organization.
+// Control who can do what in your organization. A grant gives a user or role
+// permission to perform an action (scope) on a resource. Use "*" as the
+// resource to grant access across everything.
 type Service interface {
-	// List all principal grants for an organization, optionally filtered by
-	// principal URN.
+	// List all permissions in your organization. Optionally filter to a specific
+	// user or role by passing their identifier.
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListGrantsResult, err error)
-	// Create or update one or more principal grants in batch. For each grant, if
-	// one with the same (org, principal, scope, resource) already exists, the
-	// record is kept as is.
+	// Grant permissions to one or more users or roles. Safe to call multiple times
+	// — if a permission already exists it is left unchanged.
 	UpsertGrants(context.Context, *UpsertGrantsPayload) (res *UpsertGrantsResult, err error)
-	// Remove one or more grants by their exact (principal, scope, resource) tuples.
+	// Revoke specific permissions from users or roles. Each entry must exactly
+	// match an existing grant (who, what action, which resource).
 	RemoveGrants(context.Context, *RemoveGrantsPayload) (err error)
-	// Remove all grants for a specific principal within the organization.
+	// Revoke all permissions for a specific user or role. Use this when
+	// offboarding a user or deleting a role.
 	RemovePrincipalGrants(context.Context, *RemovePrincipalGrantsPayload) (err error)
 }
 
@@ -52,32 +55,33 @@ const ServiceName = "access"
 // MethodKey key.
 var MethodNames = [4]string{"listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants"}
 
-// A principal grant representing a single RBAC permission.
+// A permission record giving a user or role the ability to perform an action
+// on a resource.
 type Grant struct {
-	// Unique identifier of the grant.
+	// Unique identifier of this permission.
 	ID string
-	// The organization this grant belongs to.
+	// The organization this permission belongs to.
 	OrganizationID string
-	// The principal URN (e.g. "user:user_abc", "role:admin").
+	// The user or role that holds this permission (e.g. "user:user_abc",
+	// "role:admin").
 	PrincipalUrn string
-	// The type portion of the principal URN (e.g. "user", "role"). Derived from
-	// principal_urn.
+	// Whether the principal is a user or a role.
 	PrincipalType string
-	// The scope being granted (e.g. "build:read").
+	// The action this permission allows (e.g. "build:read", "mcp:connect").
 	Scope string
-	// The resource this grant applies to. "*" means unrestricted.
+	// The resource this permission applies to. "*" means all resources.
 	Resource string
-	// When the grant was created.
+	// When this permission was granted.
 	CreatedAt string
-	// When the grant was last updated.
+	// When this permission was last updated.
 	UpdatedAt string
 }
 
 // ListGrantsPayload is the payload type of the access service listGrants
 // method.
 type ListGrantsPayload struct {
-	// Optional principal URN to filter by (e.g. "user:user_abc", "role:admin").
-	// Omit to list all grants.
+	// Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit
+	// to return all grants.
 	PrincipalUrn *string
 	ApikeyToken  *string
 	SessionToken *string
@@ -85,26 +89,26 @@ type ListGrantsPayload struct {
 
 // ListGrantsResult is the result type of the access service listGrants method.
 type ListGrantsResult struct {
-	// The list of grants.
+	// The permissions in your organization.
 	Grants []*Grant
 }
 
-// Identifies a single grant to remove by its (principal, scope, resource)
-// tuple.
+// A permission to revoke, identified by who holds it, what action it covers,
+// and which resource it applies to.
 type RemoveGrantEntry struct {
-	// The principal URN (e.g. "user:user_abc", "role:admin").
+	// The user or role that holds this permission (e.g. "user:user_abc",
+	// "role:admin").
 	PrincipalUrn urn.Principal
-	// The scope of the grant (e.g. "build:read").
+	// The action being permitted (e.g. "build:read", "mcp:connect").
 	Scope string
-	// The resource the grant applies to. Use "*" for unrestricted access.
+	// The resource this permission applies to. Use "*" for unrestricted access.
 	Resource string
 }
 
 // RemoveGrantsPayload is the payload type of the access service removeGrants
 // method.
 type RemoveGrantsPayload struct {
-	// The list of grants to remove, each identified by (principal_urn, scope,
-	// resource).
+	// The permissions to revoke.
 	Grants       []*RemoveGrantEntry
 	ApikeyToken  *string
 	SessionToken *string
@@ -113,27 +117,29 @@ type RemoveGrantsPayload struct {
 // RemovePrincipalGrantsPayload is the payload type of the access service
 // removePrincipalGrants method.
 type RemovePrincipalGrantsPayload struct {
-	// The principal URN whose grants should be removed (e.g. "user:user_abc",
+	// The user or role to revoke all permissions from (e.g. "user:user_abc",
 	// "role:admin").
 	PrincipalUrn string
 	ApikeyToken  *string
 	SessionToken *string
 }
 
-// Form for creating or updating a principal grant.
+// A permission to grant: who gets it, what action they can perform, and which
+// resource it applies to.
 type UpsertGrantForm struct {
-	// The principal URN (e.g. "user:user_abc", "role:admin").
+	// The user or role receiving this permission (e.g. "user:user_abc",
+	// "role:admin").
 	PrincipalUrn urn.Principal
-	// The scope to grant (e.g. "build:read", "mcp:connect").
+	// The action being permitted (e.g. "build:read", "mcp:connect").
 	Scope string
-	// The resource this grant applies to. Use "*" for unrestricted access.
+	// The resource this permission applies to. Use "*" for unrestricted access.
 	Resource string
 }
 
 // UpsertGrantsPayload is the payload type of the access service upsertGrants
 // method.
 type UpsertGrantsPayload struct {
-	// The list of grants to upsert.
+	// The permissions to grant.
 	Grants       []*UpsertGrantForm
 	ApikeyToken  *string
 	SessionToken *string
@@ -142,7 +148,7 @@ type UpsertGrantsPayload struct {
 // UpsertGrantsResult is the result type of the access service upsertGrants
 // method.
 type UpsertGrantsResult struct {
-	// The list of grants that were added or updated.
+	// The permissions that were created or already existed.
 	Grants []*Grant
 }
 

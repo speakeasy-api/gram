@@ -8,15 +8,15 @@ servers:
 paths:
     /rpc/access.listGrants:
         get:
-            description: List all principal grants for an organization, optionally filtered by principal URN.
+            description: List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.
             operationId: listGrants
             parameters:
                 - allowEmptyValue: true
-                  description: Optional principal URN to filter by (e.g. "user:user_abc", "role:admin"). Omit to list all grants.
+                  description: Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit to return all grants.
                   in: query
                   name: principal_urn
                   schema:
-                    description: Optional principal URN to filter by (e.g. "user:user_abc", "role:admin"). Omit to list all grants.
+                    description: Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit to return all grants.
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -104,7 +104,7 @@ paths:
                 name: Grants
     /rpc/access.removeGrants:
         post:
-            description: Remove one or more grants by their exact (principal, scope, resource) tuples.
+            description: Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).
             operationId: removeGrants
             parameters:
                 - allowEmptyValue: true
@@ -195,7 +195,7 @@ paths:
                 name: RemoveGrants
     /rpc/access.removePrincipalGrants:
         post:
-            description: Remove all grants for a specific principal within the organization.
+            description: Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.
             operationId: removePrincipalGrants
             parameters:
                 - allowEmptyValue: true
@@ -286,7 +286,7 @@ paths:
                 name: RemovePrincipalGrants
     /rpc/access.upsertGrants:
         post:
-            description: Create or update one or more principal grants in batch. For each grant, if one with the same (org, principal, scope, resource) already exists, the record is kept as is.
+            description: Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.
             operationId: upsertGrants
             parameters:
                 - allowEmptyValue: true
@@ -15680,32 +15680,32 @@ components:
             properties:
                 created_at:
                     type: string
-                    description: When the grant was created.
+                    description: When this permission was granted.
                     format: date-time
                 id:
                     type: string
-                    description: Unique identifier of the grant.
+                    description: Unique identifier of this permission.
                     format: uuid
                 organization_id:
                     type: string
-                    description: The organization this grant belongs to.
+                    description: The organization this permission belongs to.
                 principal_type:
                     type: string
-                    description: The type portion of the principal URN (e.g. "user", "role"). Derived from principal_urn.
+                    description: Whether the principal is a user or a role.
                 principal_urn:
                     type: string
-                    description: The principal URN (e.g. "user:user_abc", "role:admin").
+                    description: The user or role that holds this permission (e.g. "user:user_abc", "role:admin").
                 resource:
                     type: string
-                    description: The resource this grant applies to. "*" means unrestricted.
+                    description: The resource this permission applies to. "*" means all resources.
                 scope:
                     type: string
-                    description: The scope being granted (e.g. "build:read").
+                    description: The action this permission allows (e.g. "build:read", "mcp:connect").
                 updated_at:
                     type: string
-                    description: When the grant was last updated.
+                    description: When this permission was last updated.
                     format: date-time
-            description: A principal grant representing a single RBAC permission.
+            description: A permission record giving a user or role the ability to perform an action on a resource.
             required:
                 - id
                 - organization_id
@@ -16224,7 +16224,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Grant'
-                    description: The list of grants.
+                    description: The permissions in your organization.
             required:
                 - grants
         ListIntegrationsForm:
@@ -17476,17 +17476,17 @@ components:
             properties:
                 principal_urn:
                     type: string
-                    description: The principal URN (e.g. "user:user_abc", "role:admin").
+                    description: The user or role that holds this permission (e.g. "user:user_abc", "role:admin").
                 resource:
                     type: string
-                    description: The resource the grant applies to. Use "*" for unrestricted access.
+                    description: The resource this permission applies to. Use "*" for unrestricted access.
                     maxLength: 260
                 scope:
                     type: string
-                    description: The scope of the grant (e.g. "build:read").
+                    description: The action being permitted (e.g. "build:read", "mcp:connect").
                     minLength: 3
                     maxLength: 60
-            description: Identifies a single grant to remove by its (principal, scope, resource) tuple.
+            description: A permission to revoke, identified by who holds it, what action it covers, and which resource it applies to.
             required:
                 - principal_urn
                 - scope
@@ -17496,7 +17496,7 @@ components:
             properties:
                 principal_urn:
                     type: string
-                    description: The principal URN whose grants should be removed (e.g. "user:user_abc", "role:admin").
+                    description: The user or role to revoke all permissions from (e.g. "user:user_abc", "role:admin").
                     minLength: 3
                     maxLength: 260
             required:
@@ -19457,17 +19457,17 @@ components:
             properties:
                 principal_urn:
                     type: string
-                    description: The principal URN (e.g. "user:user_abc", "role:admin").
+                    description: The user or role receiving this permission (e.g. "user:user_abc", "role:admin").
                 resource:
                     type: string
-                    description: The resource this grant applies to. Use "*" for unrestricted access.
+                    description: The resource this permission applies to. Use "*" for unrestricted access.
                     maxLength: 260
                 scope:
                     type: string
-                    description: The scope to grant (e.g. "build:read", "mcp:connect").
+                    description: The action being permitted (e.g. "build:read", "mcp:connect").
                     minLength: 3
                     maxLength: 60
-            description: Form for creating or updating a principal grant.
+            description: 'A permission to grant: who gets it, what action they can perform, and which resource it applies to.'
             required:
                 - principal_urn
                 - scope
@@ -19479,7 +19479,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/UpsertGrantForm'
-                    description: The list of grants to upsert.
+                    description: The permissions to grant.
                     minItems: 1
                     maxItems: 100
             required:
@@ -19491,7 +19491,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Grant'
-                    description: The list of grants that were added or updated.
+                    description: The permissions that were created or already existed.
             required:
                 - grants
         UpsertRequestBody:
@@ -19822,7 +19822,7 @@ components:
             in: header
 tags:
     - name: access
-      description: Managing RBAC principal grants for an organization.
+      description: Control who can do what in your organization. A grant gives a user or role permission to perform an action (scope) on a resource. Use "*" as the resource to grant access across everything.
     - name: agentworkflows
       description: OpenAI Responses API compatible endpoint for running agent workflows.
     - name: assets

@@ -18,22 +18,21 @@ import (
 // UpsertGrantsRequestBody is the type of the "access" service "upsertGrants"
 // endpoint HTTP request body.
 type UpsertGrantsRequestBody struct {
-	// The list of grants to upsert.
+	// The permissions to grant.
 	Grants []*UpsertGrantFormRequestBody `form:"grants" json:"grants" xml:"grants"`
 }
 
 // RemoveGrantsRequestBody is the type of the "access" service "removeGrants"
 // endpoint HTTP request body.
 type RemoveGrantsRequestBody struct {
-	// The list of grants to remove, each identified by (principal_urn, scope,
-	// resource).
+	// The permissions to revoke.
 	Grants []*RemoveGrantEntryRequestBody `form:"grants" json:"grants" xml:"grants"`
 }
 
 // RemovePrincipalGrantsRequestBody is the type of the "access" service
 // "removePrincipalGrants" endpoint HTTP request body.
 type RemovePrincipalGrantsRequestBody struct {
-	// The principal URN whose grants should be removed (e.g. "user:user_abc",
+	// The user or role to revoke all permissions from (e.g. "user:user_abc",
 	// "role:admin").
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 }
@@ -41,14 +40,14 @@ type RemovePrincipalGrantsRequestBody struct {
 // ListGrantsResponseBody is the type of the "access" service "listGrants"
 // endpoint HTTP response body.
 type ListGrantsResponseBody struct {
-	// The list of grants.
+	// The permissions in your organization.
 	Grants []*GrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
 // UpsertGrantsResponseBody is the type of the "access" service "upsertGrants"
 // endpoint HTTP response body.
 type UpsertGrantsResponseBody struct {
-	// The list of grants that were added or updated.
+	// The permissions that were created or already existed.
 	Grants []*GrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
@@ -785,42 +784,44 @@ type RemovePrincipalGrantsGatewayErrorResponseBody struct {
 
 // GrantResponseBody is used to define fields on response body types.
 type GrantResponseBody struct {
-	// Unique identifier of the grant.
+	// Unique identifier of this permission.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The organization this grant belongs to.
+	// The organization this permission belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The principal URN (e.g. "user:user_abc", "role:admin").
+	// The user or role that holds this permission (e.g. "user:user_abc",
+	// "role:admin").
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
-	// The type portion of the principal URN (e.g. "user", "role"). Derived from
-	// principal_urn.
+	// Whether the principal is a user or a role.
 	PrincipalType *string `form:"principal_type,omitempty" json:"principal_type,omitempty" xml:"principal_type,omitempty"`
-	// The scope being granted (e.g. "build:read").
+	// The action this permission allows (e.g. "build:read", "mcp:connect").
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// The resource this grant applies to. "*" means unrestricted.
+	// The resource this permission applies to. "*" means all resources.
 	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
-	// When the grant was created.
+	// When this permission was granted.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the grant was last updated.
+	// When this permission was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpsertGrantFormRequestBody is used to define fields on request body types.
 type UpsertGrantFormRequestBody struct {
-	// The principal URN (e.g. "user:user_abc", "role:admin").
+	// The user or role receiving this permission (e.g. "user:user_abc",
+	// "role:admin").
 	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	// The scope to grant (e.g. "build:read", "mcp:connect").
+	// The action being permitted (e.g. "build:read", "mcp:connect").
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// The resource this grant applies to. Use "*" for unrestricted access.
+	// The resource this permission applies to. Use "*" for unrestricted access.
 	Resource string `form:"resource" json:"resource" xml:"resource"`
 }
 
 // RemoveGrantEntryRequestBody is used to define fields on request body types.
 type RemoveGrantEntryRequestBody struct {
-	// The principal URN (e.g. "user:user_abc", "role:admin").
+	// The user or role that holds this permission (e.g. "user:user_abc",
+	// "role:admin").
 	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	// The scope of the grant (e.g. "build:read").
+	// The action being permitted (e.g. "build:read", "mcp:connect").
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// The resource the grant applies to. Use "*" for unrestricted access.
+	// The resource this permission applies to. Use "*" for unrestricted access.
 	Resource string `form:"resource" json:"resource" xml:"resource"`
 }
 
