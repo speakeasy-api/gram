@@ -1,7 +1,8 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import type { Collection } from "@/pages/collections/types";
 import { ExternalMCPServer } from "@gram/client/models/components";
 import { useListMCPRegistries } from "@gram/client/react-query";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 interface RegistryRemoteMeta {
@@ -111,4 +112,53 @@ export function useInfiniteServeMCPRegistry(search?: string) {
   });
 
   return { ...query, debouncedSearch };
+}
+
+export type CatalogTab = "discover" | "org";
+
+export function useCatalogCollections(
+  tab?: CatalogTab,
+  search?: string,
+): {
+  data: Collection[];
+  isLoading: boolean;
+} {
+  const client = useSdkClient();
+
+  const { data: registriesData, isLoading: registriesLoading } = useQuery({
+    queryKey: ["collections", "list"],
+    queryFn: () => client.mcpRegistries.listRegistries({}),
+  });
+
+  const registries = (registriesData?.registries ?? []).filter(
+    (r) => r.source === "internal",
+  );
+
+  const filtered =
+    tab === "discover"
+      ? registries.filter((r) => r.visibility === "public")
+      : registries;
+
+  const searched = search
+    ? filtered.filter(
+        (r) =>
+          r.name.toLowerCase().includes(search.toLowerCase()) ||
+          r.slug?.toLowerCase().includes(search.toLowerCase()),
+      )
+    : filtered;
+
+  const collections: Collection[] = searched.map((r) => ({
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    description: "",
+    visibility: (r.visibility as "public" | "private") ?? "private",
+    servers: [],
+    author: { orgName: "", orgId: r.organizationId ?? "" },
+    installCount: 0,
+    createdAt: "",
+    updatedAt: "",
+  }));
+
+  return { data: collections, isLoading: registriesLoading };
 }

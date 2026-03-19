@@ -8,12 +8,19 @@ import { Link, useNavigate } from "react-router";
 import { useCollectionServers } from "./hooks";
 import type { Collection } from "./types";
 
-export function CollectionCard({ collection }: { collection: Collection }) {
+export function CollectionCard({
+  collection,
+  detailHref: detailHrefProp,
+}: {
+  collection: Collection;
+  detailHref?: string;
+}) {
   const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
   const { servers } = useCollectionServers(collection.slug);
   const serverCount = servers.length;
-  const detailHref = orgRoutes.collections.detail.href(collection.id);
+  const detailHref =
+    detailHrefProp ?? orgRoutes.collections.detail.href(collection.id);
 
   return (
     <DotCard

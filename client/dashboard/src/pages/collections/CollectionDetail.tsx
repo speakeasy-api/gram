@@ -3,24 +3,8 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { Badge } from "@/components/ui/badge";
-import {
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  Stack,
-} from "@speakeasy-api/moonshine";
-import {
-  Calendar,
-  ChevronDown,
-  Download,
-  Eye,
-  Lock,
-  MessageSquare,
-  Server,
-  Wrench,
-} from "lucide-react";
+import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Calendar, Download, Eye, Lock, Server, Wrench } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { useCollectionDetail } from "./hooks";
@@ -112,35 +96,11 @@ export default function CollectionDetail() {
                 <Type small muted>
                   by {collection.author.orgName}
                 </Type>
-                <div className="mt-4 relative inline-flex rounded-md shadow-sm">
-                  <Button
-                    className="rounded-r-none"
-                    onClick={() => setShowInstallDialog(true)}
-                  >
+                <div className="mt-4">
+                  <Button onClick={() => setShowInstallDialog(true)}>
+                    <Download className="w-4 h-4 mr-2" />
                     <Button.Text>Install</Button.Text>
                   </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex items-center rounded-r-md bg-primary px-2 border-l border-l-primary-foreground/30 hover:bg-primary/90 transition-colors"
-                      >
-                        <ChevronDown className="w-4 h-4 text-primary-foreground" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => setShowInstallDialog(true)}
-                      >
-                        <Server className="w-4 h-4 mr-2" />
-                        Install servers
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <MessageSquare className="w-4 h-4 mr-2" />
-                        Install Slack App (beta)
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
               </div>
             </div>
