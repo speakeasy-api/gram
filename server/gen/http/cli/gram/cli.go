@@ -56,7 +56,7 @@ func UsageCommands() []string {
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|submit-feedback)",
 		"chat-sessions (create|revoke)",
-		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
+		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|deployments-for-source|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
@@ -324,6 +324,14 @@ func ParseEndpoint(
 		deploymentsListDeploymentsApikeyTokenFlag      = deploymentsListDeploymentsFlags.String("apikey-token", "", "")
 		deploymentsListDeploymentsSessionTokenFlag     = deploymentsListDeploymentsFlags.String("session-token", "", "")
 		deploymentsListDeploymentsProjectSlugInputFlag = deploymentsListDeploymentsFlags.String("project-slug-input", "", "")
+
+		deploymentsDeploymentsForSourceFlags                = flag.NewFlagSet("deployments-for-source", flag.ExitOnError)
+		deploymentsDeploymentsForSourceSlugFlag             = deploymentsDeploymentsForSourceFlags.String("slug", "REQUIRED", "")
+		deploymentsDeploymentsForSourceKindFlag             = deploymentsDeploymentsForSourceFlags.String("kind", "REQUIRED", "")
+		deploymentsDeploymentsForSourceCursorFlag           = deploymentsDeploymentsForSourceFlags.String("cursor", "", "")
+		deploymentsDeploymentsForSourceApikeyTokenFlag      = deploymentsDeploymentsForSourceFlags.String("apikey-token", "", "")
+		deploymentsDeploymentsForSourceSessionTokenFlag     = deploymentsDeploymentsForSourceFlags.String("session-token", "", "")
+		deploymentsDeploymentsForSourceProjectSlugInputFlag = deploymentsDeploymentsForSourceFlags.String("project-slug-input", "", "")
 
 		deploymentsGetDeploymentLogsFlags                = flag.NewFlagSet("get-deployment-logs", flag.ExitOnError)
 		deploymentsGetDeploymentLogsDeploymentIDFlag     = deploymentsGetDeploymentLogsFlags.String("deployment-id", "REQUIRED", "")
@@ -909,6 +917,7 @@ func ParseEndpoint(
 	deploymentsEvolveFlags.Usage = deploymentsEvolveUsage
 	deploymentsRedeployFlags.Usage = deploymentsRedeployUsage
 	deploymentsListDeploymentsFlags.Usage = deploymentsListDeploymentsUsage
+	deploymentsDeploymentsForSourceFlags.Usage = deploymentsDeploymentsForSourceUsage
 	deploymentsGetDeploymentLogsFlags.Usage = deploymentsGetDeploymentLogsUsage
 
 	domainsFlags.Usage = domainsUsage
@@ -1265,6 +1274,9 @@ func ParseEndpoint(
 
 			case "list-deployments":
 				epf = deploymentsListDeploymentsFlags
+
+			case "deployments-for-source":
+				epf = deploymentsDeploymentsForSourceFlags
 
 			case "get-deployment-logs":
 				epf = deploymentsGetDeploymentLogsFlags
@@ -1794,6 +1806,9 @@ func ParseEndpoint(
 			case "list-deployments":
 				endpoint = c.ListDeployments()
 				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsApikeyTokenFlag, *deploymentsListDeploymentsSessionTokenFlag, *deploymentsListDeploymentsProjectSlugInputFlag)
+			case "deployments-for-source":
+				endpoint = c.DeploymentsForSource()
+				data, err = deploymentsc.BuildDeploymentsForSourcePayload(*deploymentsDeploymentsForSourceSlugFlag, *deploymentsDeploymentsForSourceKindFlag, *deploymentsDeploymentsForSourceCursorFlag, *deploymentsDeploymentsForSourceApikeyTokenFlag, *deploymentsDeploymentsForSourceSessionTokenFlag, *deploymentsDeploymentsForSourceProjectSlugInputFlag)
 			case "get-deployment-logs":
 				endpoint = c.GetDeploymentLogs()
 				data, err = deploymentsc.BuildGetDeploymentLogsPayload(*deploymentsGetDeploymentLogsDeploymentIDFlag, *deploymentsGetDeploymentLogsCursorFlag, *deploymentsGetDeploymentLogsApikeyTokenFlag, *deploymentsGetDeploymentLogsSessionTokenFlag, *deploymentsGetDeploymentLogsProjectSlugInputFlag)
@@ -2957,6 +2972,7 @@ func deploymentsUsage() {
 	fmt.Fprintln(os.Stderr, `    evolve: Create a new deployment with additional or updated tool sources.`)
 	fmt.Fprintln(os.Stderr, `    redeploy: Redeploys an existing deployment.`)
 	fmt.Fprintln(os.Stderr, `    list-deployments: List all deployments in descending order of creation.`)
+	fmt.Fprintln(os.Stderr, `    deployments-for-source: List deployments that contain a specific source, identified by slug and kind.`)
 	fmt.Fprintln(os.Stderr, `    get-deployment-logs: Get logs for a deployment.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -3126,6 +3142,34 @@ func deploymentsListDeploymentsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments list-deployments --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func deploymentsDeploymentsForSourceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] deployments deployments-for-source", os.Args[0])
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -kind STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List deployments that contain a specific source, identified by slug and kind.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -kind STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments deployments-for-source --slug \"abc123\" --kind \"function\" --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func deploymentsGetDeploymentLogsUsage() {

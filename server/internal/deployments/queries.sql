@@ -692,6 +692,84 @@ FROM external_mcp_attachments
 WHERE deployment_id = @deployment_id AND deleted IS FALSE
 ORDER BY created_at ASC;
 
+-- name: DeploymentsForOpenAPISource :many
+WITH latest_statuses AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, status
+  FROM deployment_statuses
+  ORDER BY deployment_id, seq DESC
+)
+SELECT
+  d.id,
+  doa.asset_id,
+  COALESCE(ls.status, 'unknown') as status,
+  d.created_at,
+  COUNT(DISTINCT htd.id) as tool_count
+FROM deployments d
+INNER JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id AND doa.slug = @slug
+LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
+LEFT JOIN http_tool_definitions htd ON doa.id = htd.openapiv3_document_id AND htd.deleted IS FALSE
+WHERE
+  d.project_id = @project_id
+  AND d.id <= CASE
+    WHEN sqlc.narg(cursor)::uuid IS NOT NULL THEN sqlc.narg(cursor)::uuid
+    ELSE (SELECT id FROM deployments WHERE project_id = @project_id ORDER BY id DESC LIMIT 1)
+  END
+GROUP BY d.id, doa.asset_id, ls.status
+ORDER BY d.id DESC
+LIMIT 51;
+
+-- name: DeploymentsForFunctionSource :many
+WITH latest_statuses AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, status
+  FROM deployment_statuses
+  ORDER BY deployment_id, seq DESC
+)
+SELECT
+  d.id,
+  df.asset_id,
+  COALESCE(ls.status, 'unknown') as status,
+  d.created_at,
+  COUNT(DISTINCT ftd.id) as tool_count
+FROM deployments d
+INNER JOIN deployments_functions df ON d.id = df.deployment_id AND df.slug = @slug
+LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
+LEFT JOIN function_tool_definitions ftd ON df.id = ftd.function_id AND ftd.deleted IS FALSE
+WHERE
+  d.project_id = @project_id
+  AND d.id <= CASE
+    WHEN sqlc.narg(cursor)::uuid IS NOT NULL THEN sqlc.narg(cursor)::uuid
+    ELSE (SELECT id FROM deployments WHERE project_id = @project_id ORDER BY id DESC LIMIT 1)
+  END
+GROUP BY d.id, df.asset_id, ls.status
+ORDER BY d.id DESC
+LIMIT 51;
+
+-- name: DeploymentsForExternalMCPSource :many
+WITH latest_statuses AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, status
+  FROM deployment_statuses
+  ORDER BY deployment_id, seq DESC
+)
+SELECT
+  d.id,
+  ema.id as asset_id,
+  COALESCE(ls.status, 'unknown') as status,
+  d.created_at,
+  COUNT(DISTINCT emtd.id) as tool_count
+FROM deployments d
+INNER JOIN external_mcp_attachments ema ON d.id = ema.deployment_id AND ema.slug = @slug AND ema.deleted IS FALSE
+LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
+LEFT JOIN external_mcp_tool_definitions emtd ON ema.id = emtd.external_mcp_attachment_id AND emtd.deleted IS FALSE
+WHERE
+  d.project_id = @project_id
+  AND d.id <= CASE
+    WHEN sqlc.narg(cursor)::uuid IS NOT NULL THEN sqlc.narg(cursor)::uuid
+    ELSE (SELECT id FROM deployments WHERE project_id = @project_id ORDER BY id DESC LIMIT 1)
+  END
+GROUP BY d.id, ema.id, ls.status
+ORDER BY d.id DESC
+LIMIT 51;
+
 -- name: CloneDeploymentExternalMCPs :many
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
 SELECT

@@ -913,6 +913,207 @@ func (q *Queries) DangerouslyClearDeploymentTools(ctx context.Context, arg Dange
 	return result.RowsAffected(), nil
 }
 
+const deploymentsForExternalMCPSource = `-- name: DeploymentsForExternalMCPSource :many
+WITH latest_statuses AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, status
+  FROM deployment_statuses
+  ORDER BY deployment_id, seq DESC
+)
+SELECT
+  d.id,
+  ema.id as asset_id,
+  COALESCE(ls.status, 'unknown') as status,
+  d.created_at,
+  COUNT(DISTINCT emtd.id) as tool_count
+FROM deployments d
+INNER JOIN external_mcp_attachments ema ON d.id = ema.deployment_id AND ema.slug = $1 AND ema.deleted IS FALSE
+LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
+LEFT JOIN external_mcp_tool_definitions emtd ON ema.id = emtd.external_mcp_attachment_id AND emtd.deleted IS FALSE
+WHERE
+  d.project_id = $2
+  AND d.id <= CASE
+    WHEN $3::uuid IS NOT NULL THEN $3::uuid
+    ELSE (SELECT id FROM deployments WHERE project_id = $2 ORDER BY id DESC LIMIT 1)
+  END
+GROUP BY d.id, ema.id, ls.status
+ORDER BY d.id DESC
+LIMIT 51
+`
+
+type DeploymentsForExternalMCPSourceParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
+}
+
+type DeploymentsForExternalMCPSourceRow struct {
+	ID        uuid.UUID
+	AssetID   uuid.UUID
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	ToolCount int64
+}
+
+func (q *Queries) DeploymentsForExternalMCPSource(ctx context.Context, arg DeploymentsForExternalMCPSourceParams) ([]DeploymentsForExternalMCPSourceRow, error) {
+	rows, err := q.db.Query(ctx, deploymentsForExternalMCPSource, arg.Slug, arg.ProjectID, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentsForExternalMCPSourceRow
+	for rows.Next() {
+		var i DeploymentsForExternalMCPSourceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ToolCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deploymentsForFunctionSource = `-- name: DeploymentsForFunctionSource :many
+WITH latest_statuses AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, status
+  FROM deployment_statuses
+  ORDER BY deployment_id, seq DESC
+)
+SELECT
+  d.id,
+  df.asset_id,
+  COALESCE(ls.status, 'unknown') as status,
+  d.created_at,
+  COUNT(DISTINCT ftd.id) as tool_count
+FROM deployments d
+INNER JOIN deployments_functions df ON d.id = df.deployment_id AND df.slug = $1
+LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
+LEFT JOIN function_tool_definitions ftd ON df.id = ftd.function_id AND ftd.deleted IS FALSE
+WHERE
+  d.project_id = $2
+  AND d.id <= CASE
+    WHEN $3::uuid IS NOT NULL THEN $3::uuid
+    ELSE (SELECT id FROM deployments WHERE project_id = $2 ORDER BY id DESC LIMIT 1)
+  END
+GROUP BY d.id, df.asset_id, ls.status
+ORDER BY d.id DESC
+LIMIT 51
+`
+
+type DeploymentsForFunctionSourceParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
+}
+
+type DeploymentsForFunctionSourceRow struct {
+	ID        uuid.UUID
+	AssetID   uuid.UUID
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	ToolCount int64
+}
+
+func (q *Queries) DeploymentsForFunctionSource(ctx context.Context, arg DeploymentsForFunctionSourceParams) ([]DeploymentsForFunctionSourceRow, error) {
+	rows, err := q.db.Query(ctx, deploymentsForFunctionSource, arg.Slug, arg.ProjectID, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentsForFunctionSourceRow
+	for rows.Next() {
+		var i DeploymentsForFunctionSourceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ToolCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deploymentsForOpenAPISource = `-- name: DeploymentsForOpenAPISource :many
+WITH latest_statuses AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, status
+  FROM deployment_statuses
+  ORDER BY deployment_id, seq DESC
+)
+SELECT
+  d.id,
+  doa.asset_id,
+  COALESCE(ls.status, 'unknown') as status,
+  d.created_at,
+  COUNT(DISTINCT htd.id) as tool_count
+FROM deployments d
+INNER JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id AND doa.slug = $1
+LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
+LEFT JOIN http_tool_definitions htd ON doa.id = htd.openapiv3_document_id AND htd.deleted IS FALSE
+WHERE
+  d.project_id = $2
+  AND d.id <= CASE
+    WHEN $3::uuid IS NOT NULL THEN $3::uuid
+    ELSE (SELECT id FROM deployments WHERE project_id = $2 ORDER BY id DESC LIMIT 1)
+  END
+GROUP BY d.id, doa.asset_id, ls.status
+ORDER BY d.id DESC
+LIMIT 51
+`
+
+type DeploymentsForOpenAPISourceParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
+}
+
+type DeploymentsForOpenAPISourceRow struct {
+	ID        uuid.UUID
+	AssetID   uuid.UUID
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	ToolCount int64
+}
+
+func (q *Queries) DeploymentsForOpenAPISource(ctx context.Context, arg DeploymentsForOpenAPISourceParams) ([]DeploymentsForOpenAPISourceRow, error) {
+	rows, err := q.db.Query(ctx, deploymentsForOpenAPISource, arg.Slug, arg.ProjectID, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentsForOpenAPISourceRow
+	for rows.Next() {
+		var i DeploymentsForOpenAPISourceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ToolCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const describeDeploymentPackages = `-- name: DescribeDeploymentPackages :many
 SELECT 
   deployments_packages.id as deployment_package_id

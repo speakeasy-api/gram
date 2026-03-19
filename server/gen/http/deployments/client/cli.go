@@ -399,6 +399,59 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 	return v, nil
 }
 
+// BuildDeploymentsForSourcePayload builds the payload for the deployments
+// deploymentsForSource endpoint from CLI flags.
+func BuildDeploymentsForSourcePayload(deploymentsDeploymentsForSourceSlug string, deploymentsDeploymentsForSourceKind string, deploymentsDeploymentsForSourceCursor string, deploymentsDeploymentsForSourceApikeyToken string, deploymentsDeploymentsForSourceSessionToken string, deploymentsDeploymentsForSourceProjectSlugInput string) (*deployments.DeploymentsForSourcePayload, error) {
+	var err error
+	var slug string
+	{
+		slug = deploymentsDeploymentsForSourceSlug
+	}
+	var kind string
+	{
+		kind = deploymentsDeploymentsForSourceKind
+		if !(kind == "openapi" || kind == "function" || kind == "externalmcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("kind", kind, []any{"openapi", "function", "externalmcp"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if deploymentsDeploymentsForSourceCursor != "" {
+			cursor = &deploymentsDeploymentsForSourceCursor
+		}
+	}
+	var apikeyToken *string
+	{
+		if deploymentsDeploymentsForSourceApikeyToken != "" {
+			apikeyToken = &deploymentsDeploymentsForSourceApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if deploymentsDeploymentsForSourceSessionToken != "" {
+			sessionToken = &deploymentsDeploymentsForSourceSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if deploymentsDeploymentsForSourceProjectSlugInput != "" {
+			projectSlugInput = &deploymentsDeploymentsForSourceProjectSlugInput
+		}
+	}
+	v := &deployments.DeploymentsForSourcePayload{}
+	v.Slug = slug
+	v.Kind = kind
+	v.Cursor = cursor
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetDeploymentLogsPayload builds the payload for the deployments
 // getDeploymentLogs endpoint from CLI flags.
 func BuildGetDeploymentLogsPayload(deploymentsGetDeploymentLogsDeploymentID string, deploymentsGetDeploymentLogsCursor string, deploymentsGetDeploymentLogsApikeyToken string, deploymentsGetDeploymentLogsSessionToken string, deploymentsGetDeploymentLogsProjectSlugInput string) (*deployments.GetDeploymentLogsPayload, error) {

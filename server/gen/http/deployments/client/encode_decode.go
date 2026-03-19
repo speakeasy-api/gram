@@ -1711,6 +1711,252 @@ func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildDeploymentsForSourceRequest instantiates a HTTP request object with
+// method and path set to call the "deployments" service "deploymentsForSource"
+// endpoint
+func (c *Client) BuildDeploymentsForSourceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeploymentsForSourceDeploymentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("deployments", "deploymentsForSource", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeploymentsForSourceRequest returns an encoder for requests sent to
+// the deployments deploymentsForSource server.
+func EncodeDeploymentsForSourceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*deployments.DeploymentsForSourcePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("deployments", "deploymentsForSource", "*deployments.DeploymentsForSourcePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", p.Slug)
+		values.Add("kind", p.Kind)
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeploymentsForSourceResponse returns a decoder for responses returned
+// by the deployments deploymentsForSource endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeDeploymentsForSourceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeploymentsForSourceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DeploymentsForSourceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			res := NewDeploymentsForSourceResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeploymentsForSourceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			return nil, NewDeploymentsForSourceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeploymentsForSourceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			return nil, NewDeploymentsForSourceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeploymentsForSourceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			return nil, NewDeploymentsForSourceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeploymentsForSourceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			return nil, NewDeploymentsForSourceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeploymentsForSourceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			return nil, NewDeploymentsForSourceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeploymentsForSourceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			return nil, NewDeploymentsForSourceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeploymentsForSourceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			return nil, NewDeploymentsForSourceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeploymentsForSourceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+				}
+				err = ValidateDeploymentsForSourceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+				}
+				return nil, NewDeploymentsForSourceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeploymentsForSourceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+				}
+				err = ValidateDeploymentsForSourceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+				}
+				return nil, NewDeploymentsForSourceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "deploymentsForSource", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeploymentsForSourceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "deploymentsForSource", err)
+			}
+			err = ValidateDeploymentsForSourceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "deploymentsForSource", err)
+			}
+			return nil, NewDeploymentsForSourceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("deployments", "deploymentsForSource", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetDeploymentLogsRequest instantiates a HTTP request object with method
 // and path set to call the "deployments" service "getDeploymentLogs" endpoint
 func (c *Client) BuildGetDeploymentLogsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2269,6 +2515,21 @@ func unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary(v *Dep
 		FunctionsToolCount:    *v.FunctionsToolCount,
 		ExternalMcpAssetCount: *v.ExternalMcpAssetCount,
 		ExternalMcpToolCount:  *v.ExternalMcpToolCount,
+	}
+
+	return res
+}
+
+// unmarshalSourceDeploymentSummaryResponseBodyToDeploymentsSourceDeploymentSummary
+// builds a value of type *deployments.SourceDeploymentSummary from a value of
+// type *SourceDeploymentSummaryResponseBody.
+func unmarshalSourceDeploymentSummaryResponseBodyToDeploymentsSourceDeploymentSummary(v *SourceDeploymentSummaryResponseBody) *deployments.SourceDeploymentSummary {
+	res := &deployments.SourceDeploymentSummary{
+		ID:        *v.ID,
+		AssetID:   *v.AssetID,
+		Status:    *v.Status,
+		CreatedAt: *v.CreatedAt,
+		ToolCount: *v.ToolCount,
 	}
 
 	return res

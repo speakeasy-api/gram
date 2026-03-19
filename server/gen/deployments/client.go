@@ -15,27 +15,29 @@ import (
 
 // Client is the "deployments" service client.
 type Client struct {
-	GetDeploymentEndpoint       goa.Endpoint
-	GetLatestDeploymentEndpoint goa.Endpoint
-	GetActiveDeploymentEndpoint goa.Endpoint
-	CreateDeploymentEndpoint    goa.Endpoint
-	EvolveEndpoint              goa.Endpoint
-	RedeployEndpoint            goa.Endpoint
-	ListDeploymentsEndpoint     goa.Endpoint
-	GetDeploymentLogsEndpoint   goa.Endpoint
+	GetDeploymentEndpoint        goa.Endpoint
+	GetLatestDeploymentEndpoint  goa.Endpoint
+	GetActiveDeploymentEndpoint  goa.Endpoint
+	CreateDeploymentEndpoint     goa.Endpoint
+	EvolveEndpoint               goa.Endpoint
+	RedeployEndpoint             goa.Endpoint
+	ListDeploymentsEndpoint      goa.Endpoint
+	DeploymentsForSourceEndpoint goa.Endpoint
+	GetDeploymentLogsEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "deployments" service client given the endpoints.
-func NewClient(getDeployment, getLatestDeployment, getActiveDeployment, createDeployment, evolve, redeploy, listDeployments, getDeploymentLogs goa.Endpoint) *Client {
+func NewClient(getDeployment, getLatestDeployment, getActiveDeployment, createDeployment, evolve, redeploy, listDeployments, deploymentsForSource, getDeploymentLogs goa.Endpoint) *Client {
 	return &Client{
-		GetDeploymentEndpoint:       getDeployment,
-		GetLatestDeploymentEndpoint: getLatestDeployment,
-		GetActiveDeploymentEndpoint: getActiveDeployment,
-		CreateDeploymentEndpoint:    createDeployment,
-		EvolveEndpoint:              evolve,
-		RedeployEndpoint:            redeploy,
-		ListDeploymentsEndpoint:     listDeployments,
-		GetDeploymentLogsEndpoint:   getDeploymentLogs,
+		GetDeploymentEndpoint:        getDeployment,
+		GetLatestDeploymentEndpoint:  getLatestDeployment,
+		GetActiveDeploymentEndpoint:  getActiveDeployment,
+		CreateDeploymentEndpoint:     createDeployment,
+		EvolveEndpoint:               evolve,
+		RedeployEndpoint:             redeploy,
+		ListDeploymentsEndpoint:      listDeployments,
+		DeploymentsForSourceEndpoint: deploymentsForSource,
+		GetDeploymentLogsEndpoint:    getDeploymentLogs,
 	}
 }
 
@@ -196,6 +198,29 @@ func (c *Client) ListDeployments(ctx context.Context, p *ListDeploymentsPayload)
 		return
 	}
 	return ires.(*ListDeploymentResult), nil
+}
+
+// DeploymentsForSource calls the "deploymentsForSource" endpoint of the
+// "deployments" service.
+// DeploymentsForSource may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeploymentsForSource(ctx context.Context, p *DeploymentsForSourcePayload) (res *DeploymentsForSourceResult, err error) {
+	var ires any
+	ires, err = c.DeploymentsForSourceEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DeploymentsForSourceResult), nil
 }
 
 // GetDeploymentLogs calls the "getDeploymentLogs" endpoint of the

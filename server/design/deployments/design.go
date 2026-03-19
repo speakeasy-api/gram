@@ -193,6 +193,34 @@ var _ = Service("deployments", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListDeployments"}`)
 	})
 
+	Method("deploymentsForSource", func() {
+		Description("List deployments that contain a specific source, identified by slug and kind.")
+
+		Payload(func() {
+			Extend(DeploymentsForSourceForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(DeploymentsForSourceResult)
+
+		HTTP(func() {
+			GET("/rpc/deployments.forSource")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("slug")
+			Param("kind")
+			Param("cursor")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deploymentsForSource")
+		Meta("openapi:extension:x-speakeasy-name-override", "forSource")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeploymentsForSource"}`)
+	})
+
 	Method("getDeploymentLogs", func() {
 		Description("Get logs for a deployment.")
 
@@ -468,6 +496,49 @@ var GetDeploymentLogsResult = Type("GetDeploymentLogsResult", func() {
 	Attribute("next_cursor", String, "The cursor to fetch results from")
 	Attribute("status", String, "The status of the deployment")
 	Attribute("events", ArrayOf(DeploymentLogEvent), "The logs for the deployment")
+})
+
+var DeploymentsForSourceForm = Type("DeploymentsForSourceForm", func() {
+	Required("slug", "kind")
+
+	Attribute("slug", String, func() {
+		Description("The slug of the source to filter by.")
+	})
+	Attribute("kind", String, func() {
+		Description("The kind of source: openapi, function, or externalmcp.")
+		Enum("openapi", "function", "externalmcp")
+	})
+	Attribute("cursor", String, "The cursor to fetch results from")
+})
+
+var DeploymentsForSourceResult = Type("DeploymentsForSourceResult", func() {
+	Required("items")
+
+	Attribute("next_cursor", String, "The cursor to fetch results from", func() {
+		Example("01jp3f054qc02gbcmpp0qmyzed")
+	})
+	Attribute("items", ArrayOf(SourceDeploymentSummary), "Deployments containing this source")
+})
+
+var SourceDeploymentSummary = Type("SourceDeploymentSummary", func() {
+	Required("id", "asset_id", "status", "created_at", "tool_count")
+
+	Attribute("id", String, func() {
+		Description("The deployment ID.")
+	})
+	Attribute("asset_id", String, func() {
+		Description("The asset ID of this source in the deployment.")
+	})
+	Attribute("status", String, func() {
+		Description("The status of the deployment.")
+	})
+	Attribute("created_at", String, func() {
+		Description("The creation date of the deployment.")
+		Format(FormatDateTime)
+	})
+	Attribute("tool_count", Int64, func() {
+		Description("The number of tools generated from this source in the deployment.")
+	})
 })
 
 var DeploymentLogEvent = Type("DeploymentLogEvent", func() {

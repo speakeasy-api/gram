@@ -16,14 +16,15 @@ import (
 
 // Endpoints wraps the "deployments" service endpoints.
 type Endpoints struct {
-	GetDeployment       goa.Endpoint
-	GetLatestDeployment goa.Endpoint
-	GetActiveDeployment goa.Endpoint
-	CreateDeployment    goa.Endpoint
-	Evolve              goa.Endpoint
-	Redeploy            goa.Endpoint
-	ListDeployments     goa.Endpoint
-	GetDeploymentLogs   goa.Endpoint
+	GetDeployment        goa.Endpoint
+	GetLatestDeployment  goa.Endpoint
+	GetActiveDeployment  goa.Endpoint
+	CreateDeployment     goa.Endpoint
+	Evolve               goa.Endpoint
+	Redeploy             goa.Endpoint
+	ListDeployments      goa.Endpoint
+	DeploymentsForSource goa.Endpoint
+	GetDeploymentLogs    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "deployments" service with endpoints.
@@ -31,14 +32,15 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetDeployment:       NewGetDeploymentEndpoint(s, a.APIKeyAuth),
-		GetLatestDeployment: NewGetLatestDeploymentEndpoint(s, a.APIKeyAuth),
-		GetActiveDeployment: NewGetActiveDeploymentEndpoint(s, a.APIKeyAuth),
-		CreateDeployment:    NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
-		Evolve:              NewEvolveEndpoint(s, a.APIKeyAuth),
-		Redeploy:            NewRedeployEndpoint(s, a.APIKeyAuth),
-		ListDeployments:     NewListDeploymentsEndpoint(s, a.APIKeyAuth),
-		GetDeploymentLogs:   NewGetDeploymentLogsEndpoint(s, a.APIKeyAuth),
+		GetDeployment:        NewGetDeploymentEndpoint(s, a.APIKeyAuth),
+		GetLatestDeployment:  NewGetLatestDeploymentEndpoint(s, a.APIKeyAuth),
+		GetActiveDeployment:  NewGetActiveDeploymentEndpoint(s, a.APIKeyAuth),
+		CreateDeployment:     NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
+		Evolve:               NewEvolveEndpoint(s, a.APIKeyAuth),
+		Redeploy:             NewRedeployEndpoint(s, a.APIKeyAuth),
+		ListDeployments:      NewListDeploymentsEndpoint(s, a.APIKeyAuth),
+		DeploymentsForSource: NewDeploymentsForSourceEndpoint(s, a.APIKeyAuth),
+		GetDeploymentLogs:    NewGetDeploymentLogsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -51,6 +53,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Evolve = m(e.Evolve)
 	e.Redeploy = m(e.Redeploy)
 	e.ListDeployments = m(e.ListDeployments)
+	e.DeploymentsForSource = m(e.DeploymentsForSource)
 	e.GetDeploymentLogs = m(e.GetDeploymentLogs)
 }
 
@@ -464,6 +467,65 @@ func NewListDeploymentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.ListDeployments(ctx, p)
+	}
+}
+
+// NewDeploymentsForSourceEndpoint returns an endpoint function that calls the
+// method "deploymentsForSource" of service "deployments".
+func NewDeploymentsForSourceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeploymentsForSourcePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.DeploymentsForSource(ctx, p)
 	}
 }
 

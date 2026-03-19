@@ -349,6 +349,96 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	}, nil
 }
 
+func (s *Service) DeploymentsForSource(ctx context.Context, form *gen.DeploymentsForSourcePayload) (*gen.DeploymentsForSourceResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	var cursor uuid.NullUUID
+	if form.Cursor != nil {
+		c, err := uuid.Parse(*form.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		}
+		cursor = uuid.NullUUID{UUID: c, Valid: true}
+	}
+
+	type row struct {
+		ID        uuid.UUID
+		AssetID   uuid.UUID
+		Status    string
+		CreatedAt pgtype.Timestamptz
+		ToolCount int64
+	}
+
+	var rows []row
+
+	switch form.Kind {
+	case "openapi":
+		r, err := s.repo.DeploymentsForOpenAPISource(ctx, repo.DeploymentsForOpenAPISourceParams{
+			Slug:      form.Slug,
+			ProjectID: *authCtx.ProjectID,
+			Cursor:    cursor,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list deployments for openapi source").Log(ctx, s.logger)
+		}
+		for _, v := range r {
+			rows = append(rows, row{ID: v.ID, AssetID: v.AssetID, Status: v.Status, CreatedAt: v.CreatedAt, ToolCount: v.ToolCount})
+		}
+	case "function":
+		r, err := s.repo.DeploymentsForFunctionSource(ctx, repo.DeploymentsForFunctionSourceParams{
+			Slug:      form.Slug,
+			ProjectID: *authCtx.ProjectID,
+			Cursor:    cursor,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list deployments for function source").Log(ctx, s.logger)
+		}
+		for _, v := range r {
+			rows = append(rows, row{ID: v.ID, AssetID: v.AssetID, Status: v.Status, CreatedAt: v.CreatedAt, ToolCount: v.ToolCount})
+		}
+	case "externalmcp":
+		r, err := s.repo.DeploymentsForExternalMCPSource(ctx, repo.DeploymentsForExternalMCPSourceParams{
+			Slug:      form.Slug,
+			ProjectID: *authCtx.ProjectID,
+			Cursor:    cursor,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list deployments for external mcp source").Log(ctx, s.logger)
+		}
+		for _, v := range r {
+			rows = append(rows, row{ID: v.ID, AssetID: v.AssetID, Status: v.Status, CreatedAt: v.CreatedAt, ToolCount: v.ToolCount})
+		}
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid source kind").Log(ctx, s.logger)
+	}
+
+	items := make([]*gen.SourceDeploymentSummary, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, &gen.SourceDeploymentSummary{
+			ID:        r.ID.String(),
+			AssetID:   r.AssetID.String(),
+			Status:    r.Status,
+			CreatedAt: r.CreatedAt.Time.Format(time.RFC3339),
+			ToolCount: r.ToolCount,
+		})
+	}
+
+	var nextCursor *string
+	limit := 50
+	if len(items) >= limit+1 {
+		nextCursor = &items[limit].ID
+		items = items[:limit]
+	}
+
+	return &gen.DeploymentsForSourceResult{
+		NextCursor: nextCursor,
+		Items:      items,
+	}, nil
+}
+
 func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeploymentPayload) (*gen.CreateDeploymentResult, error) {
 	logger := s.logger
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
