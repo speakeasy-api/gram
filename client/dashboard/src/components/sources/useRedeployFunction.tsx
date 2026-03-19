@@ -43,6 +43,12 @@ export function useRedeployFunction() {
         throw new Error("No active deployment found.");
       }
 
+      if (activeDeployment.id !== latestDeployment.id) {
+        throw new Error(
+          "Active deployment does not match latest deployment. A newer deployment may be in progress.",
+        );
+      }
+
       return client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: activeDeployment.id,
