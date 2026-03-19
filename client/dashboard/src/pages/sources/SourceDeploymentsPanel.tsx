@@ -97,46 +97,25 @@ function DeploymentSidebarItem({
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-3 py-3 border-b border-border transition-colors",
+        "w-full text-left px-3 py-4 border-b border-border transition-colors",
         "hover:bg-muted/50",
         isSelected && "bg-muted",
       )}
     >
       <div className="flex items-center gap-2">
         <StatusDot status={deployment.status} />
-        <span className="text-sm capitalize">{deployment.status}</span>
-        <span className="ml-auto">
-          {isActive ? (
-            <Badge variant="success" className="py-0 px-1.5">
-              <Badge.Text className="text-[10px]">Active</Badge.Text>
-            </Badge>
-          ) : deployment.status === "completed" ? (
-            <Badge variant="neutral" className="py-0 px-1.5">
-              <Badge.Text className="text-[10px]">Completed</Badge.Text>
-            </Badge>
-          ) : deployment.status === "failed" ? (
-            <Badge variant="destructive" className="py-0 px-1.5">
-              <Badge.Text className="text-[10px]">Failed</Badge.Text>
-            </Badge>
-          ) : (
-            <Badge variant="warning" className="py-0 px-1.5">
-              <Badge.Text className="text-[10px]">
-                {deployment.status === "pending"
-                  ? "Pending"
-                  : deployment.status === "building"
-                    ? "Building"
-                    : deployment.status}
-              </Badge.Text>
-            </Badge>
-          )}
-        </span>
-      </div>
-      {sourceAssetId && (
-        <div className="mt-1 pl-4">
+        {sourceAssetId ? (
           <LabeledBadge label="Version" value={sourceAssetId.slice(-8)} />
-        </div>
-      )}
-      <div className="flex items-center gap-2 mt-1 pl-4">
+        ) : (
+          <span className="text-sm capitalize">{deployment.status}</span>
+        )}
+        {isActive && (
+          <Badge variant="success" className="py-0 px-1.5 ml-auto">
+            <Badge.Text className="text-[10px]">Active</Badge.Text>
+          </Badge>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-2 pl-4">
         <span className="text-xs text-muted-foreground">{timeLabel}</span>
       </div>
     </button>
@@ -148,6 +127,7 @@ function DeploymentSidebarItem({
 function DeploymentDetailPanel({
   deployment,
   isActive,
+  activeDeploymentId,
   sourceKind,
   sourceSlug,
   sourceType,
@@ -155,6 +135,7 @@ function DeploymentDetailPanel({
 }: {
   deployment: DeploymentSummary;
   isActive: boolean;
+  activeDeploymentId?: string;
   sourceKind?: string;
   sourceSlug?: string;
   sourceType: "openapi" | "function" | "externalmcp";
@@ -162,9 +143,19 @@ function DeploymentDetailPanel({
 }) {
   const redeployMutation = useRedeploySource();
   const sourceAssetId = useSourceAssetId(deployment.id, sourceSlug, sourceType);
+  const activeSourceAssetId = useSourceAssetId(
+    activeDeploymentId ?? deployment.id,
+    sourceSlug,
+    sourceType,
+  );
 
+  const isCurrentVersion =
+    sourceAssetId != null && sourceAssetId === activeSourceAssetId;
   const canRedeploy =
-    !isActive && deployment.status === "completed" && sourceSlug;
+    !isActive &&
+    deployment.status === "completed" &&
+    sourceSlug &&
+    !isCurrentVersion;
   // Show source-type-specific counts when viewing a source detail page
   const isFunction = sourceKind === "function";
   const assetCount = isFunction
@@ -233,7 +224,7 @@ function DeploymentDetailPanel({
         </dl>
       </div>
 
-      {canRedeploy && (
+      {canRedeploy ? (
         <Button
           variant="secondary"
           size="sm"
@@ -250,12 +241,14 @@ function DeploymentDetailPanel({
             <Icon name="refresh-cw" className="size-4" />
           </Button.LeftIcon>
           <Button.Text>
-            {redeployMutation.isPending
-              ? "Redeploying..."
-              : "Redeploy this version"}
+            {redeployMutation.isPending ? "Rolling back..." : "Rollback"}
           </Button.Text>
         </Button>
-      )}
+      ) : isCurrentVersion && !isActive ? (
+        <Badge variant="success" className="py-0.5 px-2">
+          <Badge.Text className="text-xs">Current version</Badge.Text>
+        </Badge>
+      ) : null}
 
       {/* Logs section */}
       <Suspense
@@ -347,6 +340,7 @@ export function SourceDeploymentsPanel({
           key={selectedDeployment.id}
           deployment={selectedDeployment}
           isActive={activeDeployment?.id === selectedDeployment.id}
+          activeDeploymentId={activeDeployment?.id}
           sourceKind={sourceKind}
           sourceSlug={sourceSlug}
           sourceType={sourceType}
