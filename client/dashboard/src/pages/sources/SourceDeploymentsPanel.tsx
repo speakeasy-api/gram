@@ -3,17 +3,34 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { useListDeploymentsSuspense } from "@gram/client/react-query/index.js";
+import {
+  useDeployment,
+  useListDeploymentsSuspense,
+} from "@gram/client/react-query/index.js";
 import type { DeploymentSummary } from "@gram/client/models/components";
 import { useRoutes } from "@/routes";
 import { useRedeploySource } from "@/components/sources/useRedeploySource";
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { DeploymentsEmptyState } from "../deployments/DeploymentsEmptyState";
 import { useActiveDeployment } from "@gram/client/react-query/index.js";
 import { LogsTabContent } from "../deployments/deployment/LogsTabContent";
+
+// ─── Labeled badge ───────────────────────────────────────────
+
+function LabeledBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <Badge variant="neutral" className="p-0 gap-0 text-[10px]">
+      <span className="bg-foreground/10 text-muted-foreground pl-1.5 pr-1 py-0.5 rounded-l-[inherit]">
+        {label}
+      </span>
+      <span className="bg-foreground/10 w-1.5 self-stretch [clip-path:polygon(0_0,100%_50%,0_100%)]" />
+      <span className="pl-1.5 pr-1.5 py-0.5 font-mono">{value}</span>
+    </Badge>
+  );
+}
 
 // ─── Status dot ──────────────────────────────────────────────
 
@@ -32,20 +49,49 @@ function StatusDot({ status }: { status: string }) {
 
 // ─── Sidebar item ────────────────────────────────────────────
 
+function useSourceAssetId(
+  deploymentId: string,
+  sourceSlug?: string,
+  sourceType?: "openapi" | "function" | "externalmcp",
+) {
+  const { data: fullDeployment } = useDeployment({ id: deploymentId });
+  return useMemo(() => {
+    if (!fullDeployment || !sourceSlug || !sourceType) return undefined;
+    switch (sourceType) {
+      case "openapi":
+        return fullDeployment.openapiv3Assets?.find(
+          (a) => a.slug === sourceSlug,
+        )?.assetId;
+      case "function":
+        return fullDeployment.functionsAssets?.find(
+          (f) => f.slug === sourceSlug,
+        )?.assetId;
+      case "externalmcp":
+        return fullDeployment.externalMcps?.find((m) => m.slug === sourceSlug)
+          ?.id;
+    }
+  }, [fullDeployment, sourceSlug, sourceType]);
+}
+
 function DeploymentSidebarItem({
   deployment,
   isActive,
   isSelected,
+  sourceSlug,
+  sourceType,
   onClick,
 }: {
   deployment: DeploymentSummary;
   isActive: boolean;
   isSelected: boolean;
+  sourceSlug?: string;
+  sourceType?: "openapi" | "function" | "externalmcp";
   onClick: () => void;
 }) {
   const timeLabel = dateTimeFormatters.humanize(deployment.createdAt, {
     includeTime: false,
   });
+  const sourceAssetId = useSourceAssetId(deployment.id, sourceSlug, sourceType);
 
   return (
     <button
@@ -85,11 +131,12 @@ function DeploymentSidebarItem({
           )}
         </span>
       </div>
+      {sourceAssetId && (
+        <div className="mt-1 pl-4">
+          <LabeledBadge label="Version" value={sourceAssetId.slice(-8)} />
+        </div>
+      )}
       <div className="flex items-center gap-2 mt-1 pl-4">
-        <span className="text-xs font-mono text-muted-foreground">
-          {deployment.id.slice(0, 8)}
-        </span>
-        <span className="text-xs text-muted-foreground">&middot;</span>
         <span className="text-xs text-muted-foreground">{timeLabel}</span>
       </div>
     </button>
@@ -103,22 +150,18 @@ function DeploymentDetailPanel({
   isActive,
   sourceKind,
   sourceSlug,
+  sourceType,
   attachmentType,
 }: {
   deployment: DeploymentSummary;
   isActive: boolean;
   sourceKind?: string;
   sourceSlug?: string;
+  sourceType: "openapi" | "function" | "externalmcp";
   attachmentType?: string;
 }) {
   const redeployMutation = useRedeploySource();
-
-  const sourceType =
-    sourceKind === "function"
-      ? ("function" as const)
-      : sourceKind === "externalmcp"
-        ? ("externalmcp" as const)
-        : ("openapi" as const);
+  const sourceAssetId = useSourceAssetId(deployment.id, sourceSlug, sourceType);
 
   const canRedeploy =
     !isActive && deployment.status === "completed" && sourceSlug;
@@ -145,15 +188,17 @@ function DeploymentDetailPanel({
       {/* Info section */}
       <div className="rounded-lg border border-border p-4">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-          <div>
-            <dt className="text-muted-foreground text-xs mb-0.5">
-              Deployment ID
-            </dt>
-            <dd className="flex items-center gap-1">
-              <span className="font-mono">{deployment.id.slice(0, 8)}</span>
-              <CopyButton text={deployment.id} size="inline" />
-            </dd>
-          </div>
+          {sourceAssetId && (
+            <div>
+              <dt className="text-muted-foreground text-xs mb-0.5">
+                Source Version
+              </dt>
+              <dd className="flex items-center gap-1">
+                <span className="font-mono">{sourceAssetId.slice(-8)}</span>
+                <CopyButton text={sourceAssetId} size="inline" />
+              </dd>
+            </div>
+          )}
 
           <div>
             <dt className="text-muted-foreground text-xs mb-0.5">Status</dt>
@@ -244,6 +289,13 @@ export function SourceDeploymentsPanel({
   const activeDeployment = activeDeploymentResult?.deployment;
   const routes = useRoutes();
 
+  const sourceType =
+    sourceKind === "function"
+      ? ("function" as const)
+      : sourceKind === "externalmcp"
+        ? ("externalmcp" as const)
+        : ("openapi" as const);
+
   const [selectedId, setSelectedId] = useState<string | null>(
     deployments[0]?.id ?? null,
   );
@@ -283,6 +335,8 @@ export function SourceDeploymentsPanel({
               deployment={d}
               isActive={activeDeployment?.id === d.id}
               isSelected={selectedDeployment.id === d.id}
+              sourceSlug={sourceSlug}
+              sourceType={sourceType}
               onClick={() => setSelectedId(d.id)}
             />
           ))}
@@ -295,6 +349,7 @@ export function SourceDeploymentsPanel({
           isActive={activeDeployment?.id === selectedDeployment.id}
           sourceKind={sourceKind}
           sourceSlug={sourceSlug}
+          sourceType={sourceType}
           attachmentType={attachmentType}
         />
       </div>
