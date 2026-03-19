@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -75,8 +77,8 @@ type LogToolsetUpdateEvent struct {
 	ToolsetName           string
 	ToolsetSlug           string
 	ToolsetVersionAfter   int64
-	ToolsetSnapshotBefore any
-	ToolsetSnapshotAfter  any
+	ToolsetSnapshotBefore *types.Toolset
+	ToolsetSnapshotAfter  *types.Toolset
 }
 
 func LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateEvent) error {

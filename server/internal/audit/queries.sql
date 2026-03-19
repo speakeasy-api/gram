@@ -43,8 +43,20 @@ SELECT
   after_snapshot
 FROM audit_logs
 WHERE action = @action
-ORDER BY created_at DESC
+ORDER BY seq DESC
 LIMIT 1;
+
+-- name: ListProjectAuditLogs :many
+SELECT *
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND (
+    sqlc.narg(cursor_seq)::int8 IS NULL
+    OR seq < sqlc.narg(cursor_seq)::int8
+  )
+ORDER BY seq DESC
+LIMIT 51;
 
 -- name: CountAuditLogs :one
 SELECT COUNT(*)

@@ -407,7 +407,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			ExternalOAuthServerID:   new(existingToolset.ExternalOauthServerID.UUID.String()),
 			ExternalOAuthServerSlug: extoauthslug,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to log toolset detach external OAuth server audit event", attr.SlogError(err))
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach external OAuth server audit event").Log(ctx, logger)
 		}
 	}
 
@@ -429,7 +429,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			OAuthProxyServerID:   new(existingToolset.OauthProxyServerID.UUID.String()),
 			OAuthProxyServerSlug: oauthProxySlug,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to log toolset detach OAuth proxy server audit event", attr.SlogError(err))
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach OAuth proxy server audit event").Log(ctx, logger)
 		}
 	}
 
@@ -493,7 +493,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		ToolsetName:      deleted.Name,
 		ToolsetSlug:      deleted.Slug,
 	}); err != nil {
-		logger.ErrorContext(ctx, "failed to log toolset delete audit event", attr.SlogError(err))
+		return oops.E(oops.CodeUnexpected, err, "failed to log toolset delete").Log(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -611,7 +611,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		ToolsetName:      clonedToolset.Name,
 		ToolsetSlug:      clonedToolset.Slug,
 	}); err != nil {
-		logger.ErrorContext(ctx, "failed to log toolset create audit event", attr.SlogError(err))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset create audit event").Log(ctx, logger)
 	}
 
 	// Clone the latest toolset version
@@ -895,7 +895,7 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 			OAuthProxyServerID:   oauthProxyID,
 			OAuthProxyServerSlug: oauthProxySlug,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to log toolset detach OAuth proxy server audit event", attr.SlogError(err))
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach OAuth proxy server audit event").Log(ctx, logger)
 		}
 	}
 

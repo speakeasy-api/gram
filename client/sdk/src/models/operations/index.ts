@@ -77,6 +77,7 @@ export * from "./listintegrations.js";
 export * from "./listmcpcatalog.js";
 export * from "./listmcpregistries.js";
 export * from "./listpackages.js";
+export * from "./listprojectauditlogs.js";
 export * from "./listprojects.js";
 export * from "./listresources.js";
 export * from "./listservernameoverrides.js";

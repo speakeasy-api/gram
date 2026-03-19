@@ -48,7 +48,7 @@ SELECT
   after_snapshot
 FROM audit_logs
 WHERE action = $1
-ORDER BY created_at DESC
+ORDER BY seq DESC
 LIMIT 1
 `
 
@@ -149,4 +149,61 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listProjectAuditLogs = `-- name: ListProjectAuditLogs :many
+SELECT id, seq, organization_id, project_id, actor_id, actor_type, actor_display_name, actor_slug, action, subject_id, subject_type, subject_display_name, subject_slug, before_snapshot, after_snapshot, metadata, created_at
+FROM audit_logs
+WHERE organization_id = $1
+  AND project_id = $2
+  AND (
+    $3::int8 IS NULL
+    OR seq < $3::int8
+  )
+ORDER BY seq DESC
+LIMIT 51
+`
+
+type ListProjectAuditLogsParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	CursorSeq      pgtype.Int8
+}
+
+func (q *Queries) ListProjectAuditLogs(ctx context.Context, arg ListProjectAuditLogsParams) ([]AuditLog, error) {
+	rows, err := q.db.Query(ctx, listProjectAuditLogs, arg.OrganizationID, arg.ProjectID, arg.CursorSeq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuditLog
+	for rows.Next() {
+		var i AuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.ActorID,
+			&i.ActorType,
+			&i.ActorDisplayName,
+			&i.ActorSlug,
+			&i.Action,
+			&i.SubjectID,
+			&i.SubjectType,
+			&i.SubjectDisplayName,
+			&i.SubjectSlug,
+			&i.BeforeSnapshot,
+			&i.AfterSnapshot,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

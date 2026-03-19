@@ -1543,3 +1543,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
   CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
 );
+
+CREATE INDEX IF NOT EXISTS audit_logs_organization_id_seq_idx
+ON audit_logs (organization_id, seq DESC);
+
+CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
+ON audit_logs (organization_id, project_id, seq DESC);

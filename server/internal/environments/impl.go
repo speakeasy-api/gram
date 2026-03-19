@@ -342,7 +342,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		EnvironmentName:  deleted.Name,
 		EnvironmentSlug:  deleted.Slug,
 	}); err != nil {
-		logger.ErrorContext(ctx, "failed to log environment delete audit event", attr.SlogError(err))
+		return oops.E(oops.CodeUnexpected, err, "failed to save environment delete audit log event").Log(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
