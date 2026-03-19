@@ -73,7 +73,7 @@ func TestRemoveGrants_DoesNotAffectOtherPrincipals(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 
 	abcURN := "user:user_abc"
-	defURN := "user:user_abc"
+	defURN := "user:user_def"
 
 	// Create identical scopes for different principals
 	upsertGrant(t, ctx, ti.service, abcURN, "build:read", "*")
