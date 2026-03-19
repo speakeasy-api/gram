@@ -100,6 +100,10 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 	grants := make([]*gen.Grant, 0, len(payload.Grants))
 
 	for _, form := range payload.Grants {
+		if form == nil {
+			continue
+		}
+
 		row, err := tr.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   form.PrincipalUrn,
@@ -135,6 +139,10 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 	tr := s.repo.WithTx(dbTX)
 
 	for _, entry := range payload.Grants {
+		if entry == nil {
+			continue
+		}
+
 		_, err = tr.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   entry.PrincipalUrn,
