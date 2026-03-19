@@ -50,7 +50,7 @@ export type RemovePrincipalGrantsMutationError =
  * removePrincipalGrants access
  *
  * @remarks
- * Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.
+ * Revoke all permissions for a specific user or role.
  */
 export function useRemovePrincipalGrantsMutation(
   options?: MutationHookOptions<

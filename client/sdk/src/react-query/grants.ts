@@ -56,7 +56,7 @@ export type GrantsQueryError =
  * listGrants access
  *
  * @remarks
- * List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.
+ * List all permissions in your organization, optionally filtered to a specific user or role.
  */
 export function useGrants(
   request?: operations.ListGrantsRequest | undefined,
@@ -79,7 +79,7 @@ export function useGrants(
  * listGrants access
  *
  * @remarks
- * List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.
+ * List all permissions in your organization, optionally filtered to a specific user or role.
  */
 export function useGrantsSuspense(
   request?: operations.ListGrantsRequest | undefined,

@@ -16,7 +16,7 @@ export class Access extends ClientSDK {
    * listGrants access
    *
    * @remarks
-   * List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.
+   * List all permissions in your organization, optionally filtered to a specific user or role.
    */
   async list(
     request?: operations.ListGrantsRequest | undefined,
@@ -54,7 +54,7 @@ export class Access extends ClientSDK {
    * removePrincipalGrants access
    *
    * @remarks
-   * Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.
+   * Revoke all permissions for a specific user or role.
    */
   async removePrincipal(
     request: operations.RemovePrincipalGrantsRequest,

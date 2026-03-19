@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: d026bfbd89b7ef8828325da58552a21f
+  docChecksum: ecc41e58e91ee6cfbe098e8bbd32a0c2
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.29
-  configChecksum: e06346b4318ac3978f079f8b1172a7bf
+  releaseVersion: 0.27.31
+  configChecksum: fc67059d2fc436ac2eda9f98f16a3ee3
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -1459,7 +1459,7 @@ trackedFiles:
   docs/models/operations/validateapikeysecurity.md:
     last_write_checksum: sha1:e62caf16f73dad337d51e180798d0a150fab3a71
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:4da23d4b9319b5e6dfe6b8ba867d41ce0e3a43d6
+    last_write_checksum: sha1:56476e8ab39db73741cfc159dd1646c8dc9a123d
   docs/sdks/agentworkflows/README.md:
     last_write_checksum: sha1:394fbe8a3d99b3dd99e766a521c54982345ab648
   docs/sdks/assets/README.md:
@@ -1532,22 +1532,22 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:a7ee6bd3788606656ffd7edfe16da29b1f913284
+    last_write_checksum: sha1:78b1851e91545c084659cbfa35129438281260fc
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:1a6cbbaf3aed79149c2ff06f3530954e5ae0b6ef
+    last_write_checksum: sha1:8004d0645d8c7e889ec52f522d68a6775d9e0433
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
     last_write_checksum: sha1:a753021efd93bddd574dea18c6bded2cd8f55aad
     pristine_git_object: a0ab28c6fceba8cd55703c01ec1d9a2f98b3442a
   src/funcs/accessList.ts:
-    last_write_checksum: sha1:271fcd27d0a88b5e047e4441ccf2c682b283a7f7
+    last_write_checksum: sha1:42ad56c189bda43ef7547376c3cb01211d8ccab7
   src/funcs/accessRemove.ts:
     last_write_checksum: sha1:b5476e569dbb02df07e24b5592239118188aa936
   src/funcs/accessRemovePrincipal.ts:
-    last_write_checksum: sha1:086568713ae69b0cdc9224d5c9461b017fb2c392
+    last_write_checksum: sha1:b3f3d423c26bbdebf1ae2886937ed698a7310c3c
   src/funcs/accessUpsert.ts:
     last_write_checksum: sha1:0aeaa9e3ac2d2509f36edfbe7ba475d55b017cca
   src/funcs/agentworkflowsCreateResponse.ts:
@@ -2018,7 +2018,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:2b8e24c3e6156cb62f4f269a5282485cacc9b8f4
+    last_write_checksum: sha1:0852d6f3b9ce17252aab856910c99b9884c85e08
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3603,7 +3603,7 @@ trackedFiles:
   src/react-query/grants.core.ts:
     last_write_checksum: sha1:66a3a8d16f5a194b3680b90bdb9063a9dc234d8a
   src/react-query/grants.ts:
-    last_write_checksum: sha1:82ab282fc60ab59c33ce1a94401349f0a5e2e000
+    last_write_checksum: sha1:909b883f5028bc1965bf22aeefce796a26c6b2c1
   src/react-query/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:65daa7cbd33c503edad39c7ca638137b35727049
   src/react-query/hooksHooksNumberLogs.ts:
@@ -3829,7 +3829,7 @@ trackedFiles:
     last_write_checksum: sha1:7379aef75e33f6ff7b9964466e5a11361be1450a
     pristine_git_object: a5e064397d9337ad9ba6f11e1c7bc2148bc56e25
   src/react-query/removePrincipalGrants.ts:
-    last_write_checksum: sha1:d126512322d6a7c9df3ef9ab838c501266e2c7db
+    last_write_checksum: sha1:887247ca919a8160ed412e056c9eb26330f4a027
   src/react-query/renderTemplate.core.ts:
     id: dd751d28d8df
     last_write_checksum: sha1:baad0bd673c147a17e8a1b8f64c7c55cdd1829a8
@@ -4011,7 +4011,7 @@ trackedFiles:
     last_write_checksum: sha1:b4caae676913cbb7094eeb72f440a6b82a98b769
     pristine_git_object: 5329eedfb7bfe97abac782e76cbbc880737fc9fa
   src/sdk/access.ts:
-    last_write_checksum: sha1:35872273a25d6d3aaf656c925c962ec7b080f6ca
+    last_write_checksum: sha1:c716067f454ae970de20e8cf1b15e7e532a39a90
   src/sdk/agentworkflows.ts:
     last_write_checksum: sha1:daba15d07c856e75492c52c90bc37284f31d8fcf
   src/sdk/assets.ts:

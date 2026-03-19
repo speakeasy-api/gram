@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * listGrants access
  *
  * @remarks
- * List all permissions in your organization. Optionally filter to a specific user or role by passing their identifier.
+ * List all permissions in your organization, optionally filtered to a specific user or role.
  */
 export function accessList(
   client: GramCore,

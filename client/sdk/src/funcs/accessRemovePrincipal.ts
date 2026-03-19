@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * removePrincipalGrants access
  *
  * @remarks
- * Revoke all permissions for a specific user or role. Use this when offboarding a user or deleting a role.
+ * Revoke all permissions for a specific user or role.
  */
 export function accessRemovePrincipal(
   client: GramCore,
