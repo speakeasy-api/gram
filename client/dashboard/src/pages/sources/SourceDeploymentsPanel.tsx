@@ -10,7 +10,7 @@ import { useRoutes } from "@/routes";
 import { useRedeploySource } from "@/components/sources/useRedeploySource";
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { DeploymentsEmptyState } from "../deployments/DeploymentsEmptyState";
 import { useActiveDeployment } from "@gram/client/react-query/index.js";
@@ -231,8 +231,18 @@ export function SourceDeploymentsPanel({
 
   const sourceType = sourceKindToApiKind(sourceKind);
 
-  // Find the active deployment's asset ID from the list
-  const activeItem = deployments.find((d) => d.id === activeDeployment?.id);
+  const activeAssetId = useMemo(() => {
+    const dep = activeDeployment;
+    if (!dep || !sourceSlug) return undefined;
+    switch (sourceType) {
+      case "openapi":
+        return dep.openapiv3Assets?.find((a) => a.slug === sourceSlug)?.assetId;
+      case "function":
+        return dep.functionsAssets?.find((f) => f.slug === sourceSlug)?.assetId;
+      case "externalmcp":
+        return dep.externalMcps?.find((m) => m.slug === sourceSlug)?.id;
+    }
+  }, [activeDeployment, sourceSlug, sourceType]);
 
   const [selectedId, setSelectedId] = useState<string | null>(
     deployments[0]?.id ?? null,
@@ -283,7 +293,7 @@ export function SourceDeploymentsPanel({
           key={selectedDeployment.id}
           deployment={selectedDeployment}
           isActive={activeDeployment?.id === selectedDeployment.id}
-          activeAssetId={activeItem?.assetId}
+          activeAssetId={activeAssetId}
           sourceSlug={sourceSlug}
           sourceType={sourceType}
           attachmentType={attachmentType}
