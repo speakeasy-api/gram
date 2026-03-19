@@ -38,12 +38,14 @@ export function useRedeployFunction() {
         throw new Error("Function not found in latest deployment.");
       }
 
-      const targetDeploymentId =
-        activeResult?.deployment?.id ?? latestDeployment.id;
+      const activeDeployment = activeResult?.deployment;
+      if (!activeDeployment) {
+        throw new Error("No active deployment found.");
+      }
 
       return client.deployments.evolveDeployment({
         evolveForm: {
-          deploymentId: targetDeploymentId,
+          deploymentId: activeDeployment.id,
           upsertFunctions: [
             {
               assetId: fn.assetId,
