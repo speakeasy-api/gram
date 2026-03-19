@@ -105,12 +105,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  });
+  const result = await gram.access.list();
 
   console.log(result);
 }
@@ -125,6 +120,13 @@ run();
 
 <details open>
 <summary>Available methods</summary>
+
+### [Access](docs/sdks/access/README.md)
+
+* [list](docs/sdks/access/README.md#list) - listGrants access
+* [remove](docs/sdks/access/README.md#remove) - removeGrants access
+* [removePrincipal](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
+* [upsert](docs/sdks/access/README.md#upsert) - upsertGrants access
 
 ### [Agentworkflows](docs/sdks/agentworkflows/README.md)
 
@@ -348,6 +350,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`accessList`](docs/sdks/access/README.md#list) - listGrants access
+- [`accessRemove`](docs/sdks/access/README.md#remove) - removeGrants access
+- [`accessRemovePrincipal`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
+- [`accessUpsert`](docs/sdks/access/README.md#upsert) - upsertGrants access
 - [`agentworkflowsCreateResponse`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`agentworkflowsDeleteResponse`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
 - [`agentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
@@ -553,6 +559,7 @@ To learn about this feature and how to get started, check
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+- [`useGrants`](docs/sdks/access/README.md#list) - listGrants access
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 - [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`useHooksServerNamesDeleteServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
@@ -590,7 +597,9 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
+- [`useRemoveGrantsMutation`](docs/sdks/access/README.md#remove) - removeGrants access
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`useRemovePrincipalGrantsMutation`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
@@ -623,6 +632,7 @@ To learn about this feature and how to get started, check
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
+- [`useUpsertGrantsMutation`](docs/sdks/access/README.md#upsert) - upsertGrants access
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
 
 </details>
@@ -674,12 +684,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  }, {
+  const result = await gram.access.list({
     retries: {
       strategy: "backoff",
       backoff: {
@@ -717,12 +722,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  });
+  const result = await gram.access.list();
 
   console.log(result);
 }
@@ -755,12 +755,7 @@ const gram = new Gram();
 
 async function run() {
   try {
-    const result = await gram.assets.createSignedChatAttachmentURL({
-      createSignedChatAttachmentURLForm2: {
-        id: "<id>",
-        projectId: "<id>",
-      },
-    });
+    const result = await gram.access.list();
 
     console.log(result);
   } catch (error) {
@@ -824,12 +819,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.createSignedChatAttachmentURL({
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
-    },
-  });
+  const result = await gram.access.list();
 
   console.log(result);
 }
