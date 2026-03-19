@@ -17643,8 +17643,6 @@ components:
         principal_urn:
           type: string
           description: The user or role to revoke all permissions from (e.g. "user:user_abc", "role:admin").
-          minLength: 3
-          maxLength: 260
       required:
         - principal_urn
     RenderTemplateByIDRequestBody:
