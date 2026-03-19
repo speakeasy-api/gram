@@ -6,9 +6,11 @@ import { cn } from "@/lib/utils";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/index.js";
 import type { DeploymentSummary } from "@gram/client/models/components";
 import { useRoutes } from "@/routes";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { useRedeploySource } from "@/components/sources/useRedeploySource";
+import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
 import { Suspense, useState } from "react";
+import { useParams } from "react-router";
 import { DeploymentsEmptyState } from "../deployments/DeploymentsEmptyState";
 import { useActiveDeployment } from "@gram/client/react-query/index.js";
 import { LogsTabContent } from "../deployments/deployment/LogsTabContent";
@@ -100,13 +102,26 @@ function DeploymentDetailPanel({
   deployment,
   isActive,
   sourceKind,
+  sourceSlug,
   attachmentType,
 }: {
   deployment: DeploymentSummary;
   isActive: boolean;
   sourceKind?: string;
+  sourceSlug?: string;
   attachmentType?: string;
 }) {
+  const redeployMutation = useRedeploySource();
+
+  const sourceType =
+    sourceKind === "function"
+      ? ("function" as const)
+      : sourceKind === "externalmcp"
+        ? ("externalmcp" as const)
+        : ("openapi" as const);
+
+  const canRedeploy =
+    !isActive && deployment.status === "completed" && sourceSlug;
   // Show source-type-specific counts when viewing a source detail page
   const isFunction = sourceKind === "function";
   const assetCount = isFunction
@@ -173,6 +188,30 @@ function DeploymentDetailPanel({
         </dl>
       </div>
 
+      {canRedeploy && (
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={redeployMutation.isPending}
+          onClick={() =>
+            redeployMutation.mutate({
+              deploymentId: deployment.id,
+              slug: sourceSlug,
+              type: sourceType,
+            })
+          }
+        >
+          <Button.LeftIcon>
+            <Icon name="refresh-cw" className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>
+            {redeployMutation.isPending
+              ? "Redeploying..."
+              : "Redeploy this version"}
+          </Button.Text>
+        </Button>
+      )}
+
       {/* Logs section */}
       <Suspense
         fallback={
@@ -198,6 +237,7 @@ export function SourceDeploymentsPanel({
   sourceKind?: string;
   attachmentType?: string;
 }) {
+  const { sourceSlug } = useParams<{ sourceSlug: string }>();
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
   const { data: activeDeploymentResult } = useActiveDeployment();
@@ -254,6 +294,7 @@ export function SourceDeploymentsPanel({
           deployment={selectedDeployment}
           isActive={activeDeployment?.id === selectedDeployment.id}
           sourceKind={sourceKind}
+          sourceSlug={sourceSlug}
           attachmentType={attachmentType}
         />
       </div>
