@@ -36,6 +36,7 @@ import { SourcesEmptyState } from "./SourcesEmptyState";
 import { SourceTableRow } from "./SourceTableRow";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
 import { useFailedDeploymentSources } from "./useFailedDeploymentSources";
+import { useRedeployFunction } from "./useRedeployFunction";
 import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
 
 type DialogState =
@@ -115,6 +116,7 @@ export default function Sources() {
     openViewAsset,
     closeDialog,
   } = useDialogStore();
+  const { mutate: redeployFunction } = useRedeployFunction();
   const deploymentIsEmpty = useDeploymentIsEmpty();
 
   const allSources: NamedAsset[] = useMemo(() => {
@@ -341,6 +343,7 @@ export default function Sources() {
                   )}
                   deploymentId={deployment?.id}
                   handleRemove={() => openRemoveSource(asset)}
+                  handleRedeploy={() => redeployFunction(asset.slug)}
                   handleViewAsset={() => openViewAsset(asset)}
                   setChangeDocumentTargetSlug={openUploadOpenApi}
                 />
@@ -370,6 +373,7 @@ export default function Sources() {
                   }
                   deploymentId={deployment?.id}
                   handleRemove={() => openRemoveSource(asset)}
+                  handleRedeploy={() => redeployFunction(asset.slug)}
                   handleViewAsset={() => openViewAsset(asset)}
                   setChangeDocumentTargetSlug={openUploadOpenApi}
                 />

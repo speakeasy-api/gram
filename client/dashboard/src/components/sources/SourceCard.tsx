@@ -48,6 +48,7 @@ export function SourceCard({
   causingFailure,
   deploymentId,
   handleRemove,
+  handleRedeploy,
   handleViewAsset,
   setChangeDocumentTargetSlug,
 }: {
@@ -55,6 +56,7 @@ export function SourceCard({
   causingFailure?: boolean | undefined;
   deploymentId?: string;
   handleRemove: (assetId: string) => void;
+  handleRedeploy: () => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
@@ -75,6 +77,15 @@ export function SourceCard({
             label: "Update",
             onClick: () => setChangeDocumentTargetSlug(asset.slug),
             icon: "upload" as const,
+          },
+        ]
+      : []),
+    ...(asset.type === "function"
+      ? [
+          {
+            label: "Redeploy",
+            onClick: handleRedeploy,
+            icon: "refresh-cw" as const,
           },
         ]
       : []),

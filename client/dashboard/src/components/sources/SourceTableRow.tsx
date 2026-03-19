@@ -28,6 +28,7 @@ export function SourceTableRow({
   toolCount,
   deploymentId,
   handleRemove,
+  handleRedeploy,
   handleViewAsset,
   setChangeDocumentTargetSlug,
 }: {
@@ -36,6 +37,7 @@ export function SourceTableRow({
   toolCount: number;
   deploymentId?: string;
   handleRemove: (assetId: string) => void;
+  handleRedeploy: () => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
@@ -58,6 +60,15 @@ export function SourceTableRow({
             label: "Update",
             onClick: () => setChangeDocumentTargetSlug(asset.slug),
             icon: "upload" as const,
+          },
+        ]
+      : []),
+    ...(asset.type === "function"
+      ? [
+          {
+            label: "Redeploy",
+            onClick: handleRedeploy,
+            icon: "refresh-cw" as const,
           },
         ]
       : []),
