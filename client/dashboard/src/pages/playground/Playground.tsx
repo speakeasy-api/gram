@@ -62,7 +62,14 @@ function PlaygroundInner() {
   );
   const [showLogs, setShowLogs] = useState(false);
   const [temperature, setTemperature] = useState(0.5);
-  const [model, setModel] = useState("anthropic/claude-sonnet-4.5");
+  const [model, setModel] = useState(
+    () =>
+      localStorage.getItem("playground:model") ?? "anthropic/claude-sonnet-4.5",
+  );
+
+  useEffect(() => {
+    localStorage.setItem("playground:model", model);
+  }, [model]);
   const [maxTokens, setMaxTokens] = useState(4096);
   const [userProvidedHeaders, setUserProvidedHeaders] = useState<
     Record<string, string>
