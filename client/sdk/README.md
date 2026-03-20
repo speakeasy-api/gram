@@ -175,6 +175,7 @@ run();
 * [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
 * [evolveDeployment](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
+* [forSource](docs/sdks/deployments/README.md#forsource) - deploymentsForSource deployments
 * [getById](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 * [latest](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 * [list](docs/sdks/deployments/README.md#list) - listDeployments deployments
@@ -380,6 +381,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`deploymentsActive`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
+- [`deploymentsForSource`](docs/sdks/deployments/README.md#forsource) - deploymentsForSource deployments
 - [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`deploymentsLatest`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`deploymentsList`](docs/sdks/deployments/README.md#list) - listDeployments deployments
@@ -535,6 +537,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
+- [`useDeploymentsForSource`](docs/sdks/deployments/README.md#forsource) - deploymentsForSource deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`useFeaturesGet`](docs/sdks/features/README.md#get) - getProductFeatures features

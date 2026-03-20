@@ -44,6 +44,10 @@ type Client struct {
 	// listDeployments endpoint.
 	ListDeploymentsDoer goahttp.Doer
 
+	// DeploymentsForSource Doer is the HTTP client used to make requests to the
+	// deploymentsForSource endpoint.
+	DeploymentsForSourceDoer goahttp.Doer
+
 	// GetDeploymentLogs Doer is the HTTP client used to make requests to the
 	// getDeploymentLogs endpoint.
 	GetDeploymentLogsDoer goahttp.Doer
@@ -68,19 +72,20 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetDeploymentDoer:       doer,
-		GetLatestDeploymentDoer: doer,
-		GetActiveDeploymentDoer: doer,
-		CreateDeploymentDoer:    doer,
-		EvolveDoer:              doer,
-		RedeployDoer:            doer,
-		ListDeploymentsDoer:     doer,
-		GetDeploymentLogsDoer:   doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		GetDeploymentDoer:        doer,
+		GetLatestDeploymentDoer:  doer,
+		GetActiveDeploymentDoer:  doer,
+		CreateDeploymentDoer:     doer,
+		EvolveDoer:               doer,
+		RedeployDoer:             doer,
+		ListDeploymentsDoer:      doer,
+		DeploymentsForSourceDoer: doer,
+		GetDeploymentLogsDoer:    doer,
+		RestoreResponseBody:      restoreBody,
+		scheme:                   scheme,
+		host:                     host,
+		decoder:                  dec,
+		encoder:                  enc,
 	}
 }
 
@@ -247,6 +252,30 @@ func (c *Client) ListDeployments() goa.Endpoint {
 		resp, err := c.ListDeploymentsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("deployments", "listDeployments", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeploymentsForSource returns an endpoint that makes HTTP requests to the
+// deployments service deploymentsForSource server.
+func (c *Client) DeploymentsForSource() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeploymentsForSourceRequest(c.encoder)
+		decodeResponse = DecodeDeploymentsForSourceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeploymentsForSourceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeploymentsForSourceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deployments", "deploymentsForSource", err)
 		}
 		return decodeResponse(resp)
 	}

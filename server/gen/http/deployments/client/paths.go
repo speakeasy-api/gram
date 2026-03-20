@@ -42,6 +42,11 @@ func ListDeploymentsDeploymentsPath() string {
 	return "/rpc/deployments.list"
 }
 
+// DeploymentsForSourceDeploymentsPath returns the URL path to the deployments service deploymentsForSource HTTP endpoint.
+func DeploymentsForSourceDeploymentsPath() string {
+	return "/rpc/deployments.forSource"
+}
+
 // GetDeploymentLogsDeploymentsPath returns the URL path to the deployments service getDeploymentLogs HTTP endpoint.
 func GetDeploymentLogsDeploymentsPath() string {
 	return "/rpc/deployments.logs"

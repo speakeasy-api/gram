@@ -5,6 +5,7 @@
 import { deploymentsActive } from "../funcs/deploymentsActive.js";
 import { deploymentsCreate } from "../funcs/deploymentsCreate.js";
 import { deploymentsEvolveDeployment } from "../funcs/deploymentsEvolveDeployment.js";
+import { deploymentsForSource } from "../funcs/deploymentsForSource.js";
 import { deploymentsGetById } from "../funcs/deploymentsGetById.js";
 import { deploymentsLatest } from "../funcs/deploymentsLatest.js";
 import { deploymentsList } from "../funcs/deploymentsList.js";
@@ -66,6 +67,25 @@ export class Deployments extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.EvolveResult> {
     return unwrapAsync(deploymentsEvolveDeployment(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deploymentsForSource deployments
+   *
+   * @remarks
+   * List deployments that contain a specific source, identified by slug and kind.
+   */
+  async forSource(
+    request: operations.DeploymentsForSourceRequest,
+    security?: operations.DeploymentsForSourceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.DeploymentsForSourceResult> {
+    return unwrapAsync(deploymentsForSource(
       this,
       request,
       security,

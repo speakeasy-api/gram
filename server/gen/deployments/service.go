@@ -31,6 +31,8 @@ type Service interface {
 	Redeploy(context.Context, *RedeployPayload) (res *RedeployResult, err error)
 	// List all deployments in descending order of creation.
 	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
+	// List deployments that contain a specific source, identified by slug and kind.
+	DeploymentsForSource(context.Context, *DeploymentsForSourcePayload) (res *DeploymentsForSourceResult, err error)
 	// Get logs for a deployment.
 	GetDeploymentLogs(context.Context, *GetDeploymentLogsPayload) (res *GetDeploymentLogsResult, err error)
 }
@@ -55,7 +57,7 @@ const ServiceName = "deployments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"getDeployment", "getLatestDeployment", "getActiveDeployment", "createDeployment", "evolve", "redeploy", "listDeployments", "getDeploymentLogs"}
+var MethodNames = [9]string{"getDeployment", "getLatestDeployment", "getActiveDeployment", "createDeployment", "evolve", "redeploy", "listDeployments", "deploymentsForSource", "getDeploymentLogs"}
 
 type AddDeploymentPackageForm struct {
 	// The name of the package.
@@ -182,6 +184,29 @@ type DeploymentSummary struct {
 	ExternalMcpAssetCount int64
 	// The number of tools in the deployment generated from external MCP servers.
 	ExternalMcpToolCount int64
+}
+
+// DeploymentsForSourcePayload is the payload type of the deployments service
+// deploymentsForSource method.
+type DeploymentsForSourcePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The slug of the source to filter by.
+	Slug string
+	// The kind of source: openapi, function, or externalmcp.
+	Kind string
+	// The cursor to fetch results from
+	Cursor *string
+}
+
+// DeploymentsForSourceResult is the result type of the deployments service
+// deploymentsForSource method.
+type DeploymentsForSourceResult struct {
+	// The cursor to fetch results from
+	NextCursor *string
+	// Deployments containing this source
+	Items []*SourceDeploymentSummary
 }
 
 // EvolvePayload is the payload type of the deployments service evolve method.
@@ -369,6 +394,19 @@ type RedeployPayload struct {
 type RedeployResult struct {
 	// A deployment that was successfully created.
 	Deployment *types.Deployment
+}
+
+type SourceDeploymentSummary struct {
+	// The deployment ID.
+	ID string
+	// The asset ID of this source in the deployment.
+	AssetID string
+	// The status of the deployment.
+	Status string
+	// The creation date of the deployment.
+	CreatedAt string
+	// The number of tools generated from this source in the deployment.
+	ToolCount int64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -171,6 +171,15 @@ type ListDeploymentsResponseBody struct {
 	Items []*DeploymentSummaryResponseBody `form:"items" json:"items" xml:"items"`
 }
 
+// DeploymentsForSourceResponseBody is the type of the "deployments" service
+// "deploymentsForSource" endpoint HTTP response body.
+type DeploymentsForSourceResponseBody struct {
+	// The cursor to fetch results from
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Deployments containing this source
+	Items []*SourceDeploymentSummaryResponseBody `form:"items" json:"items" xml:"items"`
+}
+
 // GetDeploymentLogsResponseBody is the type of the "deployments" service
 // "getDeploymentLogs" endpoint HTTP response body.
 type GetDeploymentLogsResponseBody struct {
@@ -1485,6 +1494,196 @@ type ListDeploymentsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeploymentsForSourceUnauthorizedResponseBody is the type of the
+// "deployments" service "deploymentsForSource" endpoint HTTP response body for
+// the "unauthorized" error.
+type DeploymentsForSourceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceForbiddenResponseBody is the type of the "deployments"
+// service "deploymentsForSource" endpoint HTTP response body for the
+// "forbidden" error.
+type DeploymentsForSourceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceBadRequestResponseBody is the type of the "deployments"
+// service "deploymentsForSource" endpoint HTTP response body for the
+// "bad_request" error.
+type DeploymentsForSourceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceNotFoundResponseBody is the type of the "deployments"
+// service "deploymentsForSource" endpoint HTTP response body for the
+// "not_found" error.
+type DeploymentsForSourceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceConflictResponseBody is the type of the "deployments"
+// service "deploymentsForSource" endpoint HTTP response body for the
+// "conflict" error.
+type DeploymentsForSourceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceUnsupportedMediaResponseBody is the type of the
+// "deployments" service "deploymentsForSource" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeploymentsForSourceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceInvalidResponseBody is the type of the "deployments"
+// service "deploymentsForSource" endpoint HTTP response body for the "invalid"
+// error.
+type DeploymentsForSourceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceInvariantViolationResponseBody is the type of the
+// "deployments" service "deploymentsForSource" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeploymentsForSourceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceUnexpectedResponseBody is the type of the "deployments"
+// service "deploymentsForSource" endpoint HTTP response body for the
+// "unexpected" error.
+type DeploymentsForSourceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeploymentsForSourceGatewayErrorResponseBody is the type of the
+// "deployments" service "deploymentsForSource" endpoint HTTP response body for
+// the "gateway_error" error.
+type DeploymentsForSourceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetDeploymentLogsUnauthorizedResponseBody is the type of the "deployments"
 // service "getDeploymentLogs" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1802,6 +2001,21 @@ type DeploymentSummaryResponseBody struct {
 	ExternalMcpToolCount int64 `form:"external_mcp_tool_count" json:"external_mcp_tool_count" xml:"external_mcp_tool_count"`
 }
 
+// SourceDeploymentSummaryResponseBody is used to define fields on response
+// body types.
+type SourceDeploymentSummaryResponseBody struct {
+	// The deployment ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The asset ID of this source in the deployment.
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+	// The status of the deployment.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The creation date of the deployment.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The number of tools generated from this source in the deployment.
+	ToolCount int64 `form:"tool_count" json:"tool_count" xml:"tool_count"`
+}
+
 // DeploymentLogEventResponseBody is used to define fields on response body
 // types.
 type DeploymentLogEventResponseBody struct {
@@ -2013,6 +2227,27 @@ func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *List
 		}
 	} else {
 		body.Items = []*DeploymentSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewDeploymentsForSourceResponseBody builds the HTTP response body from the
+// result of the "deploymentsForSource" endpoint of the "deployments" service.
+func NewDeploymentsForSourceResponseBody(res *deployments.DeploymentsForSourceResult) *DeploymentsForSourceResponseBody {
+	body := &DeploymentsForSourceResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Items != nil {
+		body.Items = make([]*SourceDeploymentSummaryResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalDeploymentsSourceDeploymentSummaryToSourceDeploymentSummaryResponseBody(val)
+		}
+	} else {
+		body.Items = []*SourceDeploymentSummaryResponseBody{}
 	}
 	return body
 }
@@ -3047,6 +3282,156 @@ func NewListDeploymentsGatewayErrorResponseBody(res *goa.ServiceError) *ListDepl
 	return body
 }
 
+// NewDeploymentsForSourceUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "deploymentsForSource" endpoint of the
+// "deployments" service.
+func NewDeploymentsForSourceUnauthorizedResponseBody(res *goa.ServiceError) *DeploymentsForSourceUnauthorizedResponseBody {
+	body := &DeploymentsForSourceUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceForbiddenResponseBody builds the HTTP response body
+// from the result of the "deploymentsForSource" endpoint of the "deployments"
+// service.
+func NewDeploymentsForSourceForbiddenResponseBody(res *goa.ServiceError) *DeploymentsForSourceForbiddenResponseBody {
+	body := &DeploymentsForSourceForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceBadRequestResponseBody builds the HTTP response body
+// from the result of the "deploymentsForSource" endpoint of the "deployments"
+// service.
+func NewDeploymentsForSourceBadRequestResponseBody(res *goa.ServiceError) *DeploymentsForSourceBadRequestResponseBody {
+	body := &DeploymentsForSourceBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceNotFoundResponseBody builds the HTTP response body
+// from the result of the "deploymentsForSource" endpoint of the "deployments"
+// service.
+func NewDeploymentsForSourceNotFoundResponseBody(res *goa.ServiceError) *DeploymentsForSourceNotFoundResponseBody {
+	body := &DeploymentsForSourceNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceConflictResponseBody builds the HTTP response body
+// from the result of the "deploymentsForSource" endpoint of the "deployments"
+// service.
+func NewDeploymentsForSourceConflictResponseBody(res *goa.ServiceError) *DeploymentsForSourceConflictResponseBody {
+	body := &DeploymentsForSourceConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "deploymentsForSource" endpoint of the
+// "deployments" service.
+func NewDeploymentsForSourceUnsupportedMediaResponseBody(res *goa.ServiceError) *DeploymentsForSourceUnsupportedMediaResponseBody {
+	body := &DeploymentsForSourceUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceInvalidResponseBody builds the HTTP response body
+// from the result of the "deploymentsForSource" endpoint of the "deployments"
+// service.
+func NewDeploymentsForSourceInvalidResponseBody(res *goa.ServiceError) *DeploymentsForSourceInvalidResponseBody {
+	body := &DeploymentsForSourceInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "deploymentsForSource" endpoint of the
+// "deployments" service.
+func NewDeploymentsForSourceInvariantViolationResponseBody(res *goa.ServiceError) *DeploymentsForSourceInvariantViolationResponseBody {
+	body := &DeploymentsForSourceInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceUnexpectedResponseBody builds the HTTP response body
+// from the result of the "deploymentsForSource" endpoint of the "deployments"
+// service.
+func NewDeploymentsForSourceUnexpectedResponseBody(res *goa.ServiceError) *DeploymentsForSourceUnexpectedResponseBody {
+	body := &DeploymentsForSourceUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeploymentsForSourceGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "deploymentsForSource" endpoint of the
+// "deployments" service.
+func NewDeploymentsForSourceGatewayErrorResponseBody(res *goa.ServiceError) *DeploymentsForSourceGatewayErrorResponseBody {
+	body := &DeploymentsForSourceGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetDeploymentLogsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getDeploymentLogs" endpoint of the "deployments"
 // service.
@@ -3379,6 +3764,20 @@ func NewRedeployPayload(body *RedeployRequestBody, apikeyToken *string, sessionT
 // endpoint payload.
 func NewListDeploymentsPayload(cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
 	v := &deployments.ListDeploymentsPayload{}
+	v.Cursor = cursor
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeploymentsForSourcePayload builds a deployments service
+// deploymentsForSource endpoint payload.
+func NewDeploymentsForSourcePayload(slug string, kind string, cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.DeploymentsForSourcePayload {
+	v := &deployments.DeploymentsForSourcePayload{}
+	v.Slug = slug
+	v.Kind = kind
 	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
