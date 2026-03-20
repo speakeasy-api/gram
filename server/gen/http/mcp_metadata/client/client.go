@@ -25,10 +25,6 @@ type Client struct {
 	// setMcpMetadata endpoint.
 	SetMcpMetadataDoer goahttp.Doer
 
-	// DetachMcpEnvironment Doer is the HTTP client used to make requests to the
-	// detachMcpEnvironment endpoint.
-	DetachMcpEnvironmentDoer goahttp.Doer
-
 	// ExportMcpMetadata Doer is the HTTP client used to make requests to the
 	// exportMcpMetadata endpoint.
 	ExportMcpMetadataDoer goahttp.Doer
@@ -53,15 +49,14 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetMcpMetadataDoer:       doer,
-		SetMcpMetadataDoer:       doer,
-		DetachMcpEnvironmentDoer: doer,
-		ExportMcpMetadataDoer:    doer,
-		RestoreResponseBody:      restoreBody,
-		scheme:                   scheme,
-		host:                     host,
-		decoder:                  dec,
-		encoder:                  enc,
+		GetMcpMetadataDoer:    doer,
+		SetMcpMetadataDoer:    doer,
+		ExportMcpMetadataDoer: doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -108,30 +103,6 @@ func (c *Client) SetMcpMetadata() goa.Endpoint {
 		resp, err := c.SetMcpMetadataDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpMetadata", "setMcpMetadata", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// DetachMcpEnvironment returns an endpoint that makes HTTP requests to the
-// mcpMetadata service detachMcpEnvironment server.
-func (c *Client) DetachMcpEnvironment() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeDetachMcpEnvironmentRequest(c.encoder)
-		decodeResponse = DecodeDetachMcpEnvironmentResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDetachMcpEnvironmentRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.DetachMcpEnvironmentDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("mcpMetadata", "detachMcpEnvironment", err)
 		}
 		return decodeResponse(resp)
 	}

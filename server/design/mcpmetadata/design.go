@@ -205,37 +205,6 @@ var _ = Service("mcpMetadata", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "set")
 	})
 
-	Method("detachMcpEnvironment", func() {
-		Description("Detach the environment from an MCP server by clearing its default environment.")
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
-		})
-		Security(security.Session, security.ProjectSlug)
-
-		Payload(func() {
-			Attribute("toolset_slug", shared.Slug, "The slug of the toolset to detach the environment from")
-
-			Required("toolset_slug")
-
-			security.ByKeyPayload()
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		HTTP(func() {
-			DELETE("/rpc/mcpMetadata.detachEnvironment")
-			Param("toolset_slug")
-			security.ByKeyHeader()
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "detachMcpEnvironment")
-		Meta("openapi:extension:x-speakeasy-name-override", "detachEnvironment")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachMcpEnvironment"}`)
-	})
-
 	Method("exportMcpMetadata", func() {
 		Description("Export MCP server details as JSON for documentation and integration purposes.")
 		Security(security.ByKey, security.ProjectSlug, func() {

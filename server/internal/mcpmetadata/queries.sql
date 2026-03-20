@@ -49,12 +49,6 @@ RETURNING id,
           created_at,
           updated_at;
 
--- name: ClearDefaultEnvironment :exec
-UPDATE mcp_metadata
-SET default_environment_id = NULL,
-    updated_at = clock_timestamp()
-WHERE toolset_id = @toolset_id;
-
 -- name: GetHeaderDisplayNames :one
 SELECT header_display_names
 FROM mcp_metadata

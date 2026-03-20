@@ -1,5 +1,5 @@
 ---
-"@gram/client": minor
+"@gram/client": patch
 ---
 
-Add ability to detach an environment from an MCP server via new `detachMcpEnvironment` endpoint and SDK hook
+Add ability to detach an environment from an MCP server

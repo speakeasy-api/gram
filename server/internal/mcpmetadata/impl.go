@@ -242,11 +242,16 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 	var defaultEnvironmentID uuid.NullUUID
 	if payload.DefaultEnvironmentID != nil {
-		parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, s.logger)
+		if *payload.DefaultEnvironmentID == "" {
+			// Empty string explicitly clears the default environment (detach)
+			defaultEnvironmentID = uuid.NullUUID{Valid: false}
+		} else {
+			parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
+			if err != nil {
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, s.logger)
+			}
+			defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
 		}
-		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
 	}
 
 	var installationOverrideURL pgtype.Text
@@ -295,30 +300,6 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	return ToMCPMetadata(ctx, s.repo, result)
-}
-
-func (s *Service) DetachMcpEnvironment(ctx context.Context, payload *gen.DetachMcpEnvironmentPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
-		Slug:      conv.ToLower(payload.ToolsetSlug),
-		ProjectID: *authCtx.ProjectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
-	}
-
-	if err := s.repo.ClearDefaultEnvironment(ctx, toolset.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to detach environment").Log(ctx, s.logger)
-	}
-
-	return nil
 }
 
 func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpMetadataPayload) (*types.McpExport, error) {

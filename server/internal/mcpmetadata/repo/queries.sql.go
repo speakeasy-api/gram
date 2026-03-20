@@ -12,18 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const clearDefaultEnvironment = `-- name: ClearDefaultEnvironment :exec
-UPDATE mcp_metadata
-SET default_environment_id = NULL,
-    updated_at = clock_timestamp()
-WHERE toolset_id = $1
-`
-
-func (q *Queries) ClearDefaultEnvironment(ctx context.Context, toolsetID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearDefaultEnvironment, toolsetID)
-	return err
-}
-
 const deleteAllEnvironmentConfigs = `-- name: DeleteAllEnvironmentConfigs :exec
 DELETE FROM mcp_environment_configs
 WHERE mcp_metadata_id = $1

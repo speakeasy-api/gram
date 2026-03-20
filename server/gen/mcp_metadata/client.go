@@ -16,19 +16,17 @@ import (
 
 // Client is the "mcpMetadata" service client.
 type Client struct {
-	GetMcpMetadataEndpoint       goa.Endpoint
-	SetMcpMetadataEndpoint       goa.Endpoint
-	DetachMcpEnvironmentEndpoint goa.Endpoint
-	ExportMcpMetadataEndpoint    goa.Endpoint
+	GetMcpMetadataEndpoint    goa.Endpoint
+	SetMcpMetadataEndpoint    goa.Endpoint
+	ExportMcpMetadataEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "mcpMetadata" service client given the endpoints.
-func NewClient(getMcpMetadata, setMcpMetadata, detachMcpEnvironment, exportMcpMetadata goa.Endpoint) *Client {
+func NewClient(getMcpMetadata, setMcpMetadata, exportMcpMetadata goa.Endpoint) *Client {
 	return &Client{
-		GetMcpMetadataEndpoint:       getMcpMetadata,
-		SetMcpMetadataEndpoint:       setMcpMetadata,
-		DetachMcpEnvironmentEndpoint: detachMcpEnvironment,
-		ExportMcpMetadataEndpoint:    exportMcpMetadata,
+		GetMcpMetadataEndpoint:    getMcpMetadata,
+		SetMcpMetadataEndpoint:    setMcpMetadata,
+		ExportMcpMetadataEndpoint: exportMcpMetadata,
 	}
 }
 
@@ -76,25 +74,6 @@ func (c *Client) SetMcpMetadata(ctx context.Context, p *SetMcpMetadataPayload) (
 		return
 	}
 	return ires.(*types.McpMetadata), nil
-}
-
-// DetachMcpEnvironment calls the "detachMcpEnvironment" endpoint of the
-// "mcpMetadata" service.
-// DetachMcpEnvironment may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DetachMcpEnvironment(ctx context.Context, p *DetachMcpEnvironmentPayload) (err error) {
-	_, err = c.DetachMcpEnvironmentEndpoint(ctx, p)
-	return
 }
 
 // ExportMcpMetadata calls the "exportMcpMetadata" endpoint of the

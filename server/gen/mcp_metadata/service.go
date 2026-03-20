@@ -21,9 +21,6 @@ type Service interface {
 	GetMcpMetadata(context.Context, *GetMcpMetadataPayload) (res *GetMcpMetadataResult, err error)
 	// Create or update the metadata that powers the MCP install page.
 	SetMcpMetadata(context.Context, *SetMcpMetadataPayload) (res *types.McpMetadata, err error)
-	// Detach the environment from an MCP server by clearing its default
-	// environment.
-	DetachMcpEnvironment(context.Context, *DetachMcpEnvironmentPayload) (err error)
 	// Export MCP server details as JSON for documentation and integration purposes.
 	ExportMcpMetadata(context.Context, *ExportMcpMetadataPayload) (res *types.McpExport, err error)
 }
@@ -48,17 +45,7 @@ const ServiceName = "mcpMetadata"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"getMcpMetadata", "setMcpMetadata", "detachMcpEnvironment", "exportMcpMetadata"}
-
-// DetachMcpEnvironmentPayload is the payload type of the mcpMetadata service
-// detachMcpEnvironment method.
-type DetachMcpEnvironmentPayload struct {
-	// The slug of the toolset to detach the environment from
-	ToolsetSlug      types.Slug
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-}
+var MethodNames = [3]string{"getMcpMetadata", "setMcpMetadata", "exportMcpMetadata"}
 
 // ExportMcpMetadataPayload is the payload type of the mcpMetadata service
 // exportMcpMetadata method.

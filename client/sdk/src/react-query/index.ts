@@ -40,7 +40,6 @@ export * from "./deleteToolset.js";
 export * from "./deleteToolsetEnvironmentLink.js";
 export * from "./deployment.js";
 export * from "./deploymentLogs.js";
-export * from "./detachMcpEnvironment.js";
 export * from "./evolveDeployment.js";
 export * from "./exportMcpMetadata.js";
 export * from "./featuresGet.js";
