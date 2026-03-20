@@ -12,6 +12,7 @@ import {
   invalidateAllListEnvironments,
   invalidateAllToolset,
   useCreateEnvironmentMutation,
+  useDetachMcpEnvironmentMutation,
   useGetMcpMetadata,
   useListEnvironments,
   useMcpMetadataSetMutation,
@@ -205,6 +206,31 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       );
     },
   });
+
+  const detachMcpEnvironmentMutation = useDetachMcpEnvironmentMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+      invalidateAllGetMcpMetadata(queryClient);
+      toast.success("Environment detached");
+      telemetry.capture("mcp_event", {
+        action: "mcp_environment_detached",
+        toolset_slug: toolset.slug,
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to detach environment",
+      );
+    },
+  });
+
+  const handleDetachEnvironment = () => {
+    detachMcpEnvironmentMutation.mutate({
+      request: {
+        toolsetSlug: toolset.slug,
+      },
+    });
+  };
 
   const handleCreateEnvironment = () => {
     if (!newEnvironmentName.trim()) {
@@ -740,6 +766,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
               onSaveAll={handleSaveAll}
               onCancelAll={handleCancelAll}
               onSetDefaultEnvironment={handleSetDefaultEnvironment}
+              onDetachEnvironment={handleDetachEnvironment}
               onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
             />
             {envVars.map((envVar, index) => (

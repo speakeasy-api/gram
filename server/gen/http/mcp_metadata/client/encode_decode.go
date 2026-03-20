@@ -502,6 +502,235 @@ func DecodeSetMcpMetadataResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildDetachMcpEnvironmentRequest instantiates a HTTP request object with
+// method and path set to call the "mcpMetadata" service "detachMcpEnvironment"
+// endpoint
+func (c *Client) BuildDetachMcpEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DetachMcpEnvironmentMcpMetadataPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpMetadata", "detachMcpEnvironment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDetachMcpEnvironmentRequest returns an encoder for requests sent to
+// the mcpMetadata detachMcpEnvironment server.
+func EncodeDetachMcpEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpmetadata.DetachMcpEnvironmentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpMetadata", "detachMcpEnvironment", "*mcpmetadata.DetachMcpEnvironmentPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("toolset_slug", string(p.ToolsetSlug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDetachMcpEnvironmentResponse returns a decoder for responses returned
+// by the mcpMetadata detachMcpEnvironment endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeDetachMcpEnvironmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDetachMcpEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DetachMcpEnvironmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			err = ValidateDetachMcpEnvironmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			return nil, NewDetachMcpEnvironmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DetachMcpEnvironmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			err = ValidateDetachMcpEnvironmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			return nil, NewDetachMcpEnvironmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DetachMcpEnvironmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			err = ValidateDetachMcpEnvironmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			return nil, NewDetachMcpEnvironmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DetachMcpEnvironmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			err = ValidateDetachMcpEnvironmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			return nil, NewDetachMcpEnvironmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DetachMcpEnvironmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			err = ValidateDetachMcpEnvironmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			return nil, NewDetachMcpEnvironmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DetachMcpEnvironmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			err = ValidateDetachMcpEnvironmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			return nil, NewDetachMcpEnvironmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DetachMcpEnvironmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			err = ValidateDetachMcpEnvironmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			return nil, NewDetachMcpEnvironmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DetachMcpEnvironmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+				}
+				err = ValidateDetachMcpEnvironmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+				}
+				return nil, NewDetachMcpEnvironmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DetachMcpEnvironmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+				}
+				err = ValidateDetachMcpEnvironmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+				}
+				return nil, NewDetachMcpEnvironmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpMetadata", "detachMcpEnvironment", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DetachMcpEnvironmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			err = ValidateDetachMcpEnvironmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "detachMcpEnvironment", err)
+			}
+			return nil, NewDetachMcpEnvironmentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpMetadata", "detachMcpEnvironment", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildExportMcpMetadataRequest instantiates a HTTP request object with method
 // and path set to call the "mcpMetadata" service "exportMcpMetadata" endpoint
 func (c *Client) BuildExportMcpMetadataRequest(ctx context.Context, v any) (*http.Request, error) {

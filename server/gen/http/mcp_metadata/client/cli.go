@@ -127,6 +127,48 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	return v, nil
 }
 
+// BuildDetachMcpEnvironmentPayload builds the payload for the mcpMetadata
+// detachMcpEnvironment endpoint from CLI flags.
+func BuildDetachMcpEnvironmentPayload(mcpMetadataDetachMcpEnvironmentToolsetSlug string, mcpMetadataDetachMcpEnvironmentApikeyToken string, mcpMetadataDetachMcpEnvironmentSessionToken string, mcpMetadataDetachMcpEnvironmentProjectSlugInput string) (*mcpmetadata.DetachMcpEnvironmentPayload, error) {
+	var err error
+	var toolsetSlug string
+	{
+		toolsetSlug = mcpMetadataDetachMcpEnvironmentToolsetSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(toolsetSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataDetachMcpEnvironmentApikeyToken != "" {
+			apikeyToken = &mcpMetadataDetachMcpEnvironmentApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpMetadataDetachMcpEnvironmentSessionToken != "" {
+			sessionToken = &mcpMetadataDetachMcpEnvironmentSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpMetadataDetachMcpEnvironmentProjectSlugInput != "" {
+			projectSlugInput = &mcpMetadataDetachMcpEnvironmentProjectSlugInput
+		}
+	}
+	v := &mcpmetadata.DetachMcpEnvironmentPayload{}
+	v.ToolsetSlug = types.Slug(toolsetSlug)
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildExportMcpMetadataPayload builds the payload for the mcpMetadata
 // exportMcpMetadata endpoint from CLI flags.
 func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpMetadataExportMcpMetadataApikeyToken string, mcpMetadataExportMcpMetadataSessionToken string, mcpMetadataExportMcpMetadataProjectSlugInput string) (*mcpmetadata.ExportMcpMetadataPayload, error) {

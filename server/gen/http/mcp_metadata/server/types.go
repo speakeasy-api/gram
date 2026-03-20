@@ -472,6 +472,196 @@ type SetMcpMetadataGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DetachMcpEnvironmentUnauthorizedResponseBody is the type of the
+// "mcpMetadata" service "detachMcpEnvironment" endpoint HTTP response body for
+// the "unauthorized" error.
+type DetachMcpEnvironmentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentForbiddenResponseBody is the type of the "mcpMetadata"
+// service "detachMcpEnvironment" endpoint HTTP response body for the
+// "forbidden" error.
+type DetachMcpEnvironmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentBadRequestResponseBody is the type of the "mcpMetadata"
+// service "detachMcpEnvironment" endpoint HTTP response body for the
+// "bad_request" error.
+type DetachMcpEnvironmentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentNotFoundResponseBody is the type of the "mcpMetadata"
+// service "detachMcpEnvironment" endpoint HTTP response body for the
+// "not_found" error.
+type DetachMcpEnvironmentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentConflictResponseBody is the type of the "mcpMetadata"
+// service "detachMcpEnvironment" endpoint HTTP response body for the
+// "conflict" error.
+type DetachMcpEnvironmentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentUnsupportedMediaResponseBody is the type of the
+// "mcpMetadata" service "detachMcpEnvironment" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DetachMcpEnvironmentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentInvalidResponseBody is the type of the "mcpMetadata"
+// service "detachMcpEnvironment" endpoint HTTP response body for the "invalid"
+// error.
+type DetachMcpEnvironmentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentInvariantViolationResponseBody is the type of the
+// "mcpMetadata" service "detachMcpEnvironment" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DetachMcpEnvironmentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentUnexpectedResponseBody is the type of the "mcpMetadata"
+// service "detachMcpEnvironment" endpoint HTTP response body for the
+// "unexpected" error.
+type DetachMcpEnvironmentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachMcpEnvironmentGatewayErrorResponseBody is the type of the
+// "mcpMetadata" service "detachMcpEnvironment" endpoint HTTP response body for
+// the "gateway_error" error.
+type DetachMcpEnvironmentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ExportMcpMetadataUnauthorizedResponseBody is the type of the "mcpMetadata"
 // service "exportMcpMetadata" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1096,6 +1286,156 @@ func NewSetMcpMetadataGatewayErrorResponseBody(res *goa.ServiceError) *SetMcpMet
 	return body
 }
 
+// NewDetachMcpEnvironmentUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "detachMcpEnvironment" endpoint of the
+// "mcpMetadata" service.
+func NewDetachMcpEnvironmentUnauthorizedResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentUnauthorizedResponseBody {
+	body := &DetachMcpEnvironmentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentForbiddenResponseBody builds the HTTP response body
+// from the result of the "detachMcpEnvironment" endpoint of the "mcpMetadata"
+// service.
+func NewDetachMcpEnvironmentForbiddenResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentForbiddenResponseBody {
+	body := &DetachMcpEnvironmentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentBadRequestResponseBody builds the HTTP response body
+// from the result of the "detachMcpEnvironment" endpoint of the "mcpMetadata"
+// service.
+func NewDetachMcpEnvironmentBadRequestResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentBadRequestResponseBody {
+	body := &DetachMcpEnvironmentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentNotFoundResponseBody builds the HTTP response body
+// from the result of the "detachMcpEnvironment" endpoint of the "mcpMetadata"
+// service.
+func NewDetachMcpEnvironmentNotFoundResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentNotFoundResponseBody {
+	body := &DetachMcpEnvironmentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentConflictResponseBody builds the HTTP response body
+// from the result of the "detachMcpEnvironment" endpoint of the "mcpMetadata"
+// service.
+func NewDetachMcpEnvironmentConflictResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentConflictResponseBody {
+	body := &DetachMcpEnvironmentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "detachMcpEnvironment" endpoint of the
+// "mcpMetadata" service.
+func NewDetachMcpEnvironmentUnsupportedMediaResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentUnsupportedMediaResponseBody {
+	body := &DetachMcpEnvironmentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentInvalidResponseBody builds the HTTP response body
+// from the result of the "detachMcpEnvironment" endpoint of the "mcpMetadata"
+// service.
+func NewDetachMcpEnvironmentInvalidResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentInvalidResponseBody {
+	body := &DetachMcpEnvironmentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "detachMcpEnvironment" endpoint of the
+// "mcpMetadata" service.
+func NewDetachMcpEnvironmentInvariantViolationResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentInvariantViolationResponseBody {
+	body := &DetachMcpEnvironmentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentUnexpectedResponseBody builds the HTTP response body
+// from the result of the "detachMcpEnvironment" endpoint of the "mcpMetadata"
+// service.
+func NewDetachMcpEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentUnexpectedResponseBody {
+	body := &DetachMcpEnvironmentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachMcpEnvironmentGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "detachMcpEnvironment" endpoint of the
+// "mcpMetadata" service.
+func NewDetachMcpEnvironmentGatewayErrorResponseBody(res *goa.ServiceError) *DetachMcpEnvironmentGatewayErrorResponseBody {
+	body := &DetachMcpEnvironmentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewExportMcpMetadataUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "exportMcpMetadata" endpoint of the "mcpMetadata"
 // service.
@@ -1276,6 +1616,18 @@ func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, apikeyToken *stri
 			v.EnvironmentConfigs[i] = unmarshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(val)
 		}
 	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDetachMcpEnvironmentPayload builds a mcpMetadata service
+// detachMcpEnvironment endpoint payload.
+func NewDetachMcpEnvironmentPayload(toolsetSlug string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.DetachMcpEnvironmentPayload {
+	v := &mcpmetadata.DetachMcpEnvironmentPayload{}
+	v.ToolsetSlug = types.Slug(toolsetSlug)
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

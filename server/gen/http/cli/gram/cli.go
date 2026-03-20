@@ -66,7 +66,7 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
-		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
+		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|detach-mcp-environment|export-mcp-metadata)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
@@ -510,6 +510,12 @@ func ParseEndpoint(
 		mcpMetadataSetMcpMetadataApikeyTokenFlag      = mcpMetadataSetMcpMetadataFlags.String("apikey-token", "", "")
 		mcpMetadataSetMcpMetadataSessionTokenFlag     = mcpMetadataSetMcpMetadataFlags.String("session-token", "", "")
 		mcpMetadataSetMcpMetadataProjectSlugInputFlag = mcpMetadataSetMcpMetadataFlags.String("project-slug-input", "", "")
+
+		mcpMetadataDetachMcpEnvironmentFlags                = flag.NewFlagSet("detach-mcp-environment", flag.ExitOnError)
+		mcpMetadataDetachMcpEnvironmentToolsetSlugFlag      = mcpMetadataDetachMcpEnvironmentFlags.String("toolset-slug", "REQUIRED", "")
+		mcpMetadataDetachMcpEnvironmentApikeyTokenFlag      = mcpMetadataDetachMcpEnvironmentFlags.String("apikey-token", "", "")
+		mcpMetadataDetachMcpEnvironmentSessionTokenFlag     = mcpMetadataDetachMcpEnvironmentFlags.String("session-token", "", "")
+		mcpMetadataDetachMcpEnvironmentProjectSlugInputFlag = mcpMetadataDetachMcpEnvironmentFlags.String("project-slug-input", "", "")
 
 		mcpMetadataExportMcpMetadataFlags                = flag.NewFlagSet("export-mcp-metadata", flag.ExitOnError)
 		mcpMetadataExportMcpMetadataBodyFlag             = mcpMetadataExportMcpMetadataFlags.String("body", "REQUIRED", "")
@@ -960,6 +966,7 @@ func ParseEndpoint(
 	mcpMetadataFlags.Usage = mcpMetadataUsage
 	mcpMetadataGetMcpMetadataFlags.Usage = mcpMetadataGetMcpMetadataUsage
 	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
+	mcpMetadataDetachMcpEnvironmentFlags.Usage = mcpMetadataDetachMcpEnvironmentUsage
 	mcpMetadataExportMcpMetadataFlags.Usage = mcpMetadataExportMcpMetadataUsage
 
 	packagesFlags.Usage = packagesUsage
@@ -1402,6 +1409,9 @@ func ParseEndpoint(
 
 			case "set-mcp-metadata":
 				epf = mcpMetadataSetMcpMetadataFlags
+
+			case "detach-mcp-environment":
+				epf = mcpMetadataDetachMcpEnvironmentFlags
 
 			case "export-mcp-metadata":
 				epf = mcpMetadataExportMcpMetadataFlags
@@ -1931,6 +1941,9 @@ func ParseEndpoint(
 			case "set-mcp-metadata":
 				endpoint = c.SetMcpMetadata()
 				data, err = mcpmetadatac.BuildSetMcpMetadataPayload(*mcpMetadataSetMcpMetadataBodyFlag, *mcpMetadataSetMcpMetadataApikeyTokenFlag, *mcpMetadataSetMcpMetadataSessionTokenFlag, *mcpMetadataSetMcpMetadataProjectSlugInputFlag)
+			case "detach-mcp-environment":
+				endpoint = c.DetachMcpEnvironment()
+				data, err = mcpmetadatac.BuildDetachMcpEnvironmentPayload(*mcpMetadataDetachMcpEnvironmentToolsetSlugFlag, *mcpMetadataDetachMcpEnvironmentApikeyTokenFlag, *mcpMetadataDetachMcpEnvironmentSessionTokenFlag, *mcpMetadataDetachMcpEnvironmentProjectSlugInputFlag)
 			case "export-mcp-metadata":
 				endpoint = c.ExportMcpMetadata()
 				data, err = mcpmetadatac.BuildExportMcpMetadataPayload(*mcpMetadataExportMcpMetadataBodyFlag, *mcpMetadataExportMcpMetadataApikeyTokenFlag, *mcpMetadataExportMcpMetadataSessionTokenFlag, *mcpMetadataExportMcpMetadataProjectSlugInputFlag)
@@ -3931,6 +3944,7 @@ func mcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-mcp-metadata: Fetch the metadata that powers the MCP install page.`)
 	fmt.Fprintln(os.Stderr, `    set-mcp-metadata: Create or update the metadata that powers the MCP install page.`)
+	fmt.Fprintln(os.Stderr, `    detach-mcp-environment: Detach the environment from an MCP server by clearing its default environment.`)
 	fmt.Fprintln(os.Stderr, `    export-mcp-metadata: Export MCP server details as JSON for documentation and integration purposes.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -3982,6 +3996,30 @@ func mcpMetadataSetMcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_text\": \"abc123\",\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"toolset_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpMetadataDetachMcpEnvironmentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-metadata detach-mcp-environment", os.Args[0])
+	fmt.Fprint(os.Stderr, " -toolset-slug STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Detach the environment from an MCP server by clearing its default environment.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -toolset-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata detach-mcp-environment --toolset-slug \"aaa\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpMetadataExportMcpMetadataUsage() {

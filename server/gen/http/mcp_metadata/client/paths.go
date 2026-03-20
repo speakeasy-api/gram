@@ -17,6 +17,11 @@ func SetMcpMetadataMcpMetadataPath() string {
 	return "/rpc/mcpMetadata.set"
 }
 
+// DetachMcpEnvironmentMcpMetadataPath returns the URL path to the mcpMetadata service detachMcpEnvironment HTTP endpoint.
+func DetachMcpEnvironmentMcpMetadataPath() string {
+	return "/rpc/mcpMetadata.detachEnvironment"
+}
+
 // ExportMcpMetadataMcpMetadataPath returns the URL path to the mcpMetadata service exportMcpMetadata HTTP endpoint.
 func ExportMcpMetadataMcpMetadataPath() string {
 	return "/rpc/mcpMetadata.export"
