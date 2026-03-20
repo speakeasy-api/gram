@@ -123,30 +123,36 @@ export default function DeployStep() {
 
   React.useEffect(() => {
     if (!step.isCurrentStep || step.state !== "idle") return;
-    createOrEvolveDeployment().then((result) => {
-      stepper.meta.current.deployment = result;
+    createOrEvolveDeployment()
+      .then((result) => {
+        stepper.meta.current.deployment = result;
 
-      // Always mark as "completed" so we can check tool count
-      // The actual success/failure is determined by whether tools were created for THIS source
-      step.setState("completed");
-      stepper.setState("completed");
+        // Always mark as "completed" so we can check tool count
+        // The actual success/failure is determined by whether tools were created for THIS source
+        step.setState("completed");
+        stepper.setState("completed");
 
-      telemetry.capture("onboarding_event", {
-        action:
-          result.status === "failed"
-            ? "deployment_failed"
-            : "deployment_created",
-        num_tools: result?.openapiv3ToolCount,
-        deployment_status: result.status,
-      });
-
-      if (result?.openapiv3ToolCount === 0) {
         telemetry.capture("onboarding_event", {
-          action: "no_tools_found",
-          error: "no_tools_found",
+          action:
+            result.status === "failed"
+              ? "deployment_failed"
+              : "deployment_created",
+          num_tools: result?.openapiv3ToolCount,
+          deployment_status: result.status,
         });
-      }
-    });
+
+        if (result?.openapiv3ToolCount === 0) {
+          telemetry.capture("onboarding_event", {
+            action: "no_tools_found",
+            error: "no_tools_found",
+          });
+        }
+      })
+      .catch((err) => {
+        console.error("Deployment failed:", err);
+        step.setState("failed");
+        stepper.setState("error");
+      });
   }, [step.isCurrentStep, step.state]);
 
   if (!step.isCurrentStep) return null;
@@ -292,22 +298,39 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       throw new Error("Asset or file not found");
     }
 
-    const deployment = await client.deployments
-      .evolveDeployment({
-        evolveForm: {
-          upsertOpenapiv3Assets: [
-            {
-              assetId: uploadResult.asset.id,
-              name: assetName,
-              slug: slugify(assetName),
-            },
-          ],
-        },
-      })
-      .then((result) => result.deployment);
+    const result = await client.deployments.evolveDeployment({
+      evolveForm: {
+        nonBlocking: true,
+        upsertOpenapiv3Assets: [
+          {
+            assetId: uploadResult.asset.id,
+            name: assetName,
+            slug: slugify(assetName),
+          },
+        ],
+      },
+    });
 
+    let deployment = result.deployment;
     if (!deployment) {
       throw new Error("Deployment not found");
+    }
+
+    // Poll until the deployment reaches a terminal state so we can
+    // report accurate tool counts back to the stepper UI.
+    const maxAttempts = 600; // 5 minutes at 500ms intervals
+    let attempts = 0;
+    while (
+      deployment.status !== "completed" &&
+      deployment.status !== "failed"
+    ) {
+      if (++attempts >= maxAttempts) {
+        throw new Error("Deployment timed out waiting for completion");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      deployment = (await client.deployments.getById({
+        id: deployment.id,
+      })) as Deployment;
     }
 
     return deployment;

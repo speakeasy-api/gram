@@ -78,6 +78,7 @@ export default function ExternalMCPDetails() {
       await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.deployment?.id,
+          nonBlocking: true,
           excludeExternalMcps: [slug],
         },
       });

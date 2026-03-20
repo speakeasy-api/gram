@@ -977,6 +977,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           await client.deployments.evolveDeployment({
             evolveForm: {
               deploymentId: deployment.id,
+              nonBlocking: true,
               excludeExternalMcps: [externalMcpSlug],
             },
           });
