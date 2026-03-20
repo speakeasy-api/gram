@@ -63,12 +63,21 @@ function PlaygroundInner() {
   const [showLogs, setShowLogs] = useState(false);
   const [temperature, setTemperature] = useState(0.5);
   const [model, setModel] = useState(
-    () =>
-      localStorage.getItem("playground:model") ?? "anthropic/claude-sonnet-4.5",
+    () => {
+      try {
+        return localStorage.getItem("playground:model") ?? "anthropic/claude-sonnet-4.5";
+      } catch {
+        return "anthropic/claude-sonnet-4.5";
+      }
+    },
   );
 
   useEffect(() => {
-    localStorage.setItem("playground:model", model);
+    try {
+      localStorage.setItem("playground:model", model);
+    } catch {
+      // localStorage unavailable
+    }
   }, [model]);
   const [maxTokens, setMaxTokens] = useState(4096);
   const [userProvidedHeaders, setUserProvidedHeaders] = useState<
