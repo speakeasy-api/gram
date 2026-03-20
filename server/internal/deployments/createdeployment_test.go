@@ -442,15 +442,16 @@ func TestDeploymentsService_CreateDeployment_AuditLog_NotWrittenOnFailure(t *tes
 	require.NoError(t, err)
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
-		IdempotencyKey:  "test-audit-create-deployment-failure",
-		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
-		Functions:       []*gen.AddFunctionsForm{},
-		Packages: []*gen.AddDeploymentPackageForm{
+		IdempotencyKey: "test-audit-create-deployment-failure",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 			{
-				Name:    "test-package",
-				Version: new("invalid-version"),
+				AssetID: "invalid-uuid",
+				Name:    "audit-doc",
+				Slug:    "audit-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
