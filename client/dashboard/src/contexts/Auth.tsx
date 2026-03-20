@@ -1,4 +1,20 @@
 import { FullPageError } from "@/components/full-page-error";
+import { GramLogo } from "@/components/gram-logo";
+import { PageHeader } from "@/components/page-header";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import {
   InfoResponseBody,
   OrganizationEntry,
@@ -7,6 +23,8 @@ import {
 import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
+import { Icon } from "@speakeasy-api/moonshine";
+import { Loader2 } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
@@ -206,7 +224,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
   if (isLoading || (!session && !error)) {
-    return null;
+    return <AppLoadingShell />;
   }
 
   if (error || !session || !session.session) {
@@ -352,6 +370,95 @@ export const useSessionData = () => {
 
   return { session, error, status };
 };
+
+/** Static nav items matching the real sidebar groups — no auth context needed. */
+const LOADING_NAV = {
+  project: [{ label: "Home", icon: "house" as const }],
+  connect: [
+    { label: "Sources", icon: "file-code" as const },
+    { label: "Catalog", icon: "store" as const },
+    { label: "Playground", icon: "message-circle" as const },
+  ],
+  build: [
+    { label: "Chat Elements", icon: "message-circle" as const },
+    { label: "MCP", icon: "network" as const },
+    { label: "Slack", icon: "slack" as const },
+    { label: "CLIs", icon: "terminal" as const },
+  ],
+  observe: [
+    { label: "Insights", icon: "layout-dashboard" as const },
+    { label: "MCP Logs", icon: "file-text" as const },
+    { label: "Chat Sessions", icon: "messages-square" as const },
+    { label: "Hooks", icon: "webhook" as const },
+  ],
+  settings: [{ label: "Settings", icon: "settings" as const }],
+};
+
+/**
+ * Lightweight shell that mirrors the real AppLayout structure,
+ * shown while the auth session is still loading so the user
+ * sees the app chrome immediately instead of a blank screen.
+ */
+const AppLoadingShell = () => (
+  <SidebarProvider
+    style={{ "--sidebar-width": "14rem" } as React.CSSProperties}
+  >
+    <div className="flex flex-col h-screen w-full">
+      {/* Header */}
+      <header className="flex items-center h-14 pl-5 pr-4 border-b bg-white dark:bg-background shrink-0">
+        <div className="flex items-center gap-3">
+          <GramLogo className="w-28" />
+          <span className="text-muted-foreground/50 text-xl select-none">
+            /
+          </span>
+          <Skeleton className="h-5 w-24" />
+          <span className="text-muted-foreground/50 text-xl select-none">
+            /
+          </span>
+          <Skeleton className="h-5 w-20" />
+        </div>
+        <div className="ml-auto flex items-center gap-4">
+          <Skeleton className="h-8 w-8 rounded-full" />
+        </div>
+      </header>
+      {/* Body */}
+      <div className="flex flex-1 w-full overflow-hidden pt-2">
+        <Sidebar collapsible="offcanvas" variant="inset">
+          <SidebarContent className="pt-2">
+            {Object.entries(LOADING_NAV).map(([group, items]) => (
+              <SidebarGroup key={group}>
+                <SidebarGroupLabel className="text-sidebar-foreground">
+                  {group}
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {items.map((item) => (
+                      <SidebarMenuItem key={item.label}>
+                        <SidebarMenuButton>
+                          <Icon
+                            name={item.icon}
+                            className="text-muted-foreground"
+                          />
+                          <Type variant="small">{item.label}</Type>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))}
+          </SidebarContent>
+        </Sidebar>
+        <SidebarInset>
+          <PageHeader>
+            <PageHeader.Breadcrumbs />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </PageHeader>
+        </SidebarInset>
+      </div>
+    </div>
+  </SidebarProvider>
+);
 
 export const useUser = () => {
   const { user } = useSession();
