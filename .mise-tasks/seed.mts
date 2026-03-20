@@ -21,6 +21,8 @@ import { projectsRead } from "@gram/client/funcs/projectsRead.js";
 import { toolsList } from "@gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
+import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
+import { environmentsList } from "@gram/client/funcs/environmentsList.js";
 import { ServiceError } from "@gram/client/models/errors";
 import { $ } from "zx";
 
@@ -223,6 +225,20 @@ async function seed() {
     );
   }
 
+  // Seed a default environment for each project
+  for (const { slug: projectSlug } of SEED_PROJECTS) {
+    const env = await getOrCreateEnvironment({
+      gram,
+      sessionId,
+      projectSlug,
+      activeOrgID,
+      name: "Default",
+    });
+    log.info(
+      `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
+    );
+  }
+
   // Seed observability data for the first seeded project
   const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
   const firstProject = firstSeededProjectSlug
@@ -293,6 +309,49 @@ async function initAPIKey(init: {
   log.info(
     `Created new API key and set GRAM_API_KEY environment variable in mise.local.toml.`,
   );
+}
+
+async function getOrCreateEnvironment(init: {
+  gram: GramCore;
+  sessionId: string;
+  projectSlug: string;
+  activeOrgID: string;
+  name: string;
+}): Promise<{ created: boolean; slug: string }> {
+  const { gram, sessionId, projectSlug, activeOrgID, name } = init;
+
+  // Check if environment already exists
+  const listRes = await environmentsList(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+    projectSlugHeaderGramProjectSlug: projectSlug,
+  });
+  if (listRes.ok) {
+    const existing = listRes.value.environments.find((e) => e.name === name);
+    if (existing) {
+      return { created: false, slug: existing.slug };
+    }
+  }
+
+  // Create the environment
+  const res = await environmentsCreate(
+    gram,
+    {
+      createEnvironmentForm: {
+        organizationId: activeOrgID,
+        name,
+        entries: [],
+      },
+    },
+    {
+      sessionHeaderGramSession: sessionId,
+      projectSlugHeaderGramProjectSlug: projectSlug,
+    },
+  );
+  if (!res.ok) {
+    abort(`Failed to create environment '${name}'`, res.error);
+  }
+
+  return { created: true, slug: res.value.slug };
 }
 
 async function getOrCreateProject(init: {
