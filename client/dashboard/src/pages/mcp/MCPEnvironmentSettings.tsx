@@ -219,6 +219,8 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         },
       },
     });
+
+    toast.success("Detached environment from this MCP server");
   };
 
   const handleCreateEnvironment = () => {
