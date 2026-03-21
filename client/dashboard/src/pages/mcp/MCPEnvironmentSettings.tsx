@@ -211,7 +211,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       request: {
         setMcpMetadataRequestBody: {
           toolsetSlug: toolset.slug,
-          defaultEnvironmentId: "",
+          // Omitting defaultEnvironmentId causes the upsert to write NULL, detaching the environment
           environmentConfigs: mcpMetadata?.environmentConfigs || [],
           externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
           instructions: mcpMetadata?.instructions,

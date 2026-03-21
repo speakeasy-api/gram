@@ -242,16 +242,11 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 	var defaultEnvironmentID uuid.NullUUID
 	if payload.DefaultEnvironmentID != nil {
-		if *payload.DefaultEnvironmentID == "" {
-			// Empty string explicitly clears the default environment (detach)
-			defaultEnvironmentID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		} else {
-			parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, s.logger)
-			}
-			defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
+		parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, s.logger)
 		}
+		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
 	}
 
 	var installationOverrideURL pgtype.Text
