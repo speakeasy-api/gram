@@ -244,7 +244,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	if payload.DefaultEnvironmentID != nil {
 		if *payload.DefaultEnvironmentID == "" {
 			// Empty string explicitly clears the default environment (detach)
-			defaultEnvironmentID = uuid.NullUUID{Valid: false}
+			defaultEnvironmentID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		} else {
 			parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
 			if err != nil {
