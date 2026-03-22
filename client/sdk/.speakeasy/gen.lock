@@ -3,10 +3,10 @@ id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
   docChecksum: 91fb03ced3f4fda990cf8069a43292a2
   docVersion: 0.0.1
-  speakeasyVersion: 1.700.2
-  generationVersion: 2.801.2
-  releaseVersion: 0.27.28
-  configChecksum: 69bb01f89e560bff0749aeb1735fd03b
+  speakeasyVersion: 1.730.1
+  generationVersion: 2.844.3
+  releaseVersion: 0.28.4
+  configChecksum: a19cfe32e2e4847cb7ed54860fcacaf0
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -14,8 +14,8 @@ persistentEdits:
 features:
   typescript:
     additionalDependencies: 0.1.0
-    constsAndDefaults: 0.1.12
-    core: 3.26.23
+    constsAndDefaults: 0.1.14
+    core: 3.26.34
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -24,10 +24,10 @@ features:
     globalSecurityCallbacks: 0.1.0
     globalServerURLs: 2.83.0
     methodArguments: 0.1.2
-    methodSecurity: 2.82.6
-    nameOverrides: 2.81.2
+    methodSecurity: 2.82.7
+    nameOverrides: 2.81.4
     reactQueryHooks: 0.2.4
-    responseFormat: 0.2.3
+    responseFormat: 0.3.0
     retries: 2.83.0
     sdkHooks: 0.4.0
     uploadStreams: 0.1.0
@@ -50,7 +50,7 @@ trackedFiles:
     pristine_git_object: 113eead5093c17d43a46159132885318f281a68a
   .npmignore:
     id: aa70c1f807c3
-    last_write_checksum: sha1:3d5eb92f81539175db1ff0280e0aefbdd701f200
+    last_write_checksum: sha1:425e91786e3b6cddd2b364bf3f9f9cd38e3c3e1a
     pristine_git_object: cf98a6bf092538eb10ff0edc915102682ce9a6e6
   FUNCTIONS.md:
     id: 21b9df02aaeb
@@ -1494,11 +1494,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:3600b64ef2424bfbf46b04a4fdd1df6f8dedf888
+    last_write_checksum: sha1:5972f96767890d0b8059559b4784838f35c0020f
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:5816acf2824d08762b29495cc78fef2ab96fcafa
+    last_write_checksum: sha1:39b31cb4f23915a4c3c07ab8d82498848e14f03f
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1972,7 +1972,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:7e6b143f76c27aaeaabfd09a202e8da7a128f163
+    last_write_checksum: sha1:986d97b49d2d8df62f7608c5787415e752c8c765
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -5612,6 +5612,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  detachMcpEnvironment:
+    speakeasy-default-detach-mcp-environment:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
