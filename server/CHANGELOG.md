@@ -1,5 +1,11 @@
 # server
 
+## 0.29.1
+
+### Patch Changes
+
+- 41d507c: Fixed `GET /rpc/chat.creditUsage` authentication so org-scoped credit usage works correctly for customers with multiple projects, requiring only session auth and no longer allowing chat-session access.
+
 ## 0.29.0
 
 ### Minor Changes
