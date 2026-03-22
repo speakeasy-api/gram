@@ -223,13 +223,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         onSuccess: () => {
           toast.success("Detached environment from this MCP server");
         },
-        onError: (error) => {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Failed to detach environment",
-          );
-        },
       },
     );
   };
