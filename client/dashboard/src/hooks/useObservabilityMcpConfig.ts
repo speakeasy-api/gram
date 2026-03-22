@@ -62,8 +62,8 @@ export function useObservabilityMcpConfig({
   }, [toolsets]);
 
   return useMemo(() => {
-    if (!projectSlug) {
-      throw new Error("No project slug found.");
+    if (!orgSlug || !projectSlug) {
+      throw new Error("No org or project slug found.");
     }
 
     const baseConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme"> = {

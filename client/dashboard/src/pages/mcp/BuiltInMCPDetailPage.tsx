@@ -72,6 +72,10 @@ export function BuiltInMCPDetailPage() {
   const { orgSlug, projectSlug } = useSlugs();
   const [activeTab, setActiveTab] = useState("overview");
 
+  if (!orgSlug) {
+    throw new Error("No org slug found.");
+  }
+
   const mcpUrl = `${getServerURL()}/mcp/${orgSlug}-mcp-logs`;
 
   const configJson = `{
