@@ -207,20 +207,33 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   });
 
   const handleDetachEnvironment = () => {
-    setMcpMetadataMutation.mutate({
-      request: {
-        setMcpMetadataRequestBody: {
-          toolsetSlug: toolset.slug,
-          // Omitting defaultEnvironmentId causes the upsert to write NULL, detaching the environment
-          environmentConfigs: mcpMetadata?.environmentConfigs || [],
-          externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-          instructions: mcpMetadata?.instructions,
-          logoAssetId: mcpMetadata?.logoAssetId,
+    setMcpMetadataMutation.mutate(
+      {
+        request: {
+          setMcpMetadataRequestBody: {
+            toolsetSlug: toolset.slug,
+            // Omitting defaultEnvironmentId causes the upsert to write NULL, detaching the environment
+            environmentConfigs: mcpMetadata?.environmentConfigs || [],
+            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+            instructions: mcpMetadata?.instructions,
+            logoAssetId: mcpMetadata?.logoAssetId,
+            installationOverrideUrl: mcpMetadata?.installationOverrideUrl,
+          },
         },
       },
-    });
-
-    toast.success("Detached environment from this MCP server");
+      {
+        onSuccess: () => {
+          toast.success("Detached environment from this MCP server");
+        },
+        onError: (error) => {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to detach environment",
+          );
+        },
+      },
+    );
   };
 
   const handleCreateEnvironment = () => {
@@ -274,6 +287,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
             externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
             instructions: mcpMetadata?.instructions,
             logoAssetId: mcpMetadata?.logoAssetId,
+            installationOverrideUrl: mcpMetadata?.installationOverrideUrl,
           },
         },
       });
@@ -340,6 +354,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
                 instructions: mcpMetadata?.instructions,
                 logoAssetId: mcpMetadata?.logoAssetId,
+                installationOverrideUrl: mcpMetadata?.installationOverrideUrl,
               },
             },
           });
@@ -596,6 +611,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
             externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
             instructions: mcpMetadata?.instructions,
             logoAssetId: mcpMetadata?.logoAssetId,
+            installationOverrideUrl: mcpMetadata?.installationOverrideUrl,
           },
         },
       });
@@ -677,6 +693,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
           instructions: mcpMetadata?.instructions,
           logoAssetId: mcpMetadata?.logoAssetId,
+          installationOverrideUrl: mcpMetadata?.installationOverrideUrl,
         },
       },
     });
