@@ -207,6 +207,41 @@ export function Example() {
 ```
 
 
+## Pagination
+
+Certain queries may have pagination enabled if the underlying API supports it.
+In these cases, additional "infinite" query hooks are exposed to help build
+infinite scrolling and "load more" user interfaces.
+
+> [!NOTE]
+>
+> The original query hooks will still be available and if you are building a
+> more explicit pagination UI with page numbers and next/previous buttons then
+> those hooks may be more suitable.
+
+```tsx
+import { useProjectAuditLogsInfinite } from "@gram/client/react-query/auditlogsListByProject.js";
+
+export function Example() {
+  const { data, error, status, fetchNextPage, hasNextPage } = useProjectAuditLogsInfinite({
+    projectSlug: "<value>",
+  });
+
+  return (
+    <div>
+      {/* Render pages here... */}
+
+      {hasNextPage ? (
+        <div>
+          <button onClick={() => fetchNextPage()}>Load more</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+```
+
+
 ## Integration with React Suspense
 
 TanStack Query predates React Suspense and out of the box it does a great job at
