@@ -20,7 +20,7 @@ export function useObservabilityMcpConfig({
   ElementsConfig,
   "variant" | "welcome" | "theme"
 > {
-  const { projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useSlugs();
   const client = useGramContext();
   const isLocal = process.env.NODE_ENV === "development";
   const { session } = useSession();
@@ -97,9 +97,7 @@ export function useObservabilityMcpConfig({
       };
     }
 
-    const mcpUrl = getServerURL().includes("app.getgram.ai")
-      ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
-      : "https://dev.getgram.ai/mcp/speakeasy-team-gram";
+    const mcpUrl = `${getServerURL()}/mcp/${orgSlug}-gram`;
 
     return {
       ...baseConfig,
@@ -109,6 +107,7 @@ export function useObservabilityMcpConfig({
     toolsToInclude,
     getSession,
     session,
+    orgSlug,
     projectSlug,
     isLocal,
     toolsets,

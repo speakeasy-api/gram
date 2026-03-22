@@ -69,10 +69,10 @@ const TAB_TRIGGER_CLASS = cn(
 
 export function BuiltInMCPDetailPage() {
   const { builtInSlug } = useParams();
-  const { projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useSlugs();
   const [activeTab, setActiveTab] = useState("overview");
 
-  const mcpUrl = `${getServerURL()}/mcp/speakeasy-team-mcp-logs`;
+  const mcpUrl = `${getServerURL()}/mcp/${orgSlug}-mcp-logs`;
 
   const configJson = `{
   "mcpServers": {
