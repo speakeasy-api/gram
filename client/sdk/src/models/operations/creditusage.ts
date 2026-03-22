@@ -5,18 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type CreditUsageSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
-  sessionHeaderGramSession: string;
-};
-
-export type CreditUsageSecurityOption2 = {
-  chatSessionsTokenHeaderGramChatSession: string;
-};
-
 export type CreditUsageSecurity = {
-  option1?: CreditUsageSecurityOption1 | undefined;
-  option2?: CreditUsageSecurityOption2 | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type CreditUsageRequest = {
@@ -24,80 +14,11 @@ export type CreditUsageRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
 };
-
-/** @internal */
-export type CreditUsageSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const CreditUsageSecurityOption1$outboundSchema: z.ZodMiniType<
-  CreditUsageSecurityOption1$Outbound,
-  CreditUsageSecurityOption1
-> = z.pipe(
-  z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-  }),
-);
-
-export function creditUsageSecurityOption1ToJSON(
-  creditUsageSecurityOption1: CreditUsageSecurityOption1,
-): string {
-  return JSON.stringify(
-    CreditUsageSecurityOption1$outboundSchema.parse(creditUsageSecurityOption1),
-  );
-}
-
-/** @internal */
-export type CreditUsageSecurityOption2$Outbound = {
-  "chat_sessions_token_header_Gram-Chat-Session": string;
-};
-
-/** @internal */
-export const CreditUsageSecurityOption2$outboundSchema: z.ZodMiniType<
-  CreditUsageSecurityOption2$Outbound,
-  CreditUsageSecurityOption2
-> = z.pipe(
-  z.object({
-    chatSessionsTokenHeaderGramChatSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      chatSessionsTokenHeaderGramChatSession:
-        "chat_sessions_token_header_Gram-Chat-Session",
-    });
-  }),
-);
-
-export function creditUsageSecurityOption2ToJSON(
-  creditUsageSecurityOption2: CreditUsageSecurityOption2,
-): string {
-  return JSON.stringify(
-    CreditUsageSecurityOption2$outboundSchema.parse(creditUsageSecurityOption2),
-  );
-}
 
 /** @internal */
 export type CreditUsageSecurity$Outbound = {
-  Option1?: CreditUsageSecurityOption1$Outbound | undefined;
-  Option2?: CreditUsageSecurityOption2$Outbound | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -106,17 +27,11 @@ export const CreditUsageSecurity$outboundSchema: z.ZodMiniType<
   CreditUsageSecurity
 > = z.pipe(
   z.object({
-    option1: z.optional(
-      z.lazy(() => CreditUsageSecurityOption1$outboundSchema),
-    ),
-    option2: z.optional(
-      z.lazy(() => CreditUsageSecurityOption2$outboundSchema),
-    ),
+    sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      option1: "Option1",
-      option2: "Option2",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
 );
@@ -132,8 +47,6 @@ export function creditUsageSecurityToJSON(
 /** @internal */
 export type CreditUsageRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -143,14 +56,10 @@ export const CreditUsageRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
     });
   }),
 );

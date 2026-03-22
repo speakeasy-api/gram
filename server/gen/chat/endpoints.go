@@ -32,7 +32,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListChats:                NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		LoadChat:                 NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		GenerateTitle:            NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		CreditUsage:              NewCreditUsageEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		CreditUsage:              NewCreditUsageEndpoint(s, a.APIKeyAuth),
 		ListChatsWithResolutions: NewListChatsWithResolutionsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		SubmitFeedback:           NewSubmitFeedbackEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
@@ -191,7 +191,7 @@ func NewGenerateTitleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, a
 
 // NewCreditUsageEndpoint returns an endpoint function that calls the method
 // "creditUsage" of service "chat".
-func NewCreditUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+func NewCreditUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*CreditUsagePayload)
 		var err error
@@ -205,30 +205,6 @@ func NewCreditUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, aut
 			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.JWTScheme{
-				Name:           "chat_sessions_token",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var token string
-			if p.ChatSessionsToken != nil {
-				token = *p.ChatSessionsToken
-			}
-			ctx, err = authJWTFn(ctx, token, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}

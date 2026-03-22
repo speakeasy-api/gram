@@ -94,12 +94,13 @@ var _ = Service("chat", func() {
 	})
 
 	Method("creditUsage", func() {
-		Description("Load a chat by its ID")
+		// credit usage is counted at the organization level, no project slug is required.
+		Security(security.Session)
+
+		Description("Get the total number of chat credits and usage for the current billing period")
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
-			security.ChatSessionsTokenPayload()
 		})
 
 		Result(func() {
@@ -111,8 +112,6 @@ var _ = Service("chat", func() {
 		HTTP(func() {
 			GET("/rpc/chat.creditUsage")
 			security.SessionHeader()
-			security.ProjectHeader()
-			security.ChatSessionsTokenHeader()
 			Response(StatusOK)
 		})
 

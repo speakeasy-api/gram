@@ -2245,11 +2245,9 @@ func NewGenerateTitlePayload(body *GenerateTitleRequestBody, sessionToken *strin
 }
 
 // NewCreditUsagePayload builds a chat service creditUsage endpoint payload.
-func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.CreditUsagePayload {
+func NewCreditUsagePayload(sessionToken *string) *chat.CreditUsagePayload {
 	v := &chat.CreditUsagePayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }

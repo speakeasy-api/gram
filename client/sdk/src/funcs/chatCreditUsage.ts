@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * creditUsage chat
  *
  * @remarks
- * Load a chat by its ID
+ * Get the total number of chat credits and usage for the current billing period
  */
 export function chatCreditUsage(
   client: GramCore,
@@ -98,15 +98,6 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Chat-Session": encodeSimple(
-      "Gram-Chat-Session",
-      payload?.["Gram-Chat-Session"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -116,21 +107,9 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
-      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option1?.sessionHeaderGramSession,
-      },
-    ],
-    [
-      {
-        fieldName: "Authorization",
-        type: "http:bearer",
-        value: security?.option2?.chatSessionsTokenHeaderGramChatSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );
