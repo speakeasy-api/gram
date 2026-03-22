@@ -323,7 +323,7 @@ async function getOrCreateEnvironment(init: {
   // Check if environment already exists
   const listRes = await environmentsList(gram, undefined, {
     sessionHeaderGramSession: sessionId,
-    projectSlugHeaderGramProjectSlug: projectSlug,
+    projectSlugHeaderGramProject: projectSlug,
   });
   if (listRes.ok) {
     const existing = listRes.value.environments.find((e) => e.name === name);
@@ -344,7 +344,7 @@ async function getOrCreateEnvironment(init: {
     },
     {
       sessionHeaderGramSession: sessionId,
-      projectSlugHeaderGramProjectSlug: projectSlug,
+      projectSlugHeaderGramProject: projectSlug,
     },
   );
   if (!res.ok) {
