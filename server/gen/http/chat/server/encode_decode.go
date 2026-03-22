@@ -718,42 +718,18 @@ func DecodeCreditUsageRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*chat.CreditUsagePayload, error) {
 		var payload *chat.CreditUsagePayload
 		var (
-			sessionToken      *string
-			projectSlugInput  *string
-			chatSessionsToken *string
+			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		chatSessionsTokenRaw := r.Header.Get("Gram-Chat-Session")
-		if chatSessionsTokenRaw != "" {
-			chatSessionsToken = &chatSessionsTokenRaw
-		}
-		payload = NewCreditUsagePayload(sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewCreditUsagePayload(sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
-		if payload.ChatSessionsToken != nil {
-			if strings.Contains(*payload.ChatSessionsToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
-				payload.ChatSessionsToken = &cred
 			}
 		}
 

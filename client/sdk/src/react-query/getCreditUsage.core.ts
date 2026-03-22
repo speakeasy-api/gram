@@ -43,11 +43,7 @@ export function buildGetCreditUsageQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetCreditUsageQueryData>;
 } {
   return {
-    queryKey: queryKeyGetCreditUsage({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-      gramChatSession: request?.gramChatSession,
-    }),
+    queryKey: queryKeyGetCreditUsage({ gramSession: request?.gramSession }),
     queryFn: async function getCreditUsageQueryFn(
       ctx,
     ): Promise<GetCreditUsageQueryData> {
@@ -73,11 +69,7 @@ export function buildGetCreditUsageQuery(
 }
 
 export function queryKeyGetCreditUsage(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramChatSession?: string | undefined;
-  },
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "chat", "creditUsage", parameters];
 }
