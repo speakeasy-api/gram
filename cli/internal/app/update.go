@@ -51,7 +51,7 @@ func newUpdateCommand() *cli.Command {
 		Description: `Update the Gram CLI to the latest available version.
 
 This command supports multiple installation methods:
-  - Homebrew (macOS/Linux): Automatically runs 'brew upgrade gram'
+  - Homebrew (macOS/Linux): Automatically runs 'brew upgrade speakeasy-api/tap/gram'
   - Aqua: Automatically runs 'aqua upgrade speakeasy-api/gram/gram'
   - Manual installation: Downloads and replaces the current binary
 
@@ -248,7 +248,7 @@ func isAquaInstalled(logger *slog.Logger, ctx context.Context) bool {
 func updateViaHomebrew(ctx context.Context, logger *slog.Logger) error {
 	fmt.Println("🍺 Updating via Homebrew...")
 
-	cmd := exec.CommandContext(ctx, "brew", "upgrade", "gram")
+	cmd := exec.CommandContext(ctx, "brew", "upgrade", "speakeasy-api/tap/gram")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
