@@ -548,6 +548,8 @@ Best practices:
 DO: Focus on cross-feature relationships (how tools work together, required sequences), document operational patterns and workflows, be explicit about constraints and limitations, keep it short like a quick-reference card.
 DO NOT: Duplicate individual tool descriptions, include marketing claims, try to change model personality, write lengthy prose.
 
+Keep the total output under ${INSTRUCTIONS_SOFT_LIMIT} characters.
+
 Server details:
 ${JSON.stringify({ name: toolset.name, tools: tools.map((t) => ({ name: t.name, description: t.description })) }, null, 2)}
 
