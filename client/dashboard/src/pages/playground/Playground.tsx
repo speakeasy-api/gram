@@ -13,6 +13,7 @@ import {
   useRegisterToolsetTelemetry,
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { Confirm } from "@gram/client/models/components";
@@ -62,7 +63,10 @@ function PlaygroundInner() {
   );
   const [showLogs, setShowLogs] = useState(false);
   const [temperature, setTemperature] = useState(0.5);
-  const [model, setModel] = useState("anthropic/claude-sonnet-4.5");
+  const [model, setModel] = useLocalStorageState(
+    "playground:model",
+    "anthropic/claude-sonnet-4.5",
+  );
   const [maxTokens, setMaxTokens] = useState(4096);
   const [userProvidedHeaders, setUserProvidedHeaders] = useState<
     Record<string, string>
