@@ -1513,3 +1513,50 @@ COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the princip
 COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
 COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
+
+-- Named role definitions for an organization.
+-- Each role gets its scopes via principal_grants with principal_urn = 'role:<role_id>'.
+-- System roles (is_system = true) are seeded on org creation and cannot be deleted.
+CREATE TABLE IF NOT EXISTS roles (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  description TEXT NOT NULL DEFAULT '' CHECK (CHAR_LENGTH(description) <= 500),
+  is_system BOOLEAN NOT NULL DEFAULT FALSE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT roles_pkey PRIMARY KEY (id),
+  CONSTRAINT roles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS roles_organization_id_name_key
+ON roles (organization_id, name)
+WHERE deleted IS FALSE;
+
+COMMENT ON TABLE roles IS 'Named role definitions. Scopes are assigned via principal_grants with principal_urn = ''role:<role_id>''.';
+COMMENT ON COLUMN roles.is_system IS 'System roles (Admin, Member) are seeded on org creation and cannot be deleted or renamed.';
+
+-- Maps users to roles within an organization.
+-- A user has exactly one role per organization.
+CREATE TABLE IF NOT EXISTS role_assignments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT role_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT role_assignments_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT role_assignments_role_id_fkey FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE CASCADE,
+  CONSTRAINT role_assignments_organization_id_user_id_key UNIQUE (organization_id, user_id)
+);
+
+COMMENT ON TABLE role_assignments IS 'Maps each user to exactly one role per organization. Used by the access resolver to look up role grants for a user.';
+COMMENT ON COLUMN role_assignments.role_id IS 'The role assigned to this user. Grants for the role are in principal_grants with principal_urn = ''role:<role_id>''.';
