@@ -1,13 +1,13 @@
 -- Create "roles" table
 CREATE TABLE "roles" (
-  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
-  "organization_id" text NOT NULL,
-  "name" text NOT NULL,
-  "description" text NOT NULL DEFAULT '',
-  "is_system" boolean NOT NULL DEFAULT false,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,
+  "organization_id" text NOT NULL,
+  "name" text NOT NULL,
+  "description" text NOT NULL DEFAULT '',
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "is_system" boolean NOT NULL DEFAULT false,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
