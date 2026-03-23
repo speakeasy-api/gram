@@ -33,3 +33,17 @@ const (
 var resourceKinds = map[ResourceKind]struct{}{
 	ResourceKindFunction: {},
 }
+
+type AssetKind string
+
+const (
+	AssetKindImage    AssetKind = "image"
+	AssetKindFunction AssetKind = "function"
+	AssetKindOpenAPI  AssetKind = "openapi"
+)
+
+var assetKinds = map[AssetKind]struct{}{
+	AssetKindImage:    {},
+	AssetKindFunction: {},
+	AssetKindOpenAPI:  {},
+}
