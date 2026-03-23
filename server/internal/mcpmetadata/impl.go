@@ -783,7 +783,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		VSCodeInstallLink: safeVsCodeURL,
 		OrganizationName:  organization.Name,
 		SiteURL:           s.siteURL.String(),
-		ScriptURL:         s.serverURL.String() + "/mcp/install-page-" + s.installPageScriptHash + ".js",
+		ScriptURL:         "/mcp/install-page-" + s.installPageScriptHash + ".js",
 		LogoAssetURL:      logoAssetURL,
 		DocsURL:           docsURL,
 		DocsText:          docsText,
