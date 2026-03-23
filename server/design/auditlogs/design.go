@@ -80,7 +80,7 @@ var ListProjectAuditLogsForm = Type("ListProjectAuditLogsForm", func() {
 		Description("The cursor for paginating through audit logs.")
 	})
 	Attribute("project_slug", String, func() {
-		Description("Optional project slug to filter audit logs to a specific project.")
+		Description("Project slug to filter audit logs to a specific project.")
 	})
 })
 

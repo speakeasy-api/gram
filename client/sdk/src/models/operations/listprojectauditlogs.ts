@@ -20,7 +20,7 @@ export type ListProjectAuditLogsRequest = {
    */
   cursor?: string | undefined;
   /**
-   * Optional project slug to filter audit logs to a specific project.
+   * Project slug to filter audit logs to a specific project.
    */
   projectSlug: string;
   /**

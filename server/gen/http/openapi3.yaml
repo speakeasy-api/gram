@@ -1336,12 +1336,12 @@ paths:
                     description: The cursor for paginating through audit logs.
                     type: string
                 - allowEmptyValue: true
-                  description: Optional project slug to filter audit logs to a specific project.
+                  description: Project slug to filter audit logs to a specific project.
                   in: query
                   name: project_slug
                   required: true
                   schema:
-                    description: Optional project slug to filter audit logs to a specific project.
+                    description: Project slug to filter audit logs to a specific project.
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -15986,7 +15986,7 @@ components:
                     description: The cursor for paginating through audit logs.
                 project_slug:
                     type: string
-                    description: Optional project slug to filter audit logs to a specific project.
+                    description: Project slug to filter audit logs to a specific project.
             required:
                 - project_slug
         ListProjectAuditLogsResult:

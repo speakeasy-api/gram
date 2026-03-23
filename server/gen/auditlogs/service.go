@@ -68,7 +68,7 @@ type ListByProjectPayload struct {
 	SessionToken *string
 	// The cursor for paginating through audit logs.
 	Cursor *string
-	// Optional project slug to filter audit logs to a specific project.
+	// Project slug to filter audit logs to a specific project.
 	ProjectSlug string
 }
 
