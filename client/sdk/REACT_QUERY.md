@@ -48,10 +48,10 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useListAssets } from "@gram/client/react-query/assetsListAssets.js";
+import { useGrants } from "@gram/client/react-query/accessList.js";
 
 export function Example() {
-  const { data, error, status } = useListAssets();
+  const { data, error, status } = useGrants();
 
   // Render the UI here...
 }
@@ -64,11 +64,11 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useListAssets } from "@gram/client/react-query/assetsListAssets.js";
+import { useGrants } from "@gram/client/react-query/accessList.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useListAssets(
+  const { data, error, status } = useGrants(
     {
       // TanStack Query options:
       enabled,
@@ -105,10 +105,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useCreateSignedChatAttachmentURLMutation } from "@gram/client/react-query/assetsCreateSignedChatAttachmentURL.js";
+import { useRemoveGrantsMutation } from "@gram/client/react-query/accessRemove.js";
 
 export function Example() {
-  const { mutate, status } = useCreateSignedChatAttachmentURLMutation();
+  const { mutate, status } = useRemoveGrantsMutation();
 
   return (
     <form
@@ -118,9 +118,14 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          createSignedChatAttachmentURLForm2: {
-            id: "<id>",
-            projectId: "<id>",
+          removeGrantsRequestBody: {
+            grants: [
+              {
+                principalUrn: "<value>",
+                resource: "<value>",
+                scope: "<value>",
+              },
+            ],
           },
         });
       }}
@@ -138,10 +143,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useCreateSignedChatAttachmentURLMutation } from "@gram/client/react-query/assetsCreateSignedChatAttachmentURL.js";
+import { useRemoveGrantsMutation } from "@gram/client/react-query/accessRemove.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useCreateSignedChatAttachmentURLMutation({
+  const { mutate, status } = useRemoveGrantsMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -173,7 +178,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateListAssets, invalidateAllListAssets } from "@gram/client/react-query/assetsListAssets.js";
+import { invalidateGrants, invalidateAllGrants } from "@gram/client/react-query/accessList.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/client/react-query/example.js";
 
@@ -191,9 +196,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateListAssets(queryClient, /* ... arguments ... */);
+            invalidateGrants(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllListAssets(queryClient);
+            invalidateAllGrants(queryClient);
           },
         });
       }}
@@ -221,7 +226,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/client";
 import { GramProvider } from "@gram/client/react-query";
-import { useListAssetsSuspense } from "@gram/client/react-query/assetsListAssets.js";
+import { useGrantsSuspense } from "@gram/client/react-query/accessList.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore();
@@ -254,7 +259,7 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useListAssetsSuspense();
+  const { data } = useGrantsSuspense();
 
   // Render the UI here...
 }
@@ -274,13 +279,13 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/client";
-import { prefetchListAssets } from "@gram/client/react-query/assetsListAssets.js";
+import { prefetchGrants } from "@gram/client/react-query/accessList.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
   const gram = new GramCore();
 
-  await prefetchListAssets(gram);
+  await prefetchGrants(gram);
 
   return (
     // HydrationBoundary is a Client Component, so hydration will happen there.
