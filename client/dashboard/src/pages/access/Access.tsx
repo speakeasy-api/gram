@@ -16,8 +16,8 @@ const tabFromPath: Record<string, string> = {
 };
 
 const tabDisplayNames: Record<string, string> = {
-  roles: "Roles & Permissions",
-  members: "Roles & Permissions",
+  roles: "Roles",
+  members: "Members",
 };
 
 export default function Access() {
@@ -55,7 +55,7 @@ export default function Access() {
         </div>
 
         <Tabs value={currentTab} onValueChange={handleTabChange}>
-          <div className="border-b border-border -mx-8 px-8 -mt-2 bg-muted/15">
+          <div className="border-b border-border -mt-2">
             <TabsList className="bg-transparent p-0 h-auto rounded-none justify-start gap-4 text-sm">
               <PageTabsTrigger value="roles">Roles</PageTabsTrigger>
               <PageTabsTrigger value="members">Members</PageTabsTrigger>
