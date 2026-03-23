@@ -125,7 +125,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/RemoveGrantsForm'
+                            $ref: '#/components/schemas/GrantsForm'
                 required: true
             responses:
                 "204":
@@ -307,7 +307,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/RemoveGrantsForm'
+                            $ref: '#/components/schemas/GrantsForm'
                 required: true
             responses:
                 "200":
@@ -13153,26 +13153,6 @@ components:
                 - name
                 - slug
                 - runtime
-        AddGrantEntry:
-            type: object
-            properties:
-                principal_urn:
-                    type: string
-                    description: The user or role receiving this permission (e.g. "user:user_abc", "role:admin").
-                resource:
-                    type: string
-                    description: The resource this permission applies to. Use "*" for unrestricted access.
-                    maxLength: 260
-                scope:
-                    type: string
-                    description: The action being permitted (e.g. "build:read", "mcp:connect").
-                    minLength: 3
-                    maxLength: 60
-            description: 'A permission to grant: who gets it, what action they can perform, and which resource it applies to.'
-            required:
-                - principal_urn
-                - scope
-                - resource
         AddOAuthProxyServerForm:
             type: object
             properties:
@@ -15719,6 +15699,39 @@ components:
                 - resource
                 - created_at
                 - updated_at
+        GrantEntry:
+            type: object
+            properties:
+                principal_urn:
+                    type: string
+                    description: The user or role this permission entry applies to (e.g. "user:user_abc", "role:admin").
+                resource:
+                    type: string
+                    description: The resource this permission applies to. Use "*" for unrestricted access.
+                    maxLength: 260
+                scope:
+                    type: string
+                    description: The action being permitted (e.g. "build:read", "mcp:connect").
+                    minLength: 3
+                    maxLength: 60
+            description: A permission entry identifying who it applies to, what action it covers, and which resource it targets.
+            required:
+                - principal_urn
+                - scope
+                - resource
+        GrantsForm:
+            type: object
+            properties:
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GrantEntry'
+                    description: The permissions to process.
+                    minItems: 1
+                    maxItems: 100
+            description: A batch of permission entries to apply to access-management operations.
+            required:
+                - grants
         HTTPToolDefinition:
             type: object
             properties:
@@ -17475,38 +17488,6 @@ components:
                     description: The name of the org to register
             required:
                 - org_name
-        RemoveGrantEntry:
-            type: object
-            properties:
-                principal_urn:
-                    type: string
-                    description: The user or role that holds this permission (e.g. "user:user_abc", "role:admin").
-                resource:
-                    type: string
-                    description: The resource this permission applies to. Use "*" for unrestricted access.
-                    maxLength: 260
-                scope:
-                    type: string
-                    description: The action being permitted (e.g. "build:read", "mcp:connect").
-                    minLength: 3
-                    maxLength: 60
-            description: A permission to revoke, identified by who holds it, what action it covers, and which resource it applies to.
-            required:
-                - principal_urn
-                - scope
-                - resource
-        RemoveGrantsForm:
-            type: object
-            properties:
-                grants:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RemoveGrantEntry'
-                    description: The permissions to revoke.
-                    minItems: 1
-                    maxItems: 100
-            required:
-                - grants
         RemovePrincipalGrantsRequestBody:
             type: object
             properties:
@@ -19466,18 +19447,6 @@ components:
                     $ref: '#/components/schemas/ToolVariation'
             required:
                 - variation
-        UpsertGrantsForm:
-            type: object
-            properties:
-                grants:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AddGrantEntry'
-                    description: The permissions to grant.
-                    minItems: 1
-                    maxItems: 100
-            required:
-                - grants
         UpsertGrantsResult:
             type: object
             properties:

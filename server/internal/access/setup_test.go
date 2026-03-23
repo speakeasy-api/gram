@@ -79,7 +79,7 @@ func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, princip
 	require.NoError(t, err)
 
 	result, err := svc.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
-		Grants: []*gen.AddGrantEntry{
+		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: principal, Scope: scope, Resource: resource},
 		},
 	})

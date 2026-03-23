@@ -118,7 +118,7 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          removeGrantsForm: {
+          grantsForm: {
             grants: [
               {
                 principalUrn: "<value>",

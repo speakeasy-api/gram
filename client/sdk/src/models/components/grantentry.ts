@@ -6,11 +6,11 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * A permission to revoke, identified by who holds it, what action it covers, and which resource it applies to.
+ * A permission entry identifying who it applies to, what action it covers, and which resource it targets.
  */
-export type RemoveGrantEntry = {
+export type GrantEntry = {
   /**
-   * The user or role that holds this permission (e.g. "user:user_abc", "role:admin").
+   * The user or role this permission entry applies to (e.g. "user:user_abc", "role:admin").
    */
   principalUrn: string;
   /**
@@ -24,16 +24,16 @@ export type RemoveGrantEntry = {
 };
 
 /** @internal */
-export type RemoveGrantEntry$Outbound = {
+export type GrantEntry$Outbound = {
   principal_urn: string;
   resource: string;
   scope: string;
 };
 
 /** @internal */
-export const RemoveGrantEntry$outboundSchema: z.ZodMiniType<
-  RemoveGrantEntry$Outbound,
-  RemoveGrantEntry
+export const GrantEntry$outboundSchema: z.ZodMiniType<
+  GrantEntry$Outbound,
+  GrantEntry
 > = z.pipe(
   z.object({
     principalUrn: z.string(),
@@ -47,10 +47,6 @@ export const RemoveGrantEntry$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function removeGrantEntryToJSON(
-  removeGrantEntry: RemoveGrantEntry,
-): string {
-  return JSON.stringify(
-    RemoveGrantEntry$outboundSchema.parse(removeGrantEntry),
-  );
+export function grantEntryToJSON(grantEntry: GrantEntry): string {
+  return JSON.stringify(GrantEntry$outboundSchema.parse(grantEntry));
 }

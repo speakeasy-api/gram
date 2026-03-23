@@ -65,7 +65,7 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsA
 		}
 		for _, e := range body.Grants {
 			if e != nil {
-				if err2 := ValidateAddGrantEntryRequestBody(e); err2 != nil {
+				if err2 := ValidateGrantEntryRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -88,16 +88,16 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsA
 	}
 	v := &access.UpsertGrantsPayload{}
 	if body.Grants != nil {
-		v.Grants = make([]*access.AddGrantEntry, len(body.Grants))
+		v.Grants = make([]*access.GrantEntry, len(body.Grants))
 		for i, val := range body.Grants {
 			if val == nil {
 				v.Grants[i] = nil
 				continue
 			}
-			v.Grants[i] = marshalAddGrantEntryRequestBodyToAccessAddGrantEntry(val)
+			v.Grants[i] = marshalGrantEntryRequestBodyToAccessGrantEntry(val)
 		}
 	} else {
-		v.Grants = []*access.AddGrantEntry{}
+		v.Grants = []*access.GrantEntry{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -126,7 +126,7 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsA
 		}
 		for _, e := range body.Grants {
 			if e != nil {
-				if err2 := ValidateRemoveGrantEntryRequestBody(e); err2 != nil {
+				if err2 := ValidateGrantEntryRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -149,16 +149,16 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsA
 	}
 	v := &access.RemoveGrantsPayload{}
 	if body.Grants != nil {
-		v.Grants = make([]*access.RemoveGrantEntry, len(body.Grants))
+		v.Grants = make([]*access.GrantEntry, len(body.Grants))
 		for i, val := range body.Grants {
 			if val == nil {
 				v.Grants[i] = nil
 				continue
 			}
-			v.Grants[i] = marshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(val)
+			v.Grants[i] = marshalGrantEntryRequestBodyToAccessGrantEntry(val)
 		}
 	} else {
-		v.Grants = []*access.RemoveGrantEntry{}
+		v.Grants = []*access.GrantEntry{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

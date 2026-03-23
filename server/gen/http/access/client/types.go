@@ -18,15 +18,15 @@ import (
 // UpsertGrantsRequestBody is the type of the "access" service "upsertGrants"
 // endpoint HTTP request body.
 type UpsertGrantsRequestBody struct {
-	// The permissions to grant.
-	Grants []*AddGrantEntryRequestBody `form:"grants" json:"grants" xml:"grants"`
+	// The permissions to process.
+	Grants []*GrantEntryRequestBody `form:"grants" json:"grants" xml:"grants"`
 }
 
 // RemoveGrantsRequestBody is the type of the "access" service "removeGrants"
 // endpoint HTTP request body.
 type RemoveGrantsRequestBody struct {
-	// The permissions to revoke.
-	Grants []*RemoveGrantEntryRequestBody `form:"grants" json:"grants" xml:"grants"`
+	// The permissions to process.
+	Grants []*GrantEntryRequestBody `form:"grants" json:"grants" xml:"grants"`
 }
 
 // RemovePrincipalGrantsRequestBody is the type of the "access" service
@@ -803,20 +803,9 @@ type GrantResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// AddGrantEntryRequestBody is used to define fields on request body types.
-type AddGrantEntryRequestBody struct {
-	// The user or role receiving this permission (e.g. "user:user_abc",
-	// "role:admin").
-	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	// The action being permitted (e.g. "build:read", "mcp:connect").
-	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// The resource this permission applies to. Use "*" for unrestricted access.
-	Resource string `form:"resource" json:"resource" xml:"resource"`
-}
-
-// RemoveGrantEntryRequestBody is used to define fields on request body types.
-type RemoveGrantEntryRequestBody struct {
-	// The user or role that holds this permission (e.g. "user:user_abc",
+// GrantEntryRequestBody is used to define fields on request body types.
+type GrantEntryRequestBody struct {
+	// The user or role this permission entry applies to (e.g. "user:user_abc",
 	// "role:admin").
 	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// The action being permitted (e.g. "build:read", "mcp:connect").
@@ -830,16 +819,16 @@ type RemoveGrantEntryRequestBody struct {
 func NewUpsertGrantsRequestBody(p *access.UpsertGrantsPayload) *UpsertGrantsRequestBody {
 	body := &UpsertGrantsRequestBody{}
 	if p.Grants != nil {
-		body.Grants = make([]*AddGrantEntryRequestBody, len(p.Grants))
+		body.Grants = make([]*GrantEntryRequestBody, len(p.Grants))
 		for i, val := range p.Grants {
 			if val == nil {
 				body.Grants[i] = nil
 				continue
 			}
-			body.Grants[i] = marshalAccessAddGrantEntryToAddGrantEntryRequestBody(val)
+			body.Grants[i] = marshalAccessGrantEntryToGrantEntryRequestBody(val)
 		}
 	} else {
-		body.Grants = []*AddGrantEntryRequestBody{}
+		body.Grants = []*GrantEntryRequestBody{}
 	}
 	return body
 }
@@ -849,16 +838,16 @@ func NewUpsertGrantsRequestBody(p *access.UpsertGrantsPayload) *UpsertGrantsRequ
 func NewRemoveGrantsRequestBody(p *access.RemoveGrantsPayload) *RemoveGrantsRequestBody {
 	body := &RemoveGrantsRequestBody{}
 	if p.Grants != nil {
-		body.Grants = make([]*RemoveGrantEntryRequestBody, len(p.Grants))
+		body.Grants = make([]*GrantEntryRequestBody, len(p.Grants))
 		for i, val := range p.Grants {
 			if val == nil {
 				body.Grants[i] = nil
 				continue
 			}
-			body.Grants[i] = marshalAccessRemoveGrantEntryToRemoveGrantEntryRequestBody(val)
+			body.Grants[i] = marshalAccessGrantEntryToGrantEntryRequestBody(val)
 		}
 	} else {
-		body.Grants = []*RemoveGrantEntryRequestBody{}
+		body.Grants = []*GrantEntryRequestBody{}
 	}
 	return body
 }
@@ -2535,24 +2524,9 @@ func ValidateGrantResponseBody(body *GrantResponseBody) (err error) {
 	return
 }
 
-// ValidateAddGrantEntryRequestBody runs the validations defined on
-// AddGrantEntryRequestBody
-func ValidateAddGrantEntryRequestBody(body *AddGrantEntryRequestBody) (err error) {
-	if utf8.RuneCountInString(body.Scope) < 3 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 3, true))
-	}
-	if utf8.RuneCountInString(body.Scope) > 60 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 60, false))
-	}
-	if utf8.RuneCountInString(body.Resource) > 260 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 260, false))
-	}
-	return
-}
-
-// ValidateRemoveGrantEntryRequestBody runs the validations defined on
-// RemoveGrantEntryRequestBody
-func ValidateRemoveGrantEntryRequestBody(body *RemoveGrantEntryRequestBody) (err error) {
+// ValidateGrantEntryRequestBody runs the validations defined on
+// GrantEntryRequestBody
+func ValidateGrantEntryRequestBody(body *GrantEntryRequestBody) (err error) {
 	if utf8.RuneCountInString(body.Scope) < 3 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 3, true))
 	}

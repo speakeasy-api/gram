@@ -52,18 +52,6 @@ const ServiceName = "access"
 // MethodKey key.
 var MethodNames = [4]string{"listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants"}
 
-// A permission to grant: who gets it, what action they can perform, and which
-// resource it applies to.
-type AddGrantEntry struct {
-	// The user or role receiving this permission (e.g. "user:user_abc",
-	// "role:admin").
-	PrincipalUrn urn.Principal
-	// The action being permitted (e.g. "build:read", "mcp:connect").
-	Scope string
-	// The resource this permission applies to. Use "*" for unrestricted access.
-	Resource string
-}
-
 // A permission record giving a user or role the ability to perform an action
 // on a resource.
 type Grant struct {
@@ -86,6 +74,18 @@ type Grant struct {
 	UpdatedAt string
 }
 
+// A permission entry identifying who it applies to, what action it covers, and
+// which resource it targets.
+type GrantEntry struct {
+	// The user or role this permission entry applies to (e.g. "user:user_abc",
+	// "role:admin").
+	PrincipalUrn urn.Principal
+	// The action being permitted (e.g. "build:read", "mcp:connect").
+	Scope string
+	// The resource this permission applies to. Use "*" for unrestricted access.
+	Resource string
+}
+
 // ListGrantsPayload is the payload type of the access service listGrants
 // method.
 type ListGrantsPayload struct {
@@ -102,25 +102,13 @@ type ListGrantsResult struct {
 	Grants []*Grant
 }
 
-// A permission to revoke, identified by who holds it, what action it covers,
-// and which resource it applies to.
-type RemoveGrantEntry struct {
-	// The user or role that holds this permission (e.g. "user:user_abc",
-	// "role:admin").
-	PrincipalUrn urn.Principal
-	// The action being permitted (e.g. "build:read", "mcp:connect").
-	Scope string
-	// The resource this permission applies to. Use "*" for unrestricted access.
-	Resource string
-}
-
 // RemoveGrantsPayload is the payload type of the access service removeGrants
 // method.
 type RemoveGrantsPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
-	// The permissions to revoke.
-	Grants []*RemoveGrantEntry
+	// The permissions to process.
+	Grants []*GrantEntry
 }
 
 // RemovePrincipalGrantsPayload is the payload type of the access service
@@ -138,8 +126,8 @@ type RemovePrincipalGrantsPayload struct {
 type UpsertGrantsPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
-	// The permissions to grant.
-	Grants []*AddGrantEntry
+	// The permissions to process.
+	Grants []*GrantEntry
 }
 
 // UpsertGrantsResult is the result type of the access service upsertGrants

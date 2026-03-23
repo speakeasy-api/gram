@@ -18,15 +18,15 @@ import (
 // UpsertGrantsRequestBody is the type of the "access" service "upsertGrants"
 // endpoint HTTP request body.
 type UpsertGrantsRequestBody struct {
-	// The permissions to grant.
-	Grants []*AddGrantEntryRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
+	// The permissions to process.
+	Grants []*GrantEntryRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
 // RemoveGrantsRequestBody is the type of the "access" service "removeGrants"
 // endpoint HTTP request body.
 type RemoveGrantsRequestBody struct {
-	// The permissions to revoke.
-	Grants []*RemoveGrantEntryRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
+	// The permissions to process.
+	Grants []*GrantEntryRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
 // RemovePrincipalGrantsRequestBody is the type of the "access" service
@@ -803,20 +803,9 @@ type GrantResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// AddGrantEntryRequestBody is used to define fields on request body types.
-type AddGrantEntryRequestBody struct {
-	// The user or role receiving this permission (e.g. "user:user_abc",
-	// "role:admin").
-	PrincipalUrn *urn.Principal `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
-	// The action being permitted (e.g. "build:read", "mcp:connect").
-	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// The resource this permission applies to. Use "*" for unrestricted access.
-	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
-}
-
-// RemoveGrantEntryRequestBody is used to define fields on request body types.
-type RemoveGrantEntryRequestBody struct {
-	// The user or role that holds this permission (e.g. "user:user_abc",
+// GrantEntryRequestBody is used to define fields on request body types.
+type GrantEntryRequestBody struct {
+	// The user or role this permission entry applies to (e.g. "user:user_abc",
 	// "role:admin").
 	PrincipalUrn *urn.Principal `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The action being permitted (e.g. "build:read", "mcp:connect").
@@ -1446,13 +1435,13 @@ func NewListGrantsPayload(principalUrn *string, apikeyToken *string, sessionToke
 // NewUpsertGrantsPayload builds a access service upsertGrants endpoint payload.
 func NewUpsertGrantsPayload(body *UpsertGrantsRequestBody, apikeyToken *string, sessionToken *string) *access.UpsertGrantsPayload {
 	v := &access.UpsertGrantsPayload{}
-	v.Grants = make([]*access.AddGrantEntry, len(body.Grants))
+	v.Grants = make([]*access.GrantEntry, len(body.Grants))
 	for i, val := range body.Grants {
 		if val == nil {
 			v.Grants[i] = nil
 			continue
 		}
-		v.Grants[i] = unmarshalAddGrantEntryRequestBodyToAccessAddGrantEntry(val)
+		v.Grants[i] = unmarshalGrantEntryRequestBodyToAccessGrantEntry(val)
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1463,13 +1452,13 @@ func NewUpsertGrantsPayload(body *UpsertGrantsRequestBody, apikeyToken *string, 
 // NewRemoveGrantsPayload builds a access service removeGrants endpoint payload.
 func NewRemoveGrantsPayload(body *RemoveGrantsRequestBody, apikeyToken *string, sessionToken *string) *access.RemoveGrantsPayload {
 	v := &access.RemoveGrantsPayload{}
-	v.Grants = make([]*access.RemoveGrantEntry, len(body.Grants))
+	v.Grants = make([]*access.GrantEntry, len(body.Grants))
 	for i, val := range body.Grants {
 		if val == nil {
 			v.Grants[i] = nil
 			continue
 		}
-		v.Grants[i] = unmarshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(val)
+		v.Grants[i] = unmarshalGrantEntryRequestBodyToAccessGrantEntry(val)
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1503,7 +1492,7 @@ func ValidateUpsertGrantsRequestBody(body *UpsertGrantsRequestBody) (err error) 
 	}
 	for _, e := range body.Grants {
 		if e != nil {
-			if err2 := ValidateAddGrantEntryRequestBody(e); err2 != nil {
+			if err2 := ValidateGrantEntryRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -1525,7 +1514,7 @@ func ValidateRemoveGrantsRequestBody(body *RemoveGrantsRequestBody) (err error) 
 	}
 	for _, e := range body.Grants {
 		if e != nil {
-			if err2 := ValidateRemoveGrantEntryRequestBody(e); err2 != nil {
+			if err2 := ValidateGrantEntryRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -1542,39 +1531,9 @@ func ValidateRemovePrincipalGrantsRequestBody(body *RemovePrincipalGrantsRequest
 	return
 }
 
-// ValidateAddGrantEntryRequestBody runs the validations defined on
-// AddGrantEntryRequestBody
-func ValidateAddGrantEntryRequestBody(body *AddGrantEntryRequestBody) (err error) {
-	if body.PrincipalUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
-	}
-	if body.Scope == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
-	}
-	if body.Resource == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
-	}
-	if body.Scope != nil {
-		if utf8.RuneCountInString(*body.Scope) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 3, true))
-		}
-	}
-	if body.Scope != nil {
-		if utf8.RuneCountInString(*body.Scope) > 60 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 60, false))
-		}
-	}
-	if body.Resource != nil {
-		if utf8.RuneCountInString(*body.Resource) > 260 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 260, false))
-		}
-	}
-	return
-}
-
-// ValidateRemoveGrantEntryRequestBody runs the validations defined on
-// RemoveGrantEntryRequestBody
-func ValidateRemoveGrantEntryRequestBody(body *RemoveGrantEntryRequestBody) (err error) {
+// ValidateGrantEntryRequestBody runs the validations defined on
+// GrantEntryRequestBody
+func ValidateGrantEntryRequestBody(body *GrantEntryRequestBody) (err error) {
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}

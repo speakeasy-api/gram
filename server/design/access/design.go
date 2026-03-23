@@ -50,7 +50,7 @@ var _ = Service("access", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(UpsertGrantsForm)
+			Extend(GrantsForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -77,7 +77,7 @@ var _ = Service("access", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(RemoveGrantsForm)
+			Extend(GrantsForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -124,12 +124,12 @@ var _ = Service("access", func() {
 	})
 })
 
-var RemoveGrantEntry = Type("RemoveGrantEntry", func() {
-	Description("A permission to revoke, identified by who holds it, what action it covers, and which resource it applies to.")
+var GrantEntry = Type("GrantEntry", func() {
+	Description("A permission entry identifying who it applies to, what action it covers, and which resource it targets.")
 	Required("principal_urn", "scope", "resource")
 
 	Attribute("principal_urn", String, func() {
-		Description("The user or role that holds this permission (e.g. \"user:user_abc\", \"role:admin\").")
+		Description("The user or role this permission entry applies to (e.g. \"user:user_abc\", \"role:admin\").")
 		Meta("struct:field:type", "urn.Principal", "github.com/speakeasy-api/gram/server/internal/urn")
 	})
 	Attribute("scope", String, func() {
@@ -143,37 +143,10 @@ var RemoveGrantEntry = Type("RemoveGrantEntry", func() {
 	})
 })
 
-var RemoveGrantsForm = Type("RemoveGrantsForm", func() {
-	Attribute("grants", ArrayOf(RemoveGrantEntry), func() {
-		Description("The permissions to revoke.")
-		MinLength(1)
-		MaxLength(100)
-	})
-	Required("grants")
-})
-
-var AddGrantEntry = Type("AddGrantEntry", func() {
-	Description("A permission to grant: who gets it, what action they can perform, and which resource it applies to.")
-	Required("principal_urn", "scope", "resource")
-
-	Attribute("principal_urn", String, func() {
-		Description("The user or role receiving this permission (e.g. \"user:user_abc\", \"role:admin\").")
-		Meta("struct:field:type", "urn.Principal", "github.com/speakeasy-api/gram/server/internal/urn")
-	})
-	Attribute("scope", String, func() {
-		Description("The action being permitted (e.g. \"build:read\", \"mcp:connect\").")
-		MinLength(3)
-		MaxLength(60)
-	})
-	Attribute("resource", String, func() {
-		Description("The resource this permission applies to. Use \"*\" for unrestricted access.")
-		MaxLength(260)
-	})
-})
-
-var UpsertGrantsForm = Type("UpsertGrantsForm", func() {
-	Attribute("grants", ArrayOf(AddGrantEntry), func() {
-		Description("The permissions to grant.")
+var GrantsForm = Type("GrantsForm", func() {
+	Description("A batch of permission entries to apply to access-management operations.")
+	Attribute("grants", ArrayOf(GrantEntry), func() {
+		Description("The permissions to process.")
 		MinLength(1)
 		MaxLength(100)
 	})

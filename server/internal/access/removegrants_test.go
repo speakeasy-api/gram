@@ -24,7 +24,7 @@ func TestRemoveGrants_RemovesSingleGrant(t *testing.T) {
 
 	// Remove only the build:read grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
-		Grants: []*gen.RemoveGrantEntry{
+		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "build:read", Resource: "*"},
 		},
 	})
@@ -52,7 +52,7 @@ func TestRemoveGrants_BatchRemovesMultipleGrants(t *testing.T) {
 
 	// Remove two of three grants in a single batch call
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
-		Grants: []*gen.RemoveGrantEntry{
+		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "build:read", Resource: "*"},
 			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "mcp:connect", Resource: "*"},
 		},
@@ -81,7 +81,7 @@ func TestRemoveGrants_DoesNotAffectOtherPrincipals(t *testing.T) {
 
 	// Remove only user_abc's grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
-		Grants: []*gen.RemoveGrantEntry{
+		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, abcURN), Scope: "build:read", Resource: "*"},
 		},
 	})
@@ -109,7 +109,7 @@ func TestRemoveGrants_MatchesExactResourceScope(t *testing.T) {
 
 	// Remove only the project-specific grant
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
-		Grants: []*gen.RemoveGrantEntry{
+		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "build:read", Resource: "project-1"},
 		},
 	})
@@ -131,7 +131,7 @@ func TestRemoveGrants_NoOpForNonExistentGrant(t *testing.T) {
 
 	// Removing a grant that doesn't exist is a silent no-op (batch semantics)
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
-		Grants: []*gen.RemoveGrantEntry{
+		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
@@ -147,7 +147,7 @@ func TestRemoveGrants_InvalidPrincipalURN(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 
 	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
-		Grants: []*gen.RemoveGrantEntry{
+		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: urn.Principal{}, Scope: "build:read", Resource: "*"},
 		},
 	})
@@ -160,7 +160,7 @@ func TestRemoveGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 	_, ti := newTestAccessService(t)
 
 	err := ti.service.RemoveGrants(t.Context(), &gen.RemoveGrantsPayload{
-		Grants: []*gen.RemoveGrantEntry{
+		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})

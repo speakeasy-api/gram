@@ -915,23 +915,10 @@ func marshalAccessGrantToGrantResponseBody(v *access.Grant) *GrantResponseBody {
 	return res
 }
 
-// unmarshalAddGrantEntryRequestBodyToAccessAddGrantEntry builds a value of
-// type *access.AddGrantEntry from a value of type *AddGrantEntryRequestBody.
-func unmarshalAddGrantEntryRequestBodyToAccessAddGrantEntry(v *AddGrantEntryRequestBody) *access.AddGrantEntry {
-	res := &access.AddGrantEntry{
-		PrincipalUrn: *v.PrincipalUrn,
-		Scope:        *v.Scope,
-		Resource:     *v.Resource,
-	}
-
-	return res
-}
-
-// unmarshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry builds a value
-// of type *access.RemoveGrantEntry from a value of type
-// *RemoveGrantEntryRequestBody.
-func unmarshalRemoveGrantEntryRequestBodyToAccessRemoveGrantEntry(v *RemoveGrantEntryRequestBody) *access.RemoveGrantEntry {
-	res := &access.RemoveGrantEntry{
+// unmarshalGrantEntryRequestBodyToAccessGrantEntry builds a value of type
+// *access.GrantEntry from a value of type *GrantEntryRequestBody.
+func unmarshalGrantEntryRequestBodyToAccessGrantEntry(v *GrantEntryRequestBody) *access.GrantEntry {
+	res := &access.GrantEntry{
 		PrincipalUrn: *v.PrincipalUrn,
 		Scope:        *v.Scope,
 		Resource:     *v.Resource,
