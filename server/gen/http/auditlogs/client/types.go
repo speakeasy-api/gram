@@ -14,18 +14,18 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// ListByProjectResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body.
-type ListByProjectResponseBody struct {
+// ListResponseBody is the type of the "auditlogs" service "list" endpoint HTTP
+// response body.
+type ListResponseBody struct {
 	// List of audit logs
 	Logs []*AuditLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// The cursor to be used for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// ListByProjectUnauthorizedResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "unauthorized" error.
-type ListByProjectUnauthorizedResponseBody struct {
+// ListUnauthorizedResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "unauthorized" error.
+type ListUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -41,9 +41,9 @@ type ListByProjectUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectForbiddenResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "forbidden" error.
-type ListByProjectForbiddenResponseBody struct {
+// ListForbiddenResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "forbidden" error.
+type ListForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -59,9 +59,9 @@ type ListByProjectForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectBadRequestResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "bad_request" error.
-type ListByProjectBadRequestResponseBody struct {
+// ListBadRequestResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "bad_request" error.
+type ListBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -77,9 +77,9 @@ type ListByProjectBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectNotFoundResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "not_found" error.
-type ListByProjectNotFoundResponseBody struct {
+// ListNotFoundResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "not_found" error.
+type ListNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -95,9 +95,9 @@ type ListByProjectNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectConflictResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "conflict" error.
-type ListByProjectConflictResponseBody struct {
+// ListConflictResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "conflict" error.
+type ListConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -113,10 +113,9 @@ type ListByProjectConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectUnsupportedMediaResponseBody is the type of the "auditlogs"
-// service "listByProject" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ListByProjectUnsupportedMediaResponseBody struct {
+// ListUnsupportedMediaResponseBody is the type of the "auditlogs" service
+// "list" endpoint HTTP response body for the "unsupported_media" error.
+type ListUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -132,9 +131,9 @@ type ListByProjectUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectInvalidResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "invalid" error.
-type ListByProjectInvalidResponseBody struct {
+// ListInvalidResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "invalid" error.
+type ListInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -150,10 +149,9 @@ type ListByProjectInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectInvariantViolationResponseBody is the type of the "auditlogs"
-// service "listByProject" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ListByProjectInvariantViolationResponseBody struct {
+// ListInvariantViolationResponseBody is the type of the "auditlogs" service
+// "list" endpoint HTTP response body for the "invariant_violation" error.
+type ListInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -169,9 +167,9 @@ type ListByProjectInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectUnexpectedResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "unexpected" error.
-type ListByProjectUnexpectedResponseBody struct {
+// ListUnexpectedResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "unexpected" error.
+type ListUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -187,9 +185,9 @@ type ListByProjectUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListByProjectGatewayErrorResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "gateway_error" error.
-type ListByProjectGatewayErrorResponseBody struct {
+// ListGatewayErrorResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "gateway_error" error.
+type ListGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -224,10 +222,10 @@ type AuditLogResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
-// NewListByProjectListProjectAuditLogsResultOK builds a "auditlogs" service
-// "listByProject" endpoint result from a HTTP "OK" response.
-func NewListByProjectListProjectAuditLogsResultOK(body *ListByProjectResponseBody) *auditlogs.ListProjectAuditLogsResult {
-	v := &auditlogs.ListProjectAuditLogsResult{
+// NewListAuditLogsResultOK builds a "auditlogs" service "list" endpoint result
+// from a HTTP "OK" response.
+func NewListAuditLogsResultOK(body *ListResponseBody) *auditlogs.ListAuditLogsResult {
+	v := &auditlogs.ListAuditLogsResult{
 		NextCursor: body.NextCursor,
 	}
 	v.Logs = make([]*auditlogs.AuditLog, len(body.Logs))
@@ -242,9 +240,9 @@ func NewListByProjectListProjectAuditLogsResultOK(body *ListByProjectResponseBod
 	return v
 }
 
-// NewListByProjectUnauthorized builds a auditlogs service listByProject
-// endpoint unauthorized error.
-func NewListByProjectUnauthorized(body *ListByProjectUnauthorizedResponseBody) *goa.ServiceError {
+// NewListUnauthorized builds a auditlogs service list endpoint unauthorized
+// error.
+func NewListUnauthorized(body *ListUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -257,9 +255,8 @@ func NewListByProjectUnauthorized(body *ListByProjectUnauthorizedResponseBody) *
 	return v
 }
 
-// NewListByProjectForbidden builds a auditlogs service listByProject endpoint
-// forbidden error.
-func NewListByProjectForbidden(body *ListByProjectForbiddenResponseBody) *goa.ServiceError {
+// NewListForbidden builds a auditlogs service list endpoint forbidden error.
+func NewListForbidden(body *ListForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -272,9 +269,8 @@ func NewListByProjectForbidden(body *ListByProjectForbiddenResponseBody) *goa.Se
 	return v
 }
 
-// NewListByProjectBadRequest builds a auditlogs service listByProject endpoint
-// bad_request error.
-func NewListByProjectBadRequest(body *ListByProjectBadRequestResponseBody) *goa.ServiceError {
+// NewListBadRequest builds a auditlogs service list endpoint bad_request error.
+func NewListBadRequest(body *ListBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -287,9 +283,8 @@ func NewListByProjectBadRequest(body *ListByProjectBadRequestResponseBody) *goa.
 	return v
 }
 
-// NewListByProjectNotFound builds a auditlogs service listByProject endpoint
-// not_found error.
-func NewListByProjectNotFound(body *ListByProjectNotFoundResponseBody) *goa.ServiceError {
+// NewListNotFound builds a auditlogs service list endpoint not_found error.
+func NewListNotFound(body *ListNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -302,9 +297,8 @@ func NewListByProjectNotFound(body *ListByProjectNotFoundResponseBody) *goa.Serv
 	return v
 }
 
-// NewListByProjectConflict builds a auditlogs service listByProject endpoint
-// conflict error.
-func NewListByProjectConflict(body *ListByProjectConflictResponseBody) *goa.ServiceError {
+// NewListConflict builds a auditlogs service list endpoint conflict error.
+func NewListConflict(body *ListConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -317,9 +311,9 @@ func NewListByProjectConflict(body *ListByProjectConflictResponseBody) *goa.Serv
 	return v
 }
 
-// NewListByProjectUnsupportedMedia builds a auditlogs service listByProject
-// endpoint unsupported_media error.
-func NewListByProjectUnsupportedMedia(body *ListByProjectUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewListUnsupportedMedia builds a auditlogs service list endpoint
+// unsupported_media error.
+func NewListUnsupportedMedia(body *ListUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -332,9 +326,8 @@ func NewListByProjectUnsupportedMedia(body *ListByProjectUnsupportedMediaRespons
 	return v
 }
 
-// NewListByProjectInvalid builds a auditlogs service listByProject endpoint
-// invalid error.
-func NewListByProjectInvalid(body *ListByProjectInvalidResponseBody) *goa.ServiceError {
+// NewListInvalid builds a auditlogs service list endpoint invalid error.
+func NewListInvalid(body *ListInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -347,9 +340,9 @@ func NewListByProjectInvalid(body *ListByProjectInvalidResponseBody) *goa.Servic
 	return v
 }
 
-// NewListByProjectInvariantViolation builds a auditlogs service listByProject
-// endpoint invariant_violation error.
-func NewListByProjectInvariantViolation(body *ListByProjectInvariantViolationResponseBody) *goa.ServiceError {
+// NewListInvariantViolation builds a auditlogs service list endpoint
+// invariant_violation error.
+func NewListInvariantViolation(body *ListInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -362,9 +355,8 @@ func NewListByProjectInvariantViolation(body *ListByProjectInvariantViolationRes
 	return v
 }
 
-// NewListByProjectUnexpected builds a auditlogs service listByProject endpoint
-// unexpected error.
-func NewListByProjectUnexpected(body *ListByProjectUnexpectedResponseBody) *goa.ServiceError {
+// NewListUnexpected builds a auditlogs service list endpoint unexpected error.
+func NewListUnexpected(body *ListUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -377,9 +369,9 @@ func NewListByProjectUnexpected(body *ListByProjectUnexpectedResponseBody) *goa.
 	return v
 }
 
-// NewListByProjectGatewayError builds a auditlogs service listByProject
-// endpoint gateway_error error.
-func NewListByProjectGatewayError(body *ListByProjectGatewayErrorResponseBody) *goa.ServiceError {
+// NewListGatewayError builds a auditlogs service list endpoint gateway_error
+// error.
+func NewListGatewayError(body *ListGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -392,9 +384,8 @@ func NewListByProjectGatewayError(body *ListByProjectGatewayErrorResponseBody) *
 	return v
 }
 
-// ValidateListByProjectResponseBody runs the validations defined on
-// ListByProjectResponseBody
-func ValidateListByProjectResponseBody(body *ListByProjectResponseBody) (err error) {
+// ValidateListResponseBody runs the validations defined on ListResponseBody
+func ValidateListResponseBody(body *ListResponseBody) (err error) {
 	if body.Logs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("logs", "body"))
 	}
@@ -408,9 +399,9 @@ func ValidateListByProjectResponseBody(body *ListByProjectResponseBody) (err err
 	return
 }
 
-// ValidateListByProjectUnauthorizedResponseBody runs the validations defined
-// on listByProject_unauthorized_response_body
-func ValidateListByProjectUnauthorizedResponseBody(body *ListByProjectUnauthorizedResponseBody) (err error) {
+// ValidateListUnauthorizedResponseBody runs the validations defined on
+// list_unauthorized_response_body
+func ValidateListUnauthorizedResponseBody(body *ListUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -432,9 +423,9 @@ func ValidateListByProjectUnauthorizedResponseBody(body *ListByProjectUnauthoriz
 	return
 }
 
-// ValidateListByProjectForbiddenResponseBody runs the validations defined on
-// listByProject_forbidden_response_body
-func ValidateListByProjectForbiddenResponseBody(body *ListByProjectForbiddenResponseBody) (err error) {
+// ValidateListForbiddenResponseBody runs the validations defined on
+// list_forbidden_response_body
+func ValidateListForbiddenResponseBody(body *ListForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -456,9 +447,9 @@ func ValidateListByProjectForbiddenResponseBody(body *ListByProjectForbiddenResp
 	return
 }
 
-// ValidateListByProjectBadRequestResponseBody runs the validations defined on
-// listByProject_bad_request_response_body
-func ValidateListByProjectBadRequestResponseBody(body *ListByProjectBadRequestResponseBody) (err error) {
+// ValidateListBadRequestResponseBody runs the validations defined on
+// list_bad_request_response_body
+func ValidateListBadRequestResponseBody(body *ListBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -480,9 +471,9 @@ func ValidateListByProjectBadRequestResponseBody(body *ListByProjectBadRequestRe
 	return
 }
 
-// ValidateListByProjectNotFoundResponseBody runs the validations defined on
-// listByProject_not_found_response_body
-func ValidateListByProjectNotFoundResponseBody(body *ListByProjectNotFoundResponseBody) (err error) {
+// ValidateListNotFoundResponseBody runs the validations defined on
+// list_not_found_response_body
+func ValidateListNotFoundResponseBody(body *ListNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -504,9 +495,9 @@ func ValidateListByProjectNotFoundResponseBody(body *ListByProjectNotFoundRespon
 	return
 }
 
-// ValidateListByProjectConflictResponseBody runs the validations defined on
-// listByProject_conflict_response_body
-func ValidateListByProjectConflictResponseBody(body *ListByProjectConflictResponseBody) (err error) {
+// ValidateListConflictResponseBody runs the validations defined on
+// list_conflict_response_body
+func ValidateListConflictResponseBody(body *ListConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -528,9 +519,9 @@ func ValidateListByProjectConflictResponseBody(body *ListByProjectConflictRespon
 	return
 }
 
-// ValidateListByProjectUnsupportedMediaResponseBody runs the validations
-// defined on listByProject_unsupported_media_response_body
-func ValidateListByProjectUnsupportedMediaResponseBody(body *ListByProjectUnsupportedMediaResponseBody) (err error) {
+// ValidateListUnsupportedMediaResponseBody runs the validations defined on
+// list_unsupported_media_response_body
+func ValidateListUnsupportedMediaResponseBody(body *ListUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -552,9 +543,9 @@ func ValidateListByProjectUnsupportedMediaResponseBody(body *ListByProjectUnsupp
 	return
 }
 
-// ValidateListByProjectInvalidResponseBody runs the validations defined on
-// listByProject_invalid_response_body
-func ValidateListByProjectInvalidResponseBody(body *ListByProjectInvalidResponseBody) (err error) {
+// ValidateListInvalidResponseBody runs the validations defined on
+// list_invalid_response_body
+func ValidateListInvalidResponseBody(body *ListInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -576,9 +567,9 @@ func ValidateListByProjectInvalidResponseBody(body *ListByProjectInvalidResponse
 	return
 }
 
-// ValidateListByProjectInvariantViolationResponseBody runs the validations
-// defined on listByProject_invariant_violation_response_body
-func ValidateListByProjectInvariantViolationResponseBody(body *ListByProjectInvariantViolationResponseBody) (err error) {
+// ValidateListInvariantViolationResponseBody runs the validations defined on
+// list_invariant_violation_response_body
+func ValidateListInvariantViolationResponseBody(body *ListInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -600,9 +591,9 @@ func ValidateListByProjectInvariantViolationResponseBody(body *ListByProjectInva
 	return
 }
 
-// ValidateListByProjectUnexpectedResponseBody runs the validations defined on
-// listByProject_unexpected_response_body
-func ValidateListByProjectUnexpectedResponseBody(body *ListByProjectUnexpectedResponseBody) (err error) {
+// ValidateListUnexpectedResponseBody runs the validations defined on
+// list_unexpected_response_body
+func ValidateListUnexpectedResponseBody(body *ListUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -624,9 +615,9 @@ func ValidateListByProjectUnexpectedResponseBody(body *ListByProjectUnexpectedRe
 	return
 }
 
-// ValidateListByProjectGatewayErrorResponseBody runs the validations defined
-// on listByProject_gateway_error_response_body
-func ValidateListByProjectGatewayErrorResponseBody(body *ListByProjectGatewayErrorResponseBody) (err error) {
+// ValidateListGatewayErrorResponseBody runs the validations defined on
+// list_gateway_error_response_body
+func ValidateListGatewayErrorResponseBody(body *ListGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -16,7 +16,7 @@ import (
 
 // Endpoints wraps the "auditlogs" service endpoints.
 type Endpoints struct {
-	ListByProject goa.Endpoint
+	List goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "auditlogs" service with endpoints.
@@ -24,20 +24,20 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListByProject: NewListByProjectEndpoint(s, a.APIKeyAuth),
+		List: NewListEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "auditlogs" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.ListByProject = m(e.ListByProject)
+	e.List = m(e.List)
 }
 
-// NewListByProjectEndpoint returns an endpoint function that calls the method
-// "listByProject" of service "auditlogs".
-func NewListByProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewListEndpoint returns an endpoint function that calls the method "list" of
+// service "auditlogs".
+func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListByProjectPayload)
+		p := req.(*ListPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -64,6 +64,6 @@ func NewListByProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		if err != nil {
 			return nil, err
 		}
-		return s.ListByProject(ctx, p)
+		return s.List(ctx, p)
 	}
 }

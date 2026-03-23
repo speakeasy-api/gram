@@ -220,12 +220,10 @@ infinite scrolling and "load more" user interfaces.
 > those hooks may be more suitable.
 
 ```tsx
-import { useProjectAuditLogsInfinite } from "@gram/client/react-query/auditlogsListByProject.js";
+import { useAuditLogsInfinite } from "@gram/client/react-query/auditlogsList.js";
 
 export function Example() {
-  const { data, error, status, fetchNextPage, hasNextPage } = useProjectAuditLogsInfinite({
-    projectSlug: "<value>",
-  });
+  const { data, error, status, fetchNextPage, hasNextPage } = useAuditLogsInfinite();
 
   return (
     <div>

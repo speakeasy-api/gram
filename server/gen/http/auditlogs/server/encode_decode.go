@@ -18,38 +18,37 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeListByProjectResponse returns an encoder for responses returned by the
-// auditlogs listByProject endpoint.
-func EncodeListByProjectResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListResponse returns an encoder for responses returned by the
+// auditlogs list endpoint.
+func EncodeListResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*auditlogs.ListProjectAuditLogsResult)
+		res, _ := v.(*auditlogs.ListAuditLogsResult)
 		enc := encoder(ctx, w)
-		body := NewListByProjectResponseBody(res)
+		body := NewListResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListByProjectRequest returns a decoder for requests sent to the
-// auditlogs listByProject endpoint.
-func DecodeListByProjectRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*auditlogs.ListByProjectPayload, error) {
-	return func(r *http.Request) (*auditlogs.ListByProjectPayload, error) {
-		var payload *auditlogs.ListByProjectPayload
+// DecodeListRequest returns a decoder for requests sent to the auditlogs list
+// endpoint.
+func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*auditlogs.ListPayload, error) {
+	return func(r *http.Request) (*auditlogs.ListPayload, error) {
+		var payload *auditlogs.ListPayload
 		var (
 			cursor       *string
-			projectSlug  string
+			projectSlug  *string
 			apikeyToken  *string
 			sessionToken *string
-			err          error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
 		}
-		projectSlug = qp.Get("project_slug")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "query string"))
+		projectSlugRaw := qp.Get("project_slug")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -59,10 +58,7 @@ func DecodeListByProjectRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewListByProjectPayload(cursor, projectSlug, apikeyToken, sessionToken)
+		payload = NewListPayload(cursor, projectSlug, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -82,9 +78,9 @@ func DecodeListByProjectRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 	}
 }
 
-// EncodeListByProjectError returns an encoder for errors returned by the
-// listByProject auditlogs endpoint.
-func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListError returns an encoder for errors returned by the list auditlogs
+// endpoint.
+func EncodeListError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -101,7 +97,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectUnauthorizedResponseBody(res)
+				body = NewListUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -115,7 +111,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectForbiddenResponseBody(res)
+				body = NewListForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -129,7 +125,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectBadRequestResponseBody(res)
+				body = NewListBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -143,7 +139,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectNotFoundResponseBody(res)
+				body = NewListNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -157,7 +153,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectConflictResponseBody(res)
+				body = NewListConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -171,7 +167,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectUnsupportedMediaResponseBody(res)
+				body = NewListUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -185,7 +181,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectInvalidResponseBody(res)
+				body = NewListInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -199,7 +195,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectInvariantViolationResponseBody(res)
+				body = NewListInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -213,7 +209,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectUnexpectedResponseBody(res)
+				body = NewListUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -227,7 +223,7 @@ func EncodeListByProjectError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListByProjectGatewayErrorResponseBody(res)
+				body = NewListGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

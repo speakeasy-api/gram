@@ -419,3 +419,13 @@ sql:
         out: "../internal/audit/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/audit/audittest/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/audit/audittest/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true

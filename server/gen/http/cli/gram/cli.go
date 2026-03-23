@@ -54,7 +54,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
-		"auditlogs list-by-project",
+		"auditlogs list",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|submit-feedback)",
 		"chat-sessions (create|revoke)",
@@ -88,7 +88,7 @@ func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
-		os.Args[0] + " " + "auditlogs list-by-project --cursor \"abc123\" --project-slug \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auth callback --code \"abc123\" --state \"abc123\"" + "\n" +
 		""
 }
@@ -204,11 +204,11 @@ func ParseEndpoint(
 
 		auditlogsFlags = flag.NewFlagSet("auditlogs", flag.ContinueOnError)
 
-		auditlogsListByProjectFlags            = flag.NewFlagSet("list-by-project", flag.ExitOnError)
-		auditlogsListByProjectCursorFlag       = auditlogsListByProjectFlags.String("cursor", "", "")
-		auditlogsListByProjectProjectSlugFlag  = auditlogsListByProjectFlags.String("project-slug", "REQUIRED", "")
-		auditlogsListByProjectApikeyTokenFlag  = auditlogsListByProjectFlags.String("apikey-token", "", "")
-		auditlogsListByProjectSessionTokenFlag = auditlogsListByProjectFlags.String("session-token", "", "")
+		auditlogsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		auditlogsListCursorFlag       = auditlogsListFlags.String("cursor", "", "")
+		auditlogsListProjectSlugFlag  = auditlogsListFlags.String("project-slug", "", "")
+		auditlogsListApikeyTokenFlag  = auditlogsListFlags.String("apikey-token", "", "")
+		auditlogsListSessionTokenFlag = auditlogsListFlags.String("session-token", "", "")
 
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
@@ -890,7 +890,7 @@ func ParseEndpoint(
 	assetsServeChatAttachmentSignedFlags.Usage = assetsServeChatAttachmentSignedUsage
 
 	auditlogsFlags.Usage = auditlogsUsage
-	auditlogsListByProjectFlags.Usage = auditlogsListByProjectUsage
+	auditlogsListFlags.Usage = auditlogsListUsage
 
 	authFlags.Usage = authUsage
 	authCallbackFlags.Usage = authCallbackUsage
@@ -1204,8 +1204,8 @@ func ParseEndpoint(
 
 		case "auditlogs":
 			switch epn {
-			case "list-by-project":
-				epf = auditlogsListByProjectFlags
+			case "list":
+				epf = auditlogsListFlags
 
 			}
 
@@ -1739,9 +1739,9 @@ func ParseEndpoint(
 		case "auditlogs":
 			c := auditlogsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "list-by-project":
-				endpoint = c.ListByProject()
-				data, err = auditlogsc.BuildListByProjectPayload(*auditlogsListByProjectCursorFlag, *auditlogsListByProjectProjectSlugFlag, *auditlogsListByProjectApikeyTokenFlag, *auditlogsListByProjectSessionTokenFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = auditlogsc.BuildListPayload(*auditlogsListCursorFlag, *auditlogsListProjectSlugFlag, *auditlogsListApikeyTokenFlag, *auditlogsListSessionTokenFlag)
 			}
 		case "auth":
 			c := authc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2615,14 +2615,14 @@ func auditlogsUsage() {
 	fmt.Fprintln(os.Stderr, `Manages audit logs in Gram.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] auditlogs COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-by-project: List project logs for a given project.`)
+	fmt.Fprintln(os.Stderr, `    list: List audit logs across organization and projects.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auditlogs COMMAND --help\n", os.Args[0])
 }
-func auditlogsListByProjectUsage() {
+func auditlogsListUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] auditlogs list-by-project", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] auditlogs list", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -project-slug STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -2631,7 +2631,7 @@ func auditlogsListByProjectUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List project logs for a given project.`)
+	fmt.Fprintln(os.Stderr, `List audit logs across organization and projects.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -2641,7 +2641,7 @@ func auditlogsListByProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auditlogs list-by-project --cursor \"abc123\" --project-slug \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // authUsage displays the usage of the auth command and its subcommands.

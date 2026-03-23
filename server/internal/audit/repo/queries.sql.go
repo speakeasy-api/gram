@@ -12,71 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countAuditLogs = `-- name: CountAuditLogs :one
-SELECT COUNT(*)
-FROM audit_logs
-`
-
-func (q *Queries) CountAuditLogs(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countAuditLogs)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countAuditLogsByAction = `-- name: CountAuditLogsByAction :one
-SELECT COUNT(*)
-FROM audit_logs
-WHERE action = $1
-`
-
-func (q *Queries) CountAuditLogsByAction(ctx context.Context, action string) (int64, error) {
-	row := q.db.QueryRow(ctx, countAuditLogsByAction, action)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const getLatestAuditLogByAction = `-- name: GetLatestAuditLogByAction :one
-SELECT
-  action,
-  subject_type,
-  subject_display_name,
-  subject_slug,
-  metadata,
-  before_snapshot,
-  after_snapshot
-FROM audit_logs
-WHERE action = $1
-ORDER BY seq DESC
-LIMIT 1
-`
-
-type GetLatestAuditLogByActionRow struct {
-	Action             string
-	SubjectType        string
-	SubjectDisplayName pgtype.Text
-	SubjectSlug        pgtype.Text
-	Metadata           []byte
-	BeforeSnapshot     []byte
-	AfterSnapshot      []byte
-}
-
-func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) (GetLatestAuditLogByActionRow, error) {
-	row := q.db.QueryRow(ctx, getLatestAuditLogByAction, action)
-	var i GetLatestAuditLogByActionRow
-	err := row.Scan(
-		&i.Action,
-		&i.SubjectType,
-		&i.SubjectDisplayName,
-		&i.SubjectSlug,
-		&i.Metadata,
-		&i.BeforeSnapshot,
-		&i.AfterSnapshot,
-	)
-	return i, err
-}
-
 const insertAuditLog = `-- name: InsertAuditLog :one
 INSERT INTO audit_logs (
   organization_id,
@@ -151,11 +86,14 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 	return id, err
 }
 
-const listProjectAuditLogs = `-- name: ListProjectAuditLogs :many
+const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT id, seq, organization_id, project_id, actor_id, actor_type, actor_display_name, actor_slug, action, subject_id, subject_type, subject_display_name, subject_slug, before_snapshot, after_snapshot, metadata, created_at
 FROM audit_logs
 WHERE organization_id = $1
-  AND project_id = $2
+  AND (
+    $2::uuid IS NULL
+    OR project_id = $2::uuid
+  )
   AND (
     $3::int8 IS NULL
     OR seq < $3::int8
@@ -164,14 +102,14 @@ ORDER BY seq DESC
 LIMIT 51
 `
 
-type ListProjectAuditLogsParams struct {
+type ListAuditLogsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
 	CursorSeq      pgtype.Int8
 }
 
-func (q *Queries) ListProjectAuditLogs(ctx context.Context, arg ListProjectAuditLogsParams) ([]AuditLog, error) {
-	rows, err := q.db.Query(ctx, listProjectAuditLogs, arg.OrganizationID, arg.ProjectID, arg.CursorSeq)
+func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error) {
+	rows, err := q.db.Query(ctx, listAuditLogs, arg.OrganizationID, arg.ProjectID, arg.CursorSeq)
 	if err != nil {
 		return nil, err
 	}

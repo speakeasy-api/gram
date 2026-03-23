@@ -16,18 +16,18 @@ var _ = Service("auditlogs", func() {
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
-	Method("listByProject", func() {
-		Description("List project logs for a given project.")
+	Method("list", func() {
+		Description("List audit logs across organization and projects.")
 
 		Payload(func() {
-			Extend(ListProjectAuditLogsForm)
+			Extend(ListAuditLogsForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
-		Result(ListProjectAuditLogsResult)
+		Result(ListAuditLogsResult)
 
 		HTTP(func() {
-			GET("/rpc/auditlogs.listByProject")
+			GET("/rpc/auditlogs.list")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Param("cursor")
@@ -35,9 +35,9 @@ var _ = Service("auditlogs", func() {
 		})
 
 		shared.CursorPagination()
-		Meta("openapi:operationId", "listProjectAuditLogs")
-		Meta("openapi:extension:x-speakeasy-name-override", "listByProject")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ProjectAuditLogs"}`)
+		Meta("openapi:operationId", "listAuditLogs")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AuditLogs"}`)
 	})
 })
 
@@ -73,9 +73,7 @@ var AuditLog = Type("AuditLog", func() {
 	})
 })
 
-var ListProjectAuditLogsForm = Type("ListProjectAuditLogsForm", func() {
-	Required("project_slug")
-
+var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 	Attribute("cursor", String, func() {
 		Description("The cursor for paginating through audit logs.")
 	})
@@ -84,7 +82,7 @@ var ListProjectAuditLogsForm = Type("ListProjectAuditLogsForm", func() {
 	})
 })
 
-var ListProjectAuditLogsResult = Type("ListProjectAuditLogsResult", func() {
+var ListAuditLogsResult = Type("ListAuditLogsResult", func() {
 	Required("logs")
 	Attribute("logs", ArrayOf(AuditLog), "List of audit logs")
 	Attribute("next_cursor", String, func() {

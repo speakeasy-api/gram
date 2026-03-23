@@ -18,13 +18,13 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildListByProjectRequest instantiates a HTTP request object with method and
-// path set to call the "auditlogs" service "listByProject" endpoint
-func (c *Client) BuildListByProjectRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListByProjectAuditlogsPath()}
+// BuildListRequest instantiates a HTTP request object with method and path set
+// to call the "auditlogs" service "list" endpoint
+func (c *Client) BuildListRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAuditlogsPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("auditlogs", "listByProject", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("auditlogs", "list", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -33,13 +33,13 @@ func (c *Client) BuildListByProjectRequest(ctx context.Context, v any) (*http.Re
 	return req, nil
 }
 
-// EncodeListByProjectRequest returns an encoder for requests sent to the
-// auditlogs listByProject server.
-func EncodeListByProjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListRequest returns an encoder for requests sent to the auditlogs list
+// server.
+func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*auditlogs.ListByProjectPayload)
+		p, ok := v.(*auditlogs.ListPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("auditlogs", "listByProject", "*auditlogs.ListByProjectPayload", v)
+			return goahttp.ErrInvalidType("auditlogs", "list", "*auditlogs.ListPayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -53,16 +53,18 @@ func EncodeListByProjectRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
-		values.Add("project_slug", p.ProjectSlug)
+		if p.ProjectSlug != nil {
+			values.Add("project_slug", *p.ProjectSlug)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeListByProjectResponse returns a decoder for responses returned by the
-// auditlogs listByProject endpoint. restoreBody controls whether the response
-// body should be restored after having been read.
-// DecodeListByProjectResponse may return the following errors:
+// DecodeListResponse returns a decoder for responses returned by the auditlogs
+// list endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeListResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -74,7 +76,7 @@ func EncodeListByProjectRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeListByProjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -91,169 +93,169 @@ func DecodeListByProjectResponse(decoder func(*http.Response) goahttp.Decoder, r
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body ListByProjectResponseBody
+				body ListResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectResponseBody(&body)
+			err = ValidateListResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			res := NewListByProjectListProjectAuditLogsResultOK(&body)
+			res := NewListAuditLogsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body ListByProjectUnauthorizedResponseBody
+				body ListUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectUnauthorizedResponseBody(&body)
+			err = ValidateListUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			return nil, NewListByProjectUnauthorized(&body)
+			return nil, NewListUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body ListByProjectForbiddenResponseBody
+				body ListForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectForbiddenResponseBody(&body)
+			err = ValidateListForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			return nil, NewListByProjectForbidden(&body)
+			return nil, NewListForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body ListByProjectBadRequestResponseBody
+				body ListBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectBadRequestResponseBody(&body)
+			err = ValidateListBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			return nil, NewListByProjectBadRequest(&body)
+			return nil, NewListBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body ListByProjectNotFoundResponseBody
+				body ListNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectNotFoundResponseBody(&body)
+			err = ValidateListNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			return nil, NewListByProjectNotFound(&body)
+			return nil, NewListNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body ListByProjectConflictResponseBody
+				body ListConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectConflictResponseBody(&body)
+			err = ValidateListConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			return nil, NewListByProjectConflict(&body)
+			return nil, NewListConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body ListByProjectUnsupportedMediaResponseBody
+				body ListUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectUnsupportedMediaResponseBody(&body)
+			err = ValidateListUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			return nil, NewListByProjectUnsupportedMedia(&body)
+			return nil, NewListUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body ListByProjectInvalidResponseBody
+				body ListInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectInvalidResponseBody(&body)
+			err = ValidateListInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			return nil, NewListByProjectInvalid(&body)
+			return nil, NewListInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body ListByProjectInvariantViolationResponseBody
+					body ListInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+					return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 				}
-				err = ValidateListByProjectInvariantViolationResponseBody(&body)
+				err = ValidateListInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+					return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 				}
-				return nil, NewListByProjectInvariantViolation(&body)
+				return nil, NewListInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body ListByProjectUnexpectedResponseBody
+					body ListUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+					return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 				}
-				err = ValidateListByProjectUnexpectedResponseBody(&body)
+				err = ValidateListUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+					return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 				}
-				return nil, NewListByProjectUnexpected(&body)
+				return nil, NewListUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("auditlogs", "listByProject", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("auditlogs", "list", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body ListByProjectGatewayErrorResponseBody
+				body ListGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrDecodingError("auditlogs", "list", err)
 			}
-			err = ValidateListByProjectGatewayErrorResponseBody(&body)
+			err = ValidateListGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auditlogs", "listByProject", err)
+				return nil, goahttp.ErrValidationError("auditlogs", "list", err)
 			}
-			return nil, NewListByProjectGatewayError(&body)
+			return nil, NewListGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("auditlogs", "listByProject", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("auditlogs", "list", resp.StatusCode, string(body))
 		}
 	}
 }

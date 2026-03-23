@@ -11,32 +11,34 @@ import (
 	auditlogs "github.com/speakeasy-api/gram/server/gen/auditlogs"
 )
 
-// BuildListByProjectPayload builds the payload for the auditlogs listByProject
-// endpoint from CLI flags.
-func BuildListByProjectPayload(auditlogsListByProjectCursor string, auditlogsListByProjectProjectSlug string, auditlogsListByProjectApikeyToken string, auditlogsListByProjectSessionToken string) (*auditlogs.ListByProjectPayload, error) {
+// BuildListPayload builds the payload for the auditlogs list endpoint from CLI
+// flags.
+func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
 	var cursor *string
 	{
-		if auditlogsListByProjectCursor != "" {
-			cursor = &auditlogsListByProjectCursor
+		if auditlogsListCursor != "" {
+			cursor = &auditlogsListCursor
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = auditlogsListByProjectProjectSlug
+		if auditlogsListProjectSlug != "" {
+			projectSlug = &auditlogsListProjectSlug
+		}
 	}
 	var apikeyToken *string
 	{
-		if auditlogsListByProjectApikeyToken != "" {
-			apikeyToken = &auditlogsListByProjectApikeyToken
+		if auditlogsListApikeyToken != "" {
+			apikeyToken = &auditlogsListApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if auditlogsListByProjectSessionToken != "" {
-			sessionToken = &auditlogsListByProjectSessionToken
+		if auditlogsListSessionToken != "" {
+			sessionToken = &auditlogsListSessionToken
 		}
 	}
-	v := &auditlogs.ListByProjectPayload{}
+	v := &auditlogs.ListPayload{}
 	v.Cursor = cursor
 	v.ProjectSlug = projectSlug
 	v.ApikeyToken = apikeyToken

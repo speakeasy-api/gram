@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { AuditLog, AuditLog$inboundSchema } from "./auditlog.js";
 
-export type ListProjectAuditLogsResult = {
+export type ListAuditLogsResult = {
   /**
    * List of audit logs
    */
@@ -21,8 +21,8 @@ export type ListProjectAuditLogsResult = {
 };
 
 /** @internal */
-export const ListProjectAuditLogsResult$inboundSchema: z.ZodMiniType<
-  ListProjectAuditLogsResult,
+export const ListAuditLogsResult$inboundSchema: z.ZodMiniType<
+  ListAuditLogsResult,
   unknown
 > = z.pipe(
   z.object({
@@ -36,12 +36,12 @@ export const ListProjectAuditLogsResult$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listProjectAuditLogsResultFromJSON(
+export function listAuditLogsResultFromJSON(
   jsonString: string,
-): SafeParseResult<ListProjectAuditLogsResult, SDKValidationError> {
+): SafeParseResult<ListAuditLogsResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ListProjectAuditLogsResult$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ListProjectAuditLogsResult' from JSON`,
+    (x) => ListAuditLogsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAuditLogsResult' from JSON`,
   );
 }

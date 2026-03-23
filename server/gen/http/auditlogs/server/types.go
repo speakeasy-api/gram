@@ -14,18 +14,18 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// ListByProjectResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body.
-type ListByProjectResponseBody struct {
+// ListResponseBody is the type of the "auditlogs" service "list" endpoint HTTP
+// response body.
+type ListResponseBody struct {
 	// List of audit logs
 	Logs []*AuditLogResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// The cursor to be used for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// ListByProjectUnauthorizedResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "unauthorized" error.
-type ListByProjectUnauthorizedResponseBody struct {
+// ListUnauthorizedResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "unauthorized" error.
+type ListUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -41,9 +41,9 @@ type ListByProjectUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectForbiddenResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "forbidden" error.
-type ListByProjectForbiddenResponseBody struct {
+// ListForbiddenResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "forbidden" error.
+type ListForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -59,9 +59,9 @@ type ListByProjectForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectBadRequestResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "bad_request" error.
-type ListByProjectBadRequestResponseBody struct {
+// ListBadRequestResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "bad_request" error.
+type ListBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -77,9 +77,9 @@ type ListByProjectBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectNotFoundResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "not_found" error.
-type ListByProjectNotFoundResponseBody struct {
+// ListNotFoundResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "not_found" error.
+type ListNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -95,9 +95,9 @@ type ListByProjectNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectConflictResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "conflict" error.
-type ListByProjectConflictResponseBody struct {
+// ListConflictResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "conflict" error.
+type ListConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -113,10 +113,9 @@ type ListByProjectConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectUnsupportedMediaResponseBody is the type of the "auditlogs"
-// service "listByProject" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ListByProjectUnsupportedMediaResponseBody struct {
+// ListUnsupportedMediaResponseBody is the type of the "auditlogs" service
+// "list" endpoint HTTP response body for the "unsupported_media" error.
+type ListUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -132,9 +131,9 @@ type ListByProjectUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectInvalidResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "invalid" error.
-type ListByProjectInvalidResponseBody struct {
+// ListInvalidResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "invalid" error.
+type ListInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -150,10 +149,9 @@ type ListByProjectInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectInvariantViolationResponseBody is the type of the "auditlogs"
-// service "listByProject" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ListByProjectInvariantViolationResponseBody struct {
+// ListInvariantViolationResponseBody is the type of the "auditlogs" service
+// "list" endpoint HTTP response body for the "invariant_violation" error.
+type ListInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -169,9 +167,9 @@ type ListByProjectInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectUnexpectedResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "unexpected" error.
-type ListByProjectUnexpectedResponseBody struct {
+// ListUnexpectedResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "unexpected" error.
+type ListUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -187,9 +185,9 @@ type ListByProjectUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListByProjectGatewayErrorResponseBody is the type of the "auditlogs" service
-// "listByProject" endpoint HTTP response body for the "gateway_error" error.
-type ListByProjectGatewayErrorResponseBody struct {
+// ListGatewayErrorResponseBody is the type of the "auditlogs" service "list"
+// endpoint HTTP response body for the "gateway_error" error.
+type ListGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -224,10 +222,10 @@ type AuditLogResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
-// NewListByProjectResponseBody builds the HTTP response body from the result
-// of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectResponseBody(res *auditlogs.ListProjectAuditLogsResult) *ListByProjectResponseBody {
-	body := &ListByProjectResponseBody{
+// NewListResponseBody builds the HTTP response body from the result of the
+// "list" endpoint of the "auditlogs" service.
+func NewListResponseBody(res *auditlogs.ListAuditLogsResult) *ListResponseBody {
+	body := &ListResponseBody{
 		NextCursor: res.NextCursor,
 	}
 	if res.Logs != nil {
@@ -245,10 +243,10 @@ func NewListByProjectResponseBody(res *auditlogs.ListProjectAuditLogsResult) *Li
 	return body
 }
 
-// NewListByProjectUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectUnauthorizedResponseBody(res *goa.ServiceError) *ListByProjectUnauthorizedResponseBody {
-	body := &ListByProjectUnauthorizedResponseBody{
+// NewListUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "auditlogs" service.
+func NewListUnauthorizedResponseBody(res *goa.ServiceError) *ListUnauthorizedResponseBody {
+	body := &ListUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -259,10 +257,10 @@ func NewListByProjectUnauthorizedResponseBody(res *goa.ServiceError) *ListByProj
 	return body
 }
 
-// NewListByProjectForbiddenResponseBody builds the HTTP response body from the
-// result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectForbiddenResponseBody(res *goa.ServiceError) *ListByProjectForbiddenResponseBody {
-	body := &ListByProjectForbiddenResponseBody{
+// NewListForbiddenResponseBody builds the HTTP response body from the result
+// of the "list" endpoint of the "auditlogs" service.
+func NewListForbiddenResponseBody(res *goa.ServiceError) *ListForbiddenResponseBody {
+	body := &ListForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -273,10 +271,10 @@ func NewListByProjectForbiddenResponseBody(res *goa.ServiceError) *ListByProject
 	return body
 }
 
-// NewListByProjectBadRequestResponseBody builds the HTTP response body from
-// the result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectBadRequestResponseBody(res *goa.ServiceError) *ListByProjectBadRequestResponseBody {
-	body := &ListByProjectBadRequestResponseBody{
+// NewListBadRequestResponseBody builds the HTTP response body from the result
+// of the "list" endpoint of the "auditlogs" service.
+func NewListBadRequestResponseBody(res *goa.ServiceError) *ListBadRequestResponseBody {
+	body := &ListBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -287,10 +285,10 @@ func NewListByProjectBadRequestResponseBody(res *goa.ServiceError) *ListByProjec
 	return body
 }
 
-// NewListByProjectNotFoundResponseBody builds the HTTP response body from the
-// result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectNotFoundResponseBody(res *goa.ServiceError) *ListByProjectNotFoundResponseBody {
-	body := &ListByProjectNotFoundResponseBody{
+// NewListNotFoundResponseBody builds the HTTP response body from the result of
+// the "list" endpoint of the "auditlogs" service.
+func NewListNotFoundResponseBody(res *goa.ServiceError) *ListNotFoundResponseBody {
+	body := &ListNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -301,10 +299,10 @@ func NewListByProjectNotFoundResponseBody(res *goa.ServiceError) *ListByProjectN
 	return body
 }
 
-// NewListByProjectConflictResponseBody builds the HTTP response body from the
-// result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectConflictResponseBody(res *goa.ServiceError) *ListByProjectConflictResponseBody {
-	body := &ListByProjectConflictResponseBody{
+// NewListConflictResponseBody builds the HTTP response body from the result of
+// the "list" endpoint of the "auditlogs" service.
+func NewListConflictResponseBody(res *goa.ServiceError) *ListConflictResponseBody {
+	body := &ListConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -315,10 +313,10 @@ func NewListByProjectConflictResponseBody(res *goa.ServiceError) *ListByProjectC
 	return body
 }
 
-// NewListByProjectUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectUnsupportedMediaResponseBody(res *goa.ServiceError) *ListByProjectUnsupportedMediaResponseBody {
-	body := &ListByProjectUnsupportedMediaResponseBody{
+// NewListUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "auditlogs" service.
+func NewListUnsupportedMediaResponseBody(res *goa.ServiceError) *ListUnsupportedMediaResponseBody {
+	body := &ListUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -329,10 +327,10 @@ func NewListByProjectUnsupportedMediaResponseBody(res *goa.ServiceError) *ListBy
 	return body
 }
 
-// NewListByProjectInvalidResponseBody builds the HTTP response body from the
-// result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectInvalidResponseBody(res *goa.ServiceError) *ListByProjectInvalidResponseBody {
-	body := &ListByProjectInvalidResponseBody{
+// NewListInvalidResponseBody builds the HTTP response body from the result of
+// the "list" endpoint of the "auditlogs" service.
+func NewListInvalidResponseBody(res *goa.ServiceError) *ListInvalidResponseBody {
+	body := &ListInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -343,10 +341,10 @@ func NewListByProjectInvalidResponseBody(res *goa.ServiceError) *ListByProjectIn
 	return body
 }
 
-// NewListByProjectInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectInvariantViolationResponseBody(res *goa.ServiceError) *ListByProjectInvariantViolationResponseBody {
-	body := &ListByProjectInvariantViolationResponseBody{
+// NewListInvariantViolationResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "auditlogs" service.
+func NewListInvariantViolationResponseBody(res *goa.ServiceError) *ListInvariantViolationResponseBody {
+	body := &ListInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -357,10 +355,10 @@ func NewListByProjectInvariantViolationResponseBody(res *goa.ServiceError) *List
 	return body
 }
 
-// NewListByProjectUnexpectedResponseBody builds the HTTP response body from
-// the result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectUnexpectedResponseBody(res *goa.ServiceError) *ListByProjectUnexpectedResponseBody {
-	body := &ListByProjectUnexpectedResponseBody{
+// NewListUnexpectedResponseBody builds the HTTP response body from the result
+// of the "list" endpoint of the "auditlogs" service.
+func NewListUnexpectedResponseBody(res *goa.ServiceError) *ListUnexpectedResponseBody {
+	body := &ListUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -371,10 +369,10 @@ func NewListByProjectUnexpectedResponseBody(res *goa.ServiceError) *ListByProjec
 	return body
 }
 
-// NewListByProjectGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "listByProject" endpoint of the "auditlogs" service.
-func NewListByProjectGatewayErrorResponseBody(res *goa.ServiceError) *ListByProjectGatewayErrorResponseBody {
-	body := &ListByProjectGatewayErrorResponseBody{
+// NewListGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "auditlogs" service.
+func NewListGatewayErrorResponseBody(res *goa.ServiceError) *ListGatewayErrorResponseBody {
+	body := &ListGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -385,10 +383,9 @@ func NewListByProjectGatewayErrorResponseBody(res *goa.ServiceError) *ListByProj
 	return body
 }
 
-// NewListByProjectPayload builds a auditlogs service listByProject endpoint
-// payload.
-func NewListByProjectPayload(cursor *string, projectSlug string, apikeyToken *string, sessionToken *string) *auditlogs.ListByProjectPayload {
-	v := &auditlogs.ListByProjectPayload{}
+// NewListPayload builds a auditlogs service list endpoint payload.
+func NewListPayload(cursor *string, projectSlug *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
+	v := &auditlogs.ListPayload{}
 	v.Cursor = cursor
 	v.ProjectSlug = projectSlug
 	v.ApikeyToken = apikeyToken

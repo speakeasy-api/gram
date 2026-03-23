@@ -17,8 +17,8 @@ import (
 
 // Manages audit logs in Gram.
 type Service interface {
-	// List project logs for a given project.
-	ListByProject(context.Context, *ListByProjectPayload) (res *ListProjectAuditLogsResult, err error)
+	// List audit logs across organization and projects.
+	List(context.Context, *ListPayload) (res *ListAuditLogsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -41,7 +41,7 @@ const ServiceName = "auditlogs"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"listByProject"}
+var MethodNames = [1]string{"list"}
 
 type AuditLog struct {
 	ID                 string
@@ -61,24 +61,22 @@ type AuditLog struct {
 	CreatedAt string
 }
 
-// ListByProjectPayload is the payload type of the auditlogs service
-// listByProject method.
-type ListByProjectPayload struct {
+// ListAuditLogsResult is the result type of the auditlogs service list method.
+type ListAuditLogsResult struct {
+	// List of audit logs
+	Logs []*AuditLog
+	// The cursor to be used for the next page of results.
+	NextCursor *string
+}
+
+// ListPayload is the payload type of the auditlogs service list method.
+type ListPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// The cursor for paginating through audit logs.
 	Cursor *string
 	// Project slug to filter audit logs to a specific project.
-	ProjectSlug string
-}
-
-// ListProjectAuditLogsResult is the result type of the auditlogs service
-// listByProject method.
-type ListProjectAuditLogsResult struct {
-	// List of audit logs
-	Logs []*AuditLog
-	// The cursor to be used for the next page of results.
-	NextCursor *string
+	ProjectSlug *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

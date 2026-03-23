@@ -17,9 +17,8 @@ import (
 
 // Client lists the auditlogs service endpoint HTTP clients.
 type Client struct {
-	// ListByProject Doer is the HTTP client used to make requests to the
-	// listByProject endpoint.
-	ListByProjectDoer goahttp.Doer
+	// List Doer is the HTTP client used to make requests to the list endpoint.
+	ListDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -41,7 +40,7 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListByProjectDoer:   doer,
+		ListDoer:            doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -50,15 +49,15 @@ func NewClient(
 	}
 }
 
-// ListByProject returns an endpoint that makes HTTP requests to the auditlogs
-// service listByProject server.
-func (c *Client) ListByProject() goa.Endpoint {
+// List returns an endpoint that makes HTTP requests to the auditlogs service
+// list server.
+func (c *Client) List() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListByProjectRequest(c.encoder)
-		decodeResponse = DecodeListByProjectResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListRequest(c.encoder)
+		decodeResponse = DecodeListResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListByProjectRequest(ctx, v)
+		req, err := c.BuildListRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -66,9 +65,9 @@ func (c *Client) ListByProject() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListByProjectDoer.Do(req)
+		resp, err := c.ListDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("auditlogs", "listByProject", err)
+			return nil, goahttp.ErrRequestError("auditlogs", "list", err)
 		}
 		return decodeResponse(resp)
 	}

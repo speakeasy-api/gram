@@ -150,7 +150,7 @@ run();
 
 ### [Auditlogs](docs/sdks/auditlogs/README.md)
 
-* [listByProject](docs/sdks/auditlogs/README.md#listbyproject) - listByProject auditlogs
+* [list](docs/sdks/auditlogs/README.md#list) - list auditlogs
 
 ### [Auth](docs/sdks/auth/README.md)
 
@@ -368,7 +368,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
-- [`auditlogsListByProject`](docs/sdks/auditlogs/README.md#listbyproject) - listByProject auditlogs
+- [`auditlogsList`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
 - [`authInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`authLogin`](docs/sdks/auth/README.md#login) - login auth
@@ -512,6 +512,7 @@ To learn about this feature and how to get started, check
 - [`useAgentworkflowsCreateResponseMutation`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`useAgentworkflowsDeleteResponseMutation`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
 - [`useAgentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
+- [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
@@ -592,7 +593,6 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
-- [`useProjectAuditLogs`](docs/sdks/auditlogs/README.md#listbyproject) - listByProject auditlogs
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
@@ -653,9 +653,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auditlogs.listByProject({
-    projectSlug: "<value>",
-  });
+  const result = await gram.auditlogs.list();
 
   for await (const page of result) {
     console.log(page);

@@ -15,18 +15,18 @@ import (
 
 // Client is the "auditlogs" service client.
 type Client struct {
-	ListByProjectEndpoint goa.Endpoint
+	ListEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "auditlogs" service client given the endpoints.
-func NewClient(listByProject goa.Endpoint) *Client {
+func NewClient(list goa.Endpoint) *Client {
 	return &Client{
-		ListByProjectEndpoint: listByProject,
+		ListEndpoint: list,
 	}
 }
 
-// ListByProject calls the "listByProject" endpoint of the "auditlogs" service.
-// ListByProject may return the following errors:
+// List calls the "list" endpoint of the "auditlogs" service.
+// List may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -38,11 +38,11 @@ func NewClient(listByProject goa.Endpoint) *Client {
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListByProject(ctx context.Context, p *ListByProjectPayload) (res *ListProjectAuditLogsResult, err error) {
+func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListAuditLogsResult, err error) {
 	var ires any
-	ires, err = c.ListByProjectEndpoint(ctx, p)
+	ires, err = c.ListEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListProjectAuditLogsResult), nil
+	return ires.(*ListAuditLogsResult), nil
 }

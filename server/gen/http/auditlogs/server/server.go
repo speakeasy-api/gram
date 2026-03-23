@@ -18,8 +18,8 @@ import (
 
 // Server lists the auditlogs service endpoint HTTP handlers.
 type Server struct {
-	Mounts        []*MountPoint
-	ListByProject http.Handler
+	Mounts []*MountPoint
+	List   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -49,9 +49,9 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"ListByProject", "GET", "/rpc/auditlogs.listByProject"},
+			{"List", "GET", "/rpc/auditlogs.list"},
 		},
-		ListByProject: NewListByProjectHandler(e.ListByProject, mux, decoder, encoder, errhandler, formatter),
+		List: NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -60,7 +60,7 @@ func (s *Server) Service() string { return "auditlogs" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.ListByProject = m(s.ListByProject)
+	s.List = m(s.List)
 }
 
 // MethodNames returns the methods served.
@@ -68,7 +68,7 @@ func (s *Server) MethodNames() []string { return auditlogs.MethodNames[:] }
 
 // Mount configures the mux to serve the auditlogs endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountListByProjectHandler(mux, h.ListByProject)
+	MountListHandler(mux, h.List)
 }
 
 // Mount configures the mux to serve the auditlogs endpoints.
@@ -76,21 +76,21 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountListByProjectHandler configures the mux to serve the "auditlogs"
-// service "listByProject" endpoint.
-func MountListByProjectHandler(mux goahttp.Muxer, h http.Handler) {
+// MountListHandler configures the mux to serve the "auditlogs" service "list"
+// endpoint.
+func MountListHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/auditlogs.listByProject", f)
+	mux.Handle("GET", "/rpc/auditlogs.list", f)
 }
 
-// NewListByProjectHandler creates a HTTP handler which loads the HTTP request
-// and calls the "auditlogs" service "listByProject" endpoint.
-func NewListByProjectHandler(
+// NewListHandler creates a HTTP handler which loads the HTTP request and calls
+// the "auditlogs" service "list" endpoint.
+func NewListHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -99,13 +99,13 @@ func NewListByProjectHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeListByProjectRequest(mux, decoder)
-		encodeResponse = EncodeListByProjectResponse(encoder)
-		encodeError    = EncodeListByProjectError(encoder, formatter)
+		decodeRequest  = DecodeListRequest(mux, decoder)
+		encodeResponse = EncodeListResponse(encoder)
+		encodeError    = EncodeListError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listByProject")
+		ctx = context.WithValue(ctx, goa.MethodKey, "list")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "auditlogs")
 		payload, err := decodeRequest(r)
 		if err != nil {

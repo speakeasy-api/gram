@@ -1354,10 +1354,10 @@ paths:
             schema:
               type: string
               format: binary
-  /rpc/auditlogs.listByProject:
+  /rpc/auditlogs.list:
     get:
-      description: List project logs for a given project.
-      operationId: listProjectAuditLogs
+      description: List audit logs across organization and projects.
+      operationId: listAuditLogs
       parameters:
         - allowEmptyValue: true
           description: The cursor for paginating through audit logs.
@@ -1370,7 +1370,6 @@ paths:
           description: Project slug to filter audit logs to a specific project.
           in: query
           name: project_slug
-          required: true
           schema:
             description: Project slug to filter audit logs to a specific project.
             type: string
@@ -1393,7 +1392,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListProjectAuditLogsResult'
+                $ref: '#/components/schemas/ListAuditLogsResult'
           description: OK response.
         "400":
           content:
@@ -1453,10 +1452,10 @@ paths:
         - apikey_header_Gram-Key: []
         - session_header_Gram-Session: []
         - {}
-      summary: listByProject auditlogs
+      summary: list auditlogs
       tags:
         - auditlogs
-      x-speakeasy-name-override: listByProject
+      x-speakeasy-name-override: list
       x-speakeasy-pagination:
         inputs:
           - in: parameters
@@ -1466,7 +1465,7 @@ paths:
           nextCursor: $.next_cursor
         type: cursor
       x-speakeasy-react-hook:
-        name: ProjectAuditLogs
+        name: AuditLogs
   /rpc/auth.callback:
     get:
       description: Handles the authentication callback.
@@ -15979,6 +15978,28 @@ components:
       description: Result of listing distinct attribute keys
       required:
         - keys
+    ListAuditLogsForm:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: The cursor for paginating through audit logs.
+        project_slug:
+          type: string
+          description: Project slug to filter audit logs to a specific project.
+    ListAuditLogsResult:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+          description: List of audit logs
+        next_cursor:
+          type: string
+          description: The cursor to be used for the next page of results.
+      required:
+        - logs
     ListCatalogResponseBody:
       type: object
       properties:
@@ -16119,30 +16140,6 @@ components:
           description: The list of packages
       required:
         - packages
-    ListProjectAuditLogsForm:
-      type: object
-      properties:
-        cursor:
-          type: string
-          description: The cursor for paginating through audit logs.
-        project_slug:
-          type: string
-          description: Project slug to filter audit logs to a specific project.
-      required:
-        - project_slug
-    ListProjectAuditLogsResult:
-      type: object
-      properties:
-        logs:
-          type: array
-          items:
-            $ref: '#/components/schemas/AuditLog'
-          description: List of audit logs
-        next_cursor:
-          type: string
-          description: The cursor to be used for the next page of results.
-      required:
-        - logs
     ListProjectsPayload:
       type: object
       properties:

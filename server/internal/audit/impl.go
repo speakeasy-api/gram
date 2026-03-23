@@ -69,13 +69,13 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) ListByProject(ctx context.Context, payload *gen.ListByProjectPayload) (*gen.ListProjectAuditLogsResult, error) {
+func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListAuditLogsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	params := repo.ListProjectAuditLogsParams{
+	params := repo.ListAuditLogsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID: uuid.NullUUID{
 			UUID:  uuid.Nil,
@@ -87,17 +87,20 @@ func (s *Service) ListByProject(ctx context.Context, payload *gen.ListByProjectP
 		},
 	}
 
-	project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
-		Slug:           payload.ProjectSlug,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil, oops.C(oops.CodeNotFound)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(payload.ProjectSlug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-	default:
-		params.ProjectID = uuid.NullUUID{UUID: project.ID, Valid: true}
+	projectSlug := conv.PtrValOrEmpty(payload.ProjectSlug, "")
+	if projectSlug != "" {
+		project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
+			Slug:           projectSlug,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, oops.C(oops.CodeNotFound)
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(projectSlug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		default:
+			params.ProjectID = uuid.NullUUID{UUID: project.ID, Valid: true}
+		}
 	}
 
 	if payload.Cursor != nil && *payload.Cursor != "" {
@@ -108,7 +111,7 @@ func (s *Service) ListByProject(ctx context.Context, payload *gen.ListByProjectP
 		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
-	rows, err := repo.New(s.db).ListProjectAuditLogs(ctx, params)
+	rows, err := repo.New(s.db).ListAuditLogs(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit logs").Log(ctx, s.logger)
 	}
@@ -129,7 +132,7 @@ func (s *Service) ListByProject(ctx context.Context, payload *gen.ListByProjectP
 		logs = logs[:listAuditLogsPageSize]
 	}
 
-	return &gen.ListProjectAuditLogsResult{
+	return &gen.ListAuditLogsResult{
 		Logs:       logs,
 		NextCursor: nextCursor,
 	}, nil

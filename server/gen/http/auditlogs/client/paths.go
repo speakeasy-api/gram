@@ -7,7 +7,7 @@
 
 package client
 
-// ListByProjectAuditlogsPath returns the URL path to the auditlogs service listByProject HTTP endpoint.
-func ListByProjectAuditlogsPath() string {
-	return "/rpc/auditlogs.listByProject"
+// ListAuditlogsPath returns the URL path to the auditlogs service list HTTP endpoint.
+func ListAuditlogsPath() string {
+	return "/rpc/auditlogs.list"
 }

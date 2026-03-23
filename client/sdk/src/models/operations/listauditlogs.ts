@@ -9,12 +9,12 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type ListProjectAuditLogsSecurity = {
+export type ListAuditLogsSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListProjectAuditLogsRequest = {
+export type ListAuditLogsRequest = {
   /**
    * The cursor for paginating through audit logs.
    */
@@ -22,7 +22,7 @@ export type ListProjectAuditLogsRequest = {
   /**
    * Project slug to filter audit logs to a specific project.
    */
-  projectSlug: string;
+  projectSlug?: string | undefined;
   /**
    * API Key header
    */
@@ -33,20 +33,20 @@ export type ListProjectAuditLogsRequest = {
   gramSession?: string | undefined;
 };
 
-export type ListProjectAuditLogsResponse = {
-  result: components.ListProjectAuditLogsResult;
+export type ListAuditLogsResponse = {
+  result: components.ListAuditLogsResult;
 };
 
 /** @internal */
-export type ListProjectAuditLogsSecurity$Outbound = {
+export type ListAuditLogsSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const ListProjectAuditLogsSecurity$outboundSchema: z.ZodMiniType<
-  ListProjectAuditLogsSecurity$Outbound,
-  ListProjectAuditLogsSecurity
+export const ListAuditLogsSecurity$outboundSchema: z.ZodMiniType<
+  ListAuditLogsSecurity$Outbound,
+  ListAuditLogsSecurity
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
@@ -60,32 +60,30 @@ export const ListProjectAuditLogsSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listProjectAuditLogsSecurityToJSON(
-  listProjectAuditLogsSecurity: ListProjectAuditLogsSecurity,
+export function listAuditLogsSecurityToJSON(
+  listAuditLogsSecurity: ListAuditLogsSecurity,
 ): string {
   return JSON.stringify(
-    ListProjectAuditLogsSecurity$outboundSchema.parse(
-      listProjectAuditLogsSecurity,
-    ),
+    ListAuditLogsSecurity$outboundSchema.parse(listAuditLogsSecurity),
   );
 }
 
 /** @internal */
-export type ListProjectAuditLogsRequest$Outbound = {
+export type ListAuditLogsRequest$Outbound = {
   cursor?: string | undefined;
-  project_slug: string;
+  project_slug?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const ListProjectAuditLogsRequest$outboundSchema: z.ZodMiniType<
-  ListProjectAuditLogsRequest$Outbound,
-  ListProjectAuditLogsRequest
+export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
+  ListAuditLogsRequest$Outbound,
+  ListAuditLogsRequest
 > = z.pipe(
   z.object({
     cursor: z.optional(z.string()),
-    projectSlug: z.string(),
+    projectSlug: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
@@ -98,23 +96,21 @@ export const ListProjectAuditLogsRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listProjectAuditLogsRequestToJSON(
-  listProjectAuditLogsRequest: ListProjectAuditLogsRequest,
+export function listAuditLogsRequestToJSON(
+  listAuditLogsRequest: ListAuditLogsRequest,
 ): string {
   return JSON.stringify(
-    ListProjectAuditLogsRequest$outboundSchema.parse(
-      listProjectAuditLogsRequest,
-    ),
+    ListAuditLogsRequest$outboundSchema.parse(listAuditLogsRequest),
   );
 }
 
 /** @internal */
-export const ListProjectAuditLogsResponse$inboundSchema: z.ZodMiniType<
-  ListProjectAuditLogsResponse,
+export const ListAuditLogsResponse$inboundSchema: z.ZodMiniType<
+  ListAuditLogsResponse,
   unknown
 > = z.pipe(
   z.object({
-    Result: components.ListProjectAuditLogsResult$inboundSchema,
+    Result: components.ListAuditLogsResult$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -123,12 +119,12 @@ export const ListProjectAuditLogsResponse$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listProjectAuditLogsResponseFromJSON(
+export function listAuditLogsResponseFromJSON(
   jsonString: string,
-): SafeParseResult<ListProjectAuditLogsResponse, SDKValidationError> {
+): SafeParseResult<ListAuditLogsResponse, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ListProjectAuditLogsResponse$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ListProjectAuditLogsResponse' from JSON`,
+    (x) => ListAuditLogsResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAuditLogsResponse' from JSON`,
   );
 }

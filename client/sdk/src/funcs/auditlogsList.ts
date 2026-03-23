@@ -34,20 +34,20 @@ import {
 } from "../types/operations.js";
 
 /**
- * listByProject auditlogs
+ * list auditlogs
  *
  * @remarks
- * List project logs for a given project.
+ * List audit logs across organization and projects.
  */
-export function auditlogsListByProject(
+export function auditlogsList(
   client: GramCore,
-  request: operations.ListProjectAuditLogsRequest,
-  security?: operations.ListProjectAuditLogsSecurity | undefined,
+  request?: operations.ListAuditLogsRequest | undefined,
+  security?: operations.ListAuditLogsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
     Result<
-      operations.ListProjectAuditLogsResponse,
+      operations.ListAuditLogsResponse,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -71,14 +71,14 @@ export function auditlogsListByProject(
 
 async function $do(
   client: GramCore,
-  request: operations.ListProjectAuditLogsRequest,
-  security?: operations.ListProjectAuditLogsSecurity | undefined,
+  request?: operations.ListAuditLogsRequest | undefined,
+  security?: operations.ListAuditLogsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     PageIterator<
       Result<
-        operations.ListProjectAuditLogsResponse,
+        operations.ListAuditLogsResponse,
         | errors.ServiceError
         | GramError
         | ResponseValidationError
@@ -97,7 +97,10 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.ListProjectAuditLogsRequest$outboundSchema, value),
+      z.parse(
+        z.optional(operations.ListAuditLogsRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -106,20 +109,20 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/auditlogs.listByProject")();
+  const path = pathToFunc("/rpc/auditlogs.list")();
 
   const query = encodeFormQuery({
-    "cursor": payload.cursor,
-    "project_slug": payload.project_slug,
+    "cursor": payload?.cursor,
+    "project_slug": payload?.project_slug,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -145,7 +148,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listProjectAuditLogs",
+    operationID: "listAuditLogs",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -201,7 +204,7 @@ async function $do(
   };
 
   const [result, raw] = await M.match<
-    operations.ListProjectAuditLogsResponse,
+    operations.ListAuditLogsResponse,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -212,7 +215,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.ListProjectAuditLogsResponse$inboundSchema, {
+    M.json(200, operations.ListAuditLogsResponse$inboundSchema, {
       key: "Result",
     }),
     M.jsonErr(
@@ -236,7 +239,7 @@ async function $do(
   ): {
     next: Paginator<
       Result<
-        operations.ListProjectAuditLogsResponse,
+        operations.ListAuditLogsResponse,
         | errors.ServiceError
         | GramError
         | ResponseValidationError
@@ -259,10 +262,10 @@ async function $do(
     }
 
     const nextVal = () =>
-      auditlogsListByProject(
+      auditlogsList(
         client,
         {
-          ...request,
+          ...request!,
           cursor: nextCursor,
         },
         security,
