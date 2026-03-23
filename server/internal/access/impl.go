@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -28,21 +27,19 @@ type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
-	repo   *repo.Queries
 	auth   *auth.Auth
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
 		logger: logger,
 		db:     db,
-		repo:   repo.New(db),
 		auth:   auth.New(logger, db, sessions),
 	}
 }
@@ -67,12 +64,12 @@ func (s *Service) ListGrants(ctx context.Context, payload *gen.ListGrantsPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	rows, err := s.repo.ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
+	rows, err := repo.New(s.db).ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrn:   conv.PtrValOr(payload.PrincipalUrn, ""),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list principal grants").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list principal grants").Log(ctx, s.logger)
 	}
 
 	grants := make([]*gen.Grant, len(rows))
@@ -89,13 +86,13 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	dbTX, err := s.db.Begin(ctx)
+	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to access grants").Log(ctx, s.logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbTX.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	tr := s.repo.WithTx(dbTX)
+	tr := repo.New(dbtx)
 
 	grants := make([]*gen.Grant, 0, len(payload.Grants))
 
@@ -111,14 +108,14 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 			Resource:       form.Resource,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "upsert principal grant").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to add or update grant").Log(ctx, s.logger)
 		}
 
 		grants = append(grants, grantFromRow(row))
 	}
 
-	if err := dbTX.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit upsert grants").Log(ctx, s.logger)
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated grants").Log(ctx, s.logger)
 	}
 
 	return &gen.UpsertGrantsResult{Grants: grants}, nil
@@ -130,13 +127,13 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	dbTX, err := s.db.Begin(ctx)
+	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to access grants").Log(ctx, s.logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbTX.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	tr := s.repo.WithTx(dbTX)
+	tr := repo.New(dbtx)
 
 	for _, entry := range payload.Grants {
 		if entry == nil {
@@ -150,12 +147,12 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 			Resource:       entry.Resource,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "remove grant").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to remove grant").Log(ctx, s.logger)
 		}
 	}
 
-	if err := dbTX.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit remove grants").Log(ctx, s.logger)
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to save grant removals").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -167,12 +164,12 @@ func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.Remove
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	_, err := s.repo.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+	_, err := repo.New(s.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrn:   payload.PrincipalUrn,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove principal grants").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to remove principal grants").Log(ctx, s.logger)
 	}
 
 	return nil

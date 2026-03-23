@@ -63,7 +63,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := access.NewService(logger, conn, sessionManager)
+	svc := access.NewService(logger, tracerProvider, conn, sessionManager)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -79,7 +79,7 @@ func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, princip
 	require.NoError(t, err)
 
 	result, err := svc.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: principal, Scope: scope, Resource: resource},
 		},
 	})

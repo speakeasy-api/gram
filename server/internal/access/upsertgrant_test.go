@@ -17,7 +17,7 @@ func TestUpsertGrants_CreatesNewGrant(t *testing.T) {
 
 	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
@@ -42,7 +42,7 @@ func TestUpsertGrants_BatchCreatesMultipleGrants(t *testing.T) {
 
 	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "mcp:connect", Resource: "*"},
 			{PrincipalUrn: mustParsePrincipal(t, "role:admin"), Scope: "org:admin", Resource: "*"},
@@ -63,7 +63,7 @@ func TestUpsertGrants_IdempotentForSameTuple(t *testing.T) {
 
 	result1, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
@@ -71,7 +71,7 @@ func TestUpsertGrants_IdempotentForSameTuple(t *testing.T) {
 
 	result2, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
@@ -81,45 +81,52 @@ func TestUpsertGrants_IdempotentForSameTuple(t *testing.T) {
 	require.Equal(t, result1.Grants[0].CreatedAt, result2.Grants[0].CreatedAt)
 }
 
-func TestUpsertGrants_UniqueTuplesCreateSeparateGrants(t *testing.T) {
+func TestUpsertGrants_DifferentScopesCreateSeparateGrants(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name   string
-		grant1 gen.UpsertGrantForm
-		grant2 gen.UpsertGrantForm
-	}{
-		{
-			name:   "different scopes",
-			grant1: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
-			grant2: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:write", Resource: "*"},
-		},
-		{
-			name:   "different resources",
-			grant1: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "project-1"},
-			grant2: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "project-2"},
-		},
-		{
-			name:   "different principals",
-			grant1: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
-			grant2: gen.UpsertGrantForm{PrincipalUrn: mustParsePrincipal(t, "user:user_def"), Scope: "build:read", Resource: "*"},
-		},
-	}
+	ctx, ti := newTestAccessService(t)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		Grants: []*gen.AddGrantEntry{
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:write", Resource: "*"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 2)
+	require.NotEqual(t, result.Grants[0].ID, result.Grants[1].ID)
+}
 
-			ctx, ti := newTestAccessService(t)
+func TestUpsertGrants_DifferentResourcesCreateSeparateGrants(t *testing.T) {
+	t.Parallel()
 
-			result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
-				Grants: []*gen.UpsertGrantForm{&tt.grant1, &tt.grant2},
-			})
-			require.NoError(t, err)
-			require.Len(t, result.Grants, 2)
-			require.NotEqual(t, result.Grants[0].ID, result.Grants[1].ID)
-		})
-	}
+	ctx, ti := newTestAccessService(t)
+
+	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		Grants: []*gen.AddGrantEntry{
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "project-1"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "project-2"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 2)
+	require.NotEqual(t, result.Grants[0].ID, result.Grants[1].ID)
+}
+
+func TestUpsertGrants_DifferentPrincipalsCreateSeparateGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		Grants: []*gen.AddGrantEntry{
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_def"), Scope: "build:read", Resource: "*"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 2)
+	require.NotEqual(t, result.Grants[0].ID, result.Grants[1].ID)
 }
 
 func TestUpsertGrants_RolePrincipalType(t *testing.T) {
@@ -129,7 +136,7 @@ func TestUpsertGrants_RolePrincipalType(t *testing.T) {
 
 	result, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "role:project:admin"), Scope: "org:admin", Resource: "*"},
 		},
 	})
@@ -151,7 +158,7 @@ func TestUpsertGrants_InvalidPrincipalURN(t *testing.T) {
 
 	_, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
 		SessionToken: nil,
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: urn.Principal{}, Scope: "build:read", Resource: "*"},
 		},
 	})
@@ -164,7 +171,7 @@ func TestUpsertGrants_FailsOnFirstInvalidURNInBatch(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 
 	_, err := ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:valid"), Scope: "build:read", Resource: "*"},
 			{PrincipalUrn: urn.Principal{}, Scope: "build:read", Resource: "*"},
 		},
@@ -183,7 +190,7 @@ func TestUpsertGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 	_, ti := newTestAccessService(t)
 
 	_, err := ti.service.UpsertGrants(t.Context(), &gen.UpsertGrantsPayload{
-		Grants: []*gen.UpsertGrantForm{
+		Grants: []*gen.AddGrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
