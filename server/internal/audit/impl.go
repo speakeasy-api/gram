@@ -162,8 +162,9 @@ func decodeCursor(cursor string) (int64, error) {
 }
 
 func toAuditLog(row repo.AuditLog) (*gen.AuditLog, error) {
-	metadata := map[string]any{}
+	var metadata map[string]any
 	if len(row.Metadata) > 0 {
+		metadata = make(map[string]any)
 		if err := json.Unmarshal(row.Metadata, &metadata); err != nil {
 			return nil, fmt.Errorf("unmarshal metadata: %w", err)
 		}

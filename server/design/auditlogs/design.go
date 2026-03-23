@@ -59,11 +59,9 @@ var AuditLog = Type("AuditLog", func() {
 	Attribute("subject_slug", String)
 
 	Attribute("before_snapshot", Any, func() {
-		Meta("openapi:extension:x-speakeasy-type-override", "any")
 		Meta("struct:field:type", "json.RawMessage")
 	})
 	Attribute("after_snapshot", Any, func() {
-		Meta("openapi:extension:x-speakeasy-type-override", "any")
 		Meta("struct:field:type", "json.RawMessage")
 	})
 
