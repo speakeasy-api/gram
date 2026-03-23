@@ -1,5 +1,11 @@
 # cli
 
+## 0.15.7
+
+### Patch Changes
+
+- 569cbe2: fix cli update when using homebrew
+
 ## 0.15.6
 
 ### Patch Changes

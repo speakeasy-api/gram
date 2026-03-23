@@ -1,5 +1,25 @@
 # dashboard
 
+## 0.34.1
+
+### Patch Changes
+
+- 558c158: Show coming soon placeholder on CLIs page
+- 41d507c: Fixed `GET /rpc/chat.creditUsage` authentication so org-scoped credit usage works correctly for customers with multiple projects, requiring only session auth and no longer allowing chat-session access.
+- Updated dependencies [7ef727b]
+  - @gram/client@0.28.5
+
+## 0.34.0
+
+### Minor Changes
+
+- 30036db: Add table view toggle for list pages (MCP, Sources, Catalog) with grid/table switching, animated dot-pattern rows, and localStorage persistence
+
+### Patch Changes
+
+- 17788a8: fix: MCP environments section shows wrong default when none attached
+- b0120d4: Prevent double-back-button on detail pages
+
 ## 0.33.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.28.5
+
+### Patch Changes
+
+- 7ef727b: Add ability to detach an environment from an MCP server
+
 ## 0.28.0
 
 ### Minor Changes

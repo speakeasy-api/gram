@@ -267,10 +267,8 @@ func ParseEndpoint(
 		chatGenerateTitleProjectSlugInputFlag  = chatGenerateTitleFlags.String("project-slug-input", "", "")
 		chatGenerateTitleChatSessionsTokenFlag = chatGenerateTitleFlags.String("chat-sessions-token", "", "")
 
-		chatCreditUsageFlags                 = flag.NewFlagSet("credit-usage", flag.ExitOnError)
-		chatCreditUsageSessionTokenFlag      = chatCreditUsageFlags.String("session-token", "", "")
-		chatCreditUsageProjectSlugInputFlag  = chatCreditUsageFlags.String("project-slug-input", "", "")
-		chatCreditUsageChatSessionsTokenFlag = chatCreditUsageFlags.String("chat-sessions-token", "", "")
+		chatCreditUsageFlags            = flag.NewFlagSet("credit-usage", flag.ExitOnError)
+		chatCreditUsageSessionTokenFlag = chatCreditUsageFlags.String("session-token", "", "")
 
 		chatListChatsWithResolutionsFlags                 = flag.NewFlagSet("list-chats-with-resolutions", flag.ExitOnError)
 		chatListChatsWithResolutionsSearchFlag            = chatListChatsWithResolutionsFlags.String("search", "", "")
@@ -1816,7 +1814,7 @@ func ParseEndpoint(
 				data, err = chatc.BuildGenerateTitlePayload(*chatGenerateTitleBodyFlag, *chatGenerateTitleSessionTokenFlag, *chatGenerateTitleProjectSlugInputFlag, *chatGenerateTitleChatSessionsTokenFlag)
 			case "credit-usage":
 				endpoint = c.CreditUsage()
-				data, err = chatc.BuildCreditUsagePayload(*chatCreditUsageSessionTokenFlag, *chatCreditUsageProjectSlugInputFlag, *chatCreditUsageChatSessionsTokenFlag)
+				data, err = chatc.BuildCreditUsagePayload(*chatCreditUsageSessionTokenFlag)
 			case "list-chats-with-resolutions":
 				endpoint = c.ListChatsWithResolutions()
 				data, err = chatc.BuildListChatsWithResolutionsPayload(*chatListChatsWithResolutionsSearchFlag, *chatListChatsWithResolutionsExternalUserIDFlag, *chatListChatsWithResolutionsResolutionStatusFlag, *chatListChatsWithResolutionsFromFlag, *chatListChatsWithResolutionsToFlag, *chatListChatsWithResolutionsLimitFlag, *chatListChatsWithResolutionsOffsetFlag, *chatListChatsWithResolutionsSortByFlag, *chatListChatsWithResolutionsSortOrderFlag, *chatListChatsWithResolutionsSessionTokenFlag, *chatListChatsWithResolutionsProjectSlugInputFlag, *chatListChatsWithResolutionsChatSessionsTokenFlag)
@@ -2886,7 +2884,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    list-chats: List all chats for a project`)
 	fmt.Fprintln(os.Stderr, `    load-chat: Load a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    generate-title: Generate a title for a chat based on its messages`)
-	fmt.Fprintln(os.Stderr, `    credit-usage: Load a chat by its ID`)
+	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    list-chats-with-resolutions: List all chats for a project with their resolutions`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr)
@@ -2967,22 +2965,18 @@ func chatCreditUsageUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] chat credit-usage", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Load a chat by its ID`)
+	fmt.Fprintln(os.Stderr, `Get the total number of chat credits and usage for the current billing period`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat credit-usage --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat credit-usage --session-token \"abc123\"")
 }
 
 func chatListChatsWithResolutionsUsage() {

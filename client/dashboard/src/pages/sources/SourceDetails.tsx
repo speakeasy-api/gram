@@ -194,22 +194,17 @@ export default function SourceDetails() {
   useEffect(() => {
     if (!validTabs.includes(activeTab)) {
       setActiveTab("overview");
-      window.location.hash = "overview";
+      const url = new URL(window.location.href);
+      url.hash = "overview";
+      window.history.replaceState(null, "", url.toString());
     }
   }, [validTabs, activeTab]);
 
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace("#", "");
-      if (validTabs.includes(hash)) setActiveTab(hash);
-    };
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, [validTabs]);
-
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    window.location.hash = value;
+    const url = new URL(window.location.href);
+    url.hash = value;
+    window.history.replaceState(null, "", url.toString());
   };
 
   const {

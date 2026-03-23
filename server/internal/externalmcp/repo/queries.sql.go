@@ -448,7 +448,7 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 const getMCPRegistryByID = `-- name: GetMCPRegistryByID :one
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries
-WHERE id = $1 AND deleted IS FALSE
+WHERE id = $1 AND deleted IS FALSE AND url IS NOT NULL
 `
 
 type GetMCPRegistryByIDRow struct {
@@ -641,6 +641,7 @@ const listMCPRegistries = `-- name: ListMCPRegistries :many
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries
 WHERE deleted IS FALSE
+  AND url IS NOT NULL
 ORDER BY name ASC
 `
 

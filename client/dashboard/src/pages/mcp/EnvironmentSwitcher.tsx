@@ -1,7 +1,7 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Button } from "@speakeasy-api/moonshine";
-import { Plus } from "lucide-react";
+import { Plus, Unlink } from "lucide-react";
 import {
   EnvironmentVariable,
   environmentHasAllRequiredVariables,
@@ -25,6 +25,7 @@ interface EnvironmentSwitcherProps {
   onSaveAll: () => void;
   onCancelAll: () => void;
   onSetDefaultEnvironment: () => void;
+  onDetachEnvironment: () => void;
   onCreateEnvironment: () => void;
 }
 
@@ -40,6 +41,7 @@ export function EnvironmentSwitcher({
   onSaveAll,
   onCancelAll,
   onSetDefaultEnvironment,
+  onDetachEnvironment,
   onCreateEnvironment,
 }: EnvironmentSwitcherProps) {
   // Sort environments with attached environment first, falling back to default for sort order only
@@ -156,19 +158,33 @@ export function EnvironmentSwitcher({
                 </Button>
               </SimpleTooltip>
             ) : hasExistingConfigs ? (
-              // Has configs, on default env - show new environment option
-              <SimpleTooltip tooltip="Create a new environment with different values">
-                <Button
-                  onClick={onCreateEnvironment}
-                  variant="secondary"
-                  size="xs"
-                >
-                  <Button.LeftIcon>
-                    <Plus className="w-3.5 h-3.5" />
-                  </Button.LeftIcon>
-                  <Button.Text>New Environment</Button.Text>
-                </Button>
-              </SimpleTooltip>
+              // Has configs, on attached env - show new environment and detach options
+              <>
+                <SimpleTooltip tooltip="Create a new environment with different values">
+                  <Button
+                    onClick={onCreateEnvironment}
+                    variant="secondary"
+                    size="xs"
+                  >
+                    <Button.LeftIcon>
+                      <Plus className="w-3.5 h-3.5" />
+                    </Button.LeftIcon>
+                    <Button.Text>New Environment</Button.Text>
+                  </Button>
+                </SimpleTooltip>
+                <SimpleTooltip tooltip="Detach this environment from this MCP server">
+                  <Button
+                    onClick={onDetachEnvironment}
+                    variant="tertiary"
+                    size="xs"
+                  >
+                    <Button.LeftIcon>
+                      <Unlink className="w-3.5 h-3.5" />
+                    </Button.LeftIcon>
+                    <Button.Text>Detach</Button.Text>
+                  </Button>
+                </SimpleTooltip>
+              </>
             ) : null}
           </>
         )}

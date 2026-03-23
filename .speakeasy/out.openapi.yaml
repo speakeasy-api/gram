@@ -2277,7 +2277,7 @@ paths:
         name: SwitchScopes
   /rpc/chat.creditUsage:
     get:
-      description: Load a chat by its ID
+      description: Get the total number of chat credits and usage for the current billing period
       operationId: creditUsage
       parameters:
         - allowEmptyValue: true
@@ -2286,20 +2286,6 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
             type: string
       responses:
         "200":
@@ -2363,9 +2349,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - chat_sessions_token_header_Gram-Chat-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: creditUsage chat
       tags:
