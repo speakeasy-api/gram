@@ -1524,19 +1524,26 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   -- who, what and on what of an audited event. Other fields are denormalized
   -- for convenient querying and display purposes, but the URNs are the source
   -- of truth.
+
   actor_id TEXT NOT NULL,
   actor_type TEXT NOT NULL,
   actor_display_name TEXT,
   actor_slug TEXT,
+  
   action TEXT NOT NULL,
+
   subject_id TEXT NOT NULL,
   subject_type TEXT NOT NULL,
   subject_display_name TEXT,
   subject_slug TEXT,
 
+  -- for update operations these can be useful for storing the before/after
+  -- state of a subject so that a diff can be generated later on.
   before_snapshot JSONB,
   after_snapshot JSONB,
 
+  -- arbitrary bag of additional metadata that doesn't fit into the above
+  -- fields.
   metadata JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
