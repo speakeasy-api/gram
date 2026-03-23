@@ -1549,6 +1549,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
+  -- Foreign key constraints on project_id and organization_id are intentionally
+  -- omitted to retain authorative event data even if related projects or orgs
+  -- are later deleted.
 );
 
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_seq_idx
