@@ -689,6 +689,31 @@ type PromptTemplate struct {
 	Deleted       bool
 }
 
+// Named role definitions. Scopes are assigned via principal_grants with principal_urn = 'role:<role_id>'.
+type Role struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    string
+	// System roles (Admin, Member) are seeded on org creation and cannot be deleted or renamed.
+	IsSystem  bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
+}
+
+// Maps each user to exactly one role per organization. Used by the access resolver to look up role grants for a user.
+type RoleAssignment struct {
+	ID             uuid.UUID
+	OrganizationID string
+	UserID         string
+	// The role assigned to this user. Grants for the role are in principal_grants with principal_urn = 'role:<role_id>'.
+	RoleID    uuid.UUID
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
