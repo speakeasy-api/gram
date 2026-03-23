@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Heading } from "@/components/ui/heading";
+import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useState } from "react";
@@ -54,17 +55,32 @@ export function RolesTab() {
     {
       key: "actions",
       header: "",
-      width: "50px",
-      render: (role) => (
-        <Button
-          variant="tertiary"
-          size="sm"
-          disabled={role.isSystem}
-          className="opacity-50 hover:opacity-100"
-        >
-          <Icon name="ellipsis" className="h-4 w-4" />
-        </Button>
-      ),
+      width: "70px",
+      render: (role) => {
+        const actions: Action[] = [
+          {
+            icon: "users",
+            label: "View Members",
+            onClick: () => {},
+          },
+          ...(!role.isSystem
+            ? [
+                {
+                  icon: "pencil" as const,
+                  label: "Edit Role",
+                  onClick: () => {},
+                },
+                {
+                  icon: "trash-2" as const,
+                  label: "Delete Role",
+                  onClick: () => {},
+                  destructive: true,
+                },
+              ]
+            : []),
+        ];
+        return <MoreActions actions={actions} />;
+      },
     },
   ];
 
