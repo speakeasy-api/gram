@@ -14,8 +14,8 @@ export type AuditLog = {
   actorId: string;
   actorSlug?: string | undefined;
   actorType: string;
-  afterSnapshot?: string | undefined;
-  beforeSnapshot?: string | undefined;
+  afterSnapshot?: any | undefined;
+  beforeSnapshot?: any | undefined;
   /**
    * The creation date of the audit log.
    */
@@ -36,8 +36,8 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
     actor_id: z.string(),
     actor_slug: z.optional(z.string()),
     actor_type: z.string(),
-    after_snapshot: z.optional(z.string()),
-    before_snapshot: z.optional(z.string()),
+    after_snapshot: z.optional(z.any()),
+    before_snapshot: z.optional(z.any()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

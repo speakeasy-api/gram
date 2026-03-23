@@ -207,19 +207,19 @@ type ListByProjectGatewayErrorResponseBody struct {
 
 // AuditLogResponseBody is used to define fields on response body types.
 type AuditLogResponseBody struct {
-	ID                 string           `form:"id" json:"id" xml:"id"`
-	ActorID            string           `form:"actor_id" json:"actor_id" xml:"actor_id"`
-	ActorType          string           `form:"actor_type" json:"actor_type" xml:"actor_type"`
-	ActorDisplayName   *string          `form:"actor_display_name,omitempty" json:"actor_display_name,omitempty" xml:"actor_display_name,omitempty"`
-	ActorSlug          *string          `form:"actor_slug,omitempty" json:"actor_slug,omitempty" xml:"actor_slug,omitempty"`
-	Action             string           `form:"action" json:"action" xml:"action"`
-	SubjectID          string           `form:"subject_id" json:"subject_id" xml:"subject_id"`
-	SubjectType        string           `form:"subject_type" json:"subject_type" xml:"subject_type"`
-	SubjectDisplayName *string          `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	SubjectSlug        *string          `form:"subject_slug,omitempty" json:"subject_slug,omitempty" xml:"subject_slug,omitempty"`
-	BeforeSnapshot     *json.RawMessage `form:"before_snapshot,omitempty" json:"before_snapshot,omitempty" xml:"before_snapshot,omitempty"`
-	AfterSnapshot      *json.RawMessage `form:"after_snapshot,omitempty" json:"after_snapshot,omitempty" xml:"after_snapshot,omitempty"`
-	Metadata           map[string]any   `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	ID                 string          `form:"id" json:"id" xml:"id"`
+	ActorID            string          `form:"actor_id" json:"actor_id" xml:"actor_id"`
+	ActorType          string          `form:"actor_type" json:"actor_type" xml:"actor_type"`
+	ActorDisplayName   *string         `form:"actor_display_name,omitempty" json:"actor_display_name,omitempty" xml:"actor_display_name,omitempty"`
+	ActorSlug          *string         `form:"actor_slug,omitempty" json:"actor_slug,omitempty" xml:"actor_slug,omitempty"`
+	Action             string          `form:"action" json:"action" xml:"action"`
+	SubjectID          string          `form:"subject_id" json:"subject_id" xml:"subject_id"`
+	SubjectType        string          `form:"subject_type" json:"subject_type" xml:"subject_type"`
+	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	SubjectSlug        *string         `form:"subject_slug,omitempty" json:"subject_slug,omitempty" xml:"subject_slug,omitempty"`
+	BeforeSnapshot     json.RawMessage `form:"before_snapshot,omitempty" json:"before_snapshot,omitempty" xml:"before_snapshot,omitempty"`
+	AfterSnapshot      json.RawMessage `form:"after_snapshot,omitempty" json:"after_snapshot,omitempty" xml:"after_snapshot,omitempty"`
+	Metadata           map[string]any  `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
 	// The creation date of the audit log.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }

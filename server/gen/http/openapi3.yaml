@@ -13054,9 +13054,9 @@ components:
                 actor_type:
                     type: string
                 after_snapshot:
-                    type: string
+                    x-speakeasy-type-override: any
                 before_snapshot:
-                    type: string
+                    x-speakeasy-type-override: any
                 created_at:
                     type: string
                     description: The creation date of the audit log.

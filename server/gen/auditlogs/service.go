@@ -54,8 +54,8 @@ type AuditLog struct {
 	SubjectType        string
 	SubjectDisplayName *string
 	SubjectSlug        *string
-	BeforeSnapshot     *json.RawMessage
-	AfterSnapshot      *json.RawMessage
+	BeforeSnapshot     json.RawMessage
+	AfterSnapshot      json.RawMessage
 	Metadata           map[string]any
 	// The creation date of the audit log.
 	CreatedAt string

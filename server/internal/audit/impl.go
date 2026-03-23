@@ -180,18 +180,9 @@ func toAuditLog(row repo.AuditLog) (*gen.AuditLog, error) {
 		SubjectType:        row.SubjectType,
 		SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName),
 		SubjectSlug:        conv.FromPGText[string](row.SubjectSlug),
-		BeforeSnapshot:     rawMessagePtr(row.BeforeSnapshot),
-		AfterSnapshot:      rawMessagePtr(row.AfterSnapshot),
+		BeforeSnapshot:     row.BeforeSnapshot,
+		AfterSnapshot:      row.AfterSnapshot,
 		Metadata:           metadata,
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
-}
-
-func rawMessagePtr(value []byte) *json.RawMessage {
-	if len(value) == 0 {
-		return nil
-	}
-
-	raw := json.RawMessage(value)
-	return &raw
 }
