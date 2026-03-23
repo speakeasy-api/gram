@@ -47,3 +47,15 @@ var assetKinds = map[AssetKind]struct{}{
 	AssetKindFunction: {},
 	AssetKindOpenAPI:  {},
 }
+
+type VariationKind string
+
+const (
+	VariationKindGlobal  VariationKind = "global"
+	VariationKindToolset VariationKind = "toolset"
+)
+
+var variationKinds = map[VariationKind]struct{}{
+	VariationKindGlobal:  {},
+	VariationKindToolset: {},
+}
