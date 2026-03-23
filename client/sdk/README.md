@@ -221,6 +221,17 @@ run();
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
 * [set](docs/sdks/features/README.md#set) - setProductFeature features
 
+### [Hooks](docs/sdks/hooks/README.md)
+
+* [hooksNumberClaude](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+* [hooksNumberLogs](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
+
+### [HooksServerNames](docs/sdks/hooksservernames/README.md)
+
+* [deleteServerNameOverride](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
+* [listServerNameOverrides](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
+* [upsertServerNameOverride](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
+
 ### [Instances](docs/sdks/instances/README.md)
 
 * [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
@@ -413,6 +424,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
+- [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`hooksHooksNumberLogs`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
+- [`hooksServerNamesDeleteServerNameOverride`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
+- [`hooksServerNamesListServerNameOverrides`](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
+- [`hooksServerNamesUpsertServerNameOverride`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
 - [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`integrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`integrationsList`](docs/sdks/integrations/README.md#list) - list integrations
@@ -564,6 +580,11 @@ To learn about this feature and how to get started, check
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+- [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
+- [`useHooksServerNamesDeleteServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
+- [`useHooksServerNamesListServerNameOverrides`](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
+- [`useHooksServerNamesUpsertServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
