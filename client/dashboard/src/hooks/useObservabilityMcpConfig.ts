@@ -20,7 +20,7 @@ export function useObservabilityMcpConfig({
   ElementsConfig,
   "variant" | "welcome" | "theme"
 > {
-  const { orgSlug, projectSlug } = useSlugs();
+  const { projectSlug } = useSlugs();
   const client = useGramContext();
   const isLocal = process.env.NODE_ENV === "development";
   const { session } = useSession();
@@ -62,8 +62,8 @@ export function useObservabilityMcpConfig({
   }, [toolsets]);
 
   return useMemo(() => {
-    if (!orgSlug || !projectSlug) {
-      throw new Error("No org or project slug found.");
+    if (!projectSlug) {
+      throw new Error("No project slug found.");
     }
 
     const baseConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme"> = {
@@ -97,7 +97,9 @@ export function useObservabilityMcpConfig({
       };
     }
 
-    const mcpUrl = `${getServerURL()}/mcp/${orgSlug}-gram`;
+    const mcpUrl = getServerURL().includes("app.getgram.ai")
+      ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
+      : "https://dev.getgram.ai/mcp/speakeasy-team-gram";
 
     return {
       ...baseConfig,
@@ -107,7 +109,6 @@ export function useObservabilityMcpConfig({
     toolsToInclude,
     getSession,
     session,
-    orgSlug,
     projectSlug,
     isLocal,
     toolsets,
