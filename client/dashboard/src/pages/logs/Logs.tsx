@@ -195,11 +195,10 @@ function LogsContent() {
   const { projectSlug } = useSlugs();
 
   // Copilot config - filter to logs-related tools only
-  const logsToolFilter = useCallback(
-    ({ toolName }: { toolName: string }) =>
-      toolName.toLowerCase().includes("logs"),
-    [],
-  );
+  const logsToolFilter = useCallback(({ toolName }: { toolName: string }) => {
+    const name = toolName.toLowerCase();
+    return name.includes("logs") || name.includes("attribute_keys");
+  }, []);
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: logsToolFilter,
   });

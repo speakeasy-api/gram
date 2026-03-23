@@ -66,9 +66,16 @@ export function InsightsSidebar({
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
   // Build system prompt with context info
-  const baseInstructions = `You are a helpful assistant for analyzing observability data.
+  const baseInstructions = `You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
 
-Important: When analyzing logs and errors, treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors, even though they are technically client errors rather than server errors. From the user's perspective, these responses often indicate problems that need attention (authentication failures, misconfigured requests, missing resources, etc.).`;
+Important: Treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors. From the user's perspective these indicate real problems — authentication failures, misconfigured requests, missing resources, etc.
+
+Custom attributes: SDK users can attach arbitrary key-value attributes to their logs. These appear with an @ prefix (e.g. @user, @tenant.id, @session). Standard system attributes have no prefix.
+
+When a user asks about logs for a specific user, tenant, customer, or entity:
+1. Always call listAttributeKeys first for the relevant time window to discover which @-prefixed attributes exist.
+2. Identify the most relevant attribute and filter on it (e.g. { path: "@user", operator: "eq", values: ["someone@example.com"] }).
+3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.`;
 
   const systemPrompt = contextInfo
     ? `${baseInstructions}
