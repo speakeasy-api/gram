@@ -126,7 +126,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RemoveGrantsRequestBody'
+              $ref: '#/components/schemas/RemoveGrantsForm'
         required: true
       responses:
         "204":
@@ -310,7 +310,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertGrantsRequestBody'
+              $ref: '#/components/schemas/RemoveGrantsForm'
         required: true
       responses:
         "200":
@@ -13298,6 +13298,26 @@ components:
         - name
         - slug
         - runtime
+    AddGrantEntry:
+      type: object
+      properties:
+        principal_urn:
+          type: string
+          description: The user or role receiving this permission (e.g. "user:user_abc", "role:admin").
+        resource:
+          type: string
+          description: The resource this permission applies to. Use "*" for unrestricted access.
+          maxLength: 260
+        scope:
+          type: string
+          description: The action being permitted (e.g. "build:read", "mcp:connect").
+          minLength: 3
+          maxLength: 60
+      description: 'A permission to grant: who gets it, what action they can perform, and which resource it applies to.'
+      required:
+        - principal_urn
+        - scope
+        - resource
     AddOAuthProxyServerForm:
       type: object
       properties:
@@ -17621,6 +17641,18 @@ components:
         - principal_urn
         - scope
         - resource
+    RemoveGrantsForm:
+      type: object
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoveGrantEntry'
+          description: The permissions to revoke.
+          minItems: 1
+          maxItems: 100
+      required:
+        - grants
     RemovePrincipalGrantsRequestBody:
       type: object
       properties:
@@ -19580,33 +19612,13 @@ components:
           $ref: '#/components/schemas/ToolVariation'
       required:
         - variation
-    UpsertGrantForm:
-      type: object
-      properties:
-        principal_urn:
-          type: string
-          description: The user or role receiving this permission (e.g. "user:user_abc", "role:admin").
-        resource:
-          type: string
-          description: The resource this permission applies to. Use "*" for unrestricted access.
-          maxLength: 260
-        scope:
-          type: string
-          description: The action being permitted (e.g. "build:read", "mcp:connect").
-          minLength: 3
-          maxLength: 60
-      description: 'A permission to grant: who gets it, what action they can perform, and which resource it applies to.'
-      required:
-        - principal_urn
-        - scope
-        - resource
-    UpsertGrantsRequestBody:
+    UpsertGrantsForm:
       type: object
       properties:
         grants:
           type: array
           items:
-            $ref: '#/components/schemas/UpsertGrantForm'
+            $ref: '#/components/schemas/AddGrantEntry'
           description: The permissions to grant.
           minItems: 1
           maxItems: 100
@@ -19919,18 +19931,6 @@ components:
       required:
         - name
         - description
-    RemoveGrantsRequestBody:
-      type: object
-      properties:
-        grants:
-          type: array
-          items:
-            $ref: "#/components/schemas/RemoveGrantEntry"
-          description: The list of grants to remove, each identified by (principal_urn, scope, resource).
-          minItems: 1
-          maxItems: 100
-      required:
-        - grants
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

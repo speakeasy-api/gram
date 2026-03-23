@@ -20,7 +20,7 @@ export type UpsertGrantsRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  upsertGrantsRequestBody: components.UpsertGrantsRequestBody;
+  removeGrantsForm: components.RemoveGrantsForm;
 };
 
 /** @internal */
@@ -58,7 +58,7 @@ export function upsertGrantsSecurityToJSON(
 export type UpsertGrantsRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  UpsertGrantsRequestBody: components.UpsertGrantsRequestBody$Outbound;
+  RemoveGrantsForm: components.RemoveGrantsForm$Outbound;
 };
 
 /** @internal */
@@ -69,13 +69,13 @@ export const UpsertGrantsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    upsertGrantsRequestBody: components.UpsertGrantsRequestBody$outboundSchema,
+    removeGrantsForm: components.RemoveGrantsForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
-      upsertGrantsRequestBody: "UpsertGrantsRequestBody",
+      removeGrantsForm: "RemoveGrantsForm",
     });
   }),
 );

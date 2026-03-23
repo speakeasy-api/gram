@@ -91,9 +91,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpsertGrantsRequestBody, {
-    explode: true,
-  });
+  const body = encodeJSON("body", payload.RemoveGrantsForm, { explode: true });
 
   const path = pathToFunc("/rpc/access.upsertGrants")();
 

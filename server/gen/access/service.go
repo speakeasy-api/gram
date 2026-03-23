@@ -52,6 +52,18 @@ const ServiceName = "access"
 // MethodKey key.
 var MethodNames = [4]string{"listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants"}
 
+// A permission to grant: who gets it, what action they can perform, and which
+// resource it applies to.
+type AddGrantEntry struct {
+	// The user or role receiving this permission (e.g. "user:user_abc",
+	// "role:admin").
+	PrincipalUrn urn.Principal
+	// The action being permitted (e.g. "build:read", "mcp:connect").
+	Scope string
+	// The resource this permission applies to. Use "*" for unrestricted access.
+	Resource string
+}
+
 // A permission record giving a user or role the ability to perform an action
 // on a resource.
 type Grant struct {
@@ -105,10 +117,10 @@ type RemoveGrantEntry struct {
 // RemoveGrantsPayload is the payload type of the access service removeGrants
 // method.
 type RemoveGrantsPayload struct {
-	// The permissions to revoke.
-	Grants       []*RemoveGrantEntry
 	ApikeyToken  *string
 	SessionToken *string
+	// The permissions to revoke.
+	Grants []*RemoveGrantEntry
 }
 
 // RemovePrincipalGrantsPayload is the payload type of the access service
@@ -121,25 +133,13 @@ type RemovePrincipalGrantsPayload struct {
 	SessionToken *string
 }
 
-// A permission to grant: who gets it, what action they can perform, and which
-// resource it applies to.
-type UpsertGrantForm struct {
-	// The user or role receiving this permission (e.g. "user:user_abc",
-	// "role:admin").
-	PrincipalUrn urn.Principal
-	// The action being permitted (e.g. "build:read", "mcp:connect").
-	Scope string
-	// The resource this permission applies to. Use "*" for unrestricted access.
-	Resource string
-}
-
 // UpsertGrantsPayload is the payload type of the access service upsertGrants
 // method.
 type UpsertGrantsPayload struct {
-	// The permissions to grant.
-	Grants       []*UpsertGrantForm
 	ApikeyToken  *string
 	SessionToken *string
+	// The permissions to grant.
+	Grants []*AddGrantEntry
 }
 
 // UpsertGrantsResult is the result type of the access service upsertGrants

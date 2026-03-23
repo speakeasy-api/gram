@@ -50,12 +50,7 @@ var _ = Service("access", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Attribute("grants", ArrayOf(UpsertGrantForm), func() {
-				Description("The permissions to grant.")
-				MinLength(1)
-				MaxLength(100)
-			})
-			Required("grants")
+			Extend(UpsertGrantsForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -82,12 +77,7 @@ var _ = Service("access", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Attribute("grants", ArrayOf(RemoveGrantEntry), func() {
-				Description("The permissions to revoke.")
-				MinLength(1)
-				MaxLength(100)
-			})
-			Required("grants")
+			Extend(RemoveGrantsForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -153,7 +143,16 @@ var RemoveGrantEntry = Type("RemoveGrantEntry", func() {
 	})
 })
 
-var UpsertGrantForm = Type("UpsertGrantForm", func() {
+var RemoveGrantsForm = Type("RemoveGrantsForm", func() {
+	Attribute("grants", ArrayOf(RemoveGrantEntry), func() {
+		Description("The permissions to revoke.")
+		MinLength(1)
+		MaxLength(100)
+	})
+	Required("grants")
+})
+
+var AddGrantEntry = Type("AddGrantEntry", func() {
 	Description("A permission to grant: who gets it, what action they can perform, and which resource it applies to.")
 	Required("principal_urn", "scope", "resource")
 
@@ -170,6 +169,15 @@ var UpsertGrantForm = Type("UpsertGrantForm", func() {
 		Description("The resource this permission applies to. Use \"*\" for unrestricted access.")
 		MaxLength(260)
 	})
+})
+
+var UpsertGrantsForm = Type("UpsertGrantsForm", func() {
+	Attribute("grants", ArrayOf(AddGrantEntry), func() {
+		Description("The permissions to grant.")
+		MinLength(1)
+		MaxLength(100)
+	})
+	Required("grants")
 })
 
 var Grant = Type("Grant", func() {

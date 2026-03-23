@@ -9,30 +9,30 @@ import {
   RemoveGrantEntry$outboundSchema,
 } from "./removegrantentry.js";
 
-export type RemoveGrantsRequestBody = {
+export type RemoveGrantsForm = {
   /**
-   * The list of grants to remove, each identified by (principal_urn, scope, resource).
+   * The permissions to revoke.
    */
   grants: Array<RemoveGrantEntry>;
 };
 
 /** @internal */
-export type RemoveGrantsRequestBody$Outbound = {
+export type RemoveGrantsForm$Outbound = {
   grants: Array<RemoveGrantEntry$Outbound>;
 };
 
 /** @internal */
-export const RemoveGrantsRequestBody$outboundSchema: z.ZodMiniType<
-  RemoveGrantsRequestBody$Outbound,
-  RemoveGrantsRequestBody
+export const RemoveGrantsForm$outboundSchema: z.ZodMiniType<
+  RemoveGrantsForm$Outbound,
+  RemoveGrantsForm
 > = z.object({
   grants: z.array(RemoveGrantEntry$outboundSchema),
 });
 
-export function removeGrantsRequestBodyToJSON(
-  removeGrantsRequestBody: RemoveGrantsRequestBody,
+export function removeGrantsFormToJSON(
+  removeGrantsForm: RemoveGrantsForm,
 ): string {
   return JSON.stringify(
-    RemoveGrantsRequestBody$outboundSchema.parse(removeGrantsRequestBody),
+    RemoveGrantsForm$outboundSchema.parse(removeGrantsForm),
   );
 }

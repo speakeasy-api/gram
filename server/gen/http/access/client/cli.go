@@ -65,7 +65,7 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsA
 		}
 		for _, e := range body.Grants {
 			if e != nil {
-				if err2 := ValidateUpsertGrantFormRequestBody(e); err2 != nil {
+				if err2 := ValidateAddGrantEntryRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -88,16 +88,16 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsA
 	}
 	v := &access.UpsertGrantsPayload{}
 	if body.Grants != nil {
-		v.Grants = make([]*access.UpsertGrantForm, len(body.Grants))
+		v.Grants = make([]*access.AddGrantEntry, len(body.Grants))
 		for i, val := range body.Grants {
 			if val == nil {
 				v.Grants[i] = nil
 				continue
 			}
-			v.Grants[i] = marshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm(val)
+			v.Grants[i] = marshalAddGrantEntryRequestBodyToAccessAddGrantEntry(val)
 		}
 	} else {
-		v.Grants = []*access.UpsertGrantForm{}
+		v.Grants = []*access.AddGrantEntry{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

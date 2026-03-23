@@ -20,26 +20,6 @@ actions:
             schema:
               type: string
               format: binary
-  # Goa deduplicates request body schemas with identical structures.
-  # removeGrants incorrectly references UpsertGrantsRequestBody because
-  # RemoveGrantEntry and UpsertGrantForm share the same fields.
-  - target: $.components.schemas
-    update:
-      RemoveGrantsRequestBody:
-        type: object
-        properties:
-          grants:
-            type: array
-            items:
-              $ref: "#/components/schemas/RemoveGrantEntry"
-            description: The list of grants to remove, each identified by (principal_urn, scope, resource).
-            minItems: 1
-            maxItems: 100
-        required:
-          - grants
-  - target: $.paths['/rpc/access.removeGrants'].post.requestBody.content['application/json'].schema
-    update:
-      $ref: "#/components/schemas/RemoveGrantsRequestBody"
   - target: $.paths..security
     update:
       - {}

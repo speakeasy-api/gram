@@ -963,11 +963,10 @@ func unmarshalGrantResponseBodyToAccessGrant(v *GrantResponseBody) *access.Grant
 	return res
 }
 
-// marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody builds a value of
-// type *UpsertGrantFormRequestBody from a value of type
-// *access.UpsertGrantForm.
-func marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody(v *access.UpsertGrantForm) *UpsertGrantFormRequestBody {
-	res := &UpsertGrantFormRequestBody{
+// marshalAccessAddGrantEntryToAddGrantEntryRequestBody builds a value of type
+// *AddGrantEntryRequestBody from a value of type *access.AddGrantEntry.
+func marshalAccessAddGrantEntryToAddGrantEntryRequestBody(v *access.AddGrantEntry) *AddGrantEntryRequestBody {
+	res := &AddGrantEntryRequestBody{
 		PrincipalUrn: v.PrincipalUrn,
 		Scope:        v.Scope,
 		Resource:     v.Resource,
@@ -976,11 +975,10 @@ func marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody(v *access.UpsertGr
 	return res
 }
 
-// marshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm builds a value of
-// type *access.UpsertGrantForm from a value of type
-// *UpsertGrantFormRequestBody.
-func marshalUpsertGrantFormRequestBodyToAccessUpsertGrantForm(v *UpsertGrantFormRequestBody) *access.UpsertGrantForm {
-	res := &access.UpsertGrantForm{
+// marshalAddGrantEntryRequestBodyToAccessAddGrantEntry builds a value of type
+// *access.AddGrantEntry from a value of type *AddGrantEntryRequestBody.
+func marshalAddGrantEntryRequestBodyToAccessAddGrantEntry(v *AddGrantEntryRequestBody) *access.AddGrantEntry {
+	res := &access.AddGrantEntry{
 		PrincipalUrn: v.PrincipalUrn,
 		Scope:        v.Scope,
 		Resource:     v.Resource,

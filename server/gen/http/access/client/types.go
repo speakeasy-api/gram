@@ -19,7 +19,7 @@ import (
 // endpoint HTTP request body.
 type UpsertGrantsRequestBody struct {
 	// The permissions to grant.
-	Grants []*UpsertGrantFormRequestBody `form:"grants" json:"grants" xml:"grants"`
+	Grants []*AddGrantEntryRequestBody `form:"grants" json:"grants" xml:"grants"`
 }
 
 // RemoveGrantsRequestBody is the type of the "access" service "removeGrants"
@@ -803,8 +803,8 @@ type GrantResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// UpsertGrantFormRequestBody is used to define fields on request body types.
-type UpsertGrantFormRequestBody struct {
+// AddGrantEntryRequestBody is used to define fields on request body types.
+type AddGrantEntryRequestBody struct {
 	// The user or role receiving this permission (e.g. "user:user_abc",
 	// "role:admin").
 	PrincipalUrn urn.Principal `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
@@ -830,16 +830,16 @@ type RemoveGrantEntryRequestBody struct {
 func NewUpsertGrantsRequestBody(p *access.UpsertGrantsPayload) *UpsertGrantsRequestBody {
 	body := &UpsertGrantsRequestBody{}
 	if p.Grants != nil {
-		body.Grants = make([]*UpsertGrantFormRequestBody, len(p.Grants))
+		body.Grants = make([]*AddGrantEntryRequestBody, len(p.Grants))
 		for i, val := range p.Grants {
 			if val == nil {
 				body.Grants[i] = nil
 				continue
 			}
-			body.Grants[i] = marshalAccessUpsertGrantFormToUpsertGrantFormRequestBody(val)
+			body.Grants[i] = marshalAccessAddGrantEntryToAddGrantEntryRequestBody(val)
 		}
 	} else {
-		body.Grants = []*UpsertGrantFormRequestBody{}
+		body.Grants = []*AddGrantEntryRequestBody{}
 	}
 	return body
 }
@@ -2535,9 +2535,9 @@ func ValidateGrantResponseBody(body *GrantResponseBody) (err error) {
 	return
 }
 
-// ValidateUpsertGrantFormRequestBody runs the validations defined on
-// UpsertGrantFormRequestBody
-func ValidateUpsertGrantFormRequestBody(body *UpsertGrantFormRequestBody) (err error) {
+// ValidateAddGrantEntryRequestBody runs the validations defined on
+// AddGrantEntryRequestBody
+func ValidateAddGrantEntryRequestBody(body *AddGrantEntryRequestBody) (err error) {
 	if utf8.RuneCountInString(body.Scope) < 3 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 3, true))
 	}
