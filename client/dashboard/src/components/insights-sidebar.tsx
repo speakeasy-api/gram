@@ -68,6 +68,8 @@ export function InsightsSidebar({
   // Build system prompt with context info
   const baseInstructions = `You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
 
+The current date is ${new Date().toISOString().split("T")[0]}.
+
 Important: Treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors. From the user's perspective these indicate real problems — authentication failures, misconfigured requests, missing resources, etc.
 
 Custom attributes: SDK users can attach arbitrary key-value attributes to their logs. These appear with an @ prefix (e.g. @user, @tenant.id, @session). Standard system attributes have no prefix.
@@ -91,6 +93,9 @@ When the user asks about "current period", "selected period", "this timeframe", 
       ...mcpConfig,
       variant: "standalone",
       systemPrompt,
+      model: {
+        defaultModel: "anthropic/claude-sonnet-4.6",
+      },
       welcome: {
         title,
         subtitle,
