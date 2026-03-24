@@ -131,13 +131,6 @@ function CopilotIcon({ className }: { className?: string }) {
   );
 }
 
-const AI_CLIENTS = [
-  { name: "Claude", icon: ClaudeIcon },
-  { name: "Codex", icon: CodexIcon },
-  { name: "Copilot", icon: CopilotIcon },
-  { name: "Cursor", icon: CursorIcon },
-];
-
 // Stacked card cluster — multiple overlapping cards to show many instances
 function ClientCluster({
   icon: Icon,

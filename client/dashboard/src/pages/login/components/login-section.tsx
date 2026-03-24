@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@speakeasy-api/moonshine";
-import { cn, getServerURL } from "@/lib/utils";
+import { getServerURL } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";
 import {
@@ -42,43 +42,6 @@ function FeatureBadges({ labels = FEATURE_BADGES }: { labels?: string[] }) {
         </span>
       ))}
     </div>
-  );
-}
-
-function GradientButton({
-  children,
-  onClick,
-  disabled,
-  className,
-  type = "button",
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  className?: string;
-  type?: "button" | "submit" | "reset";
-}) {
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "group relative inline-flex w-full cursor-pointer items-center justify-center rounded-full p-[2px] transition-all duration-200",
-        "bg-gradient-to-br from-[#5A8250] via-[#2873D7] to-[#FB873F]",
-        disabled && "pointer-events-none opacity-50",
-        className,
-      )}
-    >
-      <span
-        className={cn(
-          "flex w-full items-center justify-center rounded-full bg-white px-8 py-2 font-mono text-[15px] uppercase leading-[1.6] tracking-[0.01em] text-black transition-all duration-200",
-          "group-hover:bg-transparent group-hover:text-white",
-        )}
-      >
-        {children}
-      </span>
-    </button>
   );
 }
 
