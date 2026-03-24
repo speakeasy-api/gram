@@ -9,13 +9,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import { invalidateAllListMembers } from "@gram/client/react-query/listMembers.js";
+import {
+  invalidateAllListRoles,
+  useListRoles,
+} from "@gram/client/react-query/listRoles.js";
+import { useUpdateMemberRoleMutation } from "@gram/client/react-query/updateMemberRole.js";
 import { Button } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { MOCK_ROLES } from "./mock-data";
-import type { Member } from "./types";
 
 interface ChangeRoleDialogProps {
-  member: Member | null;
+  member: AccessMember | null;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -26,13 +34,33 @@ export function ChangeRoleDialog({
   const [selectedRole, setSelectedRole] = useState<string | undefined>(
     undefined,
   );
+  const queryClient = useQueryClient();
+  const { data: rolesData } = useListRoles();
+  const roles = rolesData?.roles ?? [];
+
+  const updateMemberRole = useUpdateMemberRoleMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllListMembers(queryClient),
+        invalidateAllListRoles(queryClient),
+      ]);
+      onOpenChange(false);
+    },
+  });
 
   // Sync selected role when member changes
   const currentRole = selectedRole ?? member?.roleId;
 
   const handleUpdate = () => {
-    // TODO: call API when backend is implemented
-    onOpenChange(false);
+    if (!member || !currentRole) return;
+    updateMemberRole.mutate({
+      request: {
+        updateMemberRoleForm: {
+          userId: member.id,
+          roleId: currentRole,
+        },
+      },
+    });
   };
 
   return (
@@ -76,7 +104,7 @@ export function ChangeRoleDialog({
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {MOCK_ROLES.map((role) => (
+                    {roles.map((role) => (
                       <SelectItem key={role.id} value={role.id}>
                         {role.name}
                       </SelectItem>
@@ -90,7 +118,23 @@ export function ChangeRoleDialog({
               <Button variant="secondary" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleUpdate}>Update Role</Button>
+              <Button
+                onClick={handleUpdate}
+                disabled={
+                  updateMemberRole.isPending ||
+                  !currentRole ||
+                  currentRole === member?.roleId
+                }
+              >
+                {updateMemberRole.isPending && (
+                  <Button.LeftIcon>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </Button.LeftIcon>
+                )}
+                <Button.Text>
+                  {updateMemberRole.isPending ? "Updating…" : "Update Role"}
+                </Button.Text>
+              </Button>
             </div>
           </div>
         )}
