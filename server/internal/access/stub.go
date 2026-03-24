@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
+	"unicode/utf8"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -122,7 +122,10 @@ func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug stri
 	for _, row := range rows {
 		agg, ok := byScope[row.Scope]
 		if !ok {
-			agg = &scopeAgg{}
+			agg = &scopeAgg{
+				unrestricted: false,
+				resources:    nil,
+			}
 			byScope[row.Scope] = agg
 		}
 		if row.Resource == "*" {
@@ -134,11 +137,14 @@ func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug stri
 
 	grants := make([]*gen.RoleGrant, 0, len(byScope))
 	for scope, agg := range byScope {
-		g := &gen.RoleGrant{Scope: scope}
+		var resources []string
 		if !agg.unrestricted {
-			g.Resources = agg.resources
+			resources = agg.resources
 		}
-		grants = append(grants, g)
+		grants = append(grants, &gen.RoleGrant{
+			Scope:     scope,
+			Resources: resources,
+		})
 	}
 
 	return grants, nil
@@ -152,7 +158,7 @@ func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string,
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op; error is safe to ignore
 
 	q := repo.New(tx)
 	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
@@ -349,9 +355,9 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 			if mid, ok := membershipByUser[uid]; ok {
 				if _, err := s.roles.UpdateMemberRole(ctx, mid, wr.Slug); err != nil {
 					s.logger.WarnContext(ctx, "failed to assign member to new role",
-						slog.String("user_id", uid),
-						slog.String("role_slug", wr.Slug),
-						slog.Any("error", err),
+						attr.SlogUserID(uid),
+						attr.SlogRoleSlug(wr.Slug),
+						attr.SlogError(err),
 					)
 				}
 			}
@@ -403,6 +409,7 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 	opts := workos.UpdateRoleOpts{
 		Name:        p.Name,
 		Description: p.Description,
+		Permissions: nil,
 	}
 	wr, err := s.roles.UpdateRole(ctx, workosOrgID, currentSlug, opts)
 	if err != nil {
@@ -481,8 +488,8 @@ func (s *Service) DeleteRole(ctx context.Context, p *gen.DeleteRolePayload) erro
 		PrincipalUrn:   principalURN,
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to clean up grants after role deletion",
-			slog.String("role_slug", roleSlug),
-			slog.Any("error", err),
+			attr.SlogRoleSlug(roleSlug),
+			attr.SlogError(err),
 		)
 	}
 
@@ -537,8 +544,8 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		user, err := s.roles.GetUser(ctx, m.UserID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to fetch user for membership",
-				slog.String("user_id", m.UserID),
-				slog.Any("error", err),
+				attr.SlogUserID(m.UserID),
+				attr.SlogError(err),
 			)
 			continue
 		}
@@ -548,18 +555,19 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 			roleID = m.Role.Slug // fallback
 		}
 
-		member := &gen.AccessMember{
+		var photoURL *string
+		if user.ProfilePictureURL != "" {
+			photoURL = &user.ProfilePictureURL
+		}
+
+		result.Members = append(result.Members, &gen.AccessMember{
 			ID:       m.UserID,
 			Name:     user.FirstName + " " + user.LastName,
 			Email:    user.Email,
+			PhotoURL: photoURL,
 			RoleID:   roleID,
 			JoinedAt: m.CreatedAt,
-		}
-		if user.ProfilePictureURL != "" {
-			member.PhotoURL = &user.ProfilePictureURL
-		}
-
-		result.Members = append(result.Members, member)
+		})
 	}
 
 	return result, nil
@@ -625,18 +633,19 @@ func (s *Service) UpdateMemberRole(ctx context.Context, p *gen.UpdateMemberRoleP
 		}
 	}
 
-	member := &gen.AccessMember{
+	var photoURL *string
+	if user.ProfilePictureURL != "" {
+		photoURL = &user.ProfilePictureURL
+	}
+
+	return &gen.AccessMember{
 		ID:       updated.UserID,
 		Name:     user.FirstName + " " + user.LastName,
 		Email:    user.Email,
+		PhotoURL: photoURL,
 		RoleID:   responseRoleID,
 		JoinedAt: updated.CreatedAt,
-	}
-	if user.ProfilePictureURL != "" {
-		member.PhotoURL = &user.ProfilePictureURL
-	}
-
-	return member, nil
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -648,11 +657,15 @@ func (s *Service) UpdateMemberRole(ctx context.Context, p *gen.UpdateMemberRoleP
 func slugify(name string) string {
 	var b []byte
 	for _, r := range name {
+		if r > utf8.RuneSelf {
+			// Skip non-ASCII characters entirely.
+			continue
+		}
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b = append(b, byte(r))
+			b = append(b, byte(r)) //nolint:gosec // r is guaranteed ASCII by the guard above
 		case r >= 'A' && r <= 'Z':
-			b = append(b, byte(r-'A'+'a'))
+			b = append(b, byte(r-'A'+'a')) //nolint:gosec // r is guaranteed ASCII by the guard above
 		case r == ' ' || r == '-' || r == '_':
 			if len(b) > 0 && b[len(b)-1] != '-' {
 				b = append(b, '-')
