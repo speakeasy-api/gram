@@ -239,6 +239,8 @@ func EncodeListError(encoder func(context.Context, http.ResponseWriter) goahttp.
 func marshalAuditlogsAuditLogToAuditLogResponseBody(v *auditlogs.AuditLog) *AuditLogResponseBody {
 	res := &AuditLogResponseBody{
 		ID:                 v.ID,
+		ProjectID:          v.ProjectID,
+		ProjectSlug:        v.ProjectSlug,
 		ActorID:            v.ActorID,
 		ActorType:          v.ActorType,
 		ActorDisplayName:   v.ActorDisplayName,

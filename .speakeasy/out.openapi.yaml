@@ -13582,6 +13582,10 @@ components:
         metadata:
           type: object
           additionalProperties: true
+        project_id:
+          type: string
+        project_slug:
+          type: string
         subject_display_name:
           type: string
         subject_id:

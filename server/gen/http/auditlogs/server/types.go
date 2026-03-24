@@ -206,6 +206,8 @@ type ListGatewayErrorResponseBody struct {
 // AuditLogResponseBody is used to define fields on response body types.
 type AuditLogResponseBody struct {
 	ID                 string          `form:"id" json:"id" xml:"id"`
+	ProjectID          *string         `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ProjectSlug        *string         `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
 	ActorID            string          `form:"actor_id" json:"actor_id" xml:"actor_id"`
 	ActorType          string          `form:"actor_type" json:"actor_type" xml:"actor_type"`
 	ActorDisplayName   *string         `form:"actor_display_name,omitempty" json:"actor_display_name,omitempty" xml:"actor_display_name,omitempty"`

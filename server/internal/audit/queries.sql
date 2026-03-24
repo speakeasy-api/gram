@@ -33,16 +33,17 @@ INSERT INTO audit_logs (
 RETURNING id;
 
 -- name: ListAuditLogs :many
-SELECT *
-FROM audit_logs
-WHERE organization_id = @organization_id
+SELECT a.*, p.slug AS project_slug
+FROM audit_logs a
+LEFT JOIN projects p ON p.id = a.project_id
+WHERE a.organization_id = @organization_id
   AND (
     sqlc.narg(project_id)::uuid IS NULL
-    OR project_id = sqlc.narg(project_id)::uuid
+    OR a.project_id = sqlc.narg(project_id)::uuid
   )
   AND (
     sqlc.narg(cursor_seq)::int8 IS NULL
-    OR seq < sqlc.narg(cursor_seq)::int8
+    OR a.seq < sqlc.narg(cursor_seq)::int8
   )
-ORDER BY seq DESC
+ORDER BY a.seq DESC
 LIMIT 51;

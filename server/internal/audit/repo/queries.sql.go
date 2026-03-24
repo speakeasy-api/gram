@@ -87,18 +87,19 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT id, seq, organization_id, project_id, actor_id, actor_type, actor_display_name, actor_slug, action, subject_id, subject_type, subject_display_name, subject_slug, before_snapshot, after_snapshot, metadata, created_at
-FROM audit_logs
-WHERE organization_id = $1
+SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.created_at, p.slug AS project_slug
+FROM audit_logs a
+LEFT JOIN projects p ON p.id = a.project_id
+WHERE a.organization_id = $1
   AND (
     $2::uuid IS NULL
-    OR project_id = $2::uuid
+    OR a.project_id = $2::uuid
   )
   AND (
     $3::int8 IS NULL
-    OR seq < $3::int8
+    OR a.seq < $3::int8
   )
-ORDER BY seq DESC
+ORDER BY a.seq DESC
 LIMIT 51
 `
 
@@ -108,15 +109,36 @@ type ListAuditLogsParams struct {
 	CursorSeq      pgtype.Int8
 }
 
-func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error) {
+type ListAuditLogsRow struct {
+	ID                 uuid.UUID
+	Seq                int64
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ActorID            string
+	ActorType          string
+	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
+	Action             string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName pgtype.Text
+	SubjectSlug        pgtype.Text
+	BeforeSnapshot     []byte
+	AfterSnapshot      []byte
+	Metadata           []byte
+	CreatedAt          pgtype.Timestamptz
+	ProjectSlug        pgtype.Text
+}
+
+func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs, arg.OrganizationID, arg.ProjectID, arg.CursorSeq)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AuditLog
+	var items []ListAuditLogsRow
 	for rows.Next() {
-		var i AuditLog
+		var i ListAuditLogsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Seq,
@@ -135,6 +157,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 			&i.AfterSnapshot,
 			&i.Metadata,
 			&i.CreatedAt,
+			&i.ProjectSlug,
 		); err != nil {
 			return nil, err
 		}

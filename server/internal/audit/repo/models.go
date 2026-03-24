@@ -3,28 +3,3 @@
 //   sqlc v1.29.0
 
 package repo
-
-import (
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-)
-
-type AuditLog struct {
-	ID                 uuid.UUID
-	Seq                int64
-	OrganizationID     string
-	ProjectID          uuid.NullUUID
-	ActorID            string
-	ActorType          string
-	ActorDisplayName   pgtype.Text
-	ActorSlug          pgtype.Text
-	Action             string
-	SubjectID          string
-	SubjectType        string
-	SubjectDisplayName pgtype.Text
-	SubjectSlug        pgtype.Text
-	BeforeSnapshot     []byte
-	AfterSnapshot      []byte
-	Metadata           []byte
-	CreatedAt          pgtype.Timestamptz
-}
