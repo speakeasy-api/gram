@@ -1,6 +1,6 @@
 import { GramLogo } from "@/components/gram-logo";
 import { cn } from "@/lib/utils";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 
 // Brand gradient colors
 const BRAND_COLORS = {
@@ -224,11 +224,43 @@ function FeatureBar({
   );
 }
 
+const PULSE_COLORS = [
+  BRAND_COLORS.green,  // #5A8250
+  BRAND_COLORS.blue,   // #2873D7
+  BRAND_COLORS.orange, // #FB873F
+];
+
+function PulseConnector({ delay = 0, disabled = false }: { delay?: number; disabled?: boolean }) {
+  if (disabled) {
+    return <div className="h-6 w-px bg-slate-300" />;
+  }
+  return (
+    <div className="relative flex h-6 w-2 items-center justify-center overflow-hidden">
+      {PULSE_COLORS.map((color, i) => (
+        <motion.div
+          key={i}
+          className="absolute h-1 w-1 rounded-full"
+          style={{ backgroundColor: color }}
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: -12, opacity: [0, 1, 1, 0] }}
+          transition={{
+            duration: 2.5,
+            delay: delay + i * 0.6,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 interface PlatformDiagramProps {
   className?: string;
 }
 
 export function PlatformDiagram({ className }: PlatformDiagramProps) {
+  const prefersReducedMotion = useReducedMotion();
   return (
     <div
       className={cn(
@@ -243,12 +275,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
         </div>
 
         {/* Connection line */}
-        <motion.div
-          initial={{ scaleY: 0 }}
-          animate={{ scaleY: 1 }}
-          transition={{ duration: 0.3, delay: 0.5 }}
-          className="w-px h-6 bg-slate-300 origin-top"
-        />
+        <PulseConnector delay={1.4} disabled={prefersReducedMotion ?? false} />
 
         {/* Chat Backend Section */}
         <motion.div
@@ -316,12 +343,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
         </motion.div>
 
         {/* Connection line */}
-        <motion.div
-          initial={{ scaleY: 0 }}
-          animate={{ scaleY: 1 }}
-          transition={{ duration: 0.3, delay: 0.85 }}
-          className="w-px h-6 bg-slate-300 origin-top"
-        />
+        <PulseConnector delay={1.1} disabled={prefersReducedMotion ?? false} />
 
         {/* Gram Platform - Center */}
         <motion.div
@@ -331,10 +353,16 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           className="relative w-full"
         >
           {/* Gradient border */}
-          <div
+          <motion.div
             className="absolute -inset-[1.5px] rounded-lg"
             style={{
               background: `linear-gradient(135deg, ${BRAND_COLORS.green}, ${BRAND_COLORS.blue}, ${BRAND_COLORS.orange})`,
+            }}
+            animate={prefersReducedMotion ? undefined : { opacity: [0.7, 1, 0.7] }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut",
             }}
           />
           <div className="relative bg-white rounded-lg p-3">
@@ -397,12 +425,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
         </motion.div>
 
         {/* Connection line */}
-        <motion.div
-          initial={{ scaleY: 0 }}
-          animate={{ scaleY: 1 }}
-          transition={{ duration: 0.3, delay: 1.15 }}
-          className="w-px h-6 bg-slate-300 origin-top"
-        />
+        <PulseConnector delay={0.8} disabled={prefersReducedMotion ?? false} />
 
         {/* Bottom - Data Sources */}
         <div className="grid grid-cols-2 gap-3 w-full">
