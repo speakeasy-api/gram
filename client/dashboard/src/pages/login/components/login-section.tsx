@@ -28,6 +28,28 @@ function getAuthErrorMessage(errorCode?: string | null): string {
   return authErrorMessages[errorCode] || unexpected;
 }
 
+const FEATURE_BADGES = [
+  "MCP Servers",
+  "Observability",
+  "Auth & OAuth",
+  "Tool Curation",
+];
+
+function FeatureBadges({ labels = FEATURE_BADGES }: { labels?: string[] }) {
+  return (
+    <div className="flex flex-wrap justify-center gap-2">
+      {labels.map((label) => (
+        <span
+          key={label}
+          className="rounded-full border border-[#D3D3D3] px-3 py-1 font-mono text-xs uppercase tracking-[0.01em] text-[#8B8684]"
+        >
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white relative">
@@ -42,6 +64,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             systems. Securely scale AI usage across your org with Speakeasy MCP
             platform
           </p>
+          <FeatureBadges />
         </div>
 
         {children}
