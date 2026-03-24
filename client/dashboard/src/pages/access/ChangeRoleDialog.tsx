@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
-import type { Role } from "@gram/client/models/components/role.js";
 import { invalidateAllListMembers } from "@gram/client/react-query/listMembers.js";
 import {
   invalidateAllListRoles,
@@ -20,7 +19,7 @@ import { useUpdateMemberRoleMutation } from "@gram/client/react-query/updateMemb
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ChangeRoleDialogProps {
   member: AccessMember | null;
@@ -48,7 +47,11 @@ export function ChangeRoleDialog({
     },
   });
 
-  // Sync selected role when member changes
+  // Reset selected role when the dialog opens for a different member
+  useEffect(() => {
+    setSelectedRole(undefined);
+  }, [member]);
+
   const currentRole = selectedRole ?? member?.roleId;
 
   const handleUpdate = () => {
