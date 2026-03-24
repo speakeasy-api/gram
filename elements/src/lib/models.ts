@@ -2,7 +2,6 @@
 // This list should be updated to match the model whitelist on the backend side.
 export const MODELS = [
   "anthropic/claude-opus-4.6",
-  "anthropic/claude-sonnet-4.6",
   "anthropic/claude-sonnet-4.5",
   "anthropic/claude-haiku-4.5",
   "anthropic/claude-sonnet-4",
