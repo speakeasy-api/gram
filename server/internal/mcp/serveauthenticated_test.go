@@ -126,18 +126,16 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
@@ -195,12 +193,10 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "ping",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "ping",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -257,12 +253,10 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "tools/list",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "tools/list",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -319,12 +313,10 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "prompts/list",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "prompts/list",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -384,12 +376,10 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "resources/list",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "resources/list",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -449,12 +439,10 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "unknown/method",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "unknown/method",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -477,7 +465,7 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code)
 
-		// Parse the response (single object for single request in batch)
+		// Parse the response
 		var response map[string]any
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
@@ -487,57 +475,6 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		errorObj, ok := response["error"].(map[string]any)
 		require.True(t, ok)
 		require.Contains(t, errorObj["message"], "method does not exist")
-	})
-
-	t.Run("handles empty batch gracefully", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, ti := newTestMCPService(t)
-		toolsetsRepo := toolsets_repo.New(ti.conn)
-
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectID)
-		require.NotNil(t, authCtx.ProjectSlug)
-
-		// Create a toolset
-		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-			OrganizationID:         authCtx.ActiveOrganizationID,
-			ProjectID:              *authCtx.ProjectID,
-			Name:                   "Empty Batch Test MCP",
-			Slug:                   "empty-batch-test-mcp",
-			Description:            conv.ToPGText("A test MCP for empty batch"),
-			DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
-			McpSlug:                conv.ToPGText("empty-batch-test-mcp"),
-			McpEnabled:             true,
-		})
-		require.NoError(t, err)
-
-		// Create API key
-		apiKey := ti.createTestAPIKey(ctx, t)
-
-		// Empty batch
-		reqBody := []map[string]any{}
-		bodyBytes, err := json.Marshal(reqBody)
-		require.NoError(t, err)
-
-		req := httptest.NewRequest(http.MethodPost, "/mcp/"+*authCtx.ProjectSlug+"/"+toolset.Slug+"/production", bytes.NewReader(bodyBytes))
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("project", *authCtx.ProjectSlug)
-		rctx.URLParams.Add("toolset", toolset.Slug)
-		rctx.URLParams.Add("environment", "production")
-		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
-
-		w := httptest.NewRecorder()
-		err = ti.service.ServeAuthenticated(w, req)
-		require.NoError(t, err)
-
-		// Should return 202 Accepted for empty batch
-		require.Equal(t, http.StatusAccepted, w.Code)
 	})
 
 	t.Run("returns error for non-existent toolset", func(t *testing.T) {
@@ -552,12 +489,10 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -607,11 +542,9 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"method":  "notifications/initialized",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"method":  "notifications/initialized",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -676,15 +609,13 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "prompts/get",
-				"params": map[string]any{
-					"name":      "test-prompt",
-					"arguments": map[string]any{"name": "World"},
-				},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "prompts/get",
+			"params": map[string]any{
+				"name":      "test-prompt",
+				"arguments": map[string]any{"name": "World"},
 			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
@@ -740,13 +671,11 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "prompts/get",
-				"params":  map[string]any{},
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "prompts/get",
+			"params":  map[string]any{},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -801,14 +730,12 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "prompts/get",
-				"params": map[string]any{
-					"name": "nonexistent-prompt",
-				},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "prompts/get",
+			"params": map[string]any{
+				"name": "nonexistent-prompt",
 			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
@@ -864,13 +791,11 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "resources/read",
-				"params":  map[string]any{},
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "resources/read",
+			"params":  map[string]any{},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -925,14 +850,12 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "resources/read",
-				"params": map[string]any{
-					"uri": "nonexistent://resource",
-				},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "resources/read",
+			"params": map[string]any{
+				"uri": "nonexistent://resource",
 			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
@@ -988,13 +911,11 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "tools/call",
-				"params":  map[string]any{},
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "tools/call",
+			"params":  map[string]any{},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -1049,15 +970,13 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		// Create API key
 		apiKey := ti.createTestAPIKey(ctx, t)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "tools/call",
-				"params": map[string]any{
-					"name":      "nonexistent-tool",
-					"arguments": map[string]any{},
-				},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name":      "nonexistent-tool",
+				"arguments": map[string]any{},
 			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
@@ -1086,73 +1005,4 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		require.NotNil(t, response["error"])
 	})
 
-	t.Run("handles multiple requests in batch", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, ti := newTestMCPService(t)
-		toolsetsRepo := toolsets_repo.New(ti.conn)
-
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectID)
-		require.NotNil(t, authCtx.ProjectSlug)
-
-		// Create a toolset
-		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-			OrganizationID:         authCtx.ActiveOrganizationID,
-			ProjectID:              *authCtx.ProjectID,
-			Name:                   "Batch Request MCP",
-			Slug:                   "batch-request-mcp",
-			Description:            conv.ToPGText("A test MCP for batch requests"),
-			DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
-			McpSlug:                conv.ToPGText("batch-request-mcp"),
-			McpEnabled:             true,
-		})
-		require.NoError(t, err)
-
-		// Create API key
-		apiKey := ti.createTestAPIKey(ctx, t)
-
-		// Send multiple requests in a batch
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "ping",
-			},
-			{
-				"jsonrpc": "2.0",
-				"id":      2,
-				"method":  "tools/list",
-			},
-		}
-		bodyBytes, err := json.Marshal(reqBody)
-		require.NoError(t, err)
-
-		req := httptest.NewRequest(http.MethodPost, "/mcp/"+*authCtx.ProjectSlug+"/"+toolset.Slug+"/production", bytes.NewReader(bodyBytes))
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("project", *authCtx.ProjectSlug)
-		rctx.URLParams.Add("toolset", toolset.Slug)
-		rctx.URLParams.Add("environment", "production")
-		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
-
-		w := httptest.NewRecorder()
-		err = ti.service.ServeAuthenticated(w, req)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, w.Code)
-
-		// Parse the batch response (array of responses)
-		var responses []map[string]any
-		err = json.Unmarshal(w.Body.Bytes(), &responses)
-		require.NoError(t, err)
-		require.Len(t, responses, 2)
-
-		// Both responses should have id fields
-		require.NotNil(t, responses[0]["id"])
-		require.NotNil(t, responses[1]["id"])
-	})
 }

@@ -537,17 +537,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	var batch batchedRawRequest
-	err = json.NewDecoder(r.Body).Decode(&batch)
+	var req rawRequest
+	err = json.NewDecoder(r.Body).Decode(&req)
 	switch {
 	case errors.Is(err, io.EOF):
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
-	}
-
-	if len(batch) == 0 {
-		return respondWithNoContent(true, w)
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
@@ -579,12 +575,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		apiKeyID:         apiKeyID,
 	}
 
-	body, err := s.handleBatch(ctx, mcpInputs, batch)
+	body, err := s.handleRequest(ctx, mcpInputs, &req)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		return NewErrorFromCause(batch[0].ID, err)
+		body, err = json.Marshal(NewErrorFromCause(req.ID, err))
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to serialize error response").Log(ctx, s.logger)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -691,17 +690,13 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	var batch batchedRawRequest
-	err = json.NewDecoder(r.Body).Decode(&batch)
+	var req rawRequest
+	err = json.NewDecoder(r.Body).Decode(&req)
 	switch {
 	case errors.Is(err, io.EOF):
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
-	}
-
-	if len(batch) == 0 {
-		return respondWithNoContent(true, w)
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
@@ -733,12 +728,15 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		apiKeyID:         authCtx.APIKeyID,
 	}
 
-	body, err := s.handleBatch(ctx, mcpInputs, batch)
+	body, err := s.handleRequest(ctx, mcpInputs, &req)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		return NewErrorFromCause(batch[0].ID, err)
+		body, err = json.Marshal(NewErrorFromCause(req.ID, err))
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to serialize error response").Log(ctx, s.logger)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -764,37 +762,6 @@ func resolveToolMode(r *http.Request, toolset toolsets_repo.Toolset) ToolMode {
 	}
 
 	return ToolModeStatic
-}
-
-func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch batchedRawRequest) (json.RawMessage, error) {
-	results := make([]json.RawMessage, 0, len(batch))
-	for _, req := range batch {
-		result, err := s.handleRequest(ctx, payload, req)
-		switch {
-		case result == nil && err == nil:
-			return nil, nil
-		case err != nil:
-			bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
-			if merr != nil {
-				return nil, oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
-			}
-
-			result = bs
-		}
-
-		results = append(results, result)
-	}
-
-	if len(results) == 1 {
-		return results[0], nil
-	} else {
-		m, err := json.Marshal(results)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize results").Log(ctx, s.logger)
-		}
-
-		return m, nil
-	}
 }
 
 // parseMcpEnvVariables: Map potential user provided mcp variables into inputs
