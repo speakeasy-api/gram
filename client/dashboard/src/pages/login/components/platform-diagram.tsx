@@ -65,34 +65,39 @@ const JiraLogo = () => (
   </svg>
 );
 
-// AI Client logos
+// AI Client logos — official brand marks
 const ClaudeLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4">
+  <svg viewBox="0 0 46 32" className="w-5 h-3.5">
     <path
-      d="M16.009 8.754a.622.622 0 0 0-.372-.098.584.584 0 0 0-.348.137L12 11.787 8.711 8.793a.584.584 0 0 0-.348-.137.622.622 0 0 0-.372.098.59.59 0 0 0-.228.311.624.624 0 0 0 .029.388l3.87 8.485a.405.405 0 0 0 .741 0l3.87-8.485a.624.624 0 0 0 .029-.388.59.59 0 0 0-.228-.311h-.065Z"
+      d="M28.436 1.099a4.898 4.898 0 0 0-2.939-.773 4.604 4.604 0 0 0-2.747 1.086L12.016 11.53 1.282 1.412A4.604 4.604 0 0 0-1.465.326a4.898 4.898 0 0 0-2.939.773A4.653 4.653 0 0 0-6.2 3.549a4.92 4.92 0 0 0 .229 3.06l12.87 28.216a3.193 3.193 0 0 0 5.846 0l12.87-28.217a4.92 4.92 0 0 0 .229-3.06 4.653 4.653 0 0 0-1.796-2.449h-.513Z"
       fill="#D97706"
+      transform="translate(10, 0) scale(0.55)"
     />
   </svg>
 );
 
 const CodexLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-    <path d="M22.282 9.821a5.985 5.985 0 00-.516-4.91 6.046 6.046 0 00-6.51-2.9A6.065 6.065 0 0012 .067a6.045 6.045 0 00-5.764 4.152 5.985 5.985 0 00-3.996 2.9 6.045 6.045 0 00.749 7.102 5.985 5.985 0 00.516 4.911 6.045 6.045 0 006.51 2.9A6.065 6.065 0 0012 23.933a6.045 6.045 0 005.764-4.152 5.985 5.985 0 003.996-2.9 6.045 6.045 0 00-.749-7.102" />
+  <svg viewBox="0 0 24 24" className="w-4 h-4">
+    <path
+      d="M22.282 9.821a5.985 5.985 0 00-.516-4.91 6.046 6.046 0 00-6.51-2.9A6.065 6.065 0 0012 .067a6.045 6.045 0 00-5.764 4.152 5.985 5.985 0 00-3.996 2.9 6.045 6.045 0 00.749 7.102 5.985 5.985 0 00.516 4.911 6.045 6.045 0 006.51 2.9A6.065 6.065 0 0012 23.933a6.045 6.045 0 005.764-4.152 5.985 5.985 0 003.996-2.9 6.045 6.045 0 00-.749-7.102"
+      fill="#10A37F"
+    />
   </svg>
 );
 
 const CopilotLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4">
     <path
-      d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 14.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm4 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM7.5 12c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5H7.5z"
+      d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2a7.2 7.2 0 01-6-3.22c.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08a7.2 7.2 0 01-6 3.22z"
       fill="#0078D4"
     />
   </svg>
 );
 
 const CursorLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-    <path d="M5 3l14 9-14 9V3z" />
+  <svg viewBox="0 0 24 24" className="w-4 h-4">
+    <rect width="24" height="24" rx="5" fill="#000" />
+    <path d="M7 6l10 6-10 6V6z" fill="#fff" />
   </svg>
 );
 
@@ -103,33 +108,29 @@ const AI_CLIENTS = [
   { name: "Cursor", logo: CursorLogo },
 ];
 
-// AI clients row showing connections into the chat
-function AIClientsRow({ delay }: { delay: number }) {
+// AI clients column — stacked vertically to sit alongside the chat window
+function AIClientsColumn({ delay }: { delay: number }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay }}
-      className="flex items-center justify-center gap-3 w-full"
-    >
+    <div className="flex flex-col gap-2">
+      <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1">
+        AI Clients
+      </div>
       {AI_CLIENTS.map((client, i) => {
         const Logo = client.logo;
         return (
           <motion.div
             key={client.name}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, delay: delay + i * 0.1 }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg shadow-sm"
+            className="flex items-center gap-2 px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs text-slate-600"
           >
             <Logo />
-            <span className="text-[10px] font-medium text-slate-600">
-              {client.name}
-            </span>
+            <span className="font-medium">{client.name}</span>
           </motion.div>
         );
       })}
-    </motion.div>
+    </div>
   );
 }
 
@@ -299,15 +300,27 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
       )}
     >
       <div className="flex flex-col items-center gap-4 max-w-md mx-auto py-6">
-        {/* Top - AI Clients */}
-        <AIClientsRow delay={0.1} />
+        {/* Top - AI Clients alongside Chat Window */}
+        <div className="flex w-full gap-3 items-stretch">
+          {/* AI clients column */}
+          <div className="flex-1">
+            <AIClientsColumn delay={0.1} />
+          </div>
 
-        {/* Connection: AI Clients → Chat */}
-        <PulseConnector delay={1.7} disabled={prefersReducedMotion ?? false} />
+          {/* Horizontal connector */}
+          <div className="flex items-center">
+            <motion.div
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{ duration: 0.3, delay: 0.5 }}
+              className="h-px w-6 bg-slate-300 origin-left"
+            />
+          </div>
 
-        {/* Product with embedded chat */}
-        <div className="w-full">
-          <ProductWithChat delay={0.2} />
+          {/* Chat window */}
+          <div className="flex-1">
+            <ProductWithChat delay={0.2} />
+          </div>
         </div>
 
         {/* Connection: Chat → Backend */}
