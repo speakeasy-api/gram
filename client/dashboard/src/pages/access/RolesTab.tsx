@@ -1,15 +1,38 @@
 import { Badge } from "@/components/ui/badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
-import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
+import type { Role } from "@gram/client/models/components/role.js";
+import {
+  invalidateAllListRoles,
+  useListRoles,
+} from "@gram/client/react-query/listRoles.js";
+import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
+import {
+  Button,
+  Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Icon,
+  Table,
+} from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
-import { MOCK_ROLES } from "./mock-data";
-import type { Role } from "./types";
 
 export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const roles = MOCK_ROLES;
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const queryClient = useQueryClient();
+  const { data: rolesData, isLoading } = useListRoles();
+  const roles = rolesData?.roles ?? [];
+
+  const deleteRole = useDeleteRoleMutation({
+    onSuccess: async () => {
+      await invalidateAllListRoles(queryClient);
+    },
+  });
 
   const columns: Column<Role>[] = [
     {
@@ -54,16 +77,35 @@ export function RolesTab() {
     {
       key: "actions",
       header: "",
-      width: "50px",
+      width: "80px",
       render: (role) => (
-        <Button
-          variant="tertiary"
-          size="sm"
-          disabled={role.isSystem}
-          className="opacity-50 hover:opacity-100"
-        >
-          <Icon name="ellipsis" className="h-4 w-4" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="opacity-50 hover:opacity-100"
+            >
+              <Icon name="ellipsis" className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onSelect={() => setTimeout(() => setEditingRole(role), 0)}
+            >
+              Edit
+            </DropdownMenuItem>
+            {!role.isSystem && (
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive cursor-pointer"
+                onSelect={() => deleteRole.mutate({ request: { id: role.id } })}
+              >
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
     },
   ];
@@ -85,14 +127,29 @@ export function RolesTab() {
         </Button>
       </div>
 
-      <Table
-        columns={columns}
-        data={roles}
-        rowKey={(row) => row.id}
-        className="mt-4"
-      />
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Type muted>Loading roles...</Type>
+        </div>
+      ) : (
+        <Table
+          columns={columns}
+          data={roles}
+          rowKey={(row) => row.id}
+          className="mt-4"
+        />
+      )}
 
-      <CreateRoleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
+      <CreateRoleDialog
+        open={isCreateOpen || !!editingRole}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreateOpen(false);
+            setEditingRole(null);
+          }
+        }}
+        editingRole={editingRole}
+      />
     </div>
   );
 }

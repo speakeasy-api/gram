@@ -6,6 +6,9 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useListMembers } from "@gram/client/react-query/listMembers.js";
+import { useListRoles } from "@gram/client/react-query/listRoles.js";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
@@ -23,11 +26,22 @@ const tabDisplayNames: Record<string, string> = {
 export default function Access() {
   const location = useLocation();
   const navigate = useNavigate();
+  const telemetry = useTelemetry();
+  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const pathSegments = location.pathname.split("/");
   const lastSegment = pathSegments[pathSegments.length - 1];
   const currentTab = tabFromPath[lastSegment] || "roles";
   const shouldRedirect = lastSegment === "access";
+
+  const { data: rolesData } = useListRoles();
+  const { data: membersData } = useListMembers();
+  const roleCount = rolesData?.roles?.length;
+  const memberCount = membersData?.members?.length;
+
+  if (!isRbacEnabled) {
+    return <Navigate to=".." replace />;
+  }
 
   const basePath = pathSegments
     .slice(0, lastSegment === "access" ? pathSegments.length : -1)
@@ -48,17 +62,21 @@ export default function Access() {
       </Page.Header>
       <Page.Body>
         <div className="-mt-4">
-          <Type variant="body" className="text-muted-foreground mb-4">
+          <Type variant="body" className="text-muted-foreground mb-2">
             Manage access control for your team by defining roles and assigning
             permissions.
           </Type>
         </div>
 
         <Tabs value={currentTab} onValueChange={handleTabChange}>
-          <div className="border-b border-border -mx-8 px-8 -mt-2 bg-muted/15">
+          <div className="border-b border-border -mx-8 px-8">
             <TabsList className="bg-transparent p-0 h-auto rounded-none justify-start gap-4 text-sm">
-              <PageTabsTrigger value="roles">Roles</PageTabsTrigger>
-              <PageTabsTrigger value="members">Members</PageTabsTrigger>
+              <PageTabsTrigger value="roles">
+                Roles{roleCount != null ? ` (${roleCount})` : ""}
+              </PageTabsTrigger>
+              <PageTabsTrigger value="members">
+                Members{memberCount != null ? ` (${memberCount})` : ""}
+              </PageTabsTrigger>
             </TabsList>
           </div>
 

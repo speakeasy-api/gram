@@ -2,11 +2,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
-import { Button, Column, Table } from "@speakeasy-api/moonshine";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import { useListMembers } from "@gram/client/react-query/listMembers.js";
+import { useListRoles } from "@gram/client/react-query/listRoles.js";
+import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
-import { MOCK_MEMBERS, MOCK_ROLES } from "./mock-data";
-import type { Member } from "./types";
 
 function getInitials(name: string) {
   return name
@@ -18,13 +19,18 @@ function getInitials(name: string) {
 }
 
 export function MembersTab() {
-  const [changingMember, setChangingMember] = useState<Member | null>(null);
-  const members = MOCK_MEMBERS;
+  const [changingMember, setChangingMember] = useState<AccessMember | null>(
+    null,
+  );
+  const { data: membersData, isLoading: membersLoading } = useListMembers();
+  const { data: rolesData } = useListRoles();
+  const members = membersData?.members ?? [];
+  const roles = rolesData?.roles ?? [];
 
   const getRoleName = (roleId: string) =>
-    MOCK_ROLES.find((r) => r.id === roleId)?.name ?? "Unknown";
+    roles.find((r) => r.id === roleId)?.name ?? "Unknown";
 
-  const columns: Column<Member>[] = [
+  const columns: Column<AccessMember>[] = [
     {
       key: "member",
       header: "Member",
@@ -64,12 +70,12 @@ export function MembersTab() {
       key: "joinedAt",
       header: "Joined",
       width: "160px",
-      render: (member) => <HumanizeDateTime date={new Date(member.joinedAt)} />,
+      render: (member) => <HumanizeDateTime date={member.joinedAt} />,
     },
     {
       key: "actions",
       header: "",
-      width: "80px",
+      width: "100px",
       render: (member) => (
         <Button
           variant="tertiary"
@@ -93,16 +99,30 @@ export function MembersTab() {
         </div>
       </div>
 
-      <Table
-        columns={columns}
-        data={members}
-        rowKey={(row) => row.id}
-        className="mt-4"
-      />
+      {membersLoading ? (
+        <div className="flex justify-center py-12">
+          <Type muted>Loading members...</Type>
+        </div>
+      ) : (
+        <Table
+          columns={columns}
+          data={members}
+          rowKey={(row) => row.id}
+          className="mt-4 rounded-b-none"
+        />
+      )}
+      <div className="flex justify-center border border-t-0 border-border rounded-b-lg py-3">
+        <Button variant="tertiary" size="sm">
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Invite Team Members</Button.Text>
+        </Button>
+      </div>
 
       <ChangeRoleDialog
         member={changingMember}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) setChangingMember(null);
         }}
       />
