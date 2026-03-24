@@ -381,67 +381,72 @@ export function CreateRoleDialog({
             )}
           </div>
 
-          {/* Assign Members */}
-          <div className="border-t border-border pt-4 pb-4">
-            <button
-              type="button"
-              onClick={() => setShowMembers(!showMembers)}
-              className="flex items-center gap-1 w-full text-left"
-            >
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  showMembers && "rotate-90",
-                )}
-              />
-              <Type variant="body" className="font-medium">
-                Assign Members
-              </Type>
-              <Type variant="body" className="text-muted-foreground ml-1">
-                (optional, {selectedMembers.size} selected)
-              </Type>
-            </button>
+          {/* Assign Members — only shown when creating (editing uses the Members tab) */}
+          {!isEditing && (
+            <div className="border-t border-border pt-4 pb-4">
+              <button
+                type="button"
+                onClick={() => setShowMembers(!showMembers)}
+                className="flex items-center gap-1 w-full text-left"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    showMembers && "rotate-90",
+                  )}
+                />
+                <Type variant="body" className="font-medium">
+                  Assign Members
+                </Type>
+                <Type variant="body" className="text-muted-foreground ml-1">
+                  (optional, {selectedMembers.size} selected)
+                </Type>
+              </button>
 
-            {showMembers && (
-              <div className="mt-3 border border-border rounded-md divide-y divide-border">
-                {members.map((member) => (
-                  <label
-                    key={member.id}
-                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer"
-                  >
-                    <Checkbox
-                      checked={selectedMembers.has(member.id)}
-                      onCheckedChange={() => toggleMember(member.id)}
-                    />
-                    <Avatar className="h-7 w-7">
-                      {member.photoUrl && (
-                        <AvatarImage src={member.photoUrl} alt={member.name} />
-                      )}
-                      <AvatarFallback className="text-xs">
-                        {member.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()
-                          .slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <Type variant="body" className="font-medium text-sm">
-                        {member.name}
-                      </Type>
-                      <Type
-                        variant="body"
-                        className="text-muted-foreground text-xs"
-                      >
-                        {member.email}
-                      </Type>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+              {showMembers && (
+                <div className="mt-3 border border-border rounded-md divide-y divide-border">
+                  {members.map((member) => (
+                    <label
+                      key={member.id}
+                      className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={selectedMembers.has(member.id)}
+                        onCheckedChange={() => toggleMember(member.id)}
+                      />
+                      <Avatar className="h-7 w-7">
+                        {member.photoUrl && (
+                          <AvatarImage
+                            src={member.photoUrl}
+                            alt={member.name}
+                          />
+                        )}
+                        <AvatarFallback className="text-xs">
+                          {member.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <Type variant="body" className="font-medium text-sm">
+                          {member.name}
+                        </Type>
+                        <Type
+                          variant="body"
+                          className="text-muted-foreground text-xs"
+                        >
+                          {member.email}
+                        </Type>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <SheetFooter className="border-t border-border flex-row justify-end">
