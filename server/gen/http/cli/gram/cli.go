@@ -92,7 +92,6 @@ func UsageExamples() string {
 		os.Args[0] + " " + "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "auth callback --code \"abc123\" --state \"abc123\"" + "\n" +
 		""
 }
 
