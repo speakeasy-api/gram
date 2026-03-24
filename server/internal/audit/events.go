@@ -8,6 +8,7 @@ import (
 type subjectType string
 
 const (
+	subjectTypeAccessGrant  subjectType = "access_grant"
 	subjectTypeAPIKey       subjectType = "api_key"
 	subjectTypeAsset        subjectType = "asset"
 	subjectTypeCustomDomain subjectType = "custom_domain"
