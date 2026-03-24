@@ -202,19 +202,19 @@ function MiniChatApp({ label, delay }: { label: string; delay: number }) {
   );
 }
 
-// Distributed view — multiple clusters of AI clients and chat apps
+// Distributed view — AI clients and chat apps side by side
 function DistributedClients({ delay }: { delay: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay }}
-      className="w-full"
+      className="flex w-full gap-3"
     >
-      {/* Row 1: AI Clients cluster */}
-      <div className="mb-2">
+      {/* Left: AI Clients */}
+      <div className="flex-1">
         <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-          AI Clients across your org
+          AI Clients
         </div>
         <div className="flex flex-wrap gap-1.5">
           <ClientPill icon={ClaudeIcon} name="Claude" delay={delay + 0.1} />
@@ -226,12 +226,12 @@ function DistributedClients({ delay }: { delay: number }) {
         </div>
       </div>
 
-      {/* Row 2: Chat apps cluster */}
-      <div>
+      {/* Right: Chat apps */}
+      <div className="flex-1">
         <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-          Chat-enabled apps
+          Chat Apps
         </div>
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="flex flex-col gap-1.5">
           <MiniChatApp label="support.co" delay={delay + 0.4} />
           <MiniChatApp label="sales-app" delay={delay + 0.45} />
           <MiniChatApp label="internal" delay={delay + 0.5} />
