@@ -28,7 +28,7 @@ MOCK_IDP_ORG_NAME = "My Workspace"
 MOCK_IDP_ORG_SLUG = "my-workspace"
 ```
 
-After changing these values, restart the `mock-idp` process in mprocs (select it and press `r`), then log out and back in.
+After changing these values, restart the `mock-idp` process in [madprocs](https://github.com/speakeasy-api/madprocs) (select it and press `r`), then log out and back in.
 
 See [`mock-speakeasy-idp/README.md`](./mock-speakeasy-idp/README.md) for the full list of configurable variables.
 
