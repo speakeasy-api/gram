@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.34.2
+
+### Patch Changes
+
+- 045f51a: Replace hardcoded org slugs in MCP URLs for the built in MCP logs server
+
 ## 0.34.1
 
 ### Patch Changes
