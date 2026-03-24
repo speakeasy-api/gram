@@ -91,10 +91,12 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             className="w-[200px] mb-2 dark:!invert-0"
             variant="vertical"
           />
-          <p className="text-body-lg text-center dark:text-black">
-            Securely scale AI usage across your organisation with Speakeasy.
-            Control plane for distribution of MCP, Skills, CLIs and more.
-          </p>
+          <div className="flex flex-col gap-2 text-body-lg text-center dark:text-black">
+            <p>
+              Securely scale AI usage across your organisation with Speakeasy.
+            </p>
+            <p>Control plane for distribution of MCP, Skills, CLIs and more.</p>
+          </div>
           <FeatureBadges />
         </div>
 
