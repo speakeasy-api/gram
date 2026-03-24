@@ -30,6 +30,8 @@ func (d *Dispatcher) Dispatch(
 		return fmt.Errorf("failed to build auth URL: %w", err)
 	}
 
+	fmt.Printf("\nPlease visit: %s\n\n", authURL)
+
 	if canOpenBrowser() {
 		if err := openBrowser(authURL); err != nil {
 			d.logger.WarnContext(
@@ -37,10 +39,7 @@ func (d *Dispatcher) Dispatch(
 				"failed to open browser, please visit URL manually",
 				slog.String("error", err.Error()),
 			)
-			fmt.Printf("\nPlease visit: %s\n\n", authURL)
 		}
-	} else {
-		fmt.Printf("\nPlease visit: %s\n\n", authURL)
 	}
 
 	return nil
