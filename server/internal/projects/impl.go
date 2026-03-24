@@ -390,8 +390,11 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 
 	pr := s.repo.WithTx(dbtx)
 
-	err = pr.DeleteProject(ctx, projectID)
-	if err != nil {
+	_, err = pr.DeleteProject(ctx, projectID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil // Return successfully even if the project was already deleted
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error deleting project").Log(ctx, s.logger, attr.SlogProjectID(payload.ID))
 	}
 
