@@ -22,15 +22,18 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/keys/server"
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	project_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const keyPrefix = "gram"
@@ -85,6 +88,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
 func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) (*gen.Key, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -128,7 +135,15 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 
 	finalScopes := slices.Sorted(maps.Keys(scopes))
 
-	createdKey, err := s.repo.CreateAPIKey(ctx, repo.CreateAPIKeyParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing api keys").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	kr := s.repo.WithTx(dbtx)
+
+	createdKey, err := kr.CreateAPIKey(ctx, repo.CreateAPIKeyParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		Name:            payload.Name,
 		KeyHash:         keyHash,
@@ -139,6 +154,23 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating api key").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewAPIKey(createdKey.ID),
+		KeyName:          payload.Name,
+		Scopes:           finalScopes,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding api key creation audit log").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving api key creation").Log(ctx, s.logger)
 	}
 
 	return &gen.Key{
@@ -199,17 +231,45 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error accessing api keys").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	kr := s.repo.WithTx(dbtx)
+
 	keyID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
 	}
 
-	err = s.repo.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
+	deleted, err := kr.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
 		ID:             keyID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error revoking api key").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        deleted.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewAPIKey(keyID),
+		KeyName:          deleted.Name,
+		Scopes:           deleted.Scopes,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error adding api key revocation audit log").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error saving api key revocation").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -263,10 +323,6 @@ func parseProjects(rawProjects []project_repo.Project) []*gen.ValidateKeyProject
 	}
 
 	return projects
-}
-
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) generateToken() (string, error) {

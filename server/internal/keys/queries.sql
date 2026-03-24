@@ -32,12 +32,13 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
--- name: DeleteAPIKey :exec
+-- name: DeleteAPIKey :one
 UPDATE api_keys
 SET deleted_at = NOW()
 WHERE id = @id
   AND organization_id = @organization_id
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, scopes;
 
 -- name: UpdateAPIKeyLastAccessedAt :exec
 UPDATE api_keys
