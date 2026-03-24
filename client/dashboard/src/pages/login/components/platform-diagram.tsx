@@ -65,72 +65,113 @@ const JiraLogo = () => (
   </svg>
 );
 
-// AI Client logos — official brand marks
-const ClaudeLogo = () => (
-  <svg viewBox="0 0 46 32" className="w-5 h-3.5">
-    <path
-      d="M28.436 1.099a4.898 4.898 0 0 0-2.939-.773 4.604 4.604 0 0 0-2.747 1.086L12.016 11.53 1.282 1.412A4.604 4.604 0 0 0-1.465.326a4.898 4.898 0 0 0-2.939.773A4.653 4.653 0 0 0-6.2 3.549a4.92 4.92 0 0 0 .229 3.06l12.87 28.216a3.193 3.193 0 0 0 5.846 0l12.87-28.217a4.92 4.92 0 0 0 .229-3.06 4.653 4.653 0 0 0-1.796-2.449h-.513Z"
-      fill="#D97706"
-      transform="translate(10, 0) scale(0.55)"
-    />
-  </svg>
-);
+// AI Client logos — official brand marks from HookSourceIcon
+function ClaudeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 512 509.64"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="#D77655"
+        d="M115.612 0h280.775C459.974 0 512 52.026 512 115.612v278.415c0 63.587-52.026 115.612-115.613 115.612H115.612C52.026 509.639 0 457.614 0 394.027V115.612C0 52.026 52.026 0 115.612 0z"
+      />
+      <path
+        fill="#FCF2EE"
+        fillRule="nonzero"
+        d="M142.27 316.619l73.655-41.326 1.238-3.589-1.238-1.996-3.589-.001-12.31-.759-42.084-1.138-36.498-1.516-35.361-1.896-8.897-1.895-8.34-10.995.859-5.484 7.482-5.03 10.717.935 23.683 1.617 35.537 2.452 25.782 1.517 38.193 3.968h6.064l.86-2.451-2.073-1.517-1.618-1.517-36.776-24.922-39.81-26.338-20.852-15.166-11.273-7.683-5.687-7.204-2.451-15.721 10.237-11.273 13.75.935 3.513.936 13.928 10.716 29.749 23.027 38.848 28.612 5.687 4.727 2.275-1.617.278-1.138-2.553-4.271-21.13-38.193-22.546-38.848-10.035-16.101-2.654-9.655c-.935-3.968-1.617-7.304-1.617-11.374l11.652-15.823 6.445-2.073 15.545 2.073 6.547 5.687 9.655 22.092 15.646 34.78 24.265 47.291 7.103 14.028 3.791 12.992 1.416 3.968 2.449-.001v-2.275l1.997-26.641 3.69-32.707 3.589-42.084 1.239-11.854 5.863-14.206 11.652-7.683 9.099 4.348 7.482 10.716-1.036 6.926-4.449 28.915-8.72 45.294-5.687 30.331h3.313l3.792-3.791 15.342-20.372 25.782-32.227 11.374-12.789 13.27-14.129 8.517-6.724 16.1-.001 11.854 17.617-5.307 18.199-16.581 21.029-13.75 17.819-19.716 26.54-12.309 21.231 1.138 1.694 2.932-.278 44.536-9.479 24.062-4.347 28.714-4.928 12.992 6.066 1.416 6.167-5.106 12.613-30.71 7.583-36.018 7.204-53.636 12.689-.657.48.758.935 24.164 2.275 10.337.556h25.301l47.114 3.514 12.309 8.139 7.381 9.959-1.238 7.583-18.957 9.655-25.579-6.066-59.702-14.205-20.474-5.106-2.83-.001v1.694l17.061 16.682 31.266 28.233 39.152 36.397 1.997 8.999-5.03 7.102-5.307-.758-34.401-25.883-13.27-11.651-30.053-25.302-1.996-.001v2.654l6.926 10.136 36.574 54.975 1.895 16.859-2.653 5.485-9.479 3.311-10.414-1.895-21.408-30.054-22.092-33.844-17.819-30.331-2.173 1.238-10.515 113.261-4.929 5.788-11.374 4.348-9.478-7.204-5.03-11.652 5.03-23.027 6.066-30.052 4.928-23.886 4.449-29.674 2.654-9.858-.177-.657-2.173.278-22.37 30.71-34.021 45.977-26.919 28.815-6.445 2.553-11.173-5.789 1.037-10.337 6.243-9.2 37.257-47.392 22.47-29.371 14.508-16.961-.101-2.451h-.859l-98.954 64.251-17.618 2.275-7.583-7.103.936-11.652 3.589-3.791 29.749-20.474-.101.102.024.101z"
+      />
+    </svg>
+  );
+}
 
-const CodexLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4">
-    <path
-      d="M22.282 9.821a5.985 5.985 0 00-.516-4.91 6.046 6.046 0 00-6.51-2.9A6.065 6.065 0 0012 .067a6.045 6.045 0 00-5.764 4.152 5.985 5.985 0 00-3.996 2.9 6.045 6.045 0 00.749 7.102 5.985 5.985 0 00.516 4.911 6.045 6.045 0 006.51 2.9A6.065 6.065 0 0012 23.933a6.045 6.045 0 005.764-4.152 5.985 5.985 0 003.996-2.9 6.045 6.045 0 00-.749-7.102"
-      fill="#10A37F"
-    />
-  </svg>
-);
+function CursorIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 466.73 532.09"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="currentColor"
+        d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"
+      />
+    </svg>
+  );
+}
 
-const CopilotLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4">
-    <path
-      d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2a7.2 7.2 0 01-6-3.22c.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08a7.2 7.2 0 01-6 3.22z"
-      fill="#0078D4"
-    />
-  </svg>
-);
+function CodexIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="#10A37F"
+        d="M22.282 9.821a5.985 5.985 0 00-.516-4.91 6.046 6.046 0 00-6.51-2.9A6.065 6.065 0 0012 .067a6.045 6.045 0 00-5.764 4.152 5.985 5.985 0 00-3.996 2.9 6.045 6.045 0 00.749 7.102 5.985 5.985 0 00.516 4.911 6.045 6.045 0 006.51 2.9A6.065 6.065 0 0012 23.933a6.045 6.045 0 005.764-4.152 5.985 5.985 0 003.996-2.9 6.045 6.045 0 00-.749-7.102"
+      />
+    </svg>
+  );
+}
 
-const CursorLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4">
-    <rect width="24" height="24" rx="5" fill="#000" />
-    <path d="M7 6l10 6-10 6V6z" fill="#fff" />
-  </svg>
-);
+function CopilotIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="#0078D4"
+        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2a7.2 7.2 0 01-6-3.22c.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08a7.2 7.2 0 01-6 3.22z"
+      />
+    </svg>
+  );
+}
 
 const AI_CLIENTS = [
-  { name: "Claude", logo: ClaudeLogo },
-  { name: "Codex", logo: CodexLogo },
-  { name: "Copilot", logo: CopilotLogo },
-  { name: "Cursor", logo: CursorLogo },
+  { name: "Claude", icon: ClaudeIcon },
+  { name: "Codex", icon: CodexIcon },
+  { name: "Copilot", icon: CopilotIcon },
+  { name: "Cursor", icon: CursorIcon },
 ];
 
-// AI clients column — stacked vertically to sit alongside the chat window
-function AIClientsColumn({ delay }: { delay: number }) {
+// AI clients as a 2x2 grid of cards, matching the height of the chat window
+function AIClientsGrid({ delay }: { delay: number }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1">
-        AI Clients
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay }}
+      className="w-full bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden"
+    >
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 border-b border-slate-200">
+        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
+          AI Clients
+        </span>
       </div>
-      {AI_CLIENTS.map((client, i) => {
-        const Logo = client.logo;
-        return (
-          <motion.div
-            key={client.name}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: delay + i * 0.1 }}
-            className="flex items-center gap-2 px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs text-slate-600"
-          >
-            <Logo />
-            <span className="font-medium">{client.name}</span>
-          </motion.div>
-        );
-      })}
-    </div>
+      <div className="grid grid-cols-2 gap-2 p-3">
+        {AI_CLIENTS.map((client, i) => {
+          const Icon = client.icon;
+          return (
+            <motion.div
+              key={client.name}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: delay + 0.2 + i * 0.1 }}
+              className="flex flex-col items-center justify-center gap-1.5 p-3 bg-slate-50 rounded border border-slate-100"
+            >
+              <Icon className="w-6 h-6" />
+              <span className="text-[9px] font-medium text-slate-500">
+                {client.name}
+              </span>
+            </motion.div>
+          );
+        })}
+      </div>
+    </motion.div>
   );
 }
 
@@ -300,24 +341,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
       )}
     >
       <div className="flex flex-col items-center gap-4 max-w-md mx-auto py-6">
-        {/* Top - AI Clients alongside Chat Window */}
-        <div className="flex w-full gap-3 items-stretch">
-          {/* AI clients column */}
+        {/* Top - AI Clients grid alongside Chat Window, same size */}
+        <div className="flex w-full gap-3">
           <div className="flex-1">
-            <AIClientsColumn delay={0.1} />
+            <AIClientsGrid delay={0.1} />
           </div>
-
-          {/* Horizontal connector */}
-          <div className="flex items-center">
-            <motion.div
-              initial={{ scaleX: 0 }}
-              animate={{ scaleX: 1 }}
-              transition={{ duration: 0.3, delay: 0.5 }}
-              className="h-px w-6 bg-slate-300 origin-left"
-            />
-          </div>
-
-          {/* Chat window */}
           <div className="flex-1">
             <ProductWithChat delay={0.2} />
           </div>

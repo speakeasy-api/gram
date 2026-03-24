@@ -135,9 +135,11 @@ export function LoginSection(props: LoginSectionProps) {
         </p>
       )}
 
-      <GradientButton onClick={handleLogin}>
-        Login
-      </GradientButton>
+      <div className="relative z-10">
+        <Button variant="brand" onClick={handleLogin}>
+          Login
+        </Button>
+      </div>
     </AuthLayout>
   );
 }
