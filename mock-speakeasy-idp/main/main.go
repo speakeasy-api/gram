@@ -25,6 +25,11 @@ func main() {
 	host := os.Getenv("MOCK_IDP_HOST")
 
 	cfg := mockidp.DefaultConfig()
+	// When OIDC mode is active but no explicit OIDC_EXTERNAL_URL is set,
+	// derive it from the mock IDP listen address.
+	if cfg.Oidc.IsOidcMode() && cfg.Oidc.ExternalURL == "" {
+		cfg.Oidc.ExternalURL = fmt.Sprintf("http://%s:%d", host, port)
+	}
 	handler := mockidp.Handler(cfg)
 
 	mockidp.LogConfig(cfg, port)
