@@ -238,7 +238,7 @@ function PulseConnector({ delay = 0, disabled = false }: { delay?: number; disab
     <div className="relative flex h-6 w-2 items-center justify-center overflow-hidden">
       {PULSE_COLORS.map((color, i) => (
         <motion.div
-          key={i}
+          key={color}
           className="absolute h-1 w-1 rounded-full"
           style={{ backgroundColor: color }}
           initial={{ y: 12, opacity: 0 }}
@@ -359,11 +359,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
               background: `linear-gradient(135deg, ${BRAND_COLORS.green}, ${BRAND_COLORS.blue}, ${BRAND_COLORS.orange})`,
             }}
             animate={prefersReducedMotion ? undefined : { opacity: [0.7, 1, 0.7] }}
-            transition={{
-              duration: 3,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
+            transition={
+              prefersReducedMotion
+                ? undefined
+                : { duration: 3, repeat: Infinity, ease: "easeInOut" }
+            }
           />
           <div className="relative bg-white rounded-lg p-3">
             <div className="flex items-center mb-3">
