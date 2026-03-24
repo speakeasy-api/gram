@@ -1,45 +1,33 @@
 import { PlatformDiagram } from "./platform-diagram";
 
-// Brand gradient colors for dotted background
-const BRAND_COLORS = {
-  blue: "#2873D7",
-};
-
-// Dotted background component
-function DottedBackground() {
+// Animated dot background — matches the MCP card dot pattern (scroll-dots)
+function MovingDotBackground() {
   return (
-    <svg
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <pattern
-          id="login-dots-pattern"
-          x="0"
-          y="0"
-          width="24"
-          height="24"
-          patternUnits="userSpaceOnUse"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="1"
-            fill={BRAND_COLORS.blue}
-            opacity="0.07"
-          />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#login-dots-pattern)" />
-    </svg>
+    <>
+      <style>{`
+        @keyframes login-scroll-dots {
+          from { background-position: 0 0; }
+          to { background-position: 64px 64px; }
+        }
+      `}</style>
+      <div
+        className="absolute inset-0 pointer-events-none text-muted-foreground/20"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, currentColor 1px, transparent 1px)",
+          backgroundSize: "16px 16px",
+          animation: "login-scroll-dots 4s linear infinite",
+        }}
+      />
+    </>
   );
 }
 
 export function JourneyDemo() {
   return (
     <div className="hidden md:flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen relative bg-slate-50 overflow-y-auto">
-      {/* Dotted background pattern */}
-      <DottedBackground />
+      {/* Moving dot background — same pattern as MCP cards */}
+      <MovingDotBackground />
 
       {/* Soft gradient overlays for depth */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-emerald-50/30 pointer-events-none" />
