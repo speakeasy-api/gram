@@ -141,6 +141,7 @@ UPDATE prompt_templates
 SET deleted_at = clock_timestamp()
 WHERE project_id = @project_id
   AND name = @name
+  AND deleted IS FALSE
 RETURNING id, name, tool_urn;
 
 -- name: DeleteTemplateByID :one
@@ -148,4 +149,5 @@ UPDATE prompt_templates
 SET deleted_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = @id
+  AND deleted IS FALSE
 RETURNING id, name, tool_urn;

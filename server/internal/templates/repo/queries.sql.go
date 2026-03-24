@@ -78,6 +78,7 @@ UPDATE prompt_templates
 SET deleted_at = clock_timestamp()
 WHERE project_id = $1
   AND id = $2
+  AND deleted IS FALSE
 RETURNING id, name, tool_urn
 `
 
@@ -104,6 +105,7 @@ UPDATE prompt_templates
 SET deleted_at = clock_timestamp()
 WHERE project_id = $1
   AND name = $2
+  AND deleted IS FALSE
 RETURNING id, name, tool_urn
 `
 
