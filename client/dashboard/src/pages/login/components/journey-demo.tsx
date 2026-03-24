@@ -1,6 +1,6 @@
 import { PlatformDiagram } from "./platform-diagram";
 
-// Animated dot background — matches the MCP card dot pattern (scroll-dots)
+// Dot background — scrolls on hover, matching MCP card pattern
 function MovingDotBackground() {
   return (
     <>
@@ -9,14 +9,16 @@ function MovingDotBackground() {
           from { background-position: 0 0; }
           to { background-position: 64px 64px; }
         }
+        .login-pane:hover .login-dots {
+          animation: login-scroll-dots 3s linear infinite;
+        }
       `}</style>
       <div
-        className="absolute inset-0 pointer-events-none text-muted-foreground/20"
+        className="login-dots absolute inset-0 pointer-events-none text-muted-foreground/20"
         style={{
           backgroundImage:
             "radial-gradient(circle, currentColor 1px, transparent 1px)",
           backgroundSize: "16px 16px",
-          animation: "login-scroll-dots 4s linear infinite",
         }}
       />
     </>
@@ -25,7 +27,7 @@ function MovingDotBackground() {
 
 export function JourneyDemo() {
   return (
-    <div className="hidden md:flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen relative bg-slate-50 overflow-y-auto">
+    <div className="login-pane hidden md:flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen relative bg-slate-50 overflow-y-auto">
       {/* Moving dot background — same pattern as MCP cards */}
       <MovingDotBackground />
 
