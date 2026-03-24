@@ -137,11 +137,15 @@ run();
 * [createRole](docs/sdks/access/README.md#createrole) - createRole access
 * [deleteRole](docs/sdks/access/README.md#deleterole) - deleteRole access
 * [getRole](docs/sdks/access/README.md#getrole) - getRole access
+* [list](docs/sdks/access/README.md#list) - listGrants access
 * [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
+* [remove](docs/sdks/access/README.md#remove) - removeGrants access
+* [removePrincipal](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 * [updateMemberRole](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
+* [upsert](docs/sdks/access/README.md#upsert) - upsertGrants access
 
 ### [Agentworkflows](docs/sdks/agentworkflows/README.md)
 
@@ -225,6 +229,17 @@ run();
 
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
 * [set](docs/sdks/features/README.md#set) - setProductFeature features
+
+### [Hooks](docs/sdks/hooks/README.md)
+
+* [hooksNumberClaude](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+* [hooksNumberLogs](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
+
+### [HooksServerNames](docs/sdks/hooksservernames/README.md)
+
+* [deleteServerNameOverride](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
+* [listServerNameOverrides](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
+* [upsertServerNameOverride](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
 
 ### [Instances](docs/sdks/instances/README.md)
 
@@ -361,11 +376,15 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
 - [`accessDeleteRole`](docs/sdks/access/README.md#deleterole) - deleteRole access
 - [`accessGetRole`](docs/sdks/access/README.md#getrole) - getRole access
+- [`accessList`](docs/sdks/access/README.md#list) - listGrants access
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
+- [`accessRemove`](docs/sdks/access/README.md#remove) - removeGrants access
+- [`accessRemovePrincipal`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 - [`accessUpdateMemberRole`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
+- [`accessUpsert`](docs/sdks/access/README.md#upsert) - upsertGrants access
 - [`agentworkflowsCreateResponse`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`agentworkflowsDeleteResponse`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
 - [`agentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
@@ -419,6 +438,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
+- [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`hooksHooksNumberLogs`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
+- [`hooksServerNamesDeleteServerNameOverride`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
+- [`hooksServerNamesListServerNameOverrides`](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
+- [`hooksServerNamesUpsertServerNameOverride`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
 - [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`integrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`integrationsList`](docs/sdks/integrations/README.md#list) - list integrations
@@ -571,6 +595,12 @@ To learn about this feature and how to get started, check
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+- [`useGrants`](docs/sdks/access/README.md#list) - listGrants access
+- [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
+- [`useHooksServerNamesDeleteServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
+- [`useHooksServerNamesListServerNameOverrides`](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
+- [`useHooksServerNamesUpsertServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
@@ -606,7 +636,9 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
+- [`useRemoveGrantsMutation`](docs/sdks/access/README.md#remove) - removeGrants access
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`useRemovePrincipalGrantsMutation`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
@@ -641,6 +673,7 @@ To learn about this feature and how to get started, check
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
+- [`useUpsertGrantsMutation`](docs/sdks/access/README.md#upsert) - upsertGrants access
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
 
 </details>
@@ -722,28 +755,32 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.access.createRole({
-    createRoleForm: {
-      description: "swerve hm receptor how",
-      grants: [
-        {
-          scope: "mcp:connect",
-        },
-      ],
-      name: "<value>",
-    },
-  }, {
-    retries: {
-      strategy: "backoff",
-      backoff: {
-        initialInterval: 1,
-        maxInterval: 50,
-        exponent: 1.1,
-        maxElapsedTime: 100,
+  const result = await gram.access.createRole(
+    {
+      createRoleForm: {
+        description: "swerve hm receptor how",
+        grants: [
+          {
+            scope: "mcp:connect",
+          },
+        ],
+        name: "<value>",
       },
-      retryConnectionErrors: false,
     },
-  });
+    undefined,
+    {
+      retries: {
+        strategy: "backoff",
+        backoff: {
+          initialInterval: 1,
+          maxInterval: 50,
+          exponent: 1.1,
+          maxElapsedTime: 100,
+        },
+        retryConnectionErrors: false,
+      },
+    },
+  );
 
   console.log(result);
 }
@@ -920,19 +957,23 @@ The `HTTPClient` constructor takes an optional `fetcher` argument that can be
 used to integrate a third-party HTTP client or when writing tests to mock out
 the HTTP client and feed in fixtures.
 
-The following example shows how to use the `"beforeRequest"` hook to to add a
-custom header and a timeout to requests and how to use the `"requestError"` hook
-to log errors:
+The following example shows how to:
+- route requests through a proxy server using [undici](https://www.npmjs.com/package/undici)'s ProxyAgent
+- use the `"beforeRequest"` hook to add a custom header and a timeout to requests
+- use the `"requestError"` hook to log errors
 
 ```typescript
 import { Gram } from "@gram/client";
+import { ProxyAgent } from "undici";
 import { HTTPClient } from "@gram/client/lib/http";
 
+const dispatcher = new ProxyAgent("http://proxy.example.com:8080");
+
 const httpClient = new HTTPClient({
-  // fetcher takes a function that has the same signature as native `fetch`.
-  fetcher: (request) => {
-    return fetch(request);
-  }
+  // 'fetcher' takes a function that has the same signature as native 'fetch'.
+  fetcher: (input, init) =>
+    // 'dispatcher' is specific to undici and not part of the standard Fetch API.
+    fetch(input, { ...init, dispatcher } as RequestInit),
 });
 
 httpClient.addHook("beforeRequest", (request) => {
