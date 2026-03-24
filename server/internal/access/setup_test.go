@@ -63,7 +63,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := access.NewService(logger, tracerProvider, conn, sessionManager)
+	svc := access.NewService(logger, tracerProvider, conn, sessionManager, nil)
 
 	return ctx, &testInstance{
 		service: svc,
