@@ -265,7 +265,7 @@ func TestService_SetMcpMetadata_AuditLogCountOnCreate(t *testing.T) {
 	require.Equal(t, "toolset", record.SubjectType)
 	require.Equal(t, toolset.Name, record.SubjectDisplay)
 	require.Equal(t, toolset.Slug, record.SubjectSlug)
-	require.Equal(t, "null", string(record.BeforeSnapshot))
+	require.Equal(t, "", string(record.BeforeSnapshot))
 	require.NotNil(t, record.AfterSnapshot)
 	require.Nil(t, record.Metadata)
 
