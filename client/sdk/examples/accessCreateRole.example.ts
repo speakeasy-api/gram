@@ -8,11 +8,7 @@ dotenv.config();
  * Example usage of the @gram/client SDK
  *
  * To run this example from the examples directory:
-<<<<<<<< HEAD:client/sdk/examples/accessList.example.ts
- * npm run build && npx tsx accessList.example.ts
-========
  * npm run build && npx tsx accessCreateRole.example.ts
->>>>>>>> 9eb3e937b (chore: add generated Speakeasy SDK for access service):client/sdk/examples/accessCreateRole.example.ts
  */
 
 import { Gram } from "@gram/client";
@@ -20,9 +16,6 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function main() {
-<<<<<<<< HEAD:client/sdk/examples/accessList.example.ts
-  const result = await gram.access.list();
-========
   const result = await gram.access.createRole({
     createRoleForm: {
       description: "swerve hm receptor how",
@@ -34,7 +27,6 @@ async function main() {
       name: "<value>",
     },
   });
->>>>>>>> 9eb3e937b (chore: add generated Speakeasy SDK for access service):client/sdk/examples/accessCreateRole.example.ts
 
   console.log(result);
 }
