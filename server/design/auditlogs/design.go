@@ -45,6 +45,8 @@ var AuditLog = Type("AuditLog", func() {
 	Required("id", "actor_id", "actor_type", "action", "subject_id", "subject_type", "created_at")
 
 	Attribute("id", String)
+	Attribute("project_id", String)
+	Attribute("project_slug", String)
 
 	Attribute("actor_id", String)
 	Attribute("actor_type", String)

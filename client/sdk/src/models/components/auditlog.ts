@@ -22,6 +22,8 @@ export type AuditLog = {
   createdAt: Date;
   id: string;
   metadata?: { [k: string]: any } | undefined;
+  projectId?: string | undefined;
+  projectSlug?: string | undefined;
   subjectDisplayName?: string | undefined;
   subjectId: string;
   subjectSlug?: string | undefined;
@@ -44,6 +46,8 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
     ),
     id: z.string(),
     metadata: z.optional(z.record(z.string(), z.any())),
+    project_id: z.optional(z.string()),
+    project_slug: z.optional(z.string()),
     subject_display_name: z.optional(z.string()),
     subject_id: z.string(),
     subject_slug: z.optional(z.string()),
@@ -58,6 +62,8 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
       "after_snapshot": "afterSnapshot",
       "before_snapshot": "beforeSnapshot",
       "created_at": "createdAt",
+      "project_id": "projectId",
+      "project_slug": "projectSlug",
       "subject_display_name": "subjectDisplayName",
       "subject_id": "subjectId",
       "subject_slug": "subjectSlug",

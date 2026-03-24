@@ -127,6 +127,10 @@ func TestAuditService_List_Success(t *testing.T) {
 
 	latest := result.Logs[0]
 	require.Equal(t, insertedSecond.String(), latest.ID)
+	require.NotNil(t, latest.ProjectID)
+	require.Equal(t, authCtx.ProjectID.String(), *latest.ProjectID)
+	require.NotNil(t, latest.ProjectSlug)
+	require.Equal(t, *authCtx.ProjectSlug, *latest.ProjectSlug)
 	require.Equal(t, "user:second", latest.ActorID)
 	require.Equal(t, "user", latest.ActorType)
 	require.Nil(t, latest.ActorDisplayName)
@@ -145,6 +149,10 @@ func TestAuditService_List_Success(t *testing.T) {
 
 	older := result.Logs[1]
 	require.Equal(t, insertedFirst.String(), older.ID)
+	require.NotNil(t, older.ProjectID)
+	require.Equal(t, authCtx.ProjectID.String(), *older.ProjectID)
+	require.NotNil(t, older.ProjectSlug)
+	require.Equal(t, *authCtx.ProjectSlug, *older.ProjectSlug)
 	require.Equal(t, "First User", *older.ActorDisplayName)
 	require.Equal(t, "first-user", *older.ActorSlug)
 	require.Equal(t, "Project One", *older.SubjectDisplayName)
@@ -194,6 +202,35 @@ func TestAuditService_List_FiltersByOrganization(t *testing.T) {
 	require.Equal(t, matchingID.String(), result.Logs[0].ID)
 }
 
+func TestAuditService_List_OrgScopedLogHasNoProjectFields(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+
+	insertedID := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{},
+		actorID:        "user:org-scope",
+		actorType:      "user",
+		action:         "organization:update",
+		subjectID:      "organization-1",
+		subjectType:    "organization",
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, insertedID.String(), result.Logs[0].ID)
+	require.Nil(t, result.Logs[0].ProjectID)
+	require.Nil(t, result.Logs[0].ProjectSlug)
+}
+
 func TestAuditService_List_FiltersByProjectSlug(t *testing.T) {
 	t.Parallel()
 
@@ -240,6 +277,44 @@ func TestAuditService_List_FiltersByProjectSlug(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
 	require.Equal(t, matchingID.String(), result.Logs[0].ID)
+	require.NotNil(t, result.Logs[0].ProjectID)
+	require.Equal(t, authCtx.ProjectID.String(), *result.Logs[0].ProjectID)
+	require.NotNil(t, result.Logs[0].ProjectSlug)
+	require.Equal(t, *authCtx.ProjectSlug, *result.Logs[0].ProjectSlug)
+}
+
+func TestAuditService_List_DeletedProjectStillReturnsProjectSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	deletedProject := createProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+
+	insertedID := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{UUID: deletedProject.ID, Valid: true},
+		actorID:        "user:deleted-project",
+		actorType:      "user",
+		action:         "project:delete",
+		subjectID:      deletedProject.ID.String(),
+		subjectType:    "project",
+	})
+
+	deleteProject(t, ctx, ti, deletedProject.ID)
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, insertedID.String(), result.Logs[0].ID)
+	require.NotNil(t, result.Logs[0].ProjectID)
+	require.Equal(t, deletedProject.ID.String(), *result.Logs[0].ProjectID)
+	require.NotNil(t, result.Logs[0].ProjectSlug)
+	require.Equal(t, deletedProject.Slug, *result.Logs[0].ProjectSlug)
 }
 
 func TestAuditService_List_ProjectSlugNotFound(t *testing.T) {
@@ -436,6 +511,14 @@ func createProject(t *testing.T, ctx context.Context, ti *testInstance, organiza
 	require.NoError(t, err)
 
 	return project
+}
+
+func deleteProject(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) {
+	t.Helper()
+
+	deletedID, err := projectsrepo.New(ti.conn).DeleteProject(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, projectID, deletedID)
 }
 
 func jsonNumber(value int) string {
