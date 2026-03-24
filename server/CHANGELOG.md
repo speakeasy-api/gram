@@ -1,5 +1,11 @@
 # server
 
+## 0.30.0
+
+### Minor Changes
+
+- 6265f73: Introduced the audit logs API service and supplementary code to start recording audit logs in other services including new URN types to represent various subjects in Gram.
+
 ## 0.29.1
 
 ### Patch Changes
