@@ -49,17 +49,21 @@ WHERE
     ee.environment_id = @environment_id
 ORDER BY ee.name ASC;
 
--- name: DeleteEnvironment :exec
+-- name: DeleteEnvironment :one
 WITH deleted_env AS (
     UPDATE environments
     SET deleted_at = now()
     WHERE environments.slug = $1 AND environments.project_id = $2 AND environments.deleted IS FALSE
-    RETURNING slug, project_id
+    RETURNING id, name, slug, project_id
+), cleared_toolsets AS (
+    UPDATE toolsets
+    SET default_environment_slug = NULL
+    FROM deleted_env
+    WHERE toolsets.default_environment_slug = deleted_env.slug AND toolsets.project_id = deleted_env.project_id
+    RETURNING toolsets.id
 )
-UPDATE toolsets
-SET default_environment_slug = NULL
-FROM deleted_env
-WHERE toolsets.default_environment_slug = deleted_env.slug AND toolsets.project_id = deleted_env.project_id;
+SELECT id, name, slug, project_id
+FROM deleted_env;
 
 -- name: CreateEnvironmentEntries :many
 INSERT INTO environment_entries (
