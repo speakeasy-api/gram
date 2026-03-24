@@ -367,7 +367,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
 	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
@@ -784,6 +784,8 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger
+
 	// Validate URL
 	parsedURL, err := url.Parse(payload.URL)
 	if err != nil {
@@ -921,7 +923,15 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, err
 	}
 
-	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OpenAPI assets").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	ar := s.repo.WithTx(dbtx)
+
+	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
 		ProjectID:     *authCtx.ProjectID,
@@ -931,7 +941,25 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		ContentLength: actualContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+	}
+
+	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		AssetURN:  urn.NewAsset(urn.AssetKindOpenAPI, asset.ID),
+		AssetName: asset.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset creation audit log").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset").Log(ctx, logger)
 	}
 
 	return &gen.UploadOpenAPIv3Result{
