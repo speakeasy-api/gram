@@ -35,7 +35,11 @@ type LogMCPMetadataUpdateEvent struct {
 func LogMCPMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event LogMCPMetadataUpdateEvent) error {
 	action := ActionMCPMetadataUpdate
 
-	beforeSnapshot, err := marshalAuditPayload(event.MCPMetadataSnapshotBefore)
+	var beforePayload any
+	if event.MCPMetadataSnapshotBefore != nil {
+		beforePayload = event.MCPMetadataSnapshotBefore
+	}
+	beforeSnapshot, err := marshalAuditPayload(beforePayload)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
 	}
