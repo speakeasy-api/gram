@@ -72,12 +72,13 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 	return i, err
 }
 
-const deleteAPIKey = `-- name: DeleteAPIKey :exec
+const deleteAPIKey = `-- name: DeleteAPIKey :one
 UPDATE api_keys
 SET deleted_at = NOW()
 WHERE id = $1
   AND organization_id = $2
   AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, scopes
 `
 
 type DeleteAPIKeyParams struct {
@@ -85,9 +86,25 @@ type DeleteAPIKeyParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) error {
-	_, err := q.db.Exec(ctx, deleteAPIKey, arg.ID, arg.OrganizationID)
-	return err
+type DeleteAPIKeyRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Scopes         []string
+}
+
+func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) (DeleteAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, deleteAPIKey, arg.ID, arg.OrganizationID)
+	var i DeleteAPIKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Scopes,
+	)
+	return i, err
 }
 
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
