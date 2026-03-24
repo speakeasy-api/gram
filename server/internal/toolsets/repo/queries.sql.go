@@ -212,11 +212,12 @@ func (q *Queries) CreateToolsetVersion(ctx context.Context, arg CreateToolsetVer
 	return i, err
 }
 
-const deleteToolset = `-- name: DeleteToolset :exec
+const deleteToolset = `-- name: DeleteToolset :one
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
 WHERE slug = $1
   AND project_id = $2 AND deleted IS FALSE
+RETURNING id, name, slug
 `
 
 type DeleteToolsetParams struct {
@@ -224,9 +225,17 @@ type DeleteToolsetParams struct {
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) error {
-	_, err := q.db.Exec(ctx, deleteToolset, arg.Slug, arg.ProjectID)
-	return err
+type DeleteToolsetRow struct {
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
+
+func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) (DeleteToolsetRow, error) {
+	row := q.db.QueryRow(ctx, deleteToolset, arg.Slug, arg.ProjectID)
+	var i DeleteToolsetRow
+	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	return i, err
 }
 
 const getHTTPSecurityDefinitions = `-- name: GetHTTPSecurityDefinitions :many

@@ -206,6 +206,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// Paths that don't require authentication — skip the loading shell on these
+// to avoid a brief flash of the authenticated skeleton (e.g. after logout).
+const UNAUTHENTICATED_PATHS = ["/login", "/register"];
+
 // Paths that are authenticated but don't require org/project slug context.
 const SLUG_EXEMPT_PATHS = ["/slack/register"];
 
@@ -224,6 +228,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
   if (isLoading || (!session && !error)) {
+    // Don't show the authenticated app skeleton on unauthenticated routes
+    // (e.g. after logout navigates to /login). The session check will resolve
+    // quickly and render the correct page without a jarring skeleton flash.
+    if (UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))) {
+      return null;
+    }
     return <AppLoadingShell />;
   }
 

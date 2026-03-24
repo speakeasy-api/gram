@@ -24,6 +24,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -103,9 +104,11 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger
+
 	slugSuffix, err := conv.GenerateRandomSlug(5)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate random slug").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate random slug").Log(ctx, logger)
 	}
 
 	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
@@ -113,7 +116,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	enabledServerCount, err := s.usageRepo.GetEnabledServerCount(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		// don't block the user from creating a toolset
-		s.logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	createToolParams := repo.CreateToolsetParams{
@@ -149,23 +152,48 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		}
 	}
 
-	createdToolset, err := s.repo.CreateToolset(ctx, createToolParams)
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
+	createdToolset, err := tr.CreateToolset(ctx, createToolParams)
 	var pgErr *pgconn.PgError
 	if err != nil {
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, nil, "toolset slug already exists")
 		}
 
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset").Log(ctx, logger)
 	}
 
 	// Create initial toolset version with tool URNs
-	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, createdToolset.ID, s.repo)
+	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, createdToolset.ID, tr)
 	if err != nil {
 		return nil, err
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache)
+	if err := audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		ToolsetURN:       urn.NewToolset(createdToolset.ID),
+		ToolsetName:      createdToolset.Name,
+		ToolsetSlug:      createdToolset.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving toolset").Log(ctx, logger)
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}
@@ -208,11 +236,12 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").Log(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	tr := s.repo.WithTx(dbtx)
+	clearedOAuth := false
 
 	// First get the existing toolset
 	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
@@ -221,6 +250,11 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	}
+
+	existingView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(existingToolset.Slug), new(s.toolsetCache.SkipCache()))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe existing toolset").Log(ctx, logger)
 	}
 
 	// Convert update params
@@ -244,7 +278,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
-		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
+		_, err := s.environmentRepo.WithTx(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
 			Slug:      conv.ToLower(*payload.DefaultEnvironmentSlug),
 			ProjectID: *authCtx.ProjectID,
 		})
@@ -256,7 +290,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	var activeCustomDomainID *uuid.UUID
 	toolsetDomainID := conv.FromNullableUUID(existingToolset.CustomDomainID)
-	if domain, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID); err == nil && domain.Activated && domain.Verified {
+	if domain, err := s.domainsRepo.WithTx(dbtx).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID); err == nil && domain.Activated && domain.Verified {
 		activeCustomDomainID = &domain.ID
 	}
 
@@ -292,7 +326,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	if payload.McpIsPublic != nil {
 		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid || existingToolset.OauthProxyServerID.Valid
 		if (existingToolset.McpIsPublic != *payload.McpIsPublic) && oAuthIsAttached {
-			_, err := s.toolsets.repo.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
+			_, err := tr.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
 				ProjectID: existingToolset.ProjectID,
 				Slug:      existingToolset.Slug,
 			})
@@ -300,6 +334,8 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error clearing oauth configurations").Log(ctx, logger)
 			}
+
+			clearedOAuth = true
 		}
 
 		updateParams.McpIsPublic = *payload.McpIsPublic
@@ -314,7 +350,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 		isUnpaidAccount := !authCtx.HasActiveSubscription
 		if *payload.McpEnabled && !existingToolset.McpEnabled && isUnpaidAccount {
-			enabledServers, err := s.repo.ListEnabledToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
+			enabledServers, err := tr.ListEnabledToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error listing enabled toolsets").Log(ctx, logger)
 			}
@@ -348,13 +384,73 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").Log(ctx, logger)
-	}
-
-	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug), &s.toolsetCache)
+	toolsetDetails, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
 		return nil, err
+	}
+
+	if clearedOAuth && existingToolset.ExternalOauthServerID.Valid {
+		var extoauthslug *string
+		if existingView.ExternalOauthServer != nil {
+			extoauthslug = new(string(existingView.ExternalOauthServer.Slug))
+		}
+		if err := audit.LogToolsetDetachExternalOAuth(ctx, dbtx, audit.LogToolsetDetachExternalOAuthEvent{
+			OrganizationID:          authCtx.ActiveOrganizationID,
+			ProjectID:               *authCtx.ProjectID,
+			Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:        authCtx.Email,
+			ActorSlug:               nil,
+			ToolsetURN:              urn.NewToolset(updatedToolset.ID),
+			ToolsetName:             updatedToolset.Name,
+			ToolsetSlug:             updatedToolset.Slug,
+			ToolsetVersionAfter:     toolsetDetails.ToolsetVersion,
+			ExternalOAuthServerID:   new(existingToolset.ExternalOauthServerID.UUID.String()),
+			ExternalOAuthServerSlug: extoauthslug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach external OAuth server audit event").Log(ctx, logger)
+		}
+	}
+
+	if clearedOAuth && existingToolset.OauthProxyServerID.Valid {
+		var oauthProxySlug *string
+		if existingView.OauthProxyServer != nil {
+			oauthProxySlug = new(string(existingView.OauthProxyServer.Slug))
+		}
+		if err := audit.LogToolsetDetachOAuthProxy(ctx, dbtx, audit.LogToolsetDetachOAuthProxyEvent{
+			OrganizationID:       authCtx.ActiveOrganizationID,
+			ProjectID:            *authCtx.ProjectID,
+			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:     authCtx.Email,
+			ActorSlug:            nil,
+			ToolsetURN:           urn.NewToolset(updatedToolset.ID),
+			ToolsetName:          updatedToolset.Name,
+			ToolsetSlug:          updatedToolset.Slug,
+			ToolsetVersionAfter:  toolsetDetails.ToolsetVersion,
+			OAuthProxyServerID:   new(existingToolset.OauthProxyServerID.UUID.String()),
+			OAuthProxyServerSlug: oauthProxySlug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach OAuth proxy server audit event").Log(ctx, logger)
+		}
+	}
+
+	if err := audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             *authCtx.ProjectID,
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
+		ActorSlug:             nil,
+		ToolsetURN:            urn.NewToolset(updatedToolset.ID),
+		ToolsetName:           updatedToolset.Name,
+		ToolsetSlug:           updatedToolset.Slug,
+		ToolsetVersionAfter:   toolsetDetails.ToolsetVersion,
+		ToolsetSnapshotBefore: existingView,
+		ToolsetSnapshotAfter:  toolsetDetails,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").Log(ctx, logger)
 	}
 
 	return toolsetDetails, nil
@@ -366,15 +462,42 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	err := s.repo.DeleteToolset(ctx, repo.DeleteToolsetParams{
+	logger := s.logger
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error accessing toolsets").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
+	deleted, err := tr.DeleteToolset(ctx, repo.DeleteToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").Log(ctx, logger)
+	}
+
+	if err := audit.LogToolsetDelete(ctx, dbtx, audit.LogToolsetDeleteEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		ToolsetURN:       urn.NewToolset(deleted.ID),
+		ToolsetName:      deleted.Name,
+		ToolsetSlug:      deleted.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to log toolset delete").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error saving toolset deletion").Log(ctx, logger)
 	}
 
 	return nil
@@ -397,8 +520,16 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
 
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
 	// Get the original toolset
-	originalToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+	originalToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -428,38 +559,67 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		McpEnabled:             false, // Don't auto-enable MCP for cloned toolsets
 	}
 
-	// Try to create the cloned toolset, handling name conflicts
+	// Try to create the cloned toolset, handling name conflicts.
+	// In a transaction, a unique violation aborts the transaction until rolled back,
+	// so each insert attempt needs an isolated savepoint.
 	var clonedToolset repo.Toolset
-	clonedToolset, err = s.repo.CreateToolset(ctx, baseParams)
-	if err != nil {
+	nameCandidates := []string{newName}
+	for i := 2; i <= 10; i++ {
+		nameCandidates = append(nameCandidates, fmt.Sprintf("%s_copy%d", originalToolset.Name, i))
+	}
+
+	for i, candidateName := range nameCandidates {
+		baseParams.Name = candidateName
+		baseParams.Slug = conv.ToSlug(candidateName)
+
+		savepointName := fmt.Sprintf("clone_toolset_insert_%d", i)
+		if _, err := dbtx.Exec(ctx, "SAVEPOINT "+savepointName); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to clone toolset").Log(ctx, logger)
+		}
+
+		clonedToolset, err = tr.CreateToolset(ctx, baseParams)
+		if err == nil {
+			if _, releaseErr := dbtx.Exec(ctx, "RELEASE SAVEPOINT "+savepointName); releaseErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, releaseErr, "failed to clone toolset").Log(ctx, logger)
+			}
+			break
+		}
+
+		if _, rollbackErr := dbtx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepointName); rollbackErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, rollbackErr, "failed to clone toolset").Log(ctx, logger)
+		}
+		if _, releaseErr := dbtx.Exec(ctx, "RELEASE SAVEPOINT "+savepointName); releaseErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, releaseErr, "failed to clone toolset").Log(ctx, logger)
+		}
+
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			// Try with a numbered suffix if _copy already exists
-			for i := 2; i <= 10; i++ {
-				baseParams.Name = fmt.Sprintf("%s_copy%d", originalToolset.Name, i)
-				baseParams.Slug = conv.ToSlug(baseParams.Name)
-				clonedToolset, err = s.repo.CreateToolset(ctx, baseParams)
-				if err == nil {
-					break
-				}
-				if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to clone toolset").Log(ctx, logger)
-				}
-			}
-			if err != nil {
-				return nil, oops.E(oops.CodeConflict, nil, "could not create unique toolset name").Log(ctx, logger)
-			}
-		} else {
+		if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to clone toolset").Log(ctx, logger)
 		}
 	}
+	if err != nil {
+		return nil, oops.E(oops.CodeConflict, nil, "could not create unique toolset name").Log(ctx, logger)
+	}
+
+	if err := audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		ToolsetURN:       urn.NewToolset(clonedToolset.ID),
+		ToolsetName:      clonedToolset.Name,
+		ToolsetSlug:      clonedToolset.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset create audit event").Log(ctx, logger)
+	}
 
 	// Clone the latest toolset version
-	latestVersion, err := s.repo.GetLatestToolsetVersion(ctx, originalToolset.ID)
+	latestVersion, err := tr.GetLatestToolsetVersion(ctx, originalToolset.ID)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to get latest toolset version", attr.SlogError(err))
 	} else {
-		_, err = s.repo.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
+		_, err = tr.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
 			ToolsetID:     clonedToolset.ID,
 			Version:       1,
 			ToolUrns:      latestVersion.ToolUrns,
@@ -472,12 +632,12 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	}
 
 	// Clone prompt templates if any
-	originalPromptTemplates, err := s.repo.GetToolsetPromptTemplateNames(ctx, repo.GetToolsetPromptTemplateNamesParams{
+	originalPromptTemplates, err := tr.GetToolsetPromptTemplateNames(ctx, repo.GetToolsetPromptTemplateNamesParams{
 		ToolsetID: originalToolset.ID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err == nil && len(originalPromptTemplates) > 0 {
-		tplr := tplRepo.New(s.db)
+		tplr := tplRepo.New(dbtx)
 		ptrows, err := tplr.PeekTemplatesByNames(ctx, tplRepo.PeekTemplatesByNamesParams{
 			ProjectID: *authCtx.ProjectID,
 			Names:     originalPromptTemplates,
@@ -493,14 +653,14 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 					PromptName:       ptrow.Name,
 				})
 			}
-			_, err = s.repo.AddToolsetPromptTemplates(ctx, additions)
+			_, err = tr.AddToolsetPromptTemplates(ctx, additions)
 			if err != nil {
 				logger.WarnContext(ctx, "failed to clone prompt templates", attr.SlogError(err))
 			}
 		}
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(clonedToolset.Slug), &s.toolsetCache)
+	toolsetDetails, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(clonedToolset.Slug), &s.toolsetCache)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to describe cloned toolset", attr.SlogError(err))
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe cloned toolset").Log(ctx, logger)
@@ -509,6 +669,10 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	if toolsetDetails == nil {
 		logger.ErrorContext(ctx, "toolsetDetails is nil after successful describe")
 		return nil, oops.E(oops.CodeUnexpected, nil, "toolset details is nil").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save cloned toolset").Log(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "successfully cloned toolset",
@@ -533,20 +697,28 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeForbidden, nil, "free accounts cannot add external OAuth servers").Log(ctx, s.logger)
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external oauth server configuration").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
+	existingToolset, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
 		return nil, err
 	}
 
-	if toolsetDetails.McpIsPublic == nil || !*toolsetDetails.McpIsPublic {
+	if existingToolset.McpIsPublic == nil || !*existingToolset.McpIsPublic {
 		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").Log(ctx, s.logger)
 	}
 
-	if toolsetDetails.ExternalOauthServer != nil || toolsetDetails.OauthProxyServer != nil {
+	if existingToolset.ExternalOauthServer != nil || existingToolset.OauthProxyServer != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server already exists").Log(ctx, s.logger)
 	}
 
-	if toolsetDetails.OauthEnablementMetadata != nil && toolsetDetails.OauthEnablementMetadata.Oauth2SecurityCount > 1 {
+	if existingToolset.OauthEnablementMetadata != nil && existingToolset.OauthEnablementMetadata.Oauth2SecurityCount > 1 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "multiple OAuth2 security schemes detected").Log(ctx, s.logger)
 	}
 
@@ -557,7 +729,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	}
 
 	// Create the external OAuth server metadata entry
-	externalOAuthServer, err := s.oauthRepo.CreateExternalOAuthServerMetadata(ctx, oauthRepo.CreateExternalOAuthServerMetadataParams{
+	externalOAuthServer, err := s.oauthRepo.WithTx(dbtx).CreateExternalOAuthServerMetadata(ctx, oauthRepo.CreateExternalOAuthServerMetadataParams{
 		ProjectID: *authCtx.ProjectID,
 		Slug:      conv.ToLower(payload.ExternalOauthServer.Slug),
 		Metadata:  metadataBytes,
@@ -567,7 +739,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	}
 
 	// Associate it with the toolset
-	_, err = s.repo.UpdateToolsetExternalOAuthServer(ctx, repo.UpdateToolsetExternalOAuthServerParams{
+	row, err := tr.UpdateToolsetExternalOAuthServer(ctx, repo.UpdateToolsetExternalOAuthServerParams{
 		Slug:                  conv.ToLower(payload.Slug),
 		ProjectID:             *authCtx.ProjectID,
 		ExternalOauthServerID: uuid.NullUUID{UUID: externalOAuthServer.ID, Valid: true},
@@ -579,12 +751,32 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to associate external OAuth server with toolset").Log(ctx, s.logger)
 	}
 
-	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	updatedToolset, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
 		return nil, err
 	}
 
-	return toolsetDetails, nil
+	if err := audit.LogToolsetAttachExternalOAuth(ctx, dbtx, audit.LogToolsetAttachExternalOAuthEvent{
+		OrganizationID:          authCtx.ActiveOrganizationID,
+		ProjectID:               *authCtx.ProjectID,
+		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:        authCtx.Email,
+		ActorSlug:               nil,
+		ToolsetURN:              urn.NewToolset(row.ID),
+		ToolsetName:             existingToolset.Name,
+		ToolsetSlug:             row.Slug,
+		ToolsetVersionAfter:     updatedToolset.ToolsetVersion,
+		ExternalOAuthServerID:   externalOAuthServer.ID.String(),
+		ExternalOAuthServerSlug: externalOAuthServer.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding external OAuth server").Log(ctx, s.logger)
+	}
+
+	return updatedToolset, nil
 }
 
 func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAuthServerPayload) (*types.Toolset, error) {
@@ -593,44 +785,122 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing oauth server configuration").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
 	// Get the current toolset to find which OAuth server to remove
-	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, logger)
 	}
+
+	var externalServerID *string
+	var externalServerSlug *string
 
 	// Remove external OAuth server metadata if it exists
 	if existingToolset.ExternalOauthServerID.Valid {
-		err = s.oauthRepo.DeleteExternalOAuthServerMetadata(ctx, oauthRepo.DeleteExternalOAuthServerMetadataParams{
+		externalServerID = new(existingToolset.ExternalOauthServerID.UUID.String())
+
+		row, err := s.oauthRepo.WithTx(dbtx).DeleteExternalOAuthServerMetadata(ctx, oauthRepo.DeleteExternalOAuthServerMetadataParams{
 			ProjectID: *authCtx.ProjectID,
 			ID:        existingToolset.ExternalOauthServerID.UUID,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete external OAuth server metadata").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete external OAuth server metadata").Log(ctx, logger)
+		}
+
+		if row.Slug != "" {
+			externalServerSlug = &row.Slug
+		}
+	}
+
+	var oauthProxyID *string
+	var oauthProxySlug *string
+	if existingToolset.OauthProxyServerID.Valid {
+		oauthProxyID = new(existingToolset.OauthProxyServerID.UUID.String())
+
+		row, err := s.oauthRepo.WithTx(dbtx).GetOAuthProxyServer(ctx, oauthRepo.GetOAuthProxyServerParams{
+			ProjectID: *authCtx.ProjectID,
+			ID:        existingToolset.OauthProxyServerID.UUID,
+		})
+
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get OAuth proxy server metadata").Log(ctx, logger)
+		}
+
+		if row.Slug != "" {
+			oauthProxySlug = &row.Slug
 		}
 	}
 
 	// Clear OAuth server associations from toolset
-	_, err = s.repo.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
+	_, err = tr.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to remove OAuth server from toolset").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to remove OAuth server from toolset").Log(ctx, logger)
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	toolsetDetails, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
 		return nil, err
+	}
+
+	if externalServerID != nil {
+		if err := audit.LogToolsetDetachExternalOAuth(ctx, dbtx, audit.LogToolsetDetachExternalOAuthEvent{
+			OrganizationID:          authCtx.ActiveOrganizationID,
+			ProjectID:               *authCtx.ProjectID,
+			Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:        authCtx.Email,
+			ActorSlug:               nil,
+			ToolsetURN:              urn.NewToolset(existingToolset.ID),
+			ToolsetName:             existingToolset.Name,
+			ToolsetSlug:             existingToolset.Slug,
+			ToolsetVersionAfter:     toolsetDetails.ToolsetVersion,
+			ExternalOAuthServerID:   externalServerID,
+			ExternalOAuthServerSlug: externalServerSlug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").Log(ctx, logger)
+		}
+	}
+
+	if oauthProxyID != nil {
+		if err := audit.LogToolsetDetachOAuthProxy(ctx, dbtx, audit.LogToolsetDetachOAuthProxyEvent{
+			OrganizationID:       authCtx.ActiveOrganizationID,
+			ProjectID:            *authCtx.ProjectID,
+			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:     authCtx.Email,
+			ActorSlug:            nil,
+			ToolsetURN:           urn.NewToolset(existingToolset.ID),
+			ToolsetName:          existingToolset.Name,
+			ToolsetSlug:          existingToolset.Slug,
+			ToolsetVersionAfter:  toolsetDetails.ToolsetVersion,
+			OAuthProxyServerID:   oauthProxyID,
+			OAuthProxyServerSlug: oauthProxySlug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach OAuth proxy server audit event").Log(ctx, logger)
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error removing OAuth server").Log(ctx, logger)
 	}
 
 	return toolsetDetails, nil
@@ -642,9 +912,20 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OAuth proxy servers").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
 		return nil, err
+	}
+
+	toolsetID, err := uuid.Parse(toolsetDetails.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, s.logger)
 	}
 
 	if toolsetDetails.OauthProxyServer != nil || toolsetDetails.ExternalOauthServer != nil {
@@ -715,7 +996,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	// Only validate environment for custom provider type (not gram)
 	if providerType == oauth.OAuthProxyProviderTypeCustom {
 		// Validate that the environment exists for this project
-		_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
+		_, err = s.environmentRepo.WithTx(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
 			Slug:      string(*payload.OauthProxyServer.EnvironmentSlug),
 			ProjectID: *authCtx.ProjectID,
 		})
@@ -727,7 +1008,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		}
 	}
 
-	oauthProxyServer, err := s.oauthRepo.UpsertOAuthProxyServer(ctx, oauthRepo.UpsertOAuthProxyServerParams{
+	oauthProxyServer, err := s.oauthRepo.WithTx(dbtx).UpsertOAuthProxyServer(ctx, oauthRepo.UpsertOAuthProxyServerParams{
 		ProjectID: *authCtx.ProjectID,
 		Slug:      conv.ToLower(payload.OauthProxyServer.Slug),
 		Audience:  conv.PtrToPGText(payload.OauthProxyServer.Audience),
@@ -751,7 +1032,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		secretsJSON = []byte("{}")
 	}
 
-	_, err = s.oauthRepo.UpsertOAuthProxyProvider(ctx, oauthRepo.UpsertOAuthProxyProviderParams{
+	_, err = s.oauthRepo.WithTx(dbtx).UpsertOAuthProxyProvider(ctx, oauthRepo.UpsertOAuthProxyProviderParams{
 		ProjectID:                         *authCtx.ProjectID,
 		OauthProxyServerID:                oauthProxyServer.ID,
 		Slug:                              conv.ToLower(payload.OauthProxyServer.Slug),
@@ -772,7 +1053,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	}
 
 	// Associate the OAuth proxy server with the toolset
-	_, err = s.repo.UpdateToolsetOAuthProxyServer(ctx, repo.UpdateToolsetOAuthProxyServerParams{
+	_, err = s.repo.WithTx(dbtx).UpdateToolsetOAuthProxyServer(ctx, repo.UpdateToolsetOAuthProxyServerParams{
 		Slug:               conv.ToLower(payload.Slug),
 		ProjectID:          *authCtx.ProjectID,
 		OauthProxyServerID: uuid.NullUUID{UUID: oauthProxyServer.ID, Valid: true},
@@ -784,9 +1065,29 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to associate OAuth proxy server with toolset").Log(ctx, s.logger)
 	}
 
-	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
 		return nil, err
+	}
+
+	if err := audit.LogToolsetAttachOAuthProxy(ctx, dbtx, audit.LogToolsetAttachOAuthProxyEvent{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:     authCtx.Email,
+		ActorSlug:            nil,
+		ToolsetURN:           urn.NewToolset(toolsetID),
+		ToolsetName:          toolsetDetails.Name,
+		ToolsetSlug:          string(toolsetDetails.Slug),
+		ToolsetVersionAfter:  toolsetDetails.ToolsetVersion,
+		OAuthProxyServerID:   oauthProxyServer.ID.String(),
+		OAuthProxyServerSlug: oauthProxyServer.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding OAuth proxy server").Log(ctx, s.logger)
 	}
 
 	return toolsetDetails, nil

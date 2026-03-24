@@ -66,11 +66,12 @@ func (q *Queries) DeleteExternalOAuthClientRegistration(ctx context.Context, arg
 	return err
 }
 
-const deleteExternalOAuthServerMetadata = `-- name: DeleteExternalOAuthServerMetadata :exec
+const deleteExternalOAuthServerMetadata = `-- name: DeleteExternalOAuthServerMetadata :one
 UPDATE external_oauth_server_metadata SET
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE project_id = $1 AND id = $2
+RETURNING id, slug
 `
 
 type DeleteExternalOAuthServerMetadataParams struct {
@@ -78,9 +79,16 @@ type DeleteExternalOAuthServerMetadataParams struct {
 	ID        uuid.UUID
 }
 
-func (q *Queries) DeleteExternalOAuthServerMetadata(ctx context.Context, arg DeleteExternalOAuthServerMetadataParams) error {
-	_, err := q.db.Exec(ctx, deleteExternalOAuthServerMetadata, arg.ProjectID, arg.ID)
-	return err
+type DeleteExternalOAuthServerMetadataRow struct {
+	ID   uuid.UUID
+	Slug string
+}
+
+func (q *Queries) DeleteExternalOAuthServerMetadata(ctx context.Context, arg DeleteExternalOAuthServerMetadataParams) (DeleteExternalOAuthServerMetadataRow, error) {
+	row := q.db.QueryRow(ctx, deleteExternalOAuthServerMetadata, arg.ProjectID, arg.ID)
+	var i DeleteExternalOAuthServerMetadataRow
+	err := row.Scan(&i.ID, &i.Slug)
+	return i, err
 }
 
 const deleteOAuthProxyProvider = `-- name: DeleteOAuthProxyProvider :exec

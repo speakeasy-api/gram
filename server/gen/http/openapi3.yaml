@@ -1696,6 +1696,117 @@ paths:
             x-speakeasy-name-override: uploadOpenAPIv3
             x-speakeasy-react-hook:
                 name: UploadOpenAPIv3
+    /rpc/auditlogs.list:
+        get:
+            description: List audit logs across organization and projects.
+            operationId: listAuditLogs
+            parameters:
+                - allowEmptyValue: true
+                  description: The cursor for paginating through audit logs.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: The cursor for paginating through audit logs.
+                    type: string
+                - allowEmptyValue: true
+                  description: Project slug to filter audit logs to a specific project.
+                  in: query
+                  name: project_slug
+                  schema:
+                    description: Project slug to filter audit logs to a specific project.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAuditLogsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: list auditlogs
+            tags:
+                - auditlogs
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: AuditLogs
     /rpc/auth.callback:
         get:
             description: Handles the authentication callback.
@@ -13301,6 +13412,46 @@ components:
                 - content_length
                 - created_at
                 - updated_at
+        AuditLog:
+            type: object
+            properties:
+                action:
+                    type: string
+                actor_display_name:
+                    type: string
+                actor_id:
+                    type: string
+                actor_slug:
+                    type: string
+                actor_type:
+                    type: string
+                after_snapshot: {}
+                before_snapshot: {}
+                created_at:
+                    type: string
+                    description: The creation date of the audit log.
+                    format: date-time
+                id:
+                    type: string
+                metadata:
+                    type: object
+                    additionalProperties: true
+                subject_display_name:
+                    type: string
+                subject_id:
+                    type: string
+                subject_slug:
+                    type: string
+                subject_type:
+                    type: string
+            required:
+                - id
+                - actor_id
+                - actor_type
+                - action
+                - subject_id
+                - subject_type
+                - created_at
         BaseResourceAttributes:
             type: object
             properties:
@@ -16130,6 +16281,28 @@ components:
             description: Result of listing distinct attribute keys
             required:
                 - keys
+        ListAuditLogsForm:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: The cursor for paginating through audit logs.
+                project_slug:
+                    type: string
+                    description: Project slug to filter audit logs to a specific project.
+        ListAuditLogsResult:
+            type: object
+            properties:
+                logs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuditLog'
+                    description: List of audit logs
+                next_cursor:
+                    type: string
+                    description: The cursor to be used for the next page of results.
+            required:
+                - logs
         ListCatalogResponseBody:
             type: object
             properties:
@@ -19790,6 +19963,8 @@ tags:
       description: OpenAI Responses API compatible endpoint for running agent workflows.
     - name: assets
       description: Manages assets used by Gram projects.
+    - name: auditlogs
+      description: Manages audit logs in Gram.
     - name: auth
       description: Managed auth for gram producers and dashboard.
     - name: chat

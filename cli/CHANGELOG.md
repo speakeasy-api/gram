@@ -1,5 +1,11 @@
 # cli
 
+## 0.15.8
+
+### Patch Changes
+
+- 70d8ad3: Fix CLI release signing by switching to cosign v3 bundle format and migrating to ubuntu runner
+
 ## 0.15.7
 
 ### Patch Changes
