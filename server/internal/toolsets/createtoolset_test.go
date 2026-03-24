@@ -9,6 +9,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -19,6 +21,8 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Create deployment with petstore fixture
 	dep := createPetstoreDeployment(t, ctx, ti)
@@ -67,12 +71,18 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 		// Summary and Description may be empty depending on the OpenAPI spec
 	}
 	require.ElementsMatch(t, toolUrns[:2], toolSetUrns)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Create deployment with petstore fixture
 	dep := createPetstoreDeployment(t, ctx, ti)
@@ -117,12 +127,18 @@ func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 	baseTool, err := conv.ToBaseTool(result.Tools[0])
 	require.NoError(t, err)
 	require.Equal(t, tools[0].ToolUrn.String(), baseTool.ToolUrn)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Create deployment with petstore fixture
 	dep := createPetstoreDeployment(t, ctx, ti)
@@ -157,14 +173,20 @@ func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "toolset slug already exists")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
-	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            nil,
@@ -175,17 +197,23 @@ func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error finding environment")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_CreateToolset_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Test with context that has no auth context
 	ctx := t.Context()
 
-	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            nil,
@@ -196,12 +224,18 @@ func TestToolsetsService_CreateToolset_Unauthorized(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_CreateToolset_NoProjectID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Create auth context without project ID
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -209,7 +243,7 @@ func TestToolsetsService_CreateToolset_NoProjectID(t *testing.T) {
 	authCtx.ProjectID = nil
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            nil,
@@ -220,12 +254,18 @@ func TestToolsetsService_CreateToolset_NoProjectID(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_CreateToolset_EmptyToolUrns(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	result, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -240,4 +280,80 @@ func TestToolsetsService_CreateToolset_EmptyToolUrns(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "Test Toolset Empty Tools", result.Name)
 	require.Empty(t, result.Tools)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_CreateToolset_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+
+	result, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Audit Create Toolset",
+		Description:            new("Audit create description"),
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionToolsetCreate), record.Action)
+	require.Equal(t, "toolset", record.SubjectType)
+	require.Equal(t, result.Name, record.SubjectDisplay)
+	require.Equal(t, string(result.Slug), record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_CreateToolset_DuplicateSlug_NoAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Audit Duplicate Toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	middleCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, middleCount)
+
+	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Audit Duplicate Toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "toolset slug already exists")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, middleCount, afterCount)
 }
