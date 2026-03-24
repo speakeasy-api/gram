@@ -19,20 +19,20 @@ func InvalidCheck(scope Scope) error {
 }
 
 func Denied(scope Scope, resourceID string) error {
-	return &AccessDeniedError{
+	return &DeniedError{
 		Scope:      scope,
 		ResourceID: resourceID,
 		cause:      oops.C(oops.CodeForbidden),
 	}
 }
 
-type AccessDeniedError struct {
+type DeniedError struct {
 	Scope      Scope
 	ResourceID string
 	cause      *oops.ShareableError
 }
 
-func (e *AccessDeniedError) Error() string {
+func (e *DeniedError) Error() string {
 	if e.ResourceID == "" {
 		return fmt.Sprintf("access denied for scope %q", e.Scope)
 	}
@@ -40,11 +40,11 @@ func (e *AccessDeniedError) Error() string {
 	return fmt.Sprintf("access denied for scope %q on resource %q", e.Scope, e.ResourceID)
 }
 
-func (e *AccessDeniedError) Unwrap() error {
+func (e *DeniedError) Unwrap() error {
 	return e.cause
 }
 
-func (e *AccessDeniedError) Is(target error) bool {
+func (e *DeniedError) Is(target error) bool {
 	return errors.Is(e.cause, target)
 }
 

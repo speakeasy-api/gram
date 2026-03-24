@@ -72,7 +72,7 @@ func TestRequire_deniesMissingGrant(t *testing.T) {
 	err := Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_456"})
 	require.Error(t, err)
 
-	var deniedErr *AccessDeniedError
+	var deniedErr *DeniedError
 	require.True(t, errors.As(err, &deniedErr))
 	require.Equal(t, ScopeBuildRead, deniedErr.Scope)
 	require.Equal(t, "proj_456", deniedErr.ResourceID)
@@ -120,7 +120,7 @@ func TestRequire_appliesAdditiveGrants(t *testing.T) {
 	)
 	require.Error(t, err)
 
-	var deniedErr *AccessDeniedError
+	var deniedErr *DeniedError
 	require.True(t, errors.As(err, &deniedErr))
 	require.Equal(t, ScopeMCPConnect, deniedErr.Scope)
 	require.Equal(t, "mcp_analytics", deniedErr.ResourceID)
@@ -202,7 +202,7 @@ func TestRequireAny_deniesWhenNoCheckMatches(t *testing.T) {
 	)
 	require.Error(t, err)
 
-	var deniedErr *AccessDeniedError
+	var deniedErr *DeniedError
 	require.True(t, errors.As(err, &deniedErr))
 	require.Equal(t, ScopeMCPConnect, deniedErr.Scope)
 	require.Equal(t, "mcp:a", deniedErr.ResourceID)
