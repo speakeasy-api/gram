@@ -104,6 +104,7 @@ const (
 	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey             = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey             = attribute.Key("gram.external_mcp.name")
+	RoleSlugKey                    = attribute.Key("gram.role.slug")
 	URLKey                         = attribute.Key("url")
 	CacheKeyKey                    = attribute.Key("gram.cache.key")
 	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
@@ -929,6 +930,9 @@ func SlogExternalMCPSlug(v string) slog.Attr      { return slog.String(string(Ex
 
 func ExternalMCPName(v string) attribute.KeyValue { return ExternalMCPNameKey.String(v) }
 func SlogExternalMCPName(v string) slog.Attr      { return slog.String(string(ExternalMCPNameKey), v) }
+
+func RoleSlug(v string) attribute.KeyValue { return RoleSlugKey.String(v) }
+func SlogRoleSlug(v string) slog.Attr      { return slog.String(string(RoleSlugKey), v) }
 
 func URL(v string) attribute.KeyValue { return URLKey.String(v) }
 func SlogURL(v string) slog.Attr      { return slog.String(string(URLKey), v) }
