@@ -1,6 +1,6 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Sheet,
@@ -414,6 +414,9 @@ export function CreateRoleDialog({
                       onCheckedChange={() => toggleMember(member.id)}
                     />
                     <Avatar className="h-7 w-7">
+                      {member.photoUrl && (
+                        <AvatarImage src={member.photoUrl} alt={member.name} />
+                      )}
                       <AvatarFallback className="text-xs">
                         {member.name
                           .split(" ")
