@@ -160,6 +160,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		existing = toVariation(existingVariations[0])
 	default:
 		// Multiple existing variations with the same source tool urn is unexpected, will log a warning and update the first one.
+		existing = toVariation(existingVariations[0])
 		logger.WarnContext(
 			ctx,
 			"multiple active global tool variations found with same source tool urn",
