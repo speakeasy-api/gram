@@ -31,6 +31,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -48,25 +49,8 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	repo         *repo.Queries
-	toolsetRepo  *toolsets_repo.Queries
-	orgsRepo     *organizations_repo.Queries
-	domainsRepo  *customdomains_repo.Queries
-	auth         *auth.Auth
-	serverURL    *url.URL
-	siteURL      *url.URL
-	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
-
-	// Hosted install page script (embedded and served with cache-busting hash)
-	installPageScriptHash string
-	installPageScriptData []byte
-}
 
 //go:embed config_snippet.json.tmpl
 var configSnippetTmplData string
@@ -126,6 +110,24 @@ type hostedPageData struct {
 	IsPublic          bool
 }
 
+type Service struct {
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	repo         *repo.Queries
+	toolsetRepo  *toolsets_repo.Queries
+	orgsRepo     *organizations_repo.Queries
+	domainsRepo  *customdomains_repo.Queries
+	auth         *auth.Auth
+	serverURL    *url.URL
+	siteURL      *url.URL
+	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
+
+	// Hosted install page script (embedded and served with cache-busting hash)
+	installPageScriptHash string
+	installPageScriptData []byte
+}
+
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
@@ -162,6 +164,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+}
+
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadataPayload) (*gen.GetMcpMetadataResult, error) {
@@ -205,22 +211,55 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
+	logger := s.logger.With(
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogProjectSlug(conv.PtrValOr(authCtx.ProjectSlug, "")),
+	)
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to access mcp server metadata").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	mcpr := repo.New(dbtx)
+	tr := toolsets_repo.New(dbtx)
+
+	toolset, err := tr.GetToolset(ctx, toolsets_repo.GetToolsetParams{
 		Slug:      conv.ToLower(payload.ToolsetSlug),
 		ProjectID: *authCtx.ProjectID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+	}
+
+	logger = logger.With(
+		attr.SlogToolsetID(toolset.ID.String()),
+		attr.SlogToolsetSlug(toolset.Slug),
+	)
+
+	var existing *types.McpMetadata
+	existingRow, err := mcpr.GetMetadataForToolset(ctx, toolset.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// No existing metadata, proceed with creation
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch existing MCP server metadata").Log(ctx, logger)
+	default:
+		existing, err = ToMCPMetadata(ctx, mcpr, existingRow)
+		if err != nil {
+			logger.ErrorContext(ctx, "error converting existing MCP server metadata", attr.SlogError(err))
+		}
 	}
 
 	var logoID uuid.NullUUID
 	if payload.LogoAssetID != nil {
 		parsedLogoID, err := uuid.Parse(*payload.LogoAssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset ID").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset ID").Log(ctx, logger)
 		}
 		logoID = uuid.NullUUID{UUID: parsedLogoID, Valid: true}
 	}
@@ -244,7 +283,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	if payload.DefaultEnvironmentID != nil {
 		parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, logger)
 		}
 		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
 	}
@@ -254,7 +293,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		installationOverrideURL = conv.ToPGText(*payload.InstallationOverrideURL)
 	}
 
-	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
+	result, err := mcpr.UpsertMetadata(ctx, repo.UpsertMetadataParams{
 		ToolsetID:                 toolset.ID,
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  externalDocURL,
@@ -265,14 +304,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		InstallationOverrideUrl:   installationOverrideURL,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP server metadata").Log(ctx, logger)
 	}
 
 	// Update environment entries
 	if payload.EnvironmentConfigs != nil {
 		// Delete all existing entries
-		if err := s.repo.DeleteAllEnvironmentConfigs(ctx, result.ID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete existing environment configs").Log(ctx, s.logger)
+		if err := mcpr.DeleteAllEnvironmentConfigs(ctx, result.ID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete existing environment configs").Log(ctx, logger)
 		}
 
 		for _, config := range payload.EnvironmentConfigs {
@@ -281,7 +320,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 				headerDisplayName = conv.ToPGText(*config.HeaderDisplayName)
 			}
 
-			_, err := s.repo.UpsertEnvironmentConfig(ctx, repo.UpsertEnvironmentConfigParams{
+			_, err := mcpr.UpsertEnvironmentConfig(ctx, repo.UpsertEnvironmentConfigParams{
 				ProjectID:         *authCtx.ProjectID,
 				McpMetadataID:     result.ID,
 				VariableName:      config.VariableName,
@@ -289,12 +328,39 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 				ProvidedBy:        config.ProvidedBy,
 			})
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert environment config").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert environment config").Log(ctx, logger)
 			}
 		}
 	}
 
-	return ToMCPMetadata(ctx, s.repo, result)
+	metadata, err := ToMCPMetadata(ctx, mcpr, result)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := audit.LogMCPMetadataUpdate(ctx, dbtx, audit.LogMCPMetadataUpdateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		ToolsetURN:  urn.NewToolset(toolset.ID),
+		ToolsetName: toolset.Name,
+		ToolsetSlug: toolset.Slug,
+
+		MCPMetadataSnapshotBefore: existing,
+		MCPMetadataSnapshotAfter:  metadata,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log MCP server metadata update event").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save MCP server metadata").Log(ctx, logger)
+	}
+
+	return metadata, nil
 }
 
 func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpMetadataPayload) (*types.McpExport, error) {
@@ -466,10 +532,6 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 	}
 
 	return tools
-}
-
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
 }
 
 func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMetadatum) (*types.McpMetadata, error) {
