@@ -28,12 +28,7 @@ function getAuthErrorMessage(errorCode?: string | null): string {
   return authErrorMessages[errorCode] || unexpected;
 }
 
-const FEATURE_BADGES = [
-  "MCP Servers",
-  "Observability",
-  "Auth & OAuth",
-  "Tool Curation",
-];
+const FEATURE_BADGES = ["Build", "Secure", "Observe", "Distribute"];
 
 function FeatureBadges({ labels = FEATURE_BADGES }: { labels?: string[] }) {
   return (
@@ -97,9 +92,8 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             variant="vertical"
           />
           <p className="text-body-lg text-center dark:text-black">
-            AI transformation depends on secure connections to your software
-            systems. Securely scale AI usage across your org with Speakeasy MCP
-            platform
+            Securely scale AI usage across your organisation with Speakeasy.
+            Control plane for distribution of MCP, Skills, CLIs and more.
           </p>
           <FeatureBadges />
         </div>
