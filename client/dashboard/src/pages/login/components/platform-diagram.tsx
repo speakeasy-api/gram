@@ -233,7 +233,7 @@ function DistributedClients({ delay }: { delay: number }) {
       {/* Left: AI Client clusters */}
       <div className="flex-1">
         <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-3">
-          AI Clients
+          AI Agents
         </div>
         <div className="flex flex-wrap gap-4">
           <ClientCluster
@@ -266,7 +266,7 @@ function DistributedClients({ delay }: { delay: number }) {
       {/* Right: Chat apps */}
       <div className="flex-1">
         <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-3">
-          Chat Apps
+          Product Agents
         </div>
         <div className="flex flex-col gap-1.5">
           <MiniChatApp label="support.co" delay={delay + 0.4} />
@@ -368,7 +368,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           <div className="flex items-center mb-3">
             <GramLogo variant="horizontal" className="w-20" />
             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-1">
-              Chat Backend
+              Control Plane
             </span>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -382,10 +382,10 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  <path d="M12 20V10M18 20V4M6 20v-4" />
                 </svg>
               }
-              label="Chat logs and resolution"
+              label="Usage insights"
             />
             <FeatureBar
               delay={0.75}
@@ -397,11 +397,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4" />
+                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
                 </svg>
               }
-              label="Agent orchestration"
+              label="Session hooks"
             />
             <FeatureBar
               delay={0.8}
@@ -413,12 +413,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-                  <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0110 0v4" />
                 </svg>
               }
-              label="Session management"
+              label="Permissions & authorization"
             />
           </div>
         </motion.div>
@@ -452,7 +451,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
             <div className="flex items-center mb-3">
               <GramLogo variant="horizontal" className="w-20" />
               <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-1">
-                Tool Management
+                Tools Platform
               </span>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -481,11 +480,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                     stroke="currentColor"
                     strokeWidth="2"
                   >
-                    <rect x="3" y="11" width="18" height="11" rx="2" />
-                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                    <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
                   </svg>
                 }
-                label="Authentication & authorization"
+                label="Skills, plugins & CLIs"
               />
               <FeatureBar
                 delay={1.1}
