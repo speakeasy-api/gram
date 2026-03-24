@@ -138,129 +138,103 @@ const AI_CLIENTS = [
   { name: "Cursor", icon: CursorIcon },
 ];
 
-// AI clients as a 2x2 grid of cards, matching the height of the chat window
-function AIClientsGrid({ delay }: { delay: number }) {
+// Small AI client pill — compact icon + name
+function ClientPill({
+  icon: Icon,
+  name,
+  delay,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  name: string;
+  delay: number;
+}) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
-      className="w-full bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden"
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.25, delay }}
+      className="flex items-center gap-1 px-1.5 py-1 bg-white border border-slate-200 rounded shadow-sm"
     >
-      <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 border-b border-slate-200">
-        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-          AI Clients
+      <Icon className="w-3.5 h-3.5" />
+      <span className="text-[8px] font-medium text-slate-500">{name}</span>
+    </motion.div>
+  );
+}
+
+// Mini chat app card — represents one deployed chat instance
+function MiniChatApp({ label, delay }: { label: string; delay: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.25, delay }}
+      className="bg-white border border-slate-200 rounded shadow-sm overflow-hidden"
+    >
+      <div className="flex items-center gap-1 px-2 py-1 bg-slate-100 border-b border-slate-200">
+        <div className="flex gap-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+          <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+          <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+        </div>
+        <span className="text-[7px] text-slate-400 font-mono ml-1">
+          {label}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 p-3">
-        {AI_CLIENTS.map((client, i) => {
-          const Icon = client.icon;
-          return (
-            <motion.div
-              key={client.name}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, delay: delay + 0.2 + i * 0.1 }}
-              className="flex flex-col items-center justify-center gap-1.5 p-3 bg-slate-50 rounded border border-slate-100"
-            >
-              <Icon className="w-6 h-6" />
-              <span className="text-[9px] font-medium text-slate-500">
-                {client.name}
-              </span>
-            </motion.div>
-          );
-        })}
+      <div className="p-1.5 flex gap-1">
+        <div className="flex-1 flex flex-col gap-0.5">
+          <div className="h-1 w-full bg-slate-100 rounded" />
+          <div className="h-1 w-3/4 bg-slate-100 rounded" />
+          <div className="h-1 w-1/2 bg-slate-100 rounded" />
+        </div>
+        <div className="w-8 bg-slate-50 rounded border border-slate-100 flex items-center justify-center">
+          <svg
+            className="w-2.5 h-2.5 text-slate-300"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+          >
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+        </div>
       </div>
     </motion.div>
   );
 }
 
-// Product mockup with embedded chat
-function ProductWithChat({ delay }: { delay: number }) {
+// Distributed view — multiple clusters of AI clients and chat apps
+function DistributedClients({ delay }: { delay: number }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -20 }}
+      initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
-      className="w-full bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden"
+      transition={{ duration: 0.4, delay }}
+      className="w-full"
     >
-      {/* Browser chrome */}
-      <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 border-b border-slate-200">
-        <div className="flex gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
-          <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-          <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
+      {/* Row 1: AI Clients cluster */}
+      <div className="mb-2">
+        <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+          AI Clients across your org
         </div>
-        <div className="flex-1 mx-4">
-          <div className="bg-white rounded px-3 py-1 text-[10px] text-slate-400 font-mono">
-            your-app.com
-          </div>
+        <div className="flex flex-wrap gap-1.5">
+          <ClientPill icon={ClaudeIcon} name="Claude" delay={delay + 0.1} />
+          <ClientPill icon={CursorIcon} name="Cursor" delay={delay + 0.15} />
+          <ClientPill icon={CodexIcon} name="Codex" delay={delay + 0.2} />
+          <ClientPill icon={ClaudeIcon} name="Claude" delay={delay + 0.25} />
+          <ClientPill icon={CopilotIcon} name="Copilot" delay={delay + 0.3} />
+          <ClientPill icon={CursorIcon} name="Cursor" delay={delay + 0.35} />
         </div>
       </div>
 
-      {/* App content */}
-      <div className="flex h-32">
-        {/* Main content area */}
-        <div className="flex-1 p-3 border-r border-slate-100">
-          <div className="h-2 w-20 bg-slate-200 rounded mb-2" />
-          <div className="h-2 w-32 bg-slate-100 rounded mb-1.5" />
-          <div className="h-2 w-28 bg-slate-100 rounded mb-1.5" />
-          <div className="h-2 w-24 bg-slate-100 rounded mb-3" />
-          <div className="flex gap-2">
-            <div className="h-6 w-16 bg-slate-100 rounded" />
-            <div className="h-6 w-16 bg-slate-100 rounded" />
-          </div>
+      {/* Row 2: Chat apps cluster */}
+      <div>
+        <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+          Chat-enabled apps
         </div>
-
-        {/* Embedded chat widget */}
-        <div className="w-36 bg-slate-50 flex flex-col">
-          <div className="px-2 py-1.5 border-b border-slate-200 flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center">
-              <svg
-                className="w-2.5 h-2.5 text-white"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3"
-              >
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-              </svg>
-            </div>
-            <span className="text-[9px] font-medium text-slate-600">
-              AI Assistant
-            </span>
-          </div>
-          <div className="flex-1 p-2 flex flex-col gap-1.5 overflow-hidden">
-            <div className="bg-slate-200 rounded-lg px-2 py-1 text-[8px] text-slate-600 self-start max-w-[90%]">
-              How can I help?
-            </div>
-            <div className="bg-blue-500 rounded-lg px-2 py-1 text-[8px] text-white self-end max-w-[90%]">
-              Create a report
-            </div>
-            <motion.div
-              className="bg-slate-200 rounded-lg px-2 py-1 text-[8px] text-slate-600 self-start"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: delay + 0.8, duration: 0.3 }}
-            >
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0, 1, 0] }}
-                transition={{
-                  delay: delay + 0.8,
-                  duration: 1.2,
-                  repeat: Infinity,
-                }}
-              >
-                ●●●
-              </motion.span>
-            </motion.div>
-          </div>
-          <div className="px-2 pb-2">
-            <div className="bg-white border border-slate-200 rounded px-2 py-1 text-[8px] text-slate-400">
-              Type a message...
-            </div>
-          </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <MiniChatApp label="support.co" delay={delay + 0.4} />
+          <MiniChatApp label="sales-app" delay={delay + 0.45} />
+          <MiniChatApp label="internal" delay={delay + 0.5} />
         </div>
       </div>
     </motion.div>
@@ -341,15 +315,8 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
       )}
     >
       <div className="flex flex-col items-center gap-4 max-w-md mx-auto py-6">
-        {/* Top - AI Clients grid alongside Chat Window, same size */}
-        <div className="flex w-full gap-3">
-          <div className="flex-1">
-            <AIClientsGrid delay={0.1} />
-          </div>
-          <div className="flex-1">
-            <ProductWithChat delay={0.2} />
-          </div>
-        </div>
+        {/* Top - Distributed AI clients and chat apps across the org */}
+        <DistributedClients delay={0.1} />
 
         {/* Connection: Chat → Backend */}
         <PulseConnector delay={1.4} disabled={prefersReducedMotion ?? false} />
