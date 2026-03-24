@@ -9,6 +9,8 @@ import (
 
 var ErrMissingGrants = oops.E(oops.CodeUnexpected, nil, "access grants missing from context")
 
+var ErrNoChecks = oops.E(oops.CodeInvariantViolation, nil, "at least one access check is required")
+
 func InvalidCheck(scope Scope) error {
 	return &InvalidCheckError{
 		Scope: scope,

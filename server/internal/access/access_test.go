@@ -165,6 +165,94 @@ func TestRequire_rejectsEmptyResourceID(t *testing.T) {
 	require.Equal(t, oops.CodeInvariantViolation, shareableErr.Code)
 }
 
+func TestRequireAny_allowsWhenAnyCheckMatches(t *testing.T) {
+	t.Parallel()
+
+	grants := &Grants{
+		rows: []grantRow{{
+			Scope:    ScopeMCPConnect,
+			Resource: "tool:b",
+		}},
+	}
+
+	ctx := GrantsToContext(context.Background(), grants)
+
+	err := RequireAny(ctx,
+		Check{Scope: ScopeMCPConnect, ResourceID: "mcp:a"},
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool:b"},
+	)
+	require.NoError(t, err)
+}
+
+func TestRequireAny_deniesWhenNoCheckMatches(t *testing.T) {
+	t.Parallel()
+
+	grants := &Grants{
+		rows: []grantRow{{
+			Scope:    ScopeMCPConnect,
+			Resource: "tool:c",
+		}},
+	}
+
+	ctx := GrantsToContext(context.Background(), grants)
+
+	err := RequireAny(ctx,
+		Check{Scope: ScopeMCPConnect, ResourceID: "mcp:a"},
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool:b"},
+	)
+	require.Error(t, err)
+
+	var deniedErr *AccessDeniedError
+	require.True(t, errors.As(err, &deniedErr))
+	require.Equal(t, ScopeMCPConnect, deniedErr.Scope)
+	require.Equal(t, "mcp:a", deniedErr.ResourceID)
+}
+
+func TestRequireAny_requiresGrantsInContext(t *testing.T) {
+	t.Parallel()
+
+	err := RequireAny(context.Background(), Check{Scope: ScopeMCPConnect, ResourceID: "tool:b"})
+	require.Error(t, err)
+
+	var shareableErr *oops.ShareableError
+	require.True(t, errors.As(err, &shareableErr))
+	require.Equal(t, oops.CodeUnexpected, shareableErr.Code)
+}
+
+func TestRequireAny_rejectsEmptyResourceID(t *testing.T) {
+	t.Parallel()
+
+	grants := &Grants{
+		rows: []grantRow{{
+			Scope:    ScopeMCPConnect,
+			Resource: "tool:b",
+		}},
+	}
+
+	ctx := GrantsToContext(context.Background(), grants)
+
+	err := RequireAny(ctx,
+		Check{Scope: ScopeMCPConnect, ResourceID: "mcp:a"},
+		Check{Scope: ScopeMCPConnect, ResourceID: ""},
+	)
+	require.Error(t, err)
+
+	var invalidErr *InvalidCheckError
+	require.True(t, errors.As(err, &invalidErr))
+	require.Equal(t, ScopeMCPConnect, invalidErr.Scope)
+}
+
+func TestRequireAny_requiresAtLeastOneCheck(t *testing.T) {
+	t.Parallel()
+
+	err := RequireAny(context.Background())
+	require.ErrorIs(t, err, ErrNoChecks)
+
+	var shareableErr *oops.ShareableError
+	require.True(t, errors.As(err, &shareableErr))
+	require.Equal(t, oops.CodeInvariantViolation, shareableErr.Code)
+}
+
 func TestFilter_returnsAllToolsForWildcardMCPGrant(t *testing.T) {
 	t.Parallel()
 

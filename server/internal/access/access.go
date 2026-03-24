@@ -28,6 +28,32 @@ func Require(ctx context.Context, checks ...Check) error {
 	return nil
 }
 
+// RequireAny enforces that at least one check is satisfied by the grants in context.
+func RequireAny(ctx context.Context, checks ...Check) error {
+	if len(checks) == 0 {
+		return ErrNoChecks
+	}
+
+	grants, ok := GrantsFromContext(ctx)
+	if !ok || grants == nil {
+		return ErrMissingGrants
+	}
+
+	for _, check := range checks {
+		if check.ResourceID == "" {
+			return InvalidCheck(check.Scope)
+		}
+	}
+
+	for _, check := range checks {
+		if grants.hasAccess(check.Scope, check.ResourceID) {
+			return nil
+		}
+	}
+
+	return Denied(checks[0].Scope, checks[0].ResourceID)
+}
+
 // Filter returns the subset of candidate resource IDs allowed for the scope.
 // For example, if listTools returns [toolA, toolB, toolC] and the caller only
 // has mcp:connect grants for toolA and toolB, Filter returns [toolA, toolB].
