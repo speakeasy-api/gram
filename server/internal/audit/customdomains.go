@@ -42,7 +42,7 @@ func LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, event LogCustomD
 		Action: string(action),
 
 		SubjectID:          event.CustomDomainURN.ID.String(),
-		SubjectType:        "custom_domain",
+		SubjectType:        string(subjectTypeCustomDomain),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.DomainName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
@@ -84,7 +84,7 @@ func LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, event LogCustomD
 		Action: string(action),
 
 		SubjectID:          event.CustomDomainURN.ID.String(),
-		SubjectType:        "custom_domain",
+		SubjectType:        string(subjectTypeCustomDomain),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.DomainName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

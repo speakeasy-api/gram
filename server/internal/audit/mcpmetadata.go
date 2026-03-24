@@ -57,7 +57,7 @@ func LogMCPMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event LogMCPMetad
 		Action: string(action),
 
 		SubjectID:          event.ToolsetURN.ID.String(),
-		SubjectType:        "toolset",
+		SubjectType:        string(subjectTypeToolset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 

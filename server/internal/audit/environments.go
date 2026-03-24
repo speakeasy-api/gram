@@ -44,7 +44,7 @@ func LogEnvironmentCreate(ctx context.Context, dbtx repo.DBTX, event LogEnvironm
 		Action: string(action),
 
 		SubjectID:          event.EnvironmentURN.ID.String(),
-		SubjectType:        "environment",
+		SubjectType:        string(subjectTypeEnvironment),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.EnvironmentName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.EnvironmentSlug),
 
@@ -100,7 +100,7 @@ func LogEnvironmentUpdate(ctx context.Context, dbtx repo.DBTX, event LogEnvironm
 		Action: string(action),
 
 		SubjectID:          event.EnvironmentURN.ID.String(),
-		SubjectType:        "environment",
+		SubjectType:        string(subjectTypeEnvironment),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.EnvironmentName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.EnvironmentSlug),
 

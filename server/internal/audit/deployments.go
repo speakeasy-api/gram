@@ -44,7 +44,7 @@ func LogDeploymentCreate(ctx context.Context, dbtx repo.DBTX, event LogDeploymen
 		Action: string(action),
 
 		SubjectID:          event.DeploymentURN.ID.String(),
-		SubjectType:        "deployment",
+		SubjectType:        string(subjectTypeDeployment),
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
@@ -99,7 +99,7 @@ func LogDeploymentEvolve(ctx context.Context, dbtx repo.DBTX, event LogDeploymen
 		Action: string(action),
 
 		SubjectID:          event.DeploymentURN.ID.String(),
-		SubjectType:        "deployment",
+		SubjectType:        string(subjectTypeDeployment),
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
@@ -150,7 +150,7 @@ func LogDeploymentRedeploy(ctx context.Context, dbtx repo.DBTX, event LogDeploym
 		Action: string(action),
 
 		SubjectID:          event.DeploymentURN.ID.String(),
-		SubjectType:        "deployment",
+		SubjectType:        string(subjectTypeDeployment),
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

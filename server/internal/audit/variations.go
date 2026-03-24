@@ -64,7 +64,7 @@ func LogVariationUpdateGlobal(ctx context.Context, dbtx repo.DBTX, event LogVari
 		Action: string(action),
 
 		SubjectID:          event.VariationURN.ID.String(),
-		SubjectType:        "variation",
+		SubjectType:        string(subjectTypeVariation),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.SourceToolURN.Name),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
@@ -113,7 +113,7 @@ func LogVariationDeleteGlobal(ctx context.Context, dbtx repo.DBTX, event LogVari
 		Action: string(action),
 
 		SubjectID:          event.VariationURN.ID.String(),
-		SubjectType:        "variation",
+		SubjectType:        string(subjectTypeVariation),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.SourceToolURN.Name),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

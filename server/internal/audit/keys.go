@@ -52,7 +52,7 @@ func LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyCreateEvent) 
 		Action: string(action),
 
 		SubjectID:          event.KeyURN.ID.String(),
-		SubjectType:        "api_key",
+		SubjectType:        string(subjectTypeAPIKey),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.KeyName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
@@ -103,7 +103,7 @@ func LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyRevokeEvent) 
 		Action: string(action),
 
 		SubjectID:          event.KeyURN.ID.String(),
-		SubjectType:        "api_key",
+		SubjectType:        string(subjectTypeAPIKey),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.KeyName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

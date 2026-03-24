@@ -100,7 +100,7 @@ func LogProjectUpdate(ctx context.Context, dbtx repo.DBTX, event LogProjectUpdat
 		Action: string(action),
 
 		SubjectID:          event.ProjectID.String(),
-		SubjectType:        "project",
+		SubjectType:        string(subjectTypeProject),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ProjectName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ProjectSlug),
 
@@ -142,7 +142,7 @@ func LogProjectDelete(ctx context.Context, dbtx repo.DBTX, event LogProjectDelet
 		Action: string(action),
 
 		SubjectID:          event.ProjectID.String(),
-		SubjectType:        "project",
+		SubjectType:        string(subjectTypeProject),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ProjectName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ProjectSlug),
 

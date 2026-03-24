@@ -49,7 +49,7 @@ func LogAssetCreate(ctx context.Context, dbtx repo.DBTX, event LogAssetCreateEve
 		Action: string(action),
 
 		SubjectID:          event.AssetURN.ID.String(),
-		SubjectType:        "asset",
+		SubjectType:        string(subjectTypeAsset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.AssetName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

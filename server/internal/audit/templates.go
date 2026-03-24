@@ -51,7 +51,7 @@ func LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event LogTemplateCre
 		Action: string(action),
 
 		SubjectID:          event.TemplateID.String(),
-		SubjectType:        "template",
+		SubjectType:        string(subjectTypeTemplate),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.TemplateName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
@@ -101,7 +101,7 @@ func LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event LogTemplateUpd
 		Action: string(action),
 
 		SubjectID:          event.TemplateID.String(),
-		SubjectType:        "template",
+		SubjectType:        string(subjectTypeTemplate),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.TemplateName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
@@ -151,7 +151,7 @@ func LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event LogTemplateDel
 		Action: string(action),
 
 		SubjectID:          event.TemplateID.String(),
-		SubjectType:        "template",
+		SubjectType:        string(subjectTypeTemplate),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.TemplateName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

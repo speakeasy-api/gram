@@ -49,7 +49,7 @@ func LogToolsetCreate(ctx context.Context, dbtx repo.DBTX, event LogToolsetCreat
 		Action: string(action),
 
 		SubjectID:          event.ToolsetURN.ID.String(),
-		SubjectType:        "toolset",
+		SubjectType:        string(subjectTypeToolset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 
@@ -113,7 +113,7 @@ func LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdat
 		Action: string(action),
 
 		SubjectID:          event.ToolsetURN.ID.String(),
-		SubjectType:        "toolset",
+		SubjectType:        string(subjectTypeToolset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 
@@ -156,7 +156,7 @@ func LogToolsetDelete(ctx context.Context, dbtx repo.DBTX, event LogToolsetDelet
 		Action: string(action),
 
 		SubjectID:          event.ToolsetURN.ID.String(),
-		SubjectType:        "toolset",
+		SubjectType:        string(subjectTypeToolset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 
@@ -213,7 +213,7 @@ func LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DBTX, event Lo
 		Action: string(action),
 
 		SubjectID:          event.ToolsetURN.ID.String(),
-		SubjectType:        "toolset",
+		SubjectType:        string(subjectTypeToolset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 
@@ -270,7 +270,7 @@ func LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DBTX, event Lo
 		Action: string(action),
 
 		SubjectID:          event.ToolsetURN.ID.String(),
-		SubjectType:        "toolset",
+		SubjectType:        string(subjectTypeToolset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 
@@ -327,7 +327,7 @@ func LogToolsetAttachOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogTo
 		Action: string(action),
 
 		SubjectID:          event.ToolsetURN.ID.String(),
-		SubjectType:        "toolset",
+		SubjectType:        string(subjectTypeToolset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 
@@ -384,7 +384,7 @@ func LogToolsetDetachOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogTo
 		Action: string(action),
 
 		SubjectID:          event.ToolsetURN.ID.String(),
-		SubjectType:        "toolset",
+		SubjectType:        string(subjectTypeToolset),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 
