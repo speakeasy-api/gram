@@ -3,7 +3,9 @@
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
+import { createServer } from "node:http";
 import crypto from "node:crypto";
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -79,12 +81,91 @@ async function authenticateViaMockIDP(serverURL: string): Promise<string> {
   if (!location) {
     throw new Error("Mock IDP login did not return a redirect");
   }
-  const code = new URL(location).searchParams.get("code");
-  if (!code) {
-    throw new Error("Mock IDP login redirect did not contain a code");
+
+  // Check if the redirect contains a code (mock mode) or points elsewhere (OIDC mode).
+  const redirectUrl = new URL(location);
+  const code = redirectUrl.searchParams.get("code");
+
+  if (code) {
+    // Mock mode: the IDP returned a code directly.
+    return exchangeCodeWithServer(serverURL, code);
   }
 
-  // Step 2: Call the server's callback endpoint with the code to create a session.
+  // OIDC mode: the IDP redirected to an external provider (e.g. WorkOS).
+  // We need a browser-based flow to complete authentication.
+  log.info("OIDC mode detected — opening browser for authentication...");
+  return authenticateViaBrowser(serverURL, idpAddress);
+}
+
+/**
+ * Opens a browser for the user to complete OIDC authentication.
+ * Starts a temporary local HTTP server to capture the redirect code.
+ */
+async function authenticateViaBrowser(
+  serverURL: string,
+  idpAddress: string,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const url = new URL(req.url!, `http://localhost`);
+      const code = url.searchParams.get("code");
+
+      if (!code) {
+        res.writeHead(400, { "Content-Type": "text/html" });
+        res.end("<h1>Error</h1><p>No code received. Please try again.</p>");
+        return;
+      }
+
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(
+        "<h1>Authenticated!</h1><p>You can close this tab and return to the terminal.</p>",
+      );
+
+      server.close();
+
+      exchangeCodeWithServer(serverURL, code).then(resolve).catch(reject);
+    });
+
+    // Listen on a random available port
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") {
+        reject(new Error("Failed to start local callback server"));
+        return;
+      }
+      const callbackUrl = `http://127.0.0.1:${addr.port}/callback`;
+      const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=${encodeURIComponent(callbackUrl)}`;
+
+      // Open the browser
+      const openCmd =
+        process.platform === "darwin"
+          ? "open"
+          : process.platform === "win32"
+            ? "start"
+            : "xdg-open";
+      exec(`${openCmd} '${loginURL}'`, (err) => {
+        if (err) {
+          log.warn(
+            `Could not open browser automatically. Please visit:\n${loginURL}`,
+          );
+        }
+      });
+    });
+
+    // Timeout after 2 minutes (unref so it doesn't block exit)
+    const timeout = setTimeout(() => {
+      server.close();
+      reject(new Error("Authentication timed out after 2 minutes"));
+    }, 120_000);
+    timeout.unref();
+  });
+}
+
+/** Exchange an auth code with the Gram server's callback endpoint. */
+async function exchangeCodeWithServer(
+  serverURL: string,
+  code: string,
+): Promise<string> {
   const callbackURL = `${serverURL}/rpc/auth.callback?code=${encodeURIComponent(code)}`;
   const callbackRes = await fetch(callbackURL, { redirect: "manual" });
   const sessionToken = callbackRes.headers.get("gram-session");
@@ -93,7 +174,6 @@ async function authenticateViaMockIDP(serverURL: string): Promise<string> {
       `Server callback did not return a session (status=${callbackRes.status})`,
     );
   }
-
   return sessionToken;
 }
 
