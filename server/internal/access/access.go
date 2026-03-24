@@ -10,14 +10,18 @@ type Check struct {
 
 // Require enforces that every check is satisfied by the grants in context.
 func Require(ctx context.Context, checks ...Check) error {
+	if len(checks) == 0 {
+		return ErrNoChecks
+	}
+
 	grants, ok := GrantsFromContext(ctx)
 	if !ok || grants == nil {
 		return ErrMissingGrants
 	}
 
 	for _, check := range checks {
-		if check.ResourceID == "" {
-			return InvalidCheck(check.Scope)
+		if err := validateCheck(check); err != nil {
+			return err
 		}
 
 		if !grants.hasAccess(check.Scope, check.ResourceID) {
@@ -40,8 +44,8 @@ func RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	for _, check := range checks {
-		if check.ResourceID == "" {
-			return InvalidCheck(check.Scope)
+		if err := validateCheck(check); err != nil {
+			return err
 		}
 	}
 
@@ -55,8 +59,6 @@ func RequireAny(ctx context.Context, checks ...Check) error {
 }
 
 // Filter returns the subset of candidate resource IDs allowed for the scope.
-// For example, if listTools returns [toolA, toolB, toolC] and the caller only
-// has mcp:connect grants for toolA and toolB, Filter returns [toolA, toolB].
 func Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
 	grants, ok := GrantsFromContext(ctx)
 	if !ok || grants == nil {
@@ -65,8 +67,8 @@ func Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, e
 
 	allowed := make([]string, 0, len(resourceIDs))
 	for _, resourceID := range resourceIDs {
-		if resourceID == "" {
-			return nil, InvalidCheck(scope)
+		if err := validateCheck(Check{Scope: scope, ResourceID: resourceID}); err != nil {
+			return nil, err
 		}
 
 		if grants.hasAccess(scope, resourceID) {
@@ -75,4 +77,15 @@ func Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, e
 	}
 
 	return allowed, nil
+}
+
+func validateCheck(check Check) error {
+	switch check.ResourceID {
+	case "":
+		return InvalidCheck(check.Scope, check.ResourceID)
+	case WildcardResource:
+		return InvalidCheck(check.Scope, check.ResourceID)
+	default:
+		return nil
+	}
 }

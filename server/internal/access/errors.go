@@ -11,10 +11,16 @@ var ErrMissingGrants = oops.E(oops.CodeUnexpected, nil, "access grants missing f
 
 var ErrNoChecks = oops.E(oops.CodeInvariantViolation, nil, "at least one access check is required")
 
-func InvalidCheck(scope Scope) error {
+func InvalidCheck(scope Scope, resourceID string) error {
+	public := "access check requires resource id for scope %q"
+	if resourceID == WildcardResource {
+		public = "access check requires a specific resource id for scope %q"
+	}
+
 	return &InvalidCheckError{
-		Scope: scope,
-		cause: oops.E(oops.CodeInvariantViolation, nil, "access check requires resource id for scope %q", scope),
+		Scope:      scope,
+		ResourceID: resourceID,
+		cause:      oops.E(oops.CodeInvariantViolation, nil, public, scope),
 	}
 }
 
@@ -33,10 +39,6 @@ type DeniedError struct {
 }
 
 func (e *DeniedError) Error() string {
-	if e.ResourceID == "" {
-		return fmt.Sprintf("access denied for scope %q", e.Scope)
-	}
-
 	return fmt.Sprintf("access denied for scope %q on resource %q", e.Scope, e.ResourceID)
 }
 
@@ -49,11 +51,16 @@ func (e *DeniedError) Is(target error) bool {
 }
 
 type InvalidCheckError struct {
-	Scope Scope
-	cause *oops.ShareableError
+	Scope      Scope
+	ResourceID string
+	cause      *oops.ShareableError
 }
 
 func (e *InvalidCheckError) Error() string {
+	if e.ResourceID == WildcardResource {
+		return fmt.Sprintf("access check for scope %q requires a specific resource id", e.Scope)
+	}
+
 	return fmt.Sprintf("access check for scope %q requires a non-empty resource id", e.Scope)
 }
 
