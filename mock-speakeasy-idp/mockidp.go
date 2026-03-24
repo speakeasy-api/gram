@@ -667,14 +667,16 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Persist the new org to the session so subsequent /validate calls include it.
+	// Capture the slice under the lock to avoid a race with concurrent /validate reads.
 	s.mu.Lock()
 	session.Organizations = append(session.Organizations, newOrg)
+	orgs := session.Organizations
 	s.mu.Unlock()
 
 	log.Printf("[register] [oidc] created org %q for %s", body.OrganizationName, session.User.Email)
 	writeJSON(w, http.StatusOK, validateResponse{
 		User:          session.User,
-		Organizations: session.Organizations,
+		Organizations: orgs,
 	})
 }
 
