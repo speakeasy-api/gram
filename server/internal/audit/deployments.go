@@ -77,7 +77,11 @@ type LogDeploymentEvolveEvent struct {
 func LogDeploymentEvolve(ctx context.Context, dbtx repo.DBTX, event LogDeploymentEvolveEvent) error {
 	action := ActionDeploymentsEvolve
 
-	beforeSnapshot, err := marshalAuditPayload(event.Ancestor)
+	var beforePayload any
+	if event.Ancestor != nil {
+		beforePayload = event.Ancestor
+	}
+	beforeSnapshot, err := marshalAuditPayload(beforePayload)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
 	}
