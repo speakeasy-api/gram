@@ -1,5 +1,6 @@
 package access
 
+// Scope identifies an access capability granted on a resource.
 type Scope string
 
 const (

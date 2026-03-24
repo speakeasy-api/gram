@@ -164,3 +164,114 @@ func TestRequire_rejectsEmptyResourceID(t *testing.T) {
 	require.True(t, errors.As(err, &shareableErr))
 	require.Equal(t, oops.CodeInvariantViolation, shareableErr.Code)
 }
+
+func TestFilter_returnsAllToolsForWildcardMCPGrant(t *testing.T) {
+	t.Parallel()
+
+	grants := &Grants{
+		rows: []grantRow{{
+			Scope:    ScopeMCPConnect,
+			Resource: WildcardResource,
+		}},
+	}
+
+	ctx := GrantsToContext(context.Background(), grants)
+
+	resourceIDs, err := Filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC", "toolD"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"toolA", "toolB", "toolC", "toolD"}, resourceIDs)
+}
+
+func TestFilter_returnsGrantedToolSubsetForMCPList(t *testing.T) {
+	t.Parallel()
+
+	grants := &Grants{
+		rows: []grantRow{
+			{
+				Scope:    ScopeMCPConnect,
+				Resource: "toolA",
+			},
+			{
+				Scope:    ScopeMCPConnect,
+				Resource: "toolB",
+			},
+		},
+	}
+
+	ctx := GrantsToContext(context.Background(), grants)
+
+	resourceIDs, err := Filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC", "toolD"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"toolA", "toolB"}, resourceIDs)
+}
+
+func TestFilter_returnsAllProjectsForWildcardBuildGrant(t *testing.T) {
+	t.Parallel()
+
+	grants := &Grants{
+		rows: []grantRow{{
+			Scope:    ScopeBuildRead,
+			Resource: WildcardResource,
+		}},
+	}
+
+	ctx := GrantsToContext(context.Background(), grants)
+
+	resourceIDs, err := Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj:123", "proj:456"}, resourceIDs)
+}
+
+func TestFilter_returnsOnlyGrantedProjectForProjectList(t *testing.T) {
+	t.Parallel()
+
+	grants := &Grants{
+		rows: []grantRow{{
+			Scope:    ScopeBuildRead,
+			Resource: "proj:123",
+		}},
+	}
+
+	ctx := GrantsToContext(context.Background(), grants)
+
+	resourceIDs, err := Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj:123"}, resourceIDs)
+}
+
+func TestFilter_requiresGrantsInContext(t *testing.T) {
+	t.Parallel()
+
+	resourceIDs, err := Filter(context.Background(), ScopeBuildRead, []string{"proj_alpha"})
+	require.Error(t, err)
+	require.Nil(t, resourceIDs)
+
+	var shareableErr *oops.ShareableError
+	require.True(t, errors.As(err, &shareableErr))
+	require.Equal(t, oops.CodeUnexpected, shareableErr.Code)
+}
+
+func TestFilter_rejectsEmptyResourceID(t *testing.T) {
+	t.Parallel()
+
+	grants := &Grants{
+		rows: []grantRow{{
+			Scope:    ScopeBuildRead,
+			Resource: WildcardResource,
+		}},
+	}
+
+	ctx := GrantsToContext(context.Background(), grants)
+
+	resourceIDs, err := Filter(ctx, ScopeBuildRead, []string{"proj_alpha", ""})
+	require.Error(t, err)
+	require.Nil(t, resourceIDs)
+
+	var invalidErr *InvalidCheckError
+	require.True(t, errors.As(err, &invalidErr))
+	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
+
+	var shareableErr *oops.ShareableError
+	require.True(t, errors.As(err, &shareableErr))
+	require.Equal(t, oops.CodeInvariantViolation, shareableErr.Code)
+}

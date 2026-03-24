@@ -2,6 +2,7 @@ package access
 
 const WildcardResource = "*"
 
+// Grants is the in-memory grant set resolved for a request.
 type Grants struct {
 	rows []grantRow
 }
