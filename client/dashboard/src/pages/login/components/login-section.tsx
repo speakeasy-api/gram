@@ -95,26 +95,36 @@ function BrandGradientBar() {
   );
 }
 
-// Subtle grid lines for texture — brand book light layout pattern
-function GridBackground() {
+// Moving dot background — same pattern as MCP cards, scrolls on hover
+function DotBackground() {
   return (
-    <div
-      className="absolute inset-0 pointer-events-none"
-      style={{
-        backgroundImage:
-          "linear-gradient(to right, #ECECEC 1px, transparent 1px), linear-gradient(to bottom, #ECECEC 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-        opacity: 0.5,
-      }}
-    />
+    <>
+      <style>{`
+        @keyframes login-right-scroll-dots {
+          from { background-position: 0 0; }
+          to { background-position: 64px 64px; }
+        }
+        .login-right-pane:hover .login-right-dots {
+          animation: login-right-scroll-dots 3s linear infinite;
+        }
+      `}</style>
+      <div
+        className="login-right-dots absolute inset-0 pointer-events-none text-muted-foreground/10"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, currentColor 1px, transparent 1px)",
+          backgroundSize: "16px 16px",
+        }}
+      />
+    </>
   );
 }
 
 function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-[#FAFAFA] relative overflow-hidden">
-      {/* Subtle grid texture */}
-      <GridBackground />
+    <div className="login-right-pane flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-[#FAFAFA] relative overflow-hidden">
+      {/* Moving dot background — scrolls on hover */}
+      <DotBackground />
 
       <div className="relative z-10 w-full flex flex-col items-center gap-8 max-w-sm">
         <div className="flex flex-col items-center gap-4">
