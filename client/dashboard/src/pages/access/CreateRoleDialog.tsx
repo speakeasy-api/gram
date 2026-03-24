@@ -11,9 +11,11 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
+import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import { useListMembers } from "@gram/client/react-query/listMembers.js";
 import { invalidateAllListRoles } from "@gram/client/react-query/listRoles.js";
+import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Loader2 } from "lucide-react";
@@ -25,12 +27,23 @@ import type { RoleGrant, Scope } from "./types";
 interface CreateRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editingRole?: Role | null;
+}
+
+function grantsFromRole(role: Role): Record<string, RoleGrant> {
+  const result: Record<string, RoleGrant> = {};
+  for (const g of role.grants) {
+    result[g.scope] = { scope: g.scope, resources: g.resources ?? null };
+  }
+  return result;
 }
 
 export function CreateRoleDialog({
   open,
   onOpenChange,
+  editingRole,
 }: CreateRoleDialogProps) {
+  const isEditing = !!editingRole;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   // Grants keyed by scope slug — presence means the scope is enabled
@@ -41,10 +54,26 @@ export function CreateRoleDialog({
   );
   const [showMembers, setShowMembers] = useState(false);
   const [showPermissions, setShowPermissions] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
   const queryClient = useQueryClient();
   const { data: membersData } = useListMembers();
   const members = membersData?.members ?? [];
+
+  // Pre-populate fields when editing
+  if (editingRole && !initialized) {
+    setName(editingRole.name);
+    setDescription(editingRole.description);
+    setGrants(grantsFromRole(editingRole));
+    const assignedIds = new Set(
+      members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
+    );
+    setSelectedMembers(assignedIds);
+    setInitialized(true);
+  }
+  if (!editingRole && initialized) {
+    setInitialized(false);
+  }
 
   const createRole = useCreateRoleMutation({
     onSuccess: async () => {
@@ -52,6 +81,15 @@ export function CreateRoleDialog({
       handleClose();
     },
   });
+
+  const updateRole = useUpdateRoleMutation({
+    onSuccess: async () => {
+      await invalidateAllListRoles(queryClient);
+      handleClose();
+    },
+  });
+
+  const isMutating = createRole.isPending || updateRole.isPending;
 
   const grantCount = Object.keys(grants).length;
 
@@ -117,24 +155,39 @@ export function CreateRoleDialog({
     });
   };
 
-  const handleCreate = () => {
+  const handleSubmit = () => {
     const sdkGrants = Object.values(grants).map((g) => ({
       scope: g.scope,
       // Local type uses null for unrestricted; SDK uses undefined
       resources: g.resources === null ? undefined : g.resources,
     }));
 
-    createRole.mutate({
-      request: {
-        createRoleForm: {
-          name,
-          description,
-          grants: sdkGrants,
-          memberIds:
-            selectedMembers.size > 0 ? Array.from(selectedMembers) : undefined,
+    if (isEditing) {
+      updateRole.mutate({
+        request: {
+          id: editingRole.id,
+          updateRoleForm: {
+            name,
+            description,
+            grants: sdkGrants,
+          },
         },
-      },
-    });
+      });
+    } else {
+      createRole.mutate({
+        request: {
+          createRoleForm: {
+            name,
+            description,
+            grants: sdkGrants,
+            memberIds:
+              selectedMembers.size > 0
+                ? Array.from(selectedMembers)
+                : undefined,
+          },
+        },
+      });
+    }
   };
 
   const handleClose = () => {
@@ -145,6 +198,7 @@ export function CreateRoleDialog({
     setSelectedMembers(new Set());
     setShowMembers(false);
     setShowPermissions(true);
+    setInitialized(false);
     onOpenChange(false);
   };
 
@@ -155,7 +209,7 @@ export function CreateRoleDialog({
         className="sm:max-w-lg w-full flex flex-col overflow-hidden"
       >
         <SheetHeader>
-          <SheetTitle>Create Role</SheetTitle>
+          <SheetTitle>{isEditing ? "Edit Role" : "Create Role"}</SheetTitle>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-4 space-y-4">
@@ -164,6 +218,7 @@ export function CreateRoleDialog({
             placeholder="e.g., Project Manager"
             required
             autoFocus
+            disabled={editingRole?.isSystem}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -175,6 +230,7 @@ export function CreateRoleDialog({
                 {...props}
                 rows={2}
                 required
+                disabled={editingRole?.isSystem}
                 placeholder="Describe what this role can do..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -390,21 +446,27 @@ export function CreateRoleDialog({
             Cancel
           </Button>
           <Button
-            onClick={handleCreate}
+            onClick={handleSubmit}
             disabled={
               !name.trim() ||
               !description.trim() ||
               grantCount === 0 ||
-              createRole.isPending
+              isMutating
             }
           >
-            {createRole.isPending && (
+            {isMutating && (
               <Button.LeftIcon>
                 <Loader2 className="h-4 w-4 animate-spin" />
               </Button.LeftIcon>
             )}
             <Button.Text>
-              {createRole.isPending ? "Creating…" : "Create Role"}
+              {isMutating
+                ? isEditing
+                  ? "Saving…"
+                  : "Creating…"
+                : isEditing
+                  ? "Save Changes"
+                  : "Create Role"}
             </Button.Text>
           </Button>
         </SheetFooter>

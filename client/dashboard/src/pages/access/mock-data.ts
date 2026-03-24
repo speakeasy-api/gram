@@ -1,4 +1,4 @@
-import type { Member, Role, ScopeDefinition, ScopeGroup } from "./types";
+import type { ScopeDefinition, ScopeGroup } from "./types";
 
 // ---------------------------------------------------------------------------
 // Scope catalogue — from the RFC's 7 system-defined scopes
@@ -63,40 +63,6 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Roles — matching the RFC's default roles + examples
-// ---------------------------------------------------------------------------
-
-const allScopes = SCOPES.map((s) => s.slug);
-
-export const MOCK_ROLES: Role[] = [
-  {
-    id: "role_admin",
-    name: "Admin",
-    description: "Full access to all resources and settings",
-    isSystem: true,
-    grants: allScopes.map((scope) => ({ scope, resources: null })),
-    memberCount: 2,
-    createdAt: "2023-01-15T00:00:00Z",
-    updatedAt: "2023-01-15T00:00:00Z",
-  },
-  {
-    id: "role_member",
-    name: "Member",
-    description: "Read access plus MCP connectivity",
-    isSystem: true,
-    grants: [
-      { scope: "org:read", resources: null },
-      { scope: "build:read", resources: null },
-      { scope: "mcp:read", resources: null },
-      { scope: "mcp:connect", resources: null },
-    ],
-    memberCount: 5,
-    createdAt: "2023-01-15T00:00:00Z",
-    updatedAt: "2023-01-15T00:00:00Z",
-  },
-];
-
-// ---------------------------------------------------------------------------
 // Mock projects and MCP servers for resource pickers
 // ---------------------------------------------------------------------------
 
@@ -111,60 +77,4 @@ export const MOCK_MCP_SERVERS = [
   { id: "mcp_1", name: "payments" },
   { id: "mcp_2", name: "analytics" },
   { id: "mcp_3", name: "notifications" },
-];
-
-// ---------------------------------------------------------------------------
-// Members
-// ---------------------------------------------------------------------------
-
-export const MOCK_MEMBERS: Member[] = [
-  {
-    id: "usr_1",
-    name: "Sarah Chen",
-    email: "sarah@company.com",
-    roleId: "role_admin",
-    joinedAt: "2023-01-15T00:00:00Z",
-  },
-  {
-    id: "usr_2",
-    name: "Alex Johnson",
-    email: "alex@company.com",
-    roleId: "role_admin",
-    joinedAt: "2023-03-22T00:00:00Z",
-  },
-  {
-    id: "usr_3",
-    name: "Maya Patel",
-    email: "maya@company.com",
-    roleId: "role_member",
-    joinedAt: "2023-05-10T00:00:00Z",
-  },
-  {
-    id: "usr_4",
-    name: "James Wilson",
-    email: "james@company.com",
-    roleId: "role_member",
-    joinedAt: "2023-06-01T00:00:00Z",
-  },
-  {
-    id: "usr_5",
-    name: "Emma Davis",
-    email: "emma@company.com",
-    roleId: "role_member",
-    joinedAt: "2023-07-18T00:00:00Z",
-  },
-  {
-    id: "usr_6",
-    name: "Michael Brown",
-    email: "michael@company.com",
-    roleId: "role_member",
-    joinedAt: "2023-08-05T00:00:00Z",
-  },
-  {
-    id: "usr_7",
-    name: "Lisa Wang",
-    email: "lisa@company.com",
-    roleId: "role_member",
-    joinedAt: "2023-09-12T00:00:00Z",
-  },
 ];
