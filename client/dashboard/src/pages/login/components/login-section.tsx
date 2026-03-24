@@ -82,10 +82,41 @@ function GradientButton({
   );
 }
 
+// Full-spectrum RGB gradient — Speakeasy brand signature element
+function BrandGradientBar() {
+  return (
+    <div
+      className="absolute bottom-0 left-0 right-0 h-[6px]"
+      style={{
+        background:
+          "linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%)",
+      }}
+    />
+  );
+}
+
+// Subtle grid lines for texture — brand book light layout pattern
+function GridBackground() {
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        backgroundImage:
+          "linear-gradient(to right, #ECECEC 1px, transparent 1px), linear-gradient(to bottom, #ECECEC 1px, transparent 1px)",
+        backgroundSize: "48px 48px",
+        opacity: 0.5,
+      }}
+    />
+  );
+}
+
 function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white relative">
-      <div className="w-full flex flex-col items-center gap-8 max-w-sm">
+    <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-[#FAFAFA] relative overflow-hidden">
+      {/* Subtle grid texture */}
+      <GridBackground />
+
+      <div className="relative z-10 w-full flex flex-col items-center gap-8 max-w-sm">
         <div className="flex flex-col items-center gap-4">
           <GramLogo
             className="w-[200px] mb-2 dark:!invert-0"
@@ -95,7 +126,9 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             <p>
               Securely scale AI usage across your organisation with Speakeasy.
             </p>
-            <p>Control plane for distribution of MCP, Skills, CLIs and more.</p>
+            <p className="text-[#8B8684]">
+              Control plane for distribution of MCP, Skills, CLIs and more.
+            </p>
           </div>
           <FeatureBadges />
         </div>
@@ -103,7 +136,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      <p className="absolute bottom-6 text-[11px] text-[#8B8684] text-center px-8">
+      <p className="absolute bottom-10 z-10 text-[11px] text-[#8B8684] text-center px-8">
         By continuing, you agree to Speakeasy&apos;s{" "}
         <a
           href="https://www.speakeasy.com/terms-of-service"
@@ -123,6 +156,9 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
           Privacy Policy
         </a>
       </p>
+
+      {/* Brand signature — RGB gradient bar at bottom edge */}
+      <BrandGradientBar />
     </div>
   );
 }
