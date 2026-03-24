@@ -1,5 +1,17 @@
 # server
 
+## 0.30.0
+
+### Minor Changes
+
+- 6265f73: Introduced the audit logs API service and supplementary code to start recording audit logs in other services including new URN types to represent various subjects in Gram.
+
+## 0.29.1
+
+### Patch Changes
+
+- 41d507c: Fixed `GET /rpc/chat.creditUsage` authentication so org-scoped credit usage works correctly for customers with multiple projects, requiring only session auth and no longer allowing chat-session access.
+
 ## 0.29.0
 
 ### Minor Changes

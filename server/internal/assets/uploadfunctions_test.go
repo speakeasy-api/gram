@@ -16,7 +16,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	svc "github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestService_UploadFunctions_Success(t *testing.T) {
@@ -32,6 +37,8 @@ func TestService_UploadFunctions_Success(t *testing.T) {
 	expectedSha256 := hex.EncodeToString(sha[:])
 	contentType := "application/zip"
 	contentLength := int64(len(functionsContent))
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
 
 	result, err := ti.service.UploadFunctions(ctx, &assets.UploadFunctionsForm{
 		ApikeyToken:      nil,
@@ -52,17 +59,22 @@ func TestService_UploadFunctions_Success(t *testing.T) {
 	require.Equal(t, expectedSha256, result.Asset.Sha256)
 	require.NotEmpty(t, result.Asset.CreatedAt)
 	require.NotEmpty(t, result.Asset.UpdatedAt)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestService_UploadFunctions_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestAssetsService(t)
+	ctx := t.Context()
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
 
 	// Create context without auth
-	ctx := t.Context()
-
-	_, err := ti.service.UploadFunctions(ctx, &assets.UploadFunctionsForm{
+	_, err = ti.service.UploadFunctions(ctx, &assets.UploadFunctionsForm{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -73,6 +85,10 @@ func TestService_UploadFunctions_Unauthorized(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestService_UploadFunctions_NoContent(t *testing.T) {
@@ -147,6 +163,8 @@ func TestService_UploadFunctions_DuplicateAsset(t *testing.T) {
 
 	contentType := "application/zip"
 	contentLength := int64(len(functionsContent))
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
 
 	// Upload the first functions package
 	result1, err := ti.service.UploadFunctions(ctx, &assets.UploadFunctionsForm{
@@ -158,6 +176,9 @@ func TestService_UploadFunctions_DuplicateAsset(t *testing.T) {
 	}, io.NopCloser(bytes.NewBuffer(functionsContent)))
 	require.NoError(t, err)
 	require.NotNil(t, result1)
+	afterFirstCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterFirstCount)
 
 	// Upload the same functions package again
 	result2, err := ti.service.UploadFunctions(ctx, &assets.UploadFunctionsForm{
@@ -173,6 +194,10 @@ func TestService_UploadFunctions_DuplicateAsset(t *testing.T) {
 	// Should return the same asset
 	require.Equal(t, result1.Asset.ID, result2.Asset.ID)
 	require.Equal(t, result1.Asset.Sha256, result2.Asset.Sha256)
+
+	afterSecondCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, afterFirstCount, afterSecondCount)
 }
 
 func TestService_UploadFunctions_InvalidContentType(t *testing.T) {
@@ -283,6 +308,61 @@ func TestService_UploadFunctions_NoEntryPoint(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 	require.Contains(t, oopsErr.Error(), "no entry point found")
+}
+
+func TestService_UploadFunctions_AuditLogMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAssetsService(t)
+	fixturePath := filepath.Clean(filepath.Join("fixtures", "valid-js.zip"))
+	functionsContent, err := os.ReadFile(fixturePath)
+	require.NoError(t, err)
+	contentType := "application/zip"
+	contentLength := int64(len(functionsContent))
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+
+	result, err := ti.service.UploadFunctions(ctx, &assets.UploadFunctionsForm{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      contentType,
+		ContentLength:    contentLength,
+	}, io.NopCloser(bytes.NewBuffer(functionsContent)))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	assetID, err := uuid.Parse(result.Asset.ID)
+	require.NoError(t, err)
+
+	storedAsset, err := ti.repo.GetProjectAsset(ctx, repo.GetProjectAssetParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        assetID,
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionAssetCreate), record.Action)
+	require.Equal(t, "asset", record.SubjectType)
+	require.Equal(t, storedAsset.Name, record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, urn.NewAsset(urn.AssetKindFunction, assetID).String(), metadata["asset_urn"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 // The assets service deduplicates uploads based on SHA256 hash of the content.

@@ -3,8 +3,10 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
+import { Access } from "./access.js";
 import { Agentworkflows } from "./agentworkflows.js";
 import { Assets } from "./assets.js";
+import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
@@ -31,9 +33,19 @@ import { Usage } from "./usage.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
+  private _access?: Access;
+  get access(): Access {
+    return (this._access ??= new Access(this._options));
+  }
+
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));
+  }
+
+  private _auditlogs?: Auditlogs;
+  get auditlogs(): Auditlogs {
+    return (this._auditlogs ??= new Auditlogs(this._options));
   }
 
   private _auth?: Auth;

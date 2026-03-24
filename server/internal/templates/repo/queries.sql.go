@@ -73,11 +73,13 @@ func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) 
 	return id, err
 }
 
-const deleteTemplateByID = `-- name: DeleteTemplateByID :exec
+const deleteTemplateByID = `-- name: DeleteTemplateByID :one
 UPDATE prompt_templates
 SET deleted_at = clock_timestamp()
 WHERE project_id = $1
   AND id = $2
+  AND deleted IS FALSE
+RETURNING id, name, tool_urn
 `
 
 type DeleteTemplateByIDParams struct {
@@ -85,16 +87,26 @@ type DeleteTemplateByIDParams struct {
 	ID        uuid.UUID
 }
 
-func (q *Queries) DeleteTemplateByID(ctx context.Context, arg DeleteTemplateByIDParams) error {
-	_, err := q.db.Exec(ctx, deleteTemplateByID, arg.ProjectID, arg.ID)
-	return err
+type DeleteTemplateByIDRow struct {
+	ID      uuid.UUID
+	Name    string
+	ToolUrn urn.Tool
 }
 
-const deleteTemplateByName = `-- name: DeleteTemplateByName :exec
+func (q *Queries) DeleteTemplateByID(ctx context.Context, arg DeleteTemplateByIDParams) (DeleteTemplateByIDRow, error) {
+	row := q.db.QueryRow(ctx, deleteTemplateByID, arg.ProjectID, arg.ID)
+	var i DeleteTemplateByIDRow
+	err := row.Scan(&i.ID, &i.Name, &i.ToolUrn)
+	return i, err
+}
+
+const deleteTemplateByName = `-- name: DeleteTemplateByName :one
 UPDATE prompt_templates
 SET deleted_at = clock_timestamp()
 WHERE project_id = $1
   AND name = $2
+  AND deleted IS FALSE
+RETURNING id, name, tool_urn
 `
 
 type DeleteTemplateByNameParams struct {
@@ -102,9 +114,17 @@ type DeleteTemplateByNameParams struct {
 	Name      string
 }
 
-func (q *Queries) DeleteTemplateByName(ctx context.Context, arg DeleteTemplateByNameParams) error {
-	_, err := q.db.Exec(ctx, deleteTemplateByName, arg.ProjectID, arg.Name)
-	return err
+type DeleteTemplateByNameRow struct {
+	ID      uuid.UUID
+	Name    string
+	ToolUrn urn.Tool
+}
+
+func (q *Queries) DeleteTemplateByName(ctx context.Context, arg DeleteTemplateByNameParams) (DeleteTemplateByNameRow, error) {
+	row := q.db.QueryRow(ctx, deleteTemplateByName, arg.ProjectID, arg.Name)
+	var i DeleteTemplateByNameRow
+	err := row.Scan(&i.ID, &i.Name, &i.ToolUrn)
+	return i, err
 }
 
 const findPromptTemplatesByUrns = `-- name: FindPromptTemplatesByUrns :many

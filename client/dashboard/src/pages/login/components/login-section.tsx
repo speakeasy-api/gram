@@ -38,9 +38,9 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             variant="vertical"
           />
           <p className="text-body-lg text-center dark:text-black">
-            Embed intelligent, performant chat and agents directly into your
-            product. Give users AI that understands your data and takes action.
-            Powered by MCP.
+            AI transformation depends on secure connections to your software
+            systems. Securely scale AI usage across your org with Speakeasy MCP
+            platform
           </p>
         </div>
 

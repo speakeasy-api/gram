@@ -1,5 +1,20 @@
 # dashboard
 
+## 0.34.2
+
+### Patch Changes
+
+- 045f51a: Replace hardcoded org slugs in MCP URLs for the built in MCP logs server
+
+## 0.34.1
+
+### Patch Changes
+
+- 558c158: Show coming soon placeholder on CLIs page
+- 41d507c: Fixed `GET /rpc/chat.creditUsage` authentication so org-scoped credit usage works correctly for customers with multiple projects, requiring only session auth and no longer allowing chat-session access.
+- Updated dependencies [7ef727b]
+  - @gram/client@0.28.5
+
 ## 0.34.0
 
 ### Minor Changes

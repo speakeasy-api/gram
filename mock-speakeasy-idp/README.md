@@ -74,7 +74,7 @@ All variables and their defaults:
 
 The secret key used to authenticate server-to-IDP calls is controlled by `SPEAKEASY_SECRET_KEY` (default: `test-secret`), which must match between the server and the mock IDP.
 
-After changing env vars, restart the mock IDP process in mprocs (select it and press `r`).
+After changing env vars, restart the mock IDP process in [madprocs](https://github.com/speakeasy-api/madprocs) (select it and press `r`).
 
 ## Endpoints
 

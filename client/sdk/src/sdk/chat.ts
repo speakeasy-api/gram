@@ -18,7 +18,7 @@ export class Chat extends ClientSDK {
    * creditUsage chat
    *
    * @remarks
-   * Load a chat by its ID
+   * Get the total number of chat credits and usage for the current billing period
    */
   async creditUsage(
     request?: operations.CreditUsageRequest | undefined,

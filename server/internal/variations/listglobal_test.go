@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/variations"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -16,6 +17,8 @@ func TestVariationsService_ListGlobal_Success(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	result, err := ti.service.ListGlobal(ctx, &gen.ListGlobalPayload{
 		ApikeyToken:      nil,
@@ -26,6 +29,10 @@ func TestVariationsService_ListGlobal_Success(t *testing.T) {
 	require.NotNil(t, result, "result should not be nil")
 	require.NotNil(t, result.Variations, "variations should not be nil")
 	require.IsType(t, []*types.ToolVariation{}, result.Variations, "variations should be of correct type")
+
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_ListGlobal_EmptyList(t *testing.T) {

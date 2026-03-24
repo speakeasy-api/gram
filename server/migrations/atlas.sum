@@ -1,4 +1,4 @@
-h1:gEhYjaUcm8dIWybAE06UkPTN53KkSbAH7bKwcHJXsJ0=
+h1:w9mgsnS3ZQCt7z6AbkReFlxRtj235Qvr3VB83i/cPgE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -115,3 +115,4 @@ h1:gEhYjaUcm8dIWybAE06UkPTN53KkSbAH7bKwcHJXsJ0=
 20260310212348_slack_app_registrations.sql h1:RqVogi5e4YZLe9b14dNKrtzxag0YGZL7FlB1Rn/PwcY=
 20260311194019_hooks_server_display_names.sql h1:W3W8A7k5bclXWIVCnKFy8FmqMQUD732OyaThBdQC/Gw=
 20260313114450_add-rbac-principal-grants.sql h1:/64PAl8wpTAoEw50B/LI2En39aEqejByaVvu+NzQUJ8=
+20260323172742_add-audit-logs.sql h1:OezpgwnRyQgJ2V8bptbf+VcckW5+HQ7+2g0FeOlzuoY=

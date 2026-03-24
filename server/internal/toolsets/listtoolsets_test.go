@@ -8,6 +8,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -48,6 +49,8 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// List toolsets
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
@@ -67,12 +70,17 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 	}
 	require.True(t, toolsetIDs[toolset1.ID])
 	require.True(t, toolsetIDs[toolset2.ID])
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_ListToolsets_EmptyList(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// List toolsets when none exist
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
@@ -82,28 +90,38 @@ func TestToolsetsService_ListToolsets_EmptyList(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Empty(t, result.Toolsets)
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_ListToolsets_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCount(t.Context(), ti.conn)
+	require.NoError(t, err)
 
 	// Test with context that has no auth context
 	ctx := t.Context()
 
-	_, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+	_, err = ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_ListToolsets_NoProjectID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// Create auth context without project ID
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -111,12 +129,15 @@ func TestToolsetsService_ListToolsets_NoProjectID(t *testing.T) {
 	authCtx.ProjectID = nil
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+	_, err = ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
@@ -135,6 +156,8 @@ func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// List toolsets and verify details
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
@@ -152,6 +175,9 @@ func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
 	require.Empty(t, toolset.Tools)
 	require.NotNil(t, toolset.CreatedAt)
 	require.NotNil(t, toolset.UpdatedAt)
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_ListToolsets_WithResources(t *testing.T) {
@@ -184,6 +210,8 @@ func TestToolsetsService_ListToolsets_WithResources(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// List toolsets and verify resources are populated
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
@@ -207,6 +235,9 @@ func TestToolsetsService_ListToolsets_WithResources(t *testing.T) {
 	require.True(t, resourceNames["user_guide"], "user_guide resource should be present")
 	require.True(t, resourceNames["api_reference"], "api_reference resource should be present")
 	require.True(t, resourceNames["data_source"], "data_source resource should be present")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_ListToolsets_MixedToolsAndResources(t *testing.T) {
@@ -248,6 +279,8 @@ func TestToolsetsService_ListToolsets_MixedToolsAndResources(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// List toolsets and verify both tools and resources are populated
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
@@ -266,6 +299,9 @@ func TestToolsetsService_ListToolsets_MixedToolsAndResources(t *testing.T) {
 
 	// Note: Tools field may or may not be populated depending on tool type
 	// The important check is that ToolUrns are present
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_ListToolsets_MultipleToolsetsWithResources(t *testing.T) {
@@ -305,6 +341,8 @@ func TestToolsetsService_ListToolsets_MultipleToolsetsWithResources(t *testing.T
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// List toolsets
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
@@ -330,4 +368,7 @@ func TestToolsetsService_ListToolsets_MultipleToolsetsWithResources(t *testing.T
 	require.NotNil(t, ts2)
 	require.Len(t, ts2.Resources, 1, "second toolset should have 1 resource")
 	require.Len(t, ts2.ResourceUrns, 1, "second toolset should have 1 resource URN")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }

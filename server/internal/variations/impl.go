@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/variations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -109,9 +110,12 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger
+	projectID := *authCtx.ProjectID
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error beginning transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error beginning transaction").Log(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -119,25 +123,51 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 
 	tx := s.repo.WithTx(dbtx)
 
-	groupID, err := tx.PokeGlobalToolVariationsGroup(ctx, *authCtx.ProjectID)
+	groupID, err := tx.PokeGlobalToolVariationsGroup(ctx, projectID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, err, "error poking global tool variations group").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error poking global tool variations group").Log(ctx, logger)
 	}
 
 	if errors.Is(err, sql.ErrNoRows) || groupID == uuid.Nil {
 		groupID, err = tx.InitGlobalToolVariationsGroup(ctx, repo.InitGlobalToolVariationsGroupParams{
-			ProjectID:   *authCtx.ProjectID,
+			ProjectID:   projectID,
 			Name:        "Global tool variations",
 			Description: conv.ToPGTextEmpty(""),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error initializing global tool variations group").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error initializing global tool variations group").Log(ctx, logger)
 		}
 	}
 
 	srcToolUrn, err := urn.ParseTool(payload.SrcToolUrn)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid source tool urn").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid source tool urn").Log(ctx, logger)
+	}
+
+	existingVariations, err := tx.FindGlobalVariationsByToolURNs(ctx, repo.FindGlobalVariationsByToolURNsParams{
+		ProjectID: projectID,
+		ToolUrns:  []string{srcToolUrn.String()},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error finding existing global tool variations").Log(ctx, logger)
+	}
+
+	var existing *types.ToolVariation
+	switch len(existingVariations) {
+	case 0:
+		// No existing variation, will create new one.
+	case 1:
+		existing = toVariation(existingVariations[0])
+	default:
+		// Multiple existing variations with the same source tool urn is unexpected, will log a warning and update the first one.
+		existing = toVariation(existingVariations[0])
+		logger.WarnContext(
+			ctx,
+			"multiple active global tool variations found with same source tool urn",
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogToolURN(srcToolUrn.String()),
+		)
 	}
 
 	row, err := tx.UpsertToolVariation(ctx, repo.UpsertToolVariationParams{
@@ -158,33 +188,30 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		OpenWorldHint:   conv.PtrToPGBool(payload.OpenWorldHint),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error upserting global tool variation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error upserting global tool variation").Log(ctx, logger)
+	}
+
+	result := toVariation(row)
+
+	if err := audit.LogVariationUpdateGlobal(ctx, dbtx, audit.LogVariationUpdateGlobalEvent{
+		OrganizationID:          authCtx.ActiveOrganizationID,
+		ProjectID:               uuid.NullUUID{UUID: projectID, Valid: true},
+		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:        authCtx.Email,
+		ActorSlug:               nil,
+		VariationURN:            urn.NewVariation(urn.VariationKindGlobal, row.ID),
+		SourceToolURN:           srcToolUrn,
+		VariationSnapshotBefore: existing,
+		VariationSnapshotAfter:  result,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating global tool variation audit log").Log(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").Log(ctx, logger)
 	}
 
-	return &gen.UpsertGlobalToolVariationResult{
-		Variation: &types.ToolVariation{
-			ID:              row.ID.String(),
-			GroupID:         row.GroupID.String(),
-			SrcToolUrn:      row.SrcToolUrn.String(),
-			SrcToolName:     row.SrcToolName,
-			Confirm:         conv.FromPGText[string](row.Confirm),
-			ConfirmPrompt:   conv.FromPGText[string](row.ConfirmPrompt),
-			Name:            conv.FromPGText[string](row.Name),
-			Description:     conv.FromPGText[string](row.Description),
-			Summarizer:      conv.FromPGText[string](row.Summarizer),
-			Title:           conv.FromPGText[string](row.Title),
-			ReadOnlyHint:    conv.FromPGBool[bool](row.ReadOnlyHint),
-			DestructiveHint: conv.FromPGBool[bool](row.DestructiveHint),
-			IdempotentHint:  conv.FromPGBool[bool](row.IdempotentHint),
-			OpenWorldHint:   conv.FromPGBool[bool](row.OpenWorldHint),
-			CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
-		},
-	}, nil
+	return &gen.UpsertGlobalToolVariationResult{Variation: result}, nil
 }
 
 func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPayload) (*gen.DeleteGlobalToolVariationResult, error) {
@@ -198,7 +225,15 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 		return nil, oops.E(oops.CodeInvalid, err, "invalid variation ID").Log(ctx, s.logger)
 	}
 
-	row, err := s.repo.DeleteGlobalToolVariation(ctx, repo.DeleteGlobalToolVariationParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing variations").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	vr := s.repo.WithTx(dbtx)
+
+	row, err := vr.DeleteGlobalToolVariation(ctx, repo.DeleteGlobalToolVariationParams{
 		ID:        variationID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -209,7 +244,44 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error deleting global tool variation").Log(ctx, s.logger)
 	}
 
+	if err := audit.LogVariationDeleteGlobal(ctx, dbtx, audit.LogVariationDeleteGlobalEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		VariationURN:     urn.NewVariation(urn.VariationKindGlobal, row.ID),
+		SourceToolURN:    row.SrcToolUrn,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating global tool variation deletion audit log").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving variation deletion").Log(ctx, s.logger)
+	}
+
 	return &gen.DeleteGlobalToolVariationResult{
-		VariationID: row.String(),
+		VariationID: row.ID.String(),
 	}, nil
+}
+
+func toVariation(row repo.ToolVariation) *types.ToolVariation {
+	return &types.ToolVariation{
+		ID:              row.ID.String(),
+		GroupID:         row.GroupID.String(),
+		SrcToolUrn:      row.SrcToolUrn.String(),
+		SrcToolName:     row.SrcToolName,
+		Confirm:         conv.FromPGText[string](row.Confirm),
+		ConfirmPrompt:   conv.FromPGText[string](row.ConfirmPrompt),
+		Name:            conv.FromPGText[string](row.Name),
+		Description:     conv.FromPGText[string](row.Description),
+		Summarizer:      conv.FromPGText[string](row.Summarizer),
+		Title:           conv.FromPGText[string](row.Title),
+		ReadOnlyHint:    conv.FromPGBool[bool](row.ReadOnlyHint),
+		DestructiveHint: conv.FromPGBool[bool](row.DestructiveHint),
+		IdempotentHint:  conv.FromPGBool[bool](row.IdempotentHint),
+		OpenWorldHint:   conv.FromPGBool[bool](row.OpenWorldHint),
+		CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
+	}
 }

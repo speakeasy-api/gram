@@ -24,6 +24,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	variationsTypes "github.com/speakeasy-api/gram/server/gen/variations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -131,7 +132,6 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		ToolsHint:    payload.ToolsHint,
 		ToolUrnsHint: payload.ToolUrnsHint,
 	})
-
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.As(err, &pgErr):
@@ -141,6 +141,21 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		return nil, oops.E(oops.CodeUnexpected, err, "unexpected database error").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create template").Log(ctx, logger)
+	}
+
+	if err := audit.LogTemplateCreate(ctx, dbtx, audit.LogTemplateCreateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		TemplateID:   id,
+		TemplateURN:  toolURN,
+		TemplateName: string(payload.Name),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save template create audit log").Log(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -237,6 +252,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		}
 	}
 
+	updated := false
 	newid, err := tr.UpdateTemplate(ctx, repo.UpdateTemplateParams{
 		ProjectID:    uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
 		ID:           uuid.NullUUID{UUID: id, Valid: id != uuid.Nil},
@@ -251,11 +267,29 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	})
 	switch {
 	case err == nil:
+		updated = true
 		nextid = newid
 	case errors.Is(err, sql.ErrNoRows):
 		// No change, so we can use the existing id
 	default:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").Log(ctx, logger)
+	}
+
+	if updated {
+		if err := audit.LogTemplateUpdate(ctx, dbtx, audit.LogTemplateUpdateEvent{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+
+			TemplateID:   nextid,
+			TemplateURN:  toolURN,
+			TemplateName: current.Name,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to save template update audit log").Log(ctx, logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -285,7 +319,26 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger
 	projectID := *authCtx.ProjectID
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to access templates").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
+	auditEntry := &struct {
+		id      uuid.UUID
+		name    string
+		toolURN *urn.Tool
+	}{
+		id:      uuid.Nil,
+		name:    "",
+		toolURN: nil,
+	}
 
 	if payload.ID != nil && *payload.ID != "" {
 		id, err := uuid.Parse(*payload.ID)
@@ -297,23 +350,60 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 			return oops.E(oops.CodeBadRequest, nil, "invalid template id")
 		}
 
-		if err := s.repo.DeleteTemplateByID(ctx, repo.DeleteTemplateByIDParams{
+		deleted, err := tr.DeleteTemplateByID(ctx, repo.DeleteTemplateByIDParams{
 			ProjectID: projectID,
 			ID:        id,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to delete template").Log(ctx, s.logger)
+		})
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "failed to delete template by id").Log(ctx, logger)
 		}
+
+		auditEntry.id = deleted.ID
+		auditEntry.name = deleted.Name
+		auditEntry.toolURN = &deleted.ToolUrn
 	} else if payload.Name != nil && *payload.Name != "" {
 		name := *payload.Name
 
-		if err := s.repo.DeleteTemplateByName(ctx, repo.DeleteTemplateByNameParams{
+		deleted, err := tr.DeleteTemplateByName(ctx, repo.DeleteTemplateByNameParams{
 			ProjectID: projectID,
 			Name:      name,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to delete template").Log(ctx, s.logger)
+		})
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "failed to delete template by name").Log(ctx, logger)
 		}
+
+		auditEntry.id = deleted.ID
+		auditEntry.name = deleted.Name
+		auditEntry.toolURN = &deleted.ToolUrn
 	} else {
 		return oops.E(oops.CodeBadRequest, nil, "either id or name must be provided")
+	}
+
+	if auditEntry.id != uuid.Nil {
+		if err := audit.LogTemplateDelete(ctx, dbtx, audit.LogTemplateDeleteEvent{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+
+			TemplateID:   auditEntry.id,
+			TemplateURN:  *auditEntry.toolURN,
+			TemplateName: auditEntry.name,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to save template delete audit log").Log(ctx, logger)
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to save template deletion").Log(ctx, logger)
 	}
 
 	return nil

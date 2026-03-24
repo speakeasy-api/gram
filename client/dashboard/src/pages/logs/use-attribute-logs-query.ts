@@ -138,8 +138,8 @@ export function useAttributeLogsQuery({
             filters: [
               {
                 path: "gram.event.source",
-                operator: "eq",
-                values: ["tool_call"],
+                operator: "in",
+                values: ["tool_call", "function"],
               },
               ...toSdkFilters(logFilters),
             ],

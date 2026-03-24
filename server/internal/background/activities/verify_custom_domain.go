@@ -13,28 +13,33 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type VerifyCustomDomain struct {
-	domains             *customdomainsRepo.Queries
+	db                  *pgxpool.Pool
 	logger              *slog.Logger
 	expectedTargetCNAME string
 }
 
 func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, expectedTargetCNAME string) *VerifyCustomDomain {
 	return &VerifyCustomDomain{
-		domains:             customdomainsRepo.New(db),
+		db:                  db,
 		logger:              logger,
 		expectedTargetCNAME: expectedTargetCNAME,
 	}
 }
 
 type VerifyCustomDomainArgs struct {
-	OrgID  string
-	Domain string
+	OrgID         string
+	Domain        string
+	CreatedBy     urn.Principal
+	CreatedByName *string
 }
 
 var prohibitedDomainRoots = []string{"getgram.ai", "speakeasy.com", "speakeasyapi.dev"}
@@ -52,10 +57,18 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		}
 	}
 
-	domain, err := d.domains.GetCustomDomainByDomain(ctx, args.Domain)
+	dbtx, err := d.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to access custom domains").Log(ctx, d.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	cdr := customdomainsRepo.New(dbtx)
+
+	domain, err := cdr.GetCustomDomainByDomain(ctx, args.Domain)
 	if err != nil {
 		// Create a new unverified domain entry
-		domain, err = d.domains.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		domain, err = cdr.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
 			OrganizationID: args.OrgID,
 			Domain:         args.Domain,
 			IngressName:    conv.PtrToPGText(nil),
@@ -64,6 +77,21 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error creating custom domain").Log(ctx, d.logger)
 		}
+
+		if err := audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
+			OrganizationID:   args.OrgID,
+			Actor:            args.CreatedBy,
+			ActorDisplayName: args.CreatedByName,
+			ActorSlug:        nil,
+			CustomDomainURN:  urn.NewCustomDomain(domain.ID),
+			DomainName:       domain.Domain,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to create custom domain creation audit log").Log(ctx, d.logger)
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to save custom domain creation").Log(ctx, d.logger)
 	}
 
 	if domain.OrganizationID != args.OrgID {

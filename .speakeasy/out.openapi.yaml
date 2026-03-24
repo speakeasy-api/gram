@@ -6,6 +6,383 @@ info:
 servers:
   - url: https://app.getgram.ai
 paths:
+  /rpc/access.listGrants:
+    get:
+      description: List all permissions in your organization, optionally filtered to a specific user or role.
+      operationId: listGrants
+      parameters:
+        - allowEmptyValue: true
+          description: Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit to return all grants.
+          in: query
+          name: principal_urn
+          schema:
+            description: Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit to return all grants.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListGrantsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listGrants access
+      tags:
+        - access
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: Grants
+  /rpc/access.removeGrants:
+    post:
+      description: Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).
+      operationId: removeGrants
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantsForm'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: removeGrants access
+      tags:
+        - access
+      x-speakeasy-name-override: remove
+      x-speakeasy-react-hook:
+        name: RemoveGrants
+  /rpc/access.removePrincipalGrants:
+    post:
+      description: Revoke all permissions for a specific user or role.
+      operationId: removePrincipalGrants
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemovePrincipalGrantsRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: removePrincipalGrants access
+      tags:
+        - access
+      x-speakeasy-name-override: removePrincipal
+      x-speakeasy-react-hook:
+        name: RemovePrincipalGrants
+  /rpc/access.upsertGrants:
+    post:
+      description: Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.
+      operationId: upsertGrants
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantsForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpsertGrantsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: upsertGrants access
+      tags:
+        - access
+      x-speakeasy-name-override: upsert
+      x-speakeasy-react-hook:
+        name: UpsertGrants
   /rpc/assets.createSignedChatAttachmentURL:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -1354,6 +1731,118 @@ paths:
             schema:
               type: string
               format: binary
+  /rpc/auditlogs.list:
+    get:
+      description: List audit logs across organization and projects.
+      operationId: listAuditLogs
+      parameters:
+        - allowEmptyValue: true
+          description: The cursor for paginating through audit logs.
+          in: query
+          name: cursor
+          schema:
+            description: The cursor for paginating through audit logs.
+            type: string
+        - allowEmptyValue: true
+          description: Project slug to filter audit logs to a specific project.
+          in: query
+          name: project_slug
+          schema:
+            description: Project slug to filter audit logs to a specific project.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAuditLogsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: list auditlogs
+      tags:
+        - auditlogs
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: AuditLogs
   /rpc/auth.callback:
     get:
       description: Handles the authentication callback.
@@ -1900,7 +2389,7 @@ paths:
         name: SwitchScopes
   /rpc/chat.creditUsage:
     get:
-      description: Load a chat by its ID
+      description: Get the total number of chat credits and usage for the current billing period
       operationId: creditUsage
       parameters:
         - allowEmptyValue: true
@@ -1909,20 +2398,6 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
             type: string
       responses:
         "200":
@@ -1986,9 +2461,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - chat_sessions_token_header_Gram-Chat-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: creditUsage chat
       tags:
@@ -13085,6 +13558,46 @@ components:
         - content_length
         - created_at
         - updated_at
+    AuditLog:
+      type: object
+      properties:
+        action:
+          type: string
+        actor_display_name:
+          type: string
+        actor_id:
+          type: string
+        actor_slug:
+          type: string
+        actor_type:
+          type: string
+        after_snapshot: {}
+        before_snapshot: {}
+        created_at:
+          type: string
+          description: The creation date of the audit log.
+          format: date-time
+        id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        subject_display_name:
+          type: string
+        subject_id:
+          type: string
+        subject_slug:
+          type: string
+        subject_type:
+          type: string
+      required:
+        - id
+        - actor_id
+        - actor_type
+        - action
+        - subject_id
+        - subject_type
+        - created_at
     BaseResourceAttributes:
       type: object
       properties:
@@ -15444,6 +15957,79 @@ components:
       required:
         - logs_enabled
         - tool_io_logs_enabled
+    Grant:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When this permission was granted.
+          format: date-time
+        id:
+          type: string
+          description: Unique identifier of this permission.
+          format: uuid
+        organization_id:
+          type: string
+          description: The organization this permission belongs to.
+        principal_type:
+          type: string
+          description: Whether the principal is a user or a role.
+        principal_urn:
+          type: string
+          description: The user or role that holds this permission (e.g. "user:user_abc", "role:admin").
+        resource:
+          type: string
+          description: The resource this permission applies to. "*" means all resources.
+        scope:
+          type: string
+          description: The action this permission allows (e.g. "build:read", "mcp:connect").
+        updated_at:
+          type: string
+          description: When this permission was last updated.
+          format: date-time
+      description: A permission record giving a user or role the ability to perform an action on a resource.
+      required:
+        - id
+        - organization_id
+        - principal_urn
+        - principal_type
+        - scope
+        - resource
+        - created_at
+        - updated_at
+    GrantEntry:
+      type: object
+      properties:
+        principal_urn:
+          type: string
+          description: The user or role this permission entry applies to (e.g. "user:user_abc", "role:admin").
+        resource:
+          type: string
+          description: The resource this permission applies to. Use "*" for unrestricted access.
+          maxLength: 260
+        scope:
+          type: string
+          description: The action being permitted (e.g. "build:read", "mcp:connect").
+          minLength: 3
+          maxLength: 60
+      description: A permission entry identifying who it applies to, what action it covers, and which resource it targets.
+      required:
+        - principal_urn
+        - scope
+        - resource
+    GrantsForm:
+      type: object
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrantEntry'
+          description: The permissions to process.
+          minItems: 1
+          maxItems: 100
+      description: A batch of permission entries to apply to access-management operations.
+      required:
+        - grants
     HTTPToolDefinition:
       type: object
       properties:
@@ -15842,6 +16428,28 @@ components:
       description: Result of listing distinct attribute keys
       required:
         - keys
+    ListAuditLogsForm:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: The cursor for paginating through audit logs.
+        project_slug:
+          type: string
+          description: Project slug to filter audit logs to a specific project.
+    ListAuditLogsResult:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+          description: List of audit logs
+        next_cursor:
+          type: string
+          description: The cursor to be used for the next page of results.
+      required:
+        - logs
     ListCatalogResponseBody:
       type: object
       properties:
@@ -15946,6 +16554,16 @@ components:
       description: Result of listing filter options
       required:
         - options
+    ListGrantsResult:
+      type: object
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Grant'
+          description: The permissions in your organization.
+      required:
+        - grants
     ListIntegrationsForm:
       type: object
       properties:
@@ -17190,6 +17808,14 @@ components:
           description: The name of the org to register
       required:
         - org_name
+    RemovePrincipalGrantsRequestBody:
+      type: object
+      properties:
+        principal_urn:
+          type: string
+          description: The user or role to revoke all permissions from (e.g. "user:user_abc", "role:admin").
+      required:
+        - principal_urn
     RenderTemplateByIDRequestBody:
       type: object
       properties:
@@ -19141,6 +19767,16 @@ components:
           $ref: '#/components/schemas/ToolVariation'
       required:
         - variation
+    UpsertGrantsResult:
+      type: object
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Grant'
+          description: The permissions that were created or already existed.
+      required:
+        - grants
     UpsertRequestBody:
       type: object
       properties:
@@ -19468,10 +20104,14 @@ components:
       name: Gram-Session
       in: header
 tags:
+  - name: access
+    description: Manage access permissions for users and roles across your organization.
   - name: agentworkflows
     description: OpenAI Responses API compatible endpoint for running agent workflows.
   - name: assets
     description: Manages assets used by Gram projects.
+  - name: auditlogs
+    description: Manages audit logs in Gram.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: chat

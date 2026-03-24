@@ -206,6 +206,27 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     },
   });
 
+  const handleDetachEnvironment = () => {
+    setMcpMetadataMutation.mutate(
+      {
+        request: {
+          setMcpMetadataRequestBody: {
+            ...mcpMetadata,
+            toolsetSlug: toolset.slug,
+            // Omitting defaultEnvironmentId causes the upsert to write NULL, detaching the environment
+            defaultEnvironmentId: undefined,
+            environmentConfigs: mcpMetadata?.environmentConfigs || [],
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success("Detached environment from this MCP server");
+        },
+      },
+    );
+  };
+
   const handleCreateEnvironment = () => {
     if (!newEnvironmentName.trim()) {
       toast.error("Environment name is required");
@@ -250,13 +271,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       setMcpMetadataMutation.mutate({
         request: {
           setMcpMetadataRequestBody: {
+            ...mcpMetadata,
             toolsetSlug: toolset.slug,
             defaultEnvironmentId:
               mcpMetadata?.defaultEnvironmentId || attachedEnvironment.id,
             environmentConfigs: newEntries,
-            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-            instructions: mcpMetadata?.instructions,
-            logoAssetId: mcpMetadata?.logoAssetId,
           },
         },
       });
@@ -316,13 +335,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           setMcpMetadataMutation.mutate({
             request: {
               setMcpMetadataRequestBody: {
+                ...mcpMetadata,
                 toolsetSlug: toolset.slug,
                 defaultEnvironmentId:
                   mcpMetadata?.defaultEnvironmentId || targetEnv.id,
                 environmentConfigs: [...existingEntries, ...newConfigEntries],
-                externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-                instructions: mcpMetadata?.instructions,
-                logoAssetId: mcpMetadata?.logoAssetId,
               },
             },
           });
@@ -573,12 +590,10 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       await setMcpMetadataMutation.mutateAsync({
         request: {
           setMcpMetadataRequestBody: {
+            ...mcpMetadata,
             toolsetSlug: toolset.slug,
             defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
             environmentConfigs: environmentConfigsToSave,
-            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-            instructions: mcpMetadata?.instructions,
-            logoAssetId: mcpMetadata?.logoAssetId,
           },
         },
       });
@@ -654,12 +669,10 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setMcpMetadataMutation.mutate({
       request: {
         setMcpMetadataRequestBody: {
+          ...mcpMetadata,
           toolsetSlug: toolset.slug,
           defaultEnvironmentId: targetEnv.id,
           environmentConfigs: mcpMetadata?.environmentConfigs || [],
-          externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-          instructions: mcpMetadata?.instructions,
-          logoAssetId: mcpMetadata?.logoAssetId,
         },
       },
     });
@@ -740,6 +753,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
               onSaveAll={handleSaveAll}
               onCancelAll={handleCancelAll}
               onSetDefaultEnvironment={handleSetDefaultEnvironment}
+              onDetachEnvironment={handleDetachEnvironment}
               onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
             />
             {envVars.map((envVar, index) => (
