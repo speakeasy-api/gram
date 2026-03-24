@@ -70,6 +70,7 @@ export * from "./listallowedorigins.js";
 export * from "./listapikeys.js";
 export * from "./listassets.js";
 export * from "./listattributekeys.js";
+export * from "./listauditlogs.js";
 export * from "./listchats.js";
 export * from "./listchatswithresolutions.js";
 export * from "./listdeployments.js";
