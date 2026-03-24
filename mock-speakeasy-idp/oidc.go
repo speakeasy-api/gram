@@ -19,7 +19,6 @@ type OidcConfig struct {
 	Issuer       string
 	ClientID     string
 	ClientSecret string
-	Scopes       string
 	ExternalURL  string
 }
 

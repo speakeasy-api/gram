@@ -106,7 +106,6 @@ func DefaultConfig() Config {
 			Issuer:       envStrNoUnset("OIDC_ISSUER"),
 			ClientID:     envStrNoUnset("OIDC_CLIENT_ID"),
 			ClientSecret: envStrNoUnset("OIDC_CLIENT_SECRET"),
-			Scopes:       envStr("OIDC_SCOPES", "openid email profile"),
 			ExternalURL:  envStr("OIDC_EXTERNAL_URL", ""),
 		},
 	}
@@ -667,10 +666,15 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist the new org to the session so subsequent /validate calls include it.
+	s.mu.Lock()
+	session.Organizations = append(session.Organizations, newOrg)
+	s.mu.Unlock()
+
 	log.Printf("[register] [oidc] created org %q for %s", body.OrganizationName, session.User.Email)
 	writeJSON(w, http.StatusOK, validateResponse{
 		User:          session.User,
-		Organizations: append(session.Organizations, newOrg),
+		Organizations: session.Organizations,
 	})
 }
 
