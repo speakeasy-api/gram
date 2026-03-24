@@ -9,6 +9,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -19,6 +21,8 @@ func TestToolsetsService_UpdateToolset_Success(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create deployment with petstore fixture
 	dep := createPetstoreDeployment(t, ctx, ti)
@@ -73,12 +77,18 @@ func TestToolsetsService_UpdateToolset_Success(t *testing.T) {
 		toolUrns[i] = baseTool.ToolUrn
 	}
 	require.ElementsMatch(t, []string{tools[1].ToolUrn.String(), tools[2].ToolUrn.String()}, toolUrns)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create deployment with petstore fixture
 	dep := createPetstoreDeployment(t, ctx, ti)
@@ -125,12 +135,18 @@ func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 	baseTool, err := conv.ToBaseTool(result.Tools[0])
 	require.NoError(t, err)
 	require.Equal(t, tools[0].ToolUrn.String(), baseTool.ToolUrn)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_WithEnvironment(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create an environment first
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -138,7 +154,7 @@ func TestToolsetsService_UpdateToolset_WithEnvironment(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	envRepo := environmentsRepo.New(ti.conn)
-	_, err := envRepo.CreateEnvironment(ctx, environmentsRepo.CreateEnvironmentParams{
+	_, err = envRepo.CreateEnvironment(ctx, environmentsRepo.CreateEnvironmentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		Name:           "Update Test Environment",
@@ -178,14 +194,20 @@ func TestToolsetsService_UpdateToolset_WithEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "update-test-env", string(*result.DefaultEnvironmentSlug))
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
-	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   "non-existent-slug",
 		Name:                   new("New Name"),
@@ -202,12 +224,18 @@ func TestToolsetsService_UpdateToolset_NotFound(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "toolset not found")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_InvalidEnvironment(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create a toolset first
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
@@ -239,17 +267,23 @@ func TestToolsetsService_UpdateToolset_InvalidEnvironment(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error finding environment")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Test with context that has no auth context
 	ctx := t.Context()
 
-	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   "some-slug",
 		Name:                   new("New Name"),
@@ -266,12 +300,18 @@ func TestToolsetsService_UpdateToolset_Unauthorized(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_NoProjectID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create auth context without project ID
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -279,7 +319,7 @@ func TestToolsetsService_UpdateToolset_NoProjectID(t *testing.T) {
 	authCtx.ProjectID = nil
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   "some-slug",
 		Name:                   new("New Name"),
@@ -296,12 +336,18 @@ func TestToolsetsService_UpdateToolset_NoProjectID(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_EmptyToolUrns(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create deployment with petstore fixture
 	dep := createPetstoreDeployment(t, ctx, ti)
@@ -344,12 +390,18 @@ func TestToolsetsService_UpdateToolset_EmptyToolUrns(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Empty(t, result.Tools, "should have no tools after clearing")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create a toolset first
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
@@ -382,12 +434,18 @@ func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, *result.McpEnabled)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_ResourceUrnsNil_PreservesResources(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create deployment with functions that include resources
 	dep := createFunctionsDeploymentWithResources(t, ctx, ti)
@@ -448,12 +506,18 @@ func TestToolsetsService_UpdateToolset_ResourceUrnsNil_PreservesResources(t *tes
 	require.True(t, resourceNames["user_guide"])
 	require.True(t, resourceNames["api_reference"])
 	require.True(t, resourceNames["data_source"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestToolsetsService_UpdateToolset_ResourceUrnsEmpty_RemovesResources(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
 
 	// Create deployment with functions that include resources
 	dep := createFunctionsDeploymentWithResources(t, ctx, ti)
@@ -503,4 +567,164 @@ func TestToolsetsService_UpdateToolset_ResourceUrnsEmpty_RemovesResources(t *tes
 	require.Equal(t, "Updated Without Resources", result.Name)
 	require.Empty(t, result.Resources, "resources should be removed when ResourceUrns is empty array")
 	require.Empty(t, result.ResourceUrns, "resource URNs should be removed when ResourceUrns is empty array")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_UpdateToolset_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Audit Update Original",
+		Description:            new("Before description"),
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   new("Audit Update Renamed"),
+		Description:            new("After description"),
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            nil,
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionToolsetUpdate), record.Action)
+	require.Equal(t, "toolset", record.SubjectType)
+	require.Equal(t, updated.Name, record.SubjectDisplay)
+	require.Equal(t, string(updated.Slug), record.SubjectSlug)
+	require.NotNil(t, record.BeforeSnapshot)
+	require.NotNil(t, record.AfterSnapshot)
+
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, created.Name, beforeSnapshot["Name"])
+	require.Equal(t, updated.Name, afterSnapshot["Name"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_UpdateToolset_ClearsExternalOAuth_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withProAccount(t, ctx)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Audit Clear External OAuth Toolset")
+	attached, err := ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		Slug:         toolset.Slug,
+		ExternalOauthServer: &types.ExternalOAuthServerForm{
+			Slug: types.Slug("update-detach-external-oauth"),
+			Metadata: map[string]any{
+				"issuer":         "https://example.com",
+				"token_endpoint": "https://example.com/token",
+			},
+		},
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, attached)
+	require.NotNil(t, attached.ExternalOauthServer)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
+	require.NoError(t, err)
+
+	private := false
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Slug:                   toolset.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            &private,
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.Nil(t, updated.ExternalOauthServer)
+	require.NotNil(t, updated.McpIsPublic)
+	require.False(t, *updated.McpIsPublic)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionToolsetDetachExternalOAuth), record.Action)
+	require.Equal(t, "toolset", record.SubjectType)
+	require.Equal(t, updated.Name, record.SubjectDisplay)
+	require.Equal(t, string(updated.Slug), record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, attached.ExternalOauthServer.ID, metadata["external_oauth_server_id"])
+	require.Equal(t, string(attached.ExternalOauthServer.Slug), metadata["external_oauth_server_slug"])
+	require.InDelta(t, updated.ToolsetVersion, metadata["toolset_version_after"], 0)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_UpdateToolset_NotFound_NoAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   "missing-toolset",
+		Name:                   new("Should Fail"),
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            nil,
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "toolset not found")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
