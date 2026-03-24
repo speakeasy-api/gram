@@ -565,14 +565,20 @@ func (s *server) handleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgNames := make([]string, 0, len(session.Organizations))
-	for _, o := range session.Organizations {
+	// Snapshot orgs under the lock to avoid a race with handleRegister writes.
+	s.mu.Lock()
+	orgs := make([]organization, len(session.Organizations))
+	copy(orgs, session.Organizations)
+	s.mu.Unlock()
+
+	orgNames := make([]string, 0, len(orgs))
+	for _, o := range orgs {
 		orgNames = append(orgNames, o.Name)
 	}
 	log.Printf("[validate] [oidc] → %s orgs=[%s]", session.User.Email, strings.Join(orgNames, ", "))
 	writeJSON(w, http.StatusOK, validateResponse{
 		User:          session.User,
-		Organizations: session.Organizations,
+		Organizations: orgs,
 	})
 }
 
