@@ -32,7 +32,7 @@ const FEATURE_BADGES = ["Build", "Secure", "Observe", "Distribute"];
 
 function FeatureBadges({ labels = FEATURE_BADGES }: { labels?: string[] }) {
   return (
-    <div className="flex flex-wrap justify-center gap-2">
+    <div className="flex justify-center gap-2">
       {labels.map((label) => (
         <span
           key={label}
@@ -85,7 +85,7 @@ function GradientButton({
 function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white relative">
-      <div className="w-full flex flex-col items-center gap-8 max-w-xs">
+      <div className="w-full flex flex-col items-center gap-8 max-w-sm">
         <div className="flex flex-col items-center gap-4">
           <GramLogo
             className="w-[200px] mb-2 dark:!invert-0"
