@@ -14,6 +14,8 @@ import (
 	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -298,6 +300,97 @@ func TestDeploymentsService_Redeploy_WithPackages(t *testing.T) {
 	// Verify package details
 	require.Equal(t, "test-package", redeployed.Deployment.Packages[0].Name, "unexpected package name")
 	require.Equal(t, ver.Version.Semver, redeployed.Deployment.Packages[0].Version, "unexpected package version")
+}
+
+func TestDeploymentsService_Redeploy_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-audit-redeploy-initial",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "initial-doc",
+				Slug:    "initial-doc",
+			},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsRedeploy)
+	require.NoError(t, err)
+
+	redeployed, err := ti.service.Redeploy(ctx, &gen.RedeployPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     initial.Deployment.ID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, redeployed)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDeploymentsRedeploy)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionDeploymentsRedeploy), record.Action)
+	require.Equal(t, "deployment", record.SubjectType)
+	require.Empty(t, record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "deployment:"+initial.Deployment.ID, metadata["source_deployment_id"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsRedeploy)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestDeploymentsService_Redeploy_AuditLog_NotWrittenOnFailure(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsRedeploy)
+	require.NoError(t, err)
+
+	result, err := ti.service.Redeploy(ctx, &gen.RedeployPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     "invalid-uuid",
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsRedeploy)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestDeploymentsService_Redeploy_Validation(t *testing.T) {
