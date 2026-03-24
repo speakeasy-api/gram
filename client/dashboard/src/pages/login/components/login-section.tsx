@@ -100,6 +100,27 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
 
         {children}
       </div>
+
+      <p className="absolute bottom-6 text-[11px] text-[#8B8684] text-center px-8">
+        By continuing, you agree to Speakeasy&apos;s{" "}
+        <a
+          href="https://www.speakeasy.com/terms-of-service"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-slate-600"
+        >
+          Terms of Service
+        </a>{" "}
+        and{" "}
+        <a
+          href="https://www.speakeasy.com/privacy-policy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-slate-600"
+        >
+          Privacy Policy
+        </a>
+      </p>
     </div>
   );
 }
