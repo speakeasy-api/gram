@@ -162,7 +162,9 @@ func processSecurity(
 							return false
 						}
 					}
-					setHeader("Authorization", formatForBearer(token))
+					if token != "" {
+						setHeader("Authorization", formatForBearer(token))
+					}
 				}
 			}
 		default:
