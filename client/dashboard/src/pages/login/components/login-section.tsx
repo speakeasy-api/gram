@@ -122,7 +122,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             className="w-[200px] mb-2 dark:!invert-0"
             variant="vertical"
           />
-          <div className="flex flex-col gap-2 text-body-lg text-center dark:text-black">
+          <div className="flex flex-col gap-2 text-sm text-center dark:text-black">
             <p>
               Securely scale AI usage across your organisation with Speakeasy.
             </p>
