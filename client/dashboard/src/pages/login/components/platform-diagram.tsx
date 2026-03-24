@@ -156,25 +156,25 @@ function ClientCluster({
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.3, delay }}
       className="relative"
-      style={{ paddingTop: (count - 1) * 4, paddingLeft: (count - 1) * 4 }}
+      style={{ paddingTop: (count - 1) * 5, paddingLeft: (count - 1) * 5 }}
     >
       {/* Shadow cards behind — stacked offset */}
       {Array.from({ length: count - 1 }).map((_, i) => (
         <div
           key={i}
-          className="absolute bg-white border border-slate-200 rounded shadow-sm"
+          className="absolute bg-white border border-slate-200 rounded-lg shadow-sm"
           style={{
-            top: i * 4,
-            left: i * 4,
-            right: (count - 1 - i) * 4,
-            bottom: (count - 1 - i) * 4,
+            top: i * 5,
+            left: i * 5,
+            right: (count - 1 - i) * 5,
+            bottom: (count - 1 - i) * 5,
           }}
         />
       ))}
       {/* Front card */}
-      <div className="relative flex items-center gap-1.5 px-2 py-1.5 bg-white border border-slate-200 rounded shadow-sm">
-        <Icon className="w-4 h-4" />
-        <span className="text-[9px] font-medium text-slate-600">{name}</span>
+      <div className="relative flex items-center gap-2 px-3 py-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
+        <Icon className="w-5 h-5" />
+        <span className="text-xs font-medium text-slate-600">{name}</span>
       </div>
     </motion.div>
   );
@@ -232,10 +232,10 @@ function DistributedClients({ delay }: { delay: number }) {
     >
       {/* Left: AI Client clusters */}
       <div className="flex-1">
-        <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-2">
+        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-3">
           AI Clients
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-4">
           <ClientCluster
             icon={ClaudeIcon}
             name="Claude"
@@ -265,7 +265,7 @@ function DistributedClients({ delay }: { delay: number }) {
 
       {/* Right: Chat apps */}
       <div className="flex-1">
-        <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-2">
+        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-3">
           Chat Apps
         </div>
         <div className="flex flex-col gap-1.5">
