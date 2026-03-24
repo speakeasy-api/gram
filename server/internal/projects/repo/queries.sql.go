@@ -49,16 +49,18 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 	return i, err
 }
 
-const deleteProject = `-- name: DeleteProject :exec
+const deleteProject = `-- name: DeleteProject :one
 UPDATE projects
 SET deleted_at = clock_timestamp()
 WHERE id = $1
   AND deleted_at IS NULL
+RETURNING id
 `
 
-func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteProject, id)
-	return err
+func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteProject, id)
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
