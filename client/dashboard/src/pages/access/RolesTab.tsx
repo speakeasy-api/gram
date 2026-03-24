@@ -7,6 +7,7 @@ import {
   useListRoles,
 } from "@gram/client/react-query/listRoles.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Button,
   Column,
@@ -128,8 +129,8 @@ export function RolesTab() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Type muted>Loading roles...</Type>
+        <div className="mt-4">
+          <SkeletonTable />
         </div>
       ) : (
         <Table

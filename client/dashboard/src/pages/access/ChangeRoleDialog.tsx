@@ -1,5 +1,5 @@
 import { AnyField } from "@/components/moon/any-field";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Select,
@@ -77,6 +77,9 @@ export function ChangeRoleDialog({
           <div className="space-y-4 py-2">
             <div className="flex items-center gap-3 rounded-md border border-border p-3">
               <Avatar className="h-9 w-9">
+                {member.photoUrl && (
+                  <AvatarImage src={member.photoUrl} alt={member.name} />
+                )}
                 <AvatarFallback className="text-sm">
                   {member.name
                     .split(" ")
@@ -98,6 +101,7 @@ export function ChangeRoleDialog({
 
             <AnyField
               label="Role"
+              optionality="hidden"
               render={() => (
                 <Select value={currentRole} onValueChange={setSelectedRole}>
                   <SelectTrigger>

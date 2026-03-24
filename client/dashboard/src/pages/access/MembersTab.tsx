@@ -1,10 +1,11 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { useListMembers } from "@gram/client/react-query/listMembers.js";
 import { useListRoles } from "@gram/client/react-query/listRoles.js";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
@@ -38,6 +39,9 @@ export function MembersTab() {
       render: (member) => (
         <div className="flex items-center gap-3">
           <Avatar className="h-8 w-8">
+            {member.photoUrl && (
+              <AvatarImage src={member.photoUrl} alt={member.name} />
+            )}
             <AvatarFallback className="text-xs">
               {getInitials(member.name)}
             </AvatarFallback>
@@ -100,8 +104,8 @@ export function MembersTab() {
       </div>
 
       {membersLoading ? (
-        <div className="flex justify-center py-12">
-          <Type muted>Loading members...</Type>
+        <div className="mt-4">
+          <SkeletonTable />
         </div>
       ) : (
         <Table
