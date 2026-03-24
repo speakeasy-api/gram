@@ -100,6 +100,7 @@ mise run install
 echo -e "\n⏳ Setting up API keys and secrets"
 interactive_only mise run zero:github
 interactive_only mise run zero:openrouter
+interactive_only mise run zero:workos
 interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
