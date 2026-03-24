@@ -165,8 +165,8 @@ export function CreateRoleDialog({
     if (isEditing) {
       updateRole.mutate({
         request: {
-          id: editingRole.id,
           updateRoleForm: {
+            id: editingRole.id,
             name,
             description,
             grants: sdkGrants,
