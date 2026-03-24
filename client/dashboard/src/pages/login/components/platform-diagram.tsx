@@ -66,48 +66,72 @@ const JiraLogo = () => (
 );
 
 // AI Client logos
-const _CursorLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-    <path d="M5 3l14 9-14 9V3z" />
-  </svg>
-);
-
-const _ClaudeCodeLogo = () => (
+const ClaudeLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4">
-    <circle cx="12" cy="12" r="10" fill="#D97706" />
     <path
-      d="M8 12h8M12 8v8"
-      stroke="#fff"
-      strokeWidth="2"
-      strokeLinecap="round"
+      d="M16.009 8.754a.622.622 0 0 0-.372-.098.584.584 0 0 0-.348.137L12 11.787 8.711 8.793a.584.584 0 0 0-.348-.137.622.622 0 0 0-.372.098.59.59 0 0 0-.228.311.624.624 0 0 0 .029.388l3.87 8.485a.405.405 0 0 0 .741 0l3.87-8.485a.624.624 0 0 0 .029-.388.59.59 0 0 0-.228-.311h-.065Z"
+      fill="#D97706"
     />
   </svg>
 );
 
-const _WindsurfLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-    <path d="M12 2L2 22h20L12 2zm0 6l6 12H6l6-12z" />
-  </svg>
-);
-
-// Agent logos
-const _OpenAILogo = () => (
+const CodexLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
     <path d="M22.282 9.821a5.985 5.985 0 00-.516-4.91 6.046 6.046 0 00-6.51-2.9A6.065 6.065 0 0012 .067a6.045 6.045 0 00-5.764 4.152 5.985 5.985 0 00-3.996 2.9 6.045 6.045 0 00.749 7.102 5.985 5.985 0 00.516 4.911 6.045 6.045 0 006.51 2.9A6.065 6.065 0 0012 23.933a6.045 6.045 0 005.764-4.152 5.985 5.985 0 003.996-2.9 6.045 6.045 0 00-.749-7.102" />
   </svg>
 );
 
-const _LangChainLogo = () => (
+const CopilotLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4">
-    <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" fill="#1C3C3C" />
     <path
-      d="M8 12h8M12 8v8"
-      stroke="#fff"
-      strokeWidth="2"
-      strokeLinecap="round"
+      d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 14.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm4 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM7.5 12c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5H7.5z"
+      fill="#0078D4"
     />
   </svg>
 );
+
+const CursorLogo = () => (
+  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
+    <path d="M5 3l14 9-14 9V3z" />
+  </svg>
+);
+
+const AI_CLIENTS = [
+  { name: "Claude", logo: ClaudeLogo },
+  { name: "Codex", logo: CodexLogo },
+  { name: "Copilot", logo: CopilotLogo },
+  { name: "Cursor", logo: CursorLogo },
+];
+
+// AI clients row showing connections into the chat
+function AIClientsRow({ delay }: { delay: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay }}
+      className="flex items-center justify-center gap-3 w-full"
+    >
+      {AI_CLIENTS.map((client, i) => {
+        const Logo = client.logo;
+        return (
+          <motion.div
+            key={client.name}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3, delay: delay + i * 0.1 }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg shadow-sm"
+          >
+            <Logo />
+            <span className="text-[10px] font-medium text-slate-600">
+              {client.name}
+            </span>
+          </motion.div>
+        );
+      })}
+    </motion.div>
+  );
+}
 
 // Product mockup with embedded chat
 function ProductWithChat({ delay }: { delay: number }) {
@@ -225,12 +249,18 @@ function FeatureBar({
 }
 
 const PULSE_COLORS = [
-  BRAND_COLORS.green,  // #5A8250
-  BRAND_COLORS.blue,   // #2873D7
+  BRAND_COLORS.green, // #5A8250
+  BRAND_COLORS.blue, // #2873D7
   BRAND_COLORS.orange, // #FB873F
 ];
 
-function PulseConnector({ delay = 0, disabled = false }: { delay?: number; disabled?: boolean }) {
+function PulseConnector({
+  delay = 0,
+  disabled = false,
+}: {
+  delay?: number;
+  disabled?: boolean;
+}) {
   if (disabled) {
     return <div className="h-6 w-px bg-slate-300" />;
   }
@@ -269,12 +299,18 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
       )}
     >
       <div className="flex flex-col items-center gap-4 max-w-md mx-auto py-6">
-        {/* Top - Product with embedded chat */}
+        {/* Top - AI Clients */}
+        <AIClientsRow delay={0.1} />
+
+        {/* Connection: AI Clients → Chat */}
+        <PulseConnector delay={1.7} disabled={prefersReducedMotion ?? false} />
+
+        {/* Product with embedded chat */}
         <div className="w-full">
           <ProductWithChat delay={0.2} />
         </div>
 
-        {/* Connection line */}
+        {/* Connection: Chat → Backend */}
         <PulseConnector delay={1.4} disabled={prefersReducedMotion ?? false} />
 
         {/* Chat Backend Section */}
@@ -358,7 +394,9 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
             style={{
               background: `linear-gradient(135deg, ${BRAND_COLORS.green}, ${BRAND_COLORS.blue}, ${BRAND_COLORS.orange})`,
             }}
-            animate={prefersReducedMotion ? undefined : { opacity: [0.7, 1, 0.7] }}
+            animate={
+              prefersReducedMotion ? undefined : { opacity: [0.7, 1, 0.7] }
+            }
             transition={
               prefersReducedMotion
                 ? undefined
