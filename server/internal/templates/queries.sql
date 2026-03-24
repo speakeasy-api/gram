@@ -136,14 +136,16 @@ WHERE pt.project_id = @project_id
   AND pt.deleted IS FALSE
 ORDER BY pt.project_id, pt.name, pt.created_at DESC, pt.id DESC;
 
--- name: DeleteTemplateByName :exec
+-- name: DeleteTemplateByName :one
 UPDATE prompt_templates
 SET deleted_at = clock_timestamp()
 WHERE project_id = @project_id
-  AND name = @name;
+  AND name = @name
+RETURNING id, name, tool_urn;
 
--- name: DeleteTemplateByID :exec
+-- name: DeleteTemplateByID :one
 UPDATE prompt_templates
 SET deleted_at = clock_timestamp()
 WHERE project_id = @project_id
-  AND id = @id;
+  AND id = @id
+RETURNING id, name, tool_urn;
