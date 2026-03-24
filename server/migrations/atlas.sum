@@ -1,4 +1,4 @@
-h1:placeholder=
+h1:Yau25XoBW75oWXgZXQpZ2HRZwqyiVDScfONLaRzVGSU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -116,4 +116,4 @@ h1:placeholder=
 20260311194019_hooks_server_display_names.sql h1:W3W8A7k5bclXWIVCnKFy8FmqMQUD732OyaThBdQC/Gw=
 20260313114450_add-rbac-principal-grants.sql h1:/64PAl8wpTAoEw50B/LI2En39aEqejByaVvu+NzQUJ8=
 20260323172742_add-audit-logs.sql h1:OezpgwnRyQgJ2V8bptbf+VcckW5+HQ7+2g0FeOlzuoY=
-20260324000001_add-rbac-roles-and-assignments.sql h1:FZKb1UQaRZg8ERZk8tsC+ubdRrkQpyTUoFBA4fhwh7w=
+20260324000001_add-rbac-roles-and-assignments.sql h1:y1hZcc359FIr9d7yUosoCpm3/ew55w2bLIOft4nU3+U=
