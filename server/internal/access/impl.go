@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 type Service struct {
@@ -28,12 +29,13 @@ type Service struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
+	roles  *workos.RoleClient
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles *workos.RoleClient) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
@@ -41,6 +43,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger: logger,
 		db:     db,
 		auth:   auth.New(logger, db, sessions),
+		roles:  roles,
 	}
 }
 

@@ -1,5 +1,3 @@
-// Package access implements the access service, managing roles (via WorkOS)
-// and scope grants (via local principal_grants table).
 package access
 
 import (
@@ -8,60 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
-	goahttp "goa.design/goa/v3/http"
-	"goa.design/goa/v3/security"
-
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	roles  *workos.RoleClient
-}
-
-var _ gen.Service = (*Service)(nil)
-
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, roles *workos.RoleClient) *Service {
-	logger = logger.With(attr.SlogComponent("access"))
-	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions),
-		roles:  roles,
-	}
-}
-
-func Attach(mux goahttp.Muxer, service *Service) {
-	endpoints := gen.NewEndpoints(service)
-	endpoints.Use(middleware.MapErrors())
-	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
-}
-
-// APIKeyAuth implements the session auth security scheme.
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -193,8 +145,16 @@ func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug stri
 }
 
 // syncGrants replaces all principal_grants for a role with the provided grants.
+// The delete-then-insert is wrapped in a transaction so a partial failure does
+// not leave the role with missing grants.
 func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string, grants []*gen.RoleGrant) error {
-	q := repo.New(s.db)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	q := repo.New(tx)
 	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
 	// Delete existing grants for this role.
@@ -229,6 +189,10 @@ func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string,
 				}
 			}
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
@@ -372,10 +336,6 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 
 	// Assign members if requested.
 	if len(p.MemberIds) > 0 {
-		workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
-		if err != nil {
-			return nil, err
-		}
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
 			return nil, gen.MakeGatewayError(fmt.Errorf("list members: %w", err))

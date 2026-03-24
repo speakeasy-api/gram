@@ -16,14 +16,18 @@ import (
 
 // Endpoints wraps the "access" service endpoints.
 type Endpoints struct {
-	ListRoles        goa.Endpoint
-	GetRole          goa.Endpoint
-	CreateRole       goa.Endpoint
-	UpdateRole       goa.Endpoint
-	DeleteRole       goa.Endpoint
-	ListScopes       goa.Endpoint
-	ListMembers      goa.Endpoint
-	UpdateMemberRole goa.Endpoint
+	ListGrants            goa.Endpoint
+	UpsertGrants          goa.Endpoint
+	RemoveGrants          goa.Endpoint
+	RemovePrincipalGrants goa.Endpoint
+	ListRoles             goa.Endpoint
+	GetRole               goa.Endpoint
+	CreateRole            goa.Endpoint
+	UpdateRole            goa.Endpoint
+	DeleteRole            goa.Endpoint
+	ListScopes            goa.Endpoint
+	ListMembers           goa.Endpoint
+	UpdateMemberRole      goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -31,19 +35,27 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListRoles:        NewListRolesEndpoint(s, a.APIKeyAuth),
-		GetRole:          NewGetRoleEndpoint(s, a.APIKeyAuth),
-		CreateRole:       NewCreateRoleEndpoint(s, a.APIKeyAuth),
-		UpdateRole:       NewUpdateRoleEndpoint(s, a.APIKeyAuth),
-		DeleteRole:       NewDeleteRoleEndpoint(s, a.APIKeyAuth),
-		ListScopes:       NewListScopesEndpoint(s, a.APIKeyAuth),
-		ListMembers:      NewListMembersEndpoint(s, a.APIKeyAuth),
-		UpdateMemberRole: NewUpdateMemberRoleEndpoint(s, a.APIKeyAuth),
+		ListGrants:            NewListGrantsEndpoint(s, a.APIKeyAuth),
+		UpsertGrants:          NewUpsertGrantsEndpoint(s, a.APIKeyAuth),
+		RemoveGrants:          NewRemoveGrantsEndpoint(s, a.APIKeyAuth),
+		RemovePrincipalGrants: NewRemovePrincipalGrantsEndpoint(s, a.APIKeyAuth),
+		ListRoles:             NewListRolesEndpoint(s, a.APIKeyAuth),
+		GetRole:               NewGetRoleEndpoint(s, a.APIKeyAuth),
+		CreateRole:            NewCreateRoleEndpoint(s, a.APIKeyAuth),
+		UpdateRole:            NewUpdateRoleEndpoint(s, a.APIKeyAuth),
+		DeleteRole:            NewDeleteRoleEndpoint(s, a.APIKeyAuth),
+		ListScopes:            NewListScopesEndpoint(s, a.APIKeyAuth),
+		ListMembers:           NewListMembersEndpoint(s, a.APIKeyAuth),
+		UpdateMemberRole:      NewUpdateMemberRoleEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "access" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.ListGrants = m(e.ListGrants)
+	e.UpsertGrants = m(e.UpsertGrants)
+	e.RemoveGrants = m(e.RemoveGrants)
+	e.RemovePrincipalGrants = m(e.RemovePrincipalGrants)
 	e.ListRoles = m(e.ListRoles)
 	e.GetRole = m(e.GetRole)
 	e.CreateRole = m(e.CreateRole)
@@ -52,6 +64,146 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListScopes = m(e.ListScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.UpdateMemberRole = m(e.UpdateMemberRole)
+}
+
+// NewListGrantsEndpoint returns an endpoint function that calls the method
+// "listGrants" of service "access".
+func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListGrants(ctx, p)
+	}
+}
+
+// NewUpsertGrantsEndpoint returns an endpoint function that calls the method
+// "upsertGrants" of service "access".
+func NewUpsertGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpsertGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpsertGrants(ctx, p)
+	}
+}
+
+// NewRemoveGrantsEndpoint returns an endpoint function that calls the method
+// "removeGrants" of service "access".
+func NewRemoveGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RemoveGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RemoveGrants(ctx, p)
+	}
+}
+
+// NewRemovePrincipalGrantsEndpoint returns an endpoint function that calls the
+// method "removePrincipalGrants" of service "access".
+func NewRemovePrincipalGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RemovePrincipalGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RemovePrincipalGrants(ctx, p)
+	}
 }
 
 // NewListRolesEndpoint returns an endpoint function that calls the method
