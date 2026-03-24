@@ -118,13 +118,20 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
 
       <div className="relative z-10 w-full flex flex-col items-center gap-8 max-w-sm">
         <div className="flex flex-col items-center gap-4">
-          <GramLogo
-            className="w-[200px] mb-2 dark:!invert-0"
-            variant="vertical"
-          />
+          <a
+            href="https://www.speakeasy.com/product/mcp-platform"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <GramLogo
+              className="w-[200px] mb-2 dark:!invert-0"
+              variant="vertical"
+            />
+          </a>
           <div className="flex flex-col gap-2 text-sm text-center dark:text-black">
             <p>
-              Securely scale AI usage across your organisation with Speakeasy.
+              Securely scale AI usage across your organisation
+              with&nbsp;Speakeasy.
             </p>
             <p className="text-[#8B8684]">
               Control plane for distribution of MCP, Skills, CLIs and more.
