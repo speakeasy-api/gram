@@ -94,7 +94,12 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	err := workflow.ExecuteActivity(
 		ctx,
 		a.VerifyCustomDomain,
-		activities.VerifyCustomDomainArgs{OrgID: params.OrgID, Domain: params.Domain, CreatedBy: params.CreatedBy, CreateByName: params.CreatedByName},
+		activities.VerifyCustomDomainArgs{
+			OrgID:         params.OrgID,
+			Domain:        params.Domain,
+			CreatedBy:     params.CreatedBy,
+			CreatedByName: params.CreatedByName,
+		},
 	).Get(ctx, nil)
 	if err != nil {
 		logger.Error("failed to verify custom domain", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)

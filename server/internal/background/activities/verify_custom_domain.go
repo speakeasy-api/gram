@@ -36,10 +36,10 @@ func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, expectedTarget
 }
 
 type VerifyCustomDomainArgs struct {
-	OrgID        string
-	Domain       string
-	CreatedBy    urn.Principal
-	CreateByName *string
+	OrgID         string
+	Domain        string
+	CreatedBy     urn.Principal
+	CreatedByName *string
 }
 
 var prohibitedDomainRoots = []string{"getgram.ai", "speakeasy.com", "speakeasyapi.dev"}
@@ -81,7 +81,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		if err := audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
 			OrganizationID:   args.OrgID,
 			Actor:            args.CreatedBy,
-			ActorDisplayName: args.CreateByName,
+			ActorDisplayName: args.CreatedByName,
 			ActorSlug:        nil,
 			CustomDomainURN:  urn.NewCustomDomain(domain.ID),
 			DomainName:       domain.Domain,
