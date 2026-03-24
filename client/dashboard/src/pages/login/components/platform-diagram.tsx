@@ -138,25 +138,44 @@ const AI_CLIENTS = [
   { name: "Cursor", icon: CursorIcon },
 ];
 
-// Small AI client pill — compact icon + name
-function ClientPill({
+// Stacked card cluster — multiple overlapping cards to show many instances
+function ClientCluster({
   icon: Icon,
   name,
+  count,
   delay,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   name: string;
+  count: number;
   delay: number;
 }) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.25, delay }}
-      className="flex items-center gap-1 px-1.5 py-1 bg-white border border-slate-200 rounded shadow-sm"
+      transition={{ duration: 0.3, delay }}
+      className="relative"
+      style={{ paddingTop: (count - 1) * 4, paddingLeft: (count - 1) * 4 }}
     >
-      <Icon className="w-3.5 h-3.5" />
-      <span className="text-[8px] font-medium text-slate-500">{name}</span>
+      {/* Shadow cards behind — stacked offset */}
+      {Array.from({ length: count - 1 }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute bg-white border border-slate-200 rounded shadow-sm"
+          style={{
+            top: i * 4,
+            left: i * 4,
+            right: (count - 1 - i) * 4,
+            bottom: (count - 1 - i) * 4,
+          }}
+        />
+      ))}
+      {/* Front card */}
+      <div className="relative flex items-center gap-1.5 px-2 py-1.5 bg-white border border-slate-200 rounded shadow-sm">
+        <Icon className="w-4 h-4" />
+        <span className="text-[9px] font-medium text-slate-600">{name}</span>
+      </div>
     </motion.div>
   );
 }
@@ -202,33 +221,51 @@ function MiniChatApp({ label, delay }: { label: string; delay: number }) {
   );
 }
 
-// Distributed view — AI clients and chat apps side by side
+// Distributed view — clustered AI clients and chat apps side by side
 function DistributedClients({ delay }: { delay: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay }}
-      className="flex w-full gap-3"
+      className="flex w-full gap-4"
     >
-      {/* Left: AI Clients */}
+      {/* Left: AI Client clusters */}
       <div className="flex-1">
-        <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+        <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-2">
           AI Clients
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <ClientPill icon={ClaudeIcon} name="Claude" delay={delay + 0.1} />
-          <ClientPill icon={CursorIcon} name="Cursor" delay={delay + 0.15} />
-          <ClientPill icon={CodexIcon} name="Codex" delay={delay + 0.2} />
-          <ClientPill icon={ClaudeIcon} name="Claude" delay={delay + 0.25} />
-          <ClientPill icon={CopilotIcon} name="Copilot" delay={delay + 0.3} />
-          <ClientPill icon={CursorIcon} name="Cursor" delay={delay + 0.35} />
+        <div className="flex flex-wrap gap-3">
+          <ClientCluster
+            icon={ClaudeIcon}
+            name="Claude"
+            count={3}
+            delay={delay + 0.1}
+          />
+          <ClientCluster
+            icon={CursorIcon}
+            name="Cursor"
+            count={2}
+            delay={delay + 0.2}
+          />
+          <ClientCluster
+            icon={CodexIcon}
+            name="Codex"
+            count={2}
+            delay={delay + 0.3}
+          />
+          <ClientCluster
+            icon={CopilotIcon}
+            name="Copilot"
+            count={2}
+            delay={delay + 0.4}
+          />
         </div>
       </div>
 
       {/* Right: Chat apps */}
       <div className="flex-1">
-        <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+        <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mb-2">
           Chat Apps
         </div>
         <div className="flex flex-col gap-1.5">
