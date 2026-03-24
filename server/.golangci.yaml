@@ -150,6 +150,9 @@ linters:
         - '^github\.com/aws/aws-sdk-go-v2/service/s3\..+Input$'
         - '^github\.com/aws/aws-sdk-go-v2/service/s3\..+Options$'
         - '^cloud\.google\.com/go/storage\.SignedURLOptions$'
+        - '^github\.com/workos/workos-go/v6/pkg/organizations\.Client$'
+        - '^github\.com/workos/workos-go/v6/pkg/usermanagement\.ListOrganizationMembershipsOpts$'
+        - '^github\.com/workos/workos-go/v6/pkg/usermanagement\.UpdateOrganizationMembershipOpts$'
     exhaustive:
       check:
         - switch
