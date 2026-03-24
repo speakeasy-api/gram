@@ -129,10 +129,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             />
           </a>
           <div className="flex flex-col gap-2 text-sm text-center dark:text-black">
-            <p>
-              Securely scale AI usage across your organisation
-              with&nbsp;Speakeasy.
-            </p>
+            <p>Securely scale AI usage across your organisation.</p>
             <p className="text-[#8B8684]">
               Control plane for distribution of MCP, Skills, CLIs and more.
             </p>
