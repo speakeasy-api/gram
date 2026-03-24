@@ -117,7 +117,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	}
 
 	logs := make([]*gen.AuditLog, 0, min(len(rows), listAuditLogsPageSize))
-	for _, row := range rows {
+	for _, row := range rows[:min(len(rows), listAuditLogsPageSize)] {
 		log, err := toAuditLog(row)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error building audit log response").Log(ctx, s.logger)
