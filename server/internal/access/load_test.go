@@ -1,4 +1,4 @@
-package access
+package access_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -19,15 +20,15 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "role_admin")
 
 	seedOrganization(t, ctx, conn, organizationID)
-	seedGrant(t, ctx, conn, organizationID, userPrincipal, ScopeBuildRead, "proj:123")
-	seedGrant(t, ctx, conn, organizationID, rolePrincipal, ScopeMCPConnect, "toolA")
+	seedGrant(t, ctx, conn, organizationID, userPrincipal, access.ScopeBuildRead, "proj:123")
+	seedGrant(t, ctx, conn, organizationID, rolePrincipal, access.ScopeMCPConnect, "toolA")
 
-	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{userPrincipal, rolePrincipal, rolePrincipal})
+	grants, err := access.LoadGrants(ctx, conn, organizationID, []urn.Principal{userPrincipal, rolePrincipal, rolePrincipal})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []grantRow{
-		{Scope: ScopeBuildRead, Resource: "proj:123"},
-		{Scope: ScopeMCPConnect, Resource: "toolA"},
-	}, grants.rows)
+
+	ctx = access.GrantsToContext(ctx, grants)
+	require.NoError(t, access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: "proj:123"}))
+	require.NoError(t, access.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: "toolA"}))
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
@@ -36,7 +37,7 @@ func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
 	ctx := context.Background()
 	conn := newTestDB(t)
 
-	grants, err := LoadGrants(ctx, conn, "", []urn.Principal{
+	grants, err := access.LoadGrants(ctx, conn, "", []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "user_123"),
 	})
 	require.Error(t, err)
@@ -52,7 +53,7 @@ func TestLoadGrants_rejectsMissingPrincipals(t *testing.T) {
 
 	seedOrganization(t, ctx, conn, organizationID)
 
-	grants, err := LoadGrants(ctx, conn, organizationID, nil)
+	grants, err := access.LoadGrants(ctx, conn, organizationID, nil)
 	require.Error(t, err)
 	require.Nil(t, grants)
 }
@@ -66,7 +67,7 @@ func TestLoadGrants_rejectsInvalidPrincipal(t *testing.T) {
 
 	seedOrganization(t, ctx, conn, organizationID)
 
-	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{{}})
+	grants, err := access.LoadGrants(ctx, conn, organizationID, []urn.Principal{{}})
 	require.Error(t, err)
 	require.Nil(t, grants)
 }
@@ -80,9 +81,13 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 
 	seedOrganization(t, ctx, conn, organizationID)
 
-	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{
+	grants, err := access.LoadGrants(ctx, conn, organizationID, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "user_123"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, &Grants{rows: nil}, grants)
+
+	ctx = access.GrantsToContext(ctx, grants)
+	projectIDs, err := access.Filter(ctx, access.ScopeBuildRead, []string{"proj:123"})
+	require.NoError(t, err)
+	require.Empty(t, projectIDs)
 }
