@@ -20,6 +20,10 @@ type Client struct {
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
+	// ListFacets Doer is the HTTP client used to make requests to the listFacets
+	// endpoint.
+	ListFacetsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -41,6 +45,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ListDoer:            doer,
+		ListFacetsDoer:      doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -68,6 +73,30 @@ func (c *Client) List() goa.Endpoint {
 		resp, err := c.ListDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("auditlogs", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListFacets returns an endpoint that makes HTTP requests to the auditlogs
+// service listFacets server.
+func (c *Client) ListFacets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListFacetsRequest(c.encoder)
+		decodeResponse = DecodeListFacetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListFacetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListFacetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auditlogs", "listFacets", err)
 		}
 		return decodeResponse(resp)
 	}

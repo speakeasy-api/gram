@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { dlv } from "../lib/dlv.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -12,6 +11,7 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -26,39 +26,30 @@ import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
-import {
-  createPageIterator,
-  haltIterator,
-  PageIterator,
-  Paginator,
-} from "../types/operations.js";
 
 /**
- * list auditlogs
+ * listFacets auditlogs
  *
  * @remarks
- * List audit logs across organization and projects.
+ * List available audit log facet values across organization and projects.
  */
-export function auditlogsList(
+export function auditlogsListFacets(
   client: GramCore,
-  request?: operations.ListAuditLogsRequest | undefined,
-  security?: operations.ListAuditLogsSecurity | undefined,
+  request?: operations.ListAuditLogFacetsRequest | undefined,
+  security?: operations.ListAuditLogFacetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
-  PageIterator<
-    Result<
-      operations.ListAuditLogsResponse,
-      | errors.ServiceError
-      | GramError
-      | ResponseValidationError
-      | ConnectionError
-      | RequestAbortedError
-      | RequestTimeoutError
-      | InvalidRequestError
-      | UnexpectedClientError
-      | SDKValidationError
-    >,
-    { cursor: string }
+  Result<
+    components.ListAuditLogFacetsResult,
+    | errors.ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
   >
 > {
   return new APIPromise($do(
@@ -71,25 +62,22 @@ export function auditlogsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListAuditLogsRequest | undefined,
-  security?: operations.ListAuditLogsSecurity | undefined,
+  request?: operations.ListAuditLogFacetsRequest | undefined,
+  security?: operations.ListAuditLogFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
-    PageIterator<
-      Result<
-        operations.ListAuditLogsResponse,
-        | errors.ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >,
-      { cursor: string }
+    Result<
+      components.ListAuditLogFacetsResult,
+      | errors.ServiceError
+      | GramError
+      | ResponseValidationError
+      | ConnectionError
+      | RequestAbortedError
+      | RequestTimeoutError
+      | InvalidRequestError
+      | UnexpectedClientError
+      | SDKValidationError
     >,
     APICall,
   ]
@@ -98,23 +86,20 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.ListAuditLogsRequest$outboundSchema),
+        z.optional(operations.ListAuditLogFacetsRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
   );
   if (!parsed.ok) {
-    return [haltIterator(parsed), { status: "invalid" }];
+    return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/auditlogs.list")();
+  const path = pathToFunc("/rpc/auditlogs.listFacets")();
 
   const query = encodeFormQuery({
-    "action": payload?.action,
-    "actor_id": payload?.actor_id,
-    "cursor": payload?.cursor,
     "project_slug": payload?.project_slug,
   });
 
@@ -150,7 +135,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listAuditLogs",
+    operationID: "listAuditLogFacets",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -174,7 +159,7 @@ async function $do(
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
-    return [haltIterator(requestRes), { status: "invalid" }];
+    return [requestRes, { status: "invalid" }];
   }
   const req = requestRes.value;
 
@@ -197,7 +182,7 @@ async function $do(
     retryCodes: context.retryCodes,
   });
   if (!doResult.ok) {
-    return [haltIterator(doResult), { status: "request-error", request: req }];
+    return [doResult, { status: "request-error", request: req }];
   }
   const response = doResult.value;
 
@@ -205,8 +190,8 @@ async function $do(
     HttpMeta: { Response: response, Request: req },
   };
 
-  const [result, raw] = await M.match<
-    operations.ListAuditLogsResponse,
+  const [result] = await M.match<
+    components.ListAuditLogFacetsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -217,9 +202,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.ListAuditLogsResponse$inboundSchema, {
-      key: "Result",
-    }),
+    M.json(200, components.ListAuditLogFacetsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
@@ -229,58 +212,8 @@ async function $do(
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
   if (!result.ok) {
-    return [haltIterator(result), {
-      status: "complete",
-      request: req,
-      response,
-    }];
+    return [result, { status: "complete", request: req, response }];
   }
 
-  const nextFunc = (
-    responseData: unknown,
-  ): {
-    next: Paginator<
-      Result<
-        operations.ListAuditLogsResponse,
-        | errors.ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >
-    >;
-    "~next"?: { cursor: string };
-  } => {
-    const nextCursor = dlv(responseData, "next_cursor");
-    if (typeof nextCursor !== "string") {
-      return { next: () => null };
-    }
-    if (nextCursor.trim() === "") {
-      return { next: () => null };
-    }
-
-    const nextVal = () =>
-      auditlogsList(
-        client,
-        {
-          ...request!,
-          cursor: nextCursor,
-        },
-        security,
-        options,
-      );
-
-    return { next: nextVal, "~next": { cursor: nextCursor } };
-  };
-
-  const page = { ...result, ...nextFunc(raw) };
-  return [{ ...page, ...createPageIterator(page, (v) => !v.ok) }, {
-    status: "complete",
-    request: req,
-    response,
-  }];
+  return [result, { status: "complete", request: req, response }];
 }

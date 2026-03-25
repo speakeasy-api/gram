@@ -18,8 +18,9 @@ import (
 
 // Server lists the auditlogs service endpoint HTTP handlers.
 type Server struct {
-	Mounts []*MountPoint
-	List   http.Handler
+	Mounts     []*MountPoint
+	List       http.Handler
+	ListFacets http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -50,8 +51,10 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"List", "GET", "/rpc/auditlogs.list"},
+			{"ListFacets", "GET", "/rpc/auditlogs.listFacets"},
 		},
-		List: NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		List:       NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		ListFacets: NewListFacetsHandler(e.ListFacets, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -61,6 +64,7 @@ func (s *Server) Service() string { return "auditlogs" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.List = m(s.List)
+	s.ListFacets = m(s.ListFacets)
 }
 
 // MethodNames returns the methods served.
@@ -69,6 +73,7 @@ func (s *Server) MethodNames() []string { return auditlogs.MethodNames[:] }
 // Mount configures the mux to serve the auditlogs endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListHandler(mux, h.List)
+	MountListFacetsHandler(mux, h.ListFacets)
 }
 
 // Mount configures the mux to serve the auditlogs endpoints.
@@ -106,6 +111,59 @@ func NewListHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "list")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "auditlogs")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListFacetsHandler configures the mux to serve the "auditlogs" service
+// "listFacets" endpoint.
+func MountListFacetsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/auditlogs.listFacets", f)
+}
+
+// NewListFacetsHandler creates a HTTP handler which loads the HTTP request and
+// calls the "auditlogs" service "listFacets" endpoint.
+func NewListFacetsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListFacetsRequest(mux, decoder)
+		encodeResponse = EncodeListFacetsResponse(encoder)
+		encodeError    = EncodeListFacetsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listFacets")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "auditlogs")
 		payload, err := decodeRequest(r)
 		if err != nil {

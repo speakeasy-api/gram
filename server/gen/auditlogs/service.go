@@ -19,6 +19,8 @@ import (
 type Service interface {
 	// List audit logs across organization and projects.
 	List(context.Context, *ListPayload) (res *ListAuditLogsResult, err error)
+	// List available audit log facet values across organization and projects.
+	ListFacets(context.Context, *ListFacetsPayload) (res *ListAuditLogFacetsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -41,7 +43,7 @@ const ServiceName = "auditlogs"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"list"}
+var MethodNames = [2]string{"list", "listFacets"}
 
 type AuditLog struct {
 	ID                 string
@@ -63,12 +65,39 @@ type AuditLog struct {
 	CreatedAt string
 }
 
+type AuditLogFacetOption struct {
+	// The facet value used for filtering
+	Value string
+	// The display label shown for the facet value
+	DisplayName string
+	// The number of audit logs for this facet value
+	Count int64
+}
+
+// ListAuditLogFacetsResult is the result type of the auditlogs service
+// listFacets method.
+type ListAuditLogFacetsResult struct {
+	// Available actor facets
+	Actors []*AuditLogFacetOption
+	// Available action facets
+	Actions []*AuditLogFacetOption
+}
+
 // ListAuditLogsResult is the result type of the auditlogs service list method.
 type ListAuditLogsResult struct {
 	// List of audit logs
 	Logs []*AuditLog
 	// The cursor to be used for the next page of results.
 	NextCursor *string
+}
+
+// ListFacetsPayload is the payload type of the auditlogs service listFacets
+// method.
+type ListFacetsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// Project slug to filter facet values to a specific project.
+	ProjectSlug *string
 }
 
 // ListPayload is the payload type of the auditlogs service list method.
@@ -79,6 +108,10 @@ type ListPayload struct {
 	Cursor *string
 	// Project slug to filter audit logs to a specific project.
 	ProjectSlug *string
+	// Actor ID to filter audit logs to a specific actor.
+	ActorID *string
+	// Action to filter audit logs to a specific action.
+	Action *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

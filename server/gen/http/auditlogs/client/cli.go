@@ -13,7 +13,7 @@ import (
 
 // BuildListPayload builds the payload for the auditlogs list endpoint from CLI
 // flags.
-func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
+func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListActorID string, auditlogsListAction string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
 	var cursor *string
 	{
 		if auditlogsListCursor != "" {
@@ -24,6 +24,18 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 	{
 		if auditlogsListProjectSlug != "" {
 			projectSlug = &auditlogsListProjectSlug
+		}
+	}
+	var actorID *string
+	{
+		if auditlogsListActorID != "" {
+			actorID = &auditlogsListActorID
+		}
+	}
+	var action *string
+	{
+		if auditlogsListAction != "" {
+			action = &auditlogsListAction
 		}
 	}
 	var apikeyToken *string
@@ -40,6 +52,37 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 	}
 	v := &auditlogs.ListPayload{}
 	v.Cursor = cursor
+	v.ProjectSlug = projectSlug
+	v.ActorID = actorID
+	v.Action = action
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListFacetsPayload builds the payload for the auditlogs listFacets
+// endpoint from CLI flags.
+func BuildListFacetsPayload(auditlogsListFacetsProjectSlug string, auditlogsListFacetsApikeyToken string, auditlogsListFacetsSessionToken string) (*auditlogs.ListFacetsPayload, error) {
+	var projectSlug *string
+	{
+		if auditlogsListFacetsProjectSlug != "" {
+			projectSlug = &auditlogsListFacetsProjectSlug
+		}
+	}
+	var apikeyToken *string
+	{
+		if auditlogsListFacetsApikeyToken != "" {
+			apikeyToken = &auditlogsListFacetsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if auditlogsListFacetsSessionToken != "" {
+			sessionToken = &auditlogsListFacetsSessionToken
+		}
+	}
+	v := &auditlogs.ListFacetsPayload{}
 	v.ProjectSlug = projectSlug
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

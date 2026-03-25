@@ -196,6 +196,8 @@ export function setAuditLogsData(
     parameters: {
       cursor?: string | undefined;
       projectSlug?: string | undefined;
+      actorId?: string | undefined;
+      action?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -213,6 +215,8 @@ export function invalidateAuditLogs(
     [parameters: {
       cursor?: string | undefined;
       projectSlug?: string | undefined;
+      actorId?: string | undefined;
+      action?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

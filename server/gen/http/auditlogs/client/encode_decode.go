@@ -56,6 +56,12 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		if p.ProjectSlug != nil {
 			values.Add("project_slug", *p.ProjectSlug)
 		}
+		if p.ActorID != nil {
+			values.Add("actor_id", *p.ActorID)
+		}
+		if p.Action != nil {
+			values.Add("action", *p.Action)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -260,6 +266,245 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 	}
 }
 
+// BuildListFacetsRequest instantiates a HTTP request object with method and
+// path set to call the "auditlogs" service "listFacets" endpoint
+func (c *Client) BuildListFacetsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListFacetsAuditlogsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("auditlogs", "listFacets", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListFacetsRequest returns an encoder for requests sent to the
+// auditlogs listFacets server.
+func EncodeListFacetsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*auditlogs.ListFacetsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("auditlogs", "listFacets", "*auditlogs.ListFacetsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.ProjectSlug != nil {
+			values.Add("project_slug", *p.ProjectSlug)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListFacetsResponse returns a decoder for responses returned by the
+// auditlogs listFacets endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListFacetsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListFacetsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListFacetsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			res := NewListFacetsListAuditLogFacetsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListFacetsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			return nil, NewListFacetsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListFacetsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			return nil, NewListFacetsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListFacetsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			return nil, NewListFacetsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListFacetsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			return nil, NewListFacetsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListFacetsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			return nil, NewListFacetsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListFacetsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			return nil, NewListFacetsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListFacetsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			return nil, NewListFacetsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListFacetsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+				}
+				err = ValidateListFacetsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+				}
+				return nil, NewListFacetsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListFacetsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+				}
+				err = ValidateListFacetsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+				}
+				return nil, NewListFacetsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auditlogs", "listFacets", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListFacetsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auditlogs", "listFacets", err)
+			}
+			err = ValidateListFacetsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auditlogs", "listFacets", err)
+			}
+			return nil, NewListFacetsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("auditlogs", "listFacets", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAuditLogResponseBodyToAuditlogsAuditLog builds a value of type
 // *auditlogs.AuditLog from a value of type *AuditLogResponseBody.
 func unmarshalAuditLogResponseBodyToAuditlogsAuditLog(v *AuditLogResponseBody) *auditlogs.AuditLog {
@@ -287,6 +532,19 @@ func unmarshalAuditLogResponseBodyToAuditlogsAuditLog(v *AuditLogResponseBody) *
 			tv := val
 			res.Metadata[tk] = tv
 		}
+	}
+
+	return res
+}
+
+// unmarshalAuditLogFacetOptionResponseBodyToAuditlogsAuditLogFacetOption
+// builds a value of type *auditlogs.AuditLogFacetOption from a value of type
+// *AuditLogFacetOptionResponseBody.
+func unmarshalAuditLogFacetOptionResponseBodyToAuditlogsAuditLogFacetOption(v *AuditLogFacetOptionResponseBody) *auditlogs.AuditLogFacetOption {
+	res := &auditlogs.AuditLogFacetOption{
+		Value:       *v.Value,
+		DisplayName: *v.DisplayName,
+		Count:       *v.Count,
 	}
 
 	return res
