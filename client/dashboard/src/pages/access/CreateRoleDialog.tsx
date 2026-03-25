@@ -187,11 +187,15 @@ export function CreateRoleDialog({
   };
 
   const handleSubmit = () => {
-    const sdkGrants = Object.values(grants).map((g) => ({
-      scope: g.scope,
-      // Local type uses null for unrestricted; SDK uses undefined
-      resources: g.resources === null ? undefined : g.resources,
-    }));
+    const sdkGrants = Object.values(grants)
+      // Drop scopes with an empty resource list — the user switched to
+      // "specific" but didn't select any resources, so there's nothing to grant.
+      .filter((g) => g.resources === null || g.resources.length > 0)
+      .map((g) => ({
+        scope: g.scope,
+        // Local type uses null for unrestricted; SDK uses undefined
+        resources: g.resources === null ? undefined : g.resources,
+      }));
 
     if (isEditing) {
       updateRole.mutate({
