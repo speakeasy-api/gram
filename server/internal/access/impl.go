@@ -581,16 +581,21 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		slugToID[wr.Slug] = wr.ID
 	}
 
+	// Batch-fetch all users in the org (single paginated API call instead of N+1).
+	usersByID, err := s.roles.ListOrgUsers(ctx, workosOrgID)
+	if err != nil {
+		return nil, gen.MakeGatewayError(fmt.Errorf("list org users from workos: %w", err))
+	}
+
 	result := &gen.ListMembersResult{
 		Members: make([]*gen.AccessMember, 0, len(memberships)),
 	}
 
 	for _, m := range memberships {
-		user, err := s.roles.GetUser(ctx, m.UserID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to fetch user for membership",
+		user, ok := usersByID[m.UserID]
+		if !ok {
+			s.logger.WarnContext(ctx, "user not found for membership",
 				attr.SlogUserID(m.UserID),
-				attr.SlogError(err),
 			)
 			continue
 		}

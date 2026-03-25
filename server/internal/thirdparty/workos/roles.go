@@ -169,6 +169,38 @@ func (rc *RoleClient) GetUser(ctx context.Context, userID string) (*usermanageme
 	return &user, nil
 }
 
+// ListOrgUsers returns all users in the given organization as a map of userID → User.
+func (rc *RoleClient) ListOrgUsers(ctx context.Context, orgID string) (map[string]usermanagement.User, error) {
+	if rc == nil {
+		return nil, errors.New("role client is not initialized")
+	}
+
+	users := make(map[string]usermanagement.User)
+	after := ""
+
+	for {
+		resp, err := rc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
+			OrganizationID: orgID,
+			Limit:          100,
+			After:          after,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list org users: %w", err)
+		}
+
+		for _, u := range resp.Data {
+			users[u.ID] = u
+		}
+
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		after = resp.ListMetadata.After
+	}
+
+	return users, nil
+}
+
 // UpdateMemberRole changes a member's role within an organization membership.
 func (rc *RoleClient) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*usermanagement.OrganizationMembership, error) {
 	if rc == nil {
