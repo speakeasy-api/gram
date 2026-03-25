@@ -19,12 +19,12 @@ import {
   invalidateAllListRoles,
   useListRoles,
 } from "@gram/client/react-query/listRoles.js";
+import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronRight, Loader2 } from "lucide-react";
-import { useState } from "react";
-import { SCOPE_GROUPS } from "./mock-data";
+import { useMemo, useState } from "react";
 import { ScopePickerPopover } from "./ScopePickerPopover";
 import type { RoleGrant, Scope } from "./types";
 
@@ -67,6 +67,20 @@ export function CreateRoleDialog({
   const roleNameById = new Map(
     (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
   );
+  const { data: scopesData } = useListScopes();
+
+  const scopeGroups = useMemo(() => {
+    const scopes = scopesData?.scopes ?? [];
+    const groupOrder: { label: string; resourceType: string }[] = [
+      { label: "Organization", resourceType: "org" },
+      { label: "Build & Deploy", resourceType: "project" },
+      { label: "MCP Servers", resourceType: "mcp" },
+    ];
+    return groupOrder.map((g) => ({
+      ...g,
+      scopes: scopes.filter((s) => s.resourceType === g.resourceType),
+    }));
+  }, [scopesData]);
 
   // Pre-populate fields when editing
   if (editingRole && !initialized) {
@@ -133,7 +147,7 @@ export function CreateRoleDialog({
   };
 
   const toggleGroupCheckbox = (label: string) => {
-    const group = SCOPE_GROUPS.find((g) => g.label === label);
+    const group = scopeGroups.find((g) => g.label === label);
     if (!group) return;
 
     const allSelected = group.scopes.every((s) => grants[s.slug]);
@@ -274,7 +288,7 @@ export function CreateRoleDialog({
 
             {showPermissions && (
               <div className="mt-3 space-y-3">
-                {SCOPE_GROUPS.map((group) => {
+                {scopeGroups.map((group) => {
                   const selectedInGroup = group.scopes.filter(
                     (s) => grants[s.slug],
                   ).length;
