@@ -9,6 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/workos/workos-go/v6/pkg/roles"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -26,18 +28,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// RoleProvider abstracts WorkOS role and membership operations so they can be
+// mocked in tests.
+type RoleProvider interface {
+	ListRoles(ctx context.Context, orgID string) ([]roles.Role, error)
+	CreateRole(ctx context.Context, orgID string, opts workos.CreateRoleOpts) (*roles.Role, error)
+	UpdateRole(ctx context.Context, orgID string, roleSlug string, opts workos.UpdateRoleOpts) (*roles.Role, error)
+	DeleteRole(ctx context.Context, orgID string, roleSlug string) error
+	ListMembers(ctx context.Context, orgID string) ([]usermanagement.OrganizationMembership, error)
+	UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*usermanagement.OrganizationMembership, error)
+	GetUser(ctx context.Context, userID string) (*usermanagement.User, error)
+	ListOrgUsers(ctx context.Context, orgID string) (map[string]usermanagement.User, error)
+}
+
 type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
-	roles  *workos.RoleClient
+	roles  RoleProvider
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles *workos.RoleClient) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
