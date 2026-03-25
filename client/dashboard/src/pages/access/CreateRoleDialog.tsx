@@ -122,7 +122,9 @@ export function CreateRoleDialog({
 
   const isMutating = createRole.isPending || updateRole.isPending;
 
-  const grantCount = Object.keys(grants).length;
+  const grantCount = Object.values(grants).filter(
+    (g) => g.resources === null || g.resources.length > 0,
+  ).length;
 
   const toggleScope = (scope: Scope) => {
     setGrants((prev) => {
