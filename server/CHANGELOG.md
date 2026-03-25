@@ -1,5 +1,17 @@
 # server
 
+## 0.32.0
+
+### Minor Changes
+
+- fbb1c43: Introduced faceted search capabilities to the audit logs, allowing users to filter logs based on actor and action attributes.
+
+  A new endpoint, `GET /rpc/auditlogs.listFacets`, is introduced to retrieve available facets for actors and actions. The existing `GET /rpc/auditlogs.list` endpoint is updated to support filtering by these facets.
+
+### Patch Changes
+
+- e97105d: Normalized OpenAPI HTTP auth scheme casing so extraction and stored metadata behave gracefully for variants like Bearer and Basic
+
 ## 0.31.0
 
 ### Minor Changes
