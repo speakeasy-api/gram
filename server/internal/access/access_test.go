@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,12 +56,9 @@ func TestRequire_deniesMissingGrant(t *testing.T) {
 
 	var deniedErr *DeniedError
 	require.ErrorAs(t, err, &deniedErr)
+	require.ErrorIs(t, err, ErrDenied)
 	require.Equal(t, ScopeBuildRead, deniedErr.Scope)
 	require.Equal(t, "proj_456", deniedErr.ResourceID)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
 }
 
 func TestRequire_appliesAdditiveGrants(t *testing.T) {
@@ -105,23 +101,16 @@ func TestRequire_appliesAdditiveGrants(t *testing.T) {
 
 	var deniedErr *DeniedError
 	require.ErrorAs(t, err, &deniedErr)
+	require.ErrorIs(t, err, ErrDenied)
 	require.Equal(t, ScopeMCPConnect, deniedErr.Scope)
 	require.Equal(t, "mcp_analytics", deniedErr.ResourceID)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
 }
 
 func TestRequire_requiresGrantsInContext(t *testing.T) {
 	t.Parallel()
 
 	err := Require(context.Background(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.Error(t, err)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeUnexpected, shareableErr.Code)
+	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
 func TestRequire_rejectsEmptyResourceID(t *testing.T) {
@@ -141,11 +130,8 @@ func TestRequire_rejectsEmptyResourceID(t *testing.T) {
 
 	var invalidErr *InvalidCheckError
 	require.ErrorAs(t, err, &invalidErr)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeInvariantViolation, shareableErr.Code)
 }
 
 func TestRequire_rejectsWildcardResourceID(t *testing.T) {
@@ -165,6 +151,7 @@ func TestRequire_rejectsWildcardResourceID(t *testing.T) {
 
 	var invalidErr *InvalidCheckError
 	require.ErrorAs(t, err, &invalidErr)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
 	require.Equal(t, WildcardResource, invalidErr.ResourceID)
 }
@@ -174,10 +161,6 @@ func TestRequire_requiresAtLeastOneCheck(t *testing.T) {
 
 	err := Require(context.Background())
 	require.ErrorIs(t, err, ErrNoChecks)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeInvariantViolation, shareableErr.Code)
 }
 
 func TestRequireAny_allowsWhenAnyCheckMatches(t *testing.T) {
@@ -219,6 +202,7 @@ func TestRequireAny_deniesWhenNoCheckMatches(t *testing.T) {
 
 	var deniedErr *DeniedError
 	require.ErrorAs(t, err, &deniedErr)
+	require.ErrorIs(t, err, ErrDenied)
 	require.Equal(t, ScopeMCPConnect, deniedErr.Scope)
 	require.Equal(t, "mcp:a", deniedErr.ResourceID)
 }
@@ -227,11 +211,7 @@ func TestRequireAny_requiresGrantsInContext(t *testing.T) {
 	t.Parallel()
 
 	err := RequireAny(context.Background(), Check{Scope: ScopeMCPConnect, ResourceID: "tool:b"})
-	require.Error(t, err)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeUnexpected, shareableErr.Code)
+	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
 func TestRequireAny_rejectsEmptyResourceID(t *testing.T) {
@@ -254,6 +234,7 @@ func TestRequireAny_rejectsEmptyResourceID(t *testing.T) {
 
 	var invalidErr *InvalidCheckError
 	require.ErrorAs(t, err, &invalidErr)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	require.Equal(t, ScopeMCPConnect, invalidErr.Scope)
 }
 
@@ -277,6 +258,7 @@ func TestRequireAny_rejectsWildcardResourceID(t *testing.T) {
 
 	var invalidErr *InvalidCheckError
 	require.ErrorAs(t, err, &invalidErr)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	require.Equal(t, ScopeMCPConnect, invalidErr.Scope)
 	require.Equal(t, WildcardResource, invalidErr.ResourceID)
 }
@@ -286,10 +268,6 @@ func TestRequireAny_requiresAtLeastOneCheck(t *testing.T) {
 
 	err := RequireAny(context.Background())
 	require.ErrorIs(t, err, ErrNoChecks)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeInvariantViolation, shareableErr.Code)
 }
 
 func TestFilter_returnsAllToolsForWildcardMCPGrant(t *testing.T) {
@@ -372,10 +350,7 @@ func TestFilter_requiresGrantsInContext(t *testing.T) {
 	resourceIDs, err := Filter(context.Background(), ScopeBuildRead, []string{"proj_alpha"})
 	require.Error(t, err)
 	require.Nil(t, resourceIDs)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeUnexpected, shareableErr.Code)
+	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
 func TestFilter_rejectsEmptyResourceID(t *testing.T) {
@@ -396,11 +371,8 @@ func TestFilter_rejectsEmptyResourceID(t *testing.T) {
 
 	var invalidErr *InvalidCheckError
 	require.ErrorAs(t, err, &invalidErr)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeInvariantViolation, shareableErr.Code)
 }
 
 func TestFilter_rejectsWildcardResourceID(t *testing.T) {
@@ -421,6 +393,7 @@ func TestFilter_rejectsWildcardResourceID(t *testing.T) {
 
 	var invalidErr *InvalidCheckError
 	require.ErrorAs(t, err, &invalidErr)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
 	require.Equal(t, WildcardResource, invalidErr.ResourceID)
 }

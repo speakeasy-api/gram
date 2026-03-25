@@ -3,24 +3,21 @@ package access
 import (
 	"errors"
 	"fmt"
-
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-var ErrMissingGrants = oops.E(oops.CodeUnexpected, nil, "access grants missing from context")
+var ErrMissingGrants = errors.New("access grants missing from context")
 
-var ErrNoChecks = oops.E(oops.CodeInvariantViolation, nil, "at least one access check is required")
+var ErrNoChecks = errors.New("at least one access check is required")
+
+var ErrInvalidCheck = errors.New("invalid access check")
+
+var ErrDenied = errors.New("access denied")
 
 func InvalidCheck(scope Scope, resourceID string) error {
-	public := "access check requires resource id for scope %q"
-	if resourceID == WildcardResource {
-		public = "access check requires a specific resource id for scope %q"
-	}
-
 	return &InvalidCheckError{
 		Scope:      scope,
 		ResourceID: resourceID,
-		cause:      oops.E(oops.CodeInvariantViolation, nil, public, scope),
+		cause:      ErrInvalidCheck,
 	}
 }
 
@@ -28,14 +25,14 @@ func Denied(scope Scope, resourceID string) error {
 	return &DeniedError{
 		Scope:      scope,
 		ResourceID: resourceID,
-		cause:      oops.C(oops.CodeForbidden),
+		cause:      ErrDenied,
 	}
 }
 
 type DeniedError struct {
 	Scope      Scope
 	ResourceID string
-	cause      *oops.ShareableError
+	cause      error
 }
 
 func (e *DeniedError) Error() string {
@@ -46,14 +43,10 @@ func (e *DeniedError) Unwrap() error {
 	return e.cause
 }
 
-func (e *DeniedError) Is(target error) bool {
-	return errors.Is(e.cause, target)
-}
-
 type InvalidCheckError struct {
 	Scope      Scope
 	ResourceID string
-	cause      *oops.ShareableError
+	cause      error
 }
 
 func (e *InvalidCheckError) Error() string {
@@ -66,8 +59,4 @@ func (e *InvalidCheckError) Error() string {
 
 func (e *InvalidCheckError) Unwrap() error {
 	return e.cause
-}
-
-func (e *InvalidCheckError) Is(target error) bool {
-	return errors.Is(e.cause, target)
 }
