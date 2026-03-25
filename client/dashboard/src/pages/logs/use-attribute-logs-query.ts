@@ -108,12 +108,14 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
  */
 export function useAttributeLogsQuery({
   logFilters,
+  extraFilters = [],
   gramUrn,
   from,
   to,
   enabled,
 }: {
   logFilters: ActiveLogFilter[];
+  extraFilters?: LogFilter[];
   gramUrn: string | null;
   from: Date;
   to: Date;
@@ -125,6 +127,9 @@ export function useAttributeLogsQuery({
     queryKey: [
       "attribute-logs",
       logFilters.map((f) => `${f.path}:${f.op}:${f.value ?? ""}`),
+      extraFilters.map(
+        (f) => `${f.path}:${f.operator}:${f.values?.join(",") ?? ""}`,
+      ),
       gramUrn,
       from.toISOString(),
       to.toISOString(),
@@ -142,6 +147,7 @@ export function useAttributeLogsQuery({
                 values: ["tool_call", "function"],
               },
               ...toSdkFilters(logFilters),
+              ...extraFilters,
             ],
             ...(gramUrn ? { filter: { gramUrn } } : {}),
             cursor: pageParam,
