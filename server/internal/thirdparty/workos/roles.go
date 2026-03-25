@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/workos/workos-go/v6/pkg/organizations"
@@ -34,7 +35,7 @@ func NewRoleClient(logger *slog.Logger, apiKey string) *RoleClient {
 	return &RoleClient{
 		logger:     logger,
 		apiKey:     apiKey,
-		httpClient: retryablehttp.NewClient().StandardClient(),
+		httpClient: newRetryableClient(30 * time.Second),
 		orgs:       &organizations.Client{APIKey: apiKey},
 		um:         usermanagement.NewClient(apiKey),
 	}
@@ -187,6 +188,12 @@ func (rc *RoleClient) UpdateMemberRole(ctx context.Context, membershipID string,
 // --- Internal helpers ---
 
 const workosBaseURL = "https://api.workos.com"
+
+func newRetryableClient(timeout time.Duration) *http.Client {
+	c := retryablehttp.NewClient().StandardClient()
+	c.Timeout = timeout
+	return c
+}
 
 // doAPI performs a raw HTTP request against the WorkOS REST API.
 // Used for endpoints not covered by the Go SDK (role CRUD).
