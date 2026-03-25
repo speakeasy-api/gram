@@ -464,8 +464,8 @@ export default function OrgAuditLogs() {
       <Page.Header>
         <Page.Header.Title>Audit Logs</Page.Header.Title>
       </Page.Header>
-      <Page.Body fullWidth>
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
+      <Page.Body>
+        <div className="flex w-full flex-col gap-4">
           <div>
             <Type className="font-medium">Recent activity across Gram</Type>
             <Type muted small className="mt-1">
