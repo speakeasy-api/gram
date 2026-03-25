@@ -1,5 +1,20 @@
 # dashboard
 
+## 0.34.3
+
+### Patch Changes
+
+- 68177ef: Upgrade insights copilot to anthropic/claude-sonnet-4.5 and inject current date into system prompt
+- 544fac2: Revamp login page with Speakeasy brand styling, distributed platform diagram, and updated copy.
+
+  - Right pane: new copy, Build/Secure/Observe/Distribute badges, off-white background with moving dot pattern, RGB gradient bar, Terms of Service and Privacy Policy links
+  - Left pane: distributed AI agents and product agents view, Control Plane and Tools Platform sections, pulse flow animations, hover-activated dot background, docs social link
+  - Accessibility: prefers-reduced-motion support for all animations
+
+- cbc16a9: Suppress skeleton flash on logout by skipping the loading shell on unauthenticated routes
+- Updated dependencies [658bef4]
+  - @gram/client@0.33.0
+
 ## 0.34.2
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # server
 
+## 0.31.0
+
+### Minor Changes
+
+- 658bef4: Adds new API endpoints for access and permissions management.
+
+### Patch Changes
+
+- 0e5f639: Prevent clobbering API Key Headers when Client Credentials exchange is unconfigured
+
 ## 0.30.0
 
 ### Minor Changes
