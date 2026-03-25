@@ -10,24 +10,12 @@ package access
 import (
 	"context"
 
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
 
 // Manage roles, grants, and team member access control.
 type Service interface {
-	// List all permissions in your organization, optionally filtered to a specific
-	// user or role.
-	ListGrants(context.Context, *ListGrantsPayload) (res *ListGrantsResult, err error)
-	// Grant permissions to one or more users or roles. Safe to call multiple times
-	// — if a permission already exists it is left unchanged.
-	UpsertGrants(context.Context, *UpsertGrantsPayload) (res *UpsertGrantsResult, err error)
-	// Revoke specific permissions from users or roles. Each entry must exactly
-	// match an existing grant (who, what action, which resource).
-	RemoveGrants(context.Context, *RemoveGrantsPayload) (err error)
-	// Revoke all permissions for a specific user or role.
-	RemovePrincipalGrants(context.Context, *RemovePrincipalGrantsPayload) (err error)
 	// List all roles for the current organization
 	ListRoles(context.Context, *ListRolesPayload) (res *ListRolesResult, err error)
 	// Get a role by ID
@@ -66,7 +54,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants", "listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "updateMemberRole"}
+var MethodNames = [8]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "updateMemberRole"}
 
 // AccessMember is the result type of the access service updateMemberRole
 // method.
@@ -114,56 +102,6 @@ type GetRolePayload struct {
 	SessionToken *string
 }
 
-// A permission record giving a user or role the ability to perform an action
-// on a resource.
-type Grant struct {
-	// Unique identifier of this permission.
-	ID string
-	// The organization this permission belongs to.
-	OrganizationID string
-	// The user or role that holds this permission (e.g. "user:user_abc",
-	// "role:admin").
-	PrincipalUrn string
-	// Whether the principal is a user or a role.
-	PrincipalType string
-	// The action this permission allows (e.g. "build:read", "mcp:connect").
-	Scope string
-	// The resource this permission applies to. "*" means all resources.
-	Resource string
-	// When this permission was granted.
-	CreatedAt string
-	// When this permission was last updated.
-	UpdatedAt string
-}
-
-// A permission entry identifying who it applies to, what action it covers, and
-// which resource it targets.
-type GrantEntry struct {
-	// The user or role this permission entry applies to (e.g. "user:user_abc",
-	// "role:admin").
-	PrincipalUrn urn.Principal
-	// The action being permitted (e.g. "build:read", "mcp:connect").
-	Scope string
-	// The resource this permission applies to. Use "*" for unrestricted access.
-	Resource string
-}
-
-// ListGrantsPayload is the payload type of the access service listGrants
-// method.
-type ListGrantsPayload struct {
-	// Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit
-	// to return all grants.
-	PrincipalUrn *string
-	ApikeyToken  *string
-	SessionToken *string
-}
-
-// ListGrantsResult is the result type of the access service listGrants method.
-type ListGrantsResult struct {
-	// The permissions in your organization.
-	Grants []*Grant
-}
-
 // ListMembersPayload is the payload type of the access service listMembers
 // method.
 type ListMembersPayload struct {
@@ -195,25 +133,6 @@ type ListScopesPayload struct {
 // ListScopesResult is the result type of the access service listScopes method.
 type ListScopesResult struct {
 	Scopes []*ScopeDefinition
-}
-
-// RemoveGrantsPayload is the payload type of the access service removeGrants
-// method.
-type RemoveGrantsPayload struct {
-	ApikeyToken  *string
-	SessionToken *string
-	// The permissions to process.
-	Grants []*GrantEntry
-}
-
-// RemovePrincipalGrantsPayload is the payload type of the access service
-// removePrincipalGrants method.
-type RemovePrincipalGrantsPayload struct {
-	// The user or role to revoke all permissions from (e.g. "user:user_abc",
-	// "role:admin").
-	PrincipalUrn urn.Principal
-	ApikeyToken  *string
-	SessionToken *string
 }
 
 // Role is the result type of the access service getRole method.
@@ -275,22 +194,6 @@ type UpdateRolePayload struct {
 	Grants []*RoleGrant
 	// Optional member IDs to reassign to this role
 	MemberIds []string
-}
-
-// UpsertGrantsPayload is the payload type of the access service upsertGrants
-// method.
-type UpsertGrantsPayload struct {
-	ApikeyToken  *string
-	SessionToken *string
-	// The permissions to process.
-	Grants []*GrantEntry
-}
-
-// UpsertGrantsResult is the result type of the access service upsertGrants
-// method.
-type UpsertGrantsResult struct {
-	// The permissions that were created or already existed.
-	Grants []*Grant
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
