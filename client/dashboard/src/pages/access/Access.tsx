@@ -34,8 +34,12 @@ export default function Access() {
   const currentTab = tabFromPath[lastSegment] || "roles";
   const shouldRedirect = lastSegment === "access";
 
-  const { data: rolesData } = useListRoles();
-  const { data: membersData } = useListMembers();
+  const { data: rolesData } = useListRoles(undefined, undefined, {
+    enabled: isRbacEnabled,
+  });
+  const { data: membersData } = useListMembers(undefined, undefined, {
+    enabled: isRbacEnabled,
+  });
   const roleCount = rolesData?.roles?.length;
   const memberCount = membersData?.members?.length;
 

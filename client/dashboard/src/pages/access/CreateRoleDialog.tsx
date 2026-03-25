@@ -14,7 +14,10 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
-import { useListMembers } from "@gram/client/react-query/listMembers.js";
+import {
+  invalidateAllListMembers,
+  useListMembers,
+} from "@gram/client/react-query/listMembers.js";
 import {
   invalidateAllListRoles,
   useListRoles,
@@ -99,14 +102,20 @@ export function CreateRoleDialog({
 
   const createRole = useCreateRoleMutation({
     onSuccess: async () => {
-      await invalidateAllListRoles(queryClient);
+      await Promise.all([
+        invalidateAllListRoles(queryClient),
+        invalidateAllListMembers(queryClient),
+      ]);
       handleClose();
     },
   });
 
   const updateRole = useUpdateRoleMutation({
     onSuccess: async () => {
-      await invalidateAllListRoles(queryClient);
+      await Promise.all([
+        invalidateAllListRoles(queryClient),
+        invalidateAllListMembers(queryClient),
+      ]);
       handleClose();
     },
   });
