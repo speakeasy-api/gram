@@ -11,3 +11,8 @@ package client
 func ListAuditlogsPath() string {
 	return "/rpc/auditlogs.list"
 }
+
+// ListFacetsAuditlogsPath returns the URL path to the auditlogs service listFacets HTTP endpoint.
+func ListFacetsAuditlogsPath() string {
+	return "/rpc/auditlogs.listFacets"
+}

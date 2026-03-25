@@ -86,6 +86,114 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 	return id, err
 }
 
+const listAuditActionFacets = `-- name: ListAuditActionFacets :many
+SELECT
+  action AS value,
+  action AS display_name,
+  COUNT(*)::bigint AS count
+FROM audit_logs
+WHERE organization_id = $1
+  AND (
+    $2::uuid IS NULL
+    OR project_id = $2::uuid
+  )
+GROUP BY action
+ORDER BY count DESC, action ASC
+`
+
+type ListAuditActionFacetsParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+type ListAuditActionFacetsRow struct {
+	Value       string
+	DisplayName string
+	Count       int64
+}
+
+func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditActionFacetsRow
+	for rows.Next() {
+		var i ListAuditActionFacetsRow
+		if err := rows.Scan(&i.Value, &i.DisplayName, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuditActorFacets = `-- name: ListAuditActorFacets :many
+WITH filtered_logs AS (
+  SELECT actor_id, actor_display_name, seq
+  FROM audit_logs
+  WHERE organization_id = $1
+    AND (
+      $2::uuid IS NULL
+      OR project_id = $2::uuid
+    )
+), actor_counts AS (
+  SELECT actor_id, COUNT(*)::bigint AS count
+  FROM filtered_logs
+  GROUP BY actor_id
+), latest_actor_names AS (
+  SELECT DISTINCT ON (actor_id)
+    actor_id,
+    actor_display_name
+  FROM filtered_logs
+  WHERE actor_display_name IS NOT NULL
+    AND actor_display_name <> ''
+  ORDER BY actor_id, seq DESC
+)
+SELECT
+  actor_counts.actor_id AS value,
+  COALESCE(latest_actor_names.actor_display_name, actor_counts.actor_id) AS display_name,
+  actor_counts.count
+FROM actor_counts
+LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
+ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
+`
+
+type ListAuditActorFacetsParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+type ListAuditActorFacetsRow struct {
+	Value       string
+	DisplayName string
+	Count       int64
+}
+
+func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFacetsParams) ([]ListAuditActorFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditActorFacetsRow
+	for rows.Next() {
+		var i ListAuditActorFacetsRow
+		if err := rows.Scan(&i.Value, &i.DisplayName, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.created_at, p.slug AS project_slug
 FROM audit_logs a
@@ -99,6 +207,14 @@ WHERE a.organization_id = $1
     $3::int8 IS NULL
     OR a.seq < $3::int8
   )
+  AND (
+    $4::text IS NULL
+    OR a.actor_id = $4::text
+  )
+  AND (
+    $5::text IS NULL
+    OR a.action = $5::text
+  )
 ORDER BY a.seq DESC
 LIMIT 51
 `
@@ -107,6 +223,8 @@ type ListAuditLogsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
 	CursorSeq      pgtype.Int8
+	ActorID        pgtype.Text
+	Action         pgtype.Text
 }
 
 type ListAuditLogsRow struct {
@@ -131,7 +249,13 @@ type ListAuditLogsRow struct {
 }
 
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditLogs, arg.OrganizationID, arg.ProjectID, arg.CursorSeq)
+	rows, err := q.db.Query(ctx, listAuditLogs,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.CursorSeq,
+		arg.ActorID,
+		arg.Action,
+	)
 	if err != nil {
 		return nil, err
 	}

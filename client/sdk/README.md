@@ -153,6 +153,7 @@ run();
 ### [Auditlogs](docs/sdks/auditlogs/README.md)
 
 * [list](docs/sdks/auditlogs/README.md#list) - list auditlogs
+* [listFacets](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 
 ### [Auth](docs/sdks/auth/README.md)
 
@@ -375,6 +376,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`auditlogsList`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`auditlogsListFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
 - [`authInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`authLogin`](docs/sdks/auth/README.md#login) - login auth
@@ -518,6 +520,7 @@ To learn about this feature and how to get started, check
 - [`useAgentworkflowsCreateResponseMutation`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`useAgentworkflowsDeleteResponseMutation`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
 - [`useAgentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
+- [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions

@@ -23,6 +23,15 @@ type ListResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ListFacetsResponseBody is the type of the "auditlogs" service "listFacets"
+// endpoint HTTP response body.
+type ListFacetsResponseBody struct {
+	// Available actor facets
+	Actors []*AuditLogFacetOptionResponseBody `form:"actors" json:"actors" xml:"actors"`
+	// Available action facets
+	Actions []*AuditLogFacetOptionResponseBody `form:"actions" json:"actions" xml:"actions"`
+}
+
 // ListUnauthorizedResponseBody is the type of the "auditlogs" service "list"
 // endpoint HTTP response body for the "unauthorized" error.
 type ListUnauthorizedResponseBody struct {
@@ -203,6 +212,188 @@ type ListGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListFacetsUnauthorizedResponseBody is the type of the "auditlogs" service
+// "listFacets" endpoint HTTP response body for the "unauthorized" error.
+type ListFacetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsForbiddenResponseBody is the type of the "auditlogs" service
+// "listFacets" endpoint HTTP response body for the "forbidden" error.
+type ListFacetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsBadRequestResponseBody is the type of the "auditlogs" service
+// "listFacets" endpoint HTTP response body for the "bad_request" error.
+type ListFacetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsNotFoundResponseBody is the type of the "auditlogs" service
+// "listFacets" endpoint HTTP response body for the "not_found" error.
+type ListFacetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsConflictResponseBody is the type of the "auditlogs" service
+// "listFacets" endpoint HTTP response body for the "conflict" error.
+type ListFacetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsUnsupportedMediaResponseBody is the type of the "auditlogs"
+// service "listFacets" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ListFacetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsInvalidResponseBody is the type of the "auditlogs" service
+// "listFacets" endpoint HTTP response body for the "invalid" error.
+type ListFacetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsInvariantViolationResponseBody is the type of the "auditlogs"
+// service "listFacets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListFacetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsUnexpectedResponseBody is the type of the "auditlogs" service
+// "listFacets" endpoint HTTP response body for the "unexpected" error.
+type ListFacetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsGatewayErrorResponseBody is the type of the "auditlogs" service
+// "listFacets" endpoint HTTP response body for the "gateway_error" error.
+type ListFacetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AuditLogResponseBody is used to define fields on response body types.
 type AuditLogResponseBody struct {
 	ID                 string          `form:"id" json:"id" xml:"id"`
@@ -224,6 +415,17 @@ type AuditLogResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
+// AuditLogFacetOptionResponseBody is used to define fields on response body
+// types.
+type AuditLogFacetOptionResponseBody struct {
+	// The facet value used for filtering
+	Value string `form:"value" json:"value" xml:"value"`
+	// The display label shown for the facet value
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// The number of audit logs for this facet value
+	Count int64 `form:"count" json:"count" xml:"count"`
+}
+
 // NewListResponseBody builds the HTTP response body from the result of the
 // "list" endpoint of the "auditlogs" service.
 func NewListResponseBody(res *auditlogs.ListAuditLogsResult) *ListResponseBody {
@@ -241,6 +443,37 @@ func NewListResponseBody(res *auditlogs.ListAuditLogsResult) *ListResponseBody {
 		}
 	} else {
 		body.Logs = []*AuditLogResponseBody{}
+	}
+	return body
+}
+
+// NewListFacetsResponseBody builds the HTTP response body from the result of
+// the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsResponseBody(res *auditlogs.ListAuditLogFacetsResult) *ListFacetsResponseBody {
+	body := &ListFacetsResponseBody{}
+	if res.Actors != nil {
+		body.Actors = make([]*AuditLogFacetOptionResponseBody, len(res.Actors))
+		for i, val := range res.Actors {
+			if val == nil {
+				body.Actors[i] = nil
+				continue
+			}
+			body.Actors[i] = marshalAuditlogsAuditLogFacetOptionToAuditLogFacetOptionResponseBody(val)
+		}
+	} else {
+		body.Actors = []*AuditLogFacetOptionResponseBody{}
+	}
+	if res.Actions != nil {
+		body.Actions = make([]*AuditLogFacetOptionResponseBody, len(res.Actions))
+		for i, val := range res.Actions {
+			if val == nil {
+				body.Actions[i] = nil
+				continue
+			}
+			body.Actions[i] = marshalAuditlogsAuditLogFacetOptionToAuditLogFacetOptionResponseBody(val)
+		}
+	} else {
+		body.Actions = []*AuditLogFacetOptionResponseBody{}
 	}
 	return body
 }
@@ -385,10 +618,162 @@ func NewListGatewayErrorResponseBody(res *goa.ServiceError) *ListGatewayErrorRes
 	return body
 }
 
+// NewListFacetsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsUnauthorizedResponseBody(res *goa.ServiceError) *ListFacetsUnauthorizedResponseBody {
+	body := &ListFacetsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsForbiddenResponseBody(res *goa.ServiceError) *ListFacetsForbiddenResponseBody {
+	body := &ListFacetsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsBadRequestResponseBody(res *goa.ServiceError) *ListFacetsBadRequestResponseBody {
+	body := &ListFacetsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsNotFoundResponseBody(res *goa.ServiceError) *ListFacetsNotFoundResponseBody {
+	body := &ListFacetsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsConflictResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsConflictResponseBody(res *goa.ServiceError) *ListFacetsConflictResponseBody {
+	body := &ListFacetsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListFacetsUnsupportedMediaResponseBody {
+	body := &ListFacetsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsInvalidResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsInvalidResponseBody(res *goa.ServiceError) *ListFacetsInvalidResponseBody {
+	body := &ListFacetsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsInvariantViolationResponseBody(res *goa.ServiceError) *ListFacetsInvariantViolationResponseBody {
+	body := &ListFacetsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsUnexpectedResponseBody(res *goa.ServiceError) *ListFacetsUnexpectedResponseBody {
+	body := &ListFacetsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "auditlogs" service.
+func NewListFacetsGatewayErrorResponseBody(res *goa.ServiceError) *ListFacetsGatewayErrorResponseBody {
+	body := &ListFacetsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListPayload builds a auditlogs service list endpoint payload.
-func NewListPayload(cursor *string, projectSlug *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
+func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
 	v := &auditlogs.ListPayload{}
 	v.Cursor = cursor
+	v.ProjectSlug = projectSlug
+	v.ActorID = actorID
+	v.Action = action
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListFacetsPayload builds a auditlogs service listFacets endpoint payload.
+func NewListFacetsPayload(projectSlug *string, apikeyToken *string, sessionToken *string) *auditlogs.ListFacetsPayload {
+	v := &auditlogs.ListFacetsPayload{}
 	v.ProjectSlug = projectSlug
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

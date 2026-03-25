@@ -75,32 +75,20 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	projectID, err := s.resolveProjectID(ctx, authCtx.ActiveOrganizationID, conv.PtrValOrEmpty(payload.ProjectSlug, ""))
+	if err != nil {
+		return nil, err
+	}
+
 	params := repo.ListAuditLogsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID: uuid.NullUUID{
-			UUID:  uuid.Nil,
-			Valid: false,
-		},
+		ProjectID:      projectID,
 		CursorSeq: pgtype.Int8{
 			Int64: 0,
 			Valid: false,
 		},
-	}
-
-	projectSlug := conv.PtrValOrEmpty(payload.ProjectSlug, "")
-	if projectSlug != "" {
-		project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
-			Slug:           projectSlug,
-			OrganizationID: authCtx.ActiveOrganizationID,
-		})
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return nil, oops.C(oops.CodeNotFound)
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(projectSlug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-		default:
-			params.ProjectID = uuid.NullUUID{UUID: project.ID, Valid: true}
-		}
+		ActorID: conv.PtrToPGTextEmpty(payload.ActorID),
+		Action:  conv.PtrToPGTextEmpty(payload.Action),
 	}
 
 	if payload.Cursor != nil && *payload.Cursor != "" {
@@ -136,6 +124,59 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		Logs:       logs,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload) (*gen.ListAuditLogFacetsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID, err := s.resolveProjectID(ctx, authCtx.ActiveOrganizationID, conv.PtrValOrEmpty(payload.ProjectSlug, ""))
+	if err != nil {
+		return nil, err
+	}
+
+	queries := repo.New(s.db)
+	actorRows, err := queries.ListAuditActorFacets(ctx, repo.ListAuditActorFacetsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit actor facets").Log(ctx, s.logger)
+	}
+
+	actionRows, err := queries.ListAuditActionFacets(ctx, repo.ListAuditActionFacetsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").Log(ctx, s.logger)
+	}
+
+	return &gen.ListAuditLogFacetsResult{
+		Actors:  toAuditActorFacetOptions(actorRows),
+		Actions: toAuditActionFacetOptions(actionRows),
+	}, nil
+}
+
+func (s *Service) resolveProjectID(ctx context.Context, organizationID string, projectSlug string) (uuid.NullUUID, error) {
+	if projectSlug == "" {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+
+	project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
+		Slug:           projectSlug,
+		OrganizationID: organizationID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return uuid.NullUUID{}, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(projectSlug), attr.SlogOrganizationID(organizationID))
+	default:
+		return uuid.NullUUID{UUID: project.ID, Valid: true}, nil
+	}
 }
 
 func encodeCursor(seq int64, id string) string {
@@ -191,4 +232,30 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		Metadata:           metadata,
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
+}
+
+func toAuditActorFacetOptions(rows []repo.ListAuditActorFacetsRow) []*gen.AuditLogFacetOption {
+	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
+	for _, row := range rows {
+		options = append(options, &gen.AuditLogFacetOption{
+			Value:       row.Value,
+			DisplayName: row.DisplayName,
+			Count:       row.Count,
+		})
+	}
+
+	return options
+}
+
+func toAuditActionFacetOptions(rows []repo.ListAuditActionFacetsRow) []*gen.AuditLogFacetOption {
+	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
+	for _, row := range rows {
+		options = append(options, &gen.AuditLogFacetOption{
+			Value:       row.Value,
+			DisplayName: row.DisplayName,
+			Count:       row.Count,
+		})
+	}
+
+	return options
 }

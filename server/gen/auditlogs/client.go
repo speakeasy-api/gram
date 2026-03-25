@@ -15,13 +15,15 @@ import (
 
 // Client is the "auditlogs" service client.
 type Client struct {
-	ListEndpoint goa.Endpoint
+	ListEndpoint       goa.Endpoint
+	ListFacetsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "auditlogs" service client given the endpoints.
-func NewClient(list goa.Endpoint) *Client {
+func NewClient(list, listFacets goa.Endpoint) *Client {
 	return &Client{
-		ListEndpoint: list,
+		ListEndpoint:       list,
+		ListFacetsEndpoint: listFacets,
 	}
 }
 
@@ -45,4 +47,26 @@ func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListAuditLogsRe
 		return
 	}
 	return ires.(*ListAuditLogsResult), nil
+}
+
+// ListFacets calls the "listFacets" endpoint of the "auditlogs" service.
+// ListFacets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListFacets(ctx context.Context, p *ListFacetsPayload) (res *ListAuditLogFacetsResult, err error) {
+	var ires any
+	ires, err = c.ListFacetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAuditLogFacetsResult), nil
 }

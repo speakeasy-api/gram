@@ -3,8 +3,11 @@
  */
 
 import { auditlogsList } from "../funcs/auditlogsList.js";
+import { auditlogsListFacets } from "../funcs/auditlogsListFacets.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
+import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Auditlogs extends ClientSDK {
@@ -22,6 +25,25 @@ export class Auditlogs extends ClientSDK {
     PageIterator<operations.ListAuditLogsResponse, { cursor: string }>
   > {
     return unwrapResultIterator(auditlogsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listFacets auditlogs
+   *
+   * @remarks
+   * List available audit log facet values across organization and projects.
+   */
+  async listFacets(
+    request?: operations.ListAuditLogFacetsRequest | undefined,
+    security?: operations.ListAuditLogFacetsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListAuditLogFacetsResult> {
+    return unwrapAsync(auditlogsListFacets(
       this,
       request,
       security,
