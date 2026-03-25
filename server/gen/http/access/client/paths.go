@@ -7,26 +7,6 @@
 
 package client
 
-// ListGrantsAccessPath returns the URL path to the access service listGrants HTTP endpoint.
-func ListGrantsAccessPath() string {
-	return "/rpc/access.listGrants"
-}
-
-// UpsertGrantsAccessPath returns the URL path to the access service upsertGrants HTTP endpoint.
-func UpsertGrantsAccessPath() string {
-	return "/rpc/access.upsertGrants"
-}
-
-// RemoveGrantsAccessPath returns the URL path to the access service removeGrants HTTP endpoint.
-func RemoveGrantsAccessPath() string {
-	return "/rpc/access.removeGrants"
-}
-
-// RemovePrincipalGrantsAccessPath returns the URL path to the access service removePrincipalGrants HTTP endpoint.
-func RemovePrincipalGrantsAccessPath() string {
-	return "/rpc/access.removePrincipalGrants"
-}
-
 // ListRolesAccessPath returns the URL path to the access service listRoles HTTP endpoint.
 func ListRolesAccessPath() string {
 	return "/rpc/access.listRoles"

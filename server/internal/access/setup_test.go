@@ -7,14 +7,11 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	gen "github.com/speakeasy-api/gram/server/gen/access"
-	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -52,10 +49,14 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	tracerProvider := testenv.NewTracerProvider(t)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("clone test database: %v", err)
+	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("new redis client: %v", err)
+	}
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
@@ -69,29 +70,4 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 		service: svc,
 		conn:    conn,
 	}
-}
-
-// upsertGrant is a test helper that upserts a single grant via the batch API.
-func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, principalUrnStr, scope, resource string) *gen.Grant {
-	t.Helper()
-
-	principal, err := urn.ParsePrincipal(principalUrnStr)
-	require.NoError(t, err)
-
-	result, err := svc.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
-		Grants: []*gen.GrantEntry{
-			{PrincipalUrn: principal, Scope: scope, Resource: resource},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Grants, 1)
-
-	return result.Grants[0]
-}
-
-func mustParsePrincipal(t *testing.T, s string) urn.Principal {
-	t.Helper()
-	p, err := urn.ParsePrincipal(s)
-	require.NoError(t, err)
-	return p
 }
