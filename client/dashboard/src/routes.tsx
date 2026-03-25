@@ -36,6 +36,7 @@ import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
+import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgLogs from "./pages/org/OrgLogs";
@@ -553,6 +554,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
+  },
+  auditLogs: {
+    title: "Audit Logs",
+    url: "audit-logs",
+    icon: "history",
+    component: OrgAuditLogs,
   },
   adminSettings: {
     title: "Super Admin",
