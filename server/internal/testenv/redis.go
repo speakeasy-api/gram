@@ -38,12 +38,17 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			return nil, fmt.Errorf("failed to parse redis connection string: %w", err)
 		}
 
-		// Resolve hostname to IP up front so that Redis connections inside a
-		// synctest bubble never trigger DNS lookups (Go's net.DefaultResolver
-		// uses a global singleflight whose goroutines live outside any bubble).
-		host, port, _ := net.SplitHostPort(uri.Host)
-		if ips, err := net.LookupHost(host); err == nil && len(ips) > 0 {
-			host = ips[0]
+		host, port, err := net.SplitHostPort(uri.Host)
+		if err != nil {
+			return nil, fmt.Errorf("split redis host/port: %w", err)
+		}
+
+		// Avoid a DNS lookup for localhost inside synctest bubbles without
+		// changing arbitrary Docker/Testcontainers endpoints. Re-resolving the
+		// host here can pick an address that is not the actual published Redis
+		// endpoint (for example ::1 instead of Docker's IPv4 localhost binding).
+		if host == "localhost" {
+			host = "127.0.0.1"
 		}
 
 		client := redis.NewClient(&redis.Options{

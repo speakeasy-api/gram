@@ -45,6 +45,8 @@ var MethodNames = [1]string{"list"}
 
 type AuditLog struct {
 	ID                 string
+	ProjectID          *string
+	ProjectSlug        *string
 	ActorID            string
 	ActorType          string
 	ActorDisplayName   *string

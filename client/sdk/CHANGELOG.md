@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.33.0
+
+### Minor Changes
+
+- 658bef4: Adds new API endpoints for access and permissions management.
+
 ## 0.28.5
 
 ### Patch Changes

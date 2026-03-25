@@ -265,6 +265,8 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 func unmarshalAuditLogResponseBodyToAuditlogsAuditLog(v *AuditLogResponseBody) *auditlogs.AuditLog {
 	res := &auditlogs.AuditLog{
 		ID:                 *v.ID,
+		ProjectID:          v.ProjectID,
+		ProjectSlug:        v.ProjectSlug,
 		ActorID:            *v.ActorID,
 		ActorType:          *v.ActorType,
 		ActorDisplayName:   v.ActorDisplayName,

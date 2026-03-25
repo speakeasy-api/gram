@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e04aeb1d5e517e863ce63df5a7e2789e
+  docChecksum: 5ab8023d99a2866f116d047a582f3fe3
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
@@ -90,7 +90,7 @@ trackedFiles:
   docs/models/components/asset.md:
     last_write_checksum: sha1:3da48f7c0a6c8e83a69059b082816228dd56dc70
   docs/models/components/auditlog.md:
-    last_write_checksum: sha1:60ca364c5d4f7a4d0fbe71d57dc96ce474e575c6
+    last_write_checksum: sha1:2c00f3c5903e507e6648e3f73670a9914ea481f1
   docs/models/components/canonicaltoolattributes.md:
     last_write_checksum: sha1:54b9a25c5259c24a5256f150b10779e39adf7d2e
   docs/models/components/captureeventpayload.md:
@@ -2120,7 +2120,7 @@ trackedFiles:
     last_write_checksum: sha1:8acb541aa089a73038818ff795e737d854dd4060
     pristine_git_object: 09414470c2ae72ff198a87557bd5da2d49838849
   src/models/components/auditlog.ts:
-    last_write_checksum: sha1:9505f3c9e8333d743c90c90c351ebb4051df5242
+    last_write_checksum: sha1:f2850e269d248a6b51579977ac170210b1278b32
   src/models/components/canonicaltoolattributes.ts:
     id: a6b329b1f87b
     last_write_checksum: sha1:86d90b89fca842c7e25ac436cdb9ee79c7786cc8

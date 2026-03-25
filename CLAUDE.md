@@ -58,6 +58,18 @@ Contains the main application code for the Gram server:
 
 </commands>
 
+### client/dashboard
+
+The main frontend application lives in `client/dashboard/` (not `client/` directly).
+
+<commands>
+
+- `cd client/dashboard && npx tsc --noEmit`: Type-check the dashboard
+- `cd client/dashboard && pnpm build`: Build the dashboard
+- `cd client/dashboard && pnpm dev`: Run dev server
+
+</commands>
+
 ### Atlas Migration Troubleshooting
 
 - **"migration file X was added out of order" error**: Rename the migration file to have a timestamp after the latest existing migration (e.g., `20260129_foo.sql` → `20260203000001_foo.sql`), then run `mise db:hash` to regenerate `atlas.sum`.

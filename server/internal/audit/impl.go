@@ -164,7 +164,7 @@ func decodeCursor(cursor string) (int64, error) {
 	return seq, nil
 }
 
-func toAuditLog(row repo.AuditLog) (*gen.AuditLog, error) {
+func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		metadata = make(map[string]any)
@@ -175,6 +175,8 @@ func toAuditLog(row repo.AuditLog) (*gen.AuditLog, error) {
 
 	return &gen.AuditLog{
 		ID:                 row.ID.String(),
+		ProjectID:          conv.FromNullableUUID(row.ProjectID),
+		ProjectSlug:        conv.FromPGText[string](row.ProjectSlug),
 		ActorID:            row.ActorID,
 		ActorType:          row.ActorType,
 		ActorDisplayName:   conv.FromPGText[string](row.ActorDisplayName),
