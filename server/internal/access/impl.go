@@ -96,9 +96,9 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	tr := repo.New(dbtx)
-	existingGrants, err := listExistingGrantsByEntry(ctx, tr, authCtx.ActiveOrganizationID, payload.Grants)
+	existingGrants, err := listGrants(ctx, tr, authCtx.ActiveOrganizationID, payload.Grants)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to inspect existing grants").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list existing grants").Log(ctx, s.logger)
 	}
 
 	grants := make([]*gen.Grant, 0, len(payload.Grants))
@@ -107,9 +107,6 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 		if form == nil {
 			continue
 		}
-
-		key := principalGrantKey(form.PrincipalUrn.String(), form.Scope, form.Resource)
-		existing, hadExisting := existingGrants[key]
 
 		row, err := tr.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -123,8 +120,9 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 
 		grant := grantFromRow(row)
 		grants = append(grants, grant)
-		existingGrants[key] = row
 
+		key := principalGrantKey(form.PrincipalUrn.String(), form.Scope, form.Resource)
+		existing, hadExisting := existingGrants[key]
 		var beforeGrant *gen.Grant
 		if hadExisting {
 			beforeGrant = grantFromRow(existing)
@@ -132,18 +130,18 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 
 		if err := audit.LogAccessGrantUpsert(ctx, dbtx, audit.LogAccessGrantUpsertEvent{
 			OrganizationID:   authCtx.ActiveOrganizationID,
-			Actor:            auditActor(authCtx),
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
 			ActorSlug:        nil,
 			GrantBefore:      beforeGrant,
 			GrantAfter:       grant,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to log grant upsert").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to create grant upsert audit log").Log(ctx, s.logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated grants").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit grant upsert").Log(ctx, s.logger)
 	}
 
 	return &gen.UpsertGrantsResult{Grants: grants}, nil
@@ -162,9 +160,9 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	tr := repo.New(dbtx)
-	existingGrants, err := listExistingGrantsByEntry(ctx, tr, authCtx.ActiveOrganizationID, payload.Grants)
+	existingGrants, err := listGrants(ctx, tr, authCtx.ActiveOrganizationID, payload.Grants)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to inspect existing grants").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to list existing grants").Log(ctx, s.logger)
 	}
 	for _, entry := range payload.Grants {
 		if entry == nil {
@@ -191,18 +189,18 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 		if existingGrant != nil {
 			if err := audit.LogAccessGrantRemove(ctx, dbtx, audit.LogAccessGrantRemoveEvent{
 				OrganizationID:   authCtx.ActiveOrganizationID,
-				Actor:            auditActor(authCtx),
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 				ActorDisplayName: authCtx.Email,
 				ActorSlug:        nil,
 				Grant:            existingGrant,
 			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "failed to log grant removal").Log(ctx, s.logger)
+				return oops.E(oops.CodeUnexpected, err, "failed to create grant removal audit log").Log(ctx, s.logger)
 			}
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to save grant removals").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to commit grant removals").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -226,7 +224,7 @@ func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.Remove
 		PrincipalUrn:   payload.PrincipalUrn.String(),
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to inspect principal grants").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to list principal grants").Log(ctx, s.logger)
 	}
 
 	_, err = tr.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
@@ -241,18 +239,18 @@ func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.Remove
 		for _, row := range existingRows {
 			if err := audit.LogAccessGrantRemovePrincipal(ctx, dbtx, audit.LogAccessGrantRemovePrincipalEvent{
 				OrganizationID:   authCtx.ActiveOrganizationID,
-				Actor:            auditActor(authCtx),
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 				ActorDisplayName: authCtx.Email,
 				ActorSlug:        nil,
 				Grant:            grantFromRow(row),
 			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "failed to log principal grant removal").Log(ctx, s.logger)
+				return oops.E(oops.CodeUnexpected, err, "failed to create principal grant removal audit log").Log(ctx, s.logger)
 			}
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to save principal grant removals").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to commit principal grant removals").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -271,28 +269,19 @@ func grantFromRow(row repo.PrincipalGrant) *gen.Grant {
 	}
 }
 
-func auditActor(authCtx *contextvalues.AuthContext) urn.Principal {
-	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-}
-
-func listExistingGrantsByEntry(ctx context.Context, tr *repo.Queries, organizationID string, entries []*gen.GrantEntry) (map[string]repo.PrincipalGrant, error) {
-	principalURNs := make(map[string]struct{}, len(entries))
+func listGrants(ctx context.Context, tr *repo.Queries, organizationID string, entries []*gen.GrantEntry) (map[string]repo.PrincipalGrant, error) {
+	grantsByKey := make(map[string]repo.PrincipalGrant, len(entries))
 	for _, entry := range entries {
 		if entry == nil {
 			continue
 		}
 
-		principalURNs[entry.PrincipalUrn.String()] = struct{}{}
-	}
-
-	grantsByKey := make(map[string]repo.PrincipalGrant)
-	for principalURN := range principalURNs {
 		rows, err := tr.ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
 			OrganizationID: organizationID,
-			PrincipalUrn:   principalURN,
+			PrincipalUrn:   entry.PrincipalUrn.String(),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("list grants for principal %q: %w", principalURN, err)
+			return nil, fmt.Errorf("list grants for principal %q: %w", entry.PrincipalUrn, err)
 		}
 
 		for _, row := range rows {
