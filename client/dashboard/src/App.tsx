@@ -82,25 +82,25 @@ export default function App() {
   }, []);
 
   return (
-    <NuqsAdapter>
-      <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
-        <LocalTooltipProvider>
-          <TooltipProvider>
-            <TelemetryProvider>
-              <CommandPaletteProvider>
-                <BrowserRouter>
+    <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
+      <LocalTooltipProvider>
+        <TooltipProvider>
+          <TelemetryProvider>
+            <CommandPaletteProvider>
+              <BrowserRouter>
+                <NuqsAdapter>
                   <SdkProvider>
                     <AppContent />
                     <Toaster />
                     <CommandPalette />
                   </SdkProvider>
-                </BrowserRouter>
-              </CommandPaletteProvider>
-            </TelemetryProvider>
-          </TooltipProvider>
-        </LocalTooltipProvider>
-      </MoonshineConfigProvider>
-    </NuqsAdapter>
+                </NuqsAdapter>
+              </BrowserRouter>
+            </CommandPaletteProvider>
+          </TelemetryProvider>
+        </TooltipProvider>
+      </LocalTooltipProvider>
+    </MoonshineConfigProvider>
   );
 }
 
