@@ -45,6 +45,8 @@ func TestAuditService_List_Unauthorized(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.Error(t, err)
 
@@ -63,6 +65,8 @@ func TestAuditService_List_Empty(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -119,6 +123,8 @@ func TestAuditService_List_Success(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -196,6 +202,8 @@ func TestAuditService_List_FiltersByOrganization(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -223,6 +231,8 @@ func TestAuditService_List_OrgScopedLogHasNoProjectFields(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -273,6 +283,8 @@ func TestAuditService_List_FiltersByProjectSlug(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  authCtx.ProjectSlug,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -281,6 +293,139 @@ func TestAuditService_List_FiltersByProjectSlug(t *testing.T) {
 	require.Equal(t, authCtx.ProjectID.String(), *result.Logs[0].ProjectID)
 	require.NotNil(t, result.Logs[0].ProjectSlug)
 	require.Equal(t, *authCtx.ProjectSlug, *result.Logs[0].ProjectSlug)
+}
+
+func TestAuditService_List_FiltersByActorID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	actorID := "user:target"
+
+	matchingID := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:        actorID,
+		actorType:      "user",
+		action:         "project:update",
+		subjectID:      "subject-target",
+		subjectType:    "project",
+	})
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:        "user:other",
+		actorType:      "user",
+		action:         "project:update",
+		subjectID:      "subject-other",
+		subjectType:    "project",
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      &actorID,
+		Action:       nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, matchingID.String(), result.Logs[0].ID)
+	require.Equal(t, actorID, result.Logs[0].ActorID)
+}
+
+func TestAuditService_List_FiltersByAction(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	action := "api_key:create"
+
+	matchingID := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:        "user:first",
+		actorType:      "user",
+		action:         action,
+		subjectID:      "subject-match",
+		subjectType:    "api_key",
+	})
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:        "user:second",
+		actorType:      "user",
+		action:         "project:update",
+		subjectID:      "subject-other",
+		subjectType:    "project",
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       &action,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, matchingID.String(), result.Logs[0].ID)
+	require.Equal(t, action, result.Logs[0].Action)
+}
+
+func TestAuditService_List_FiltersByActorIDAndAction(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	actorID := "user:target"
+	action := "project:update"
+
+	matchingID := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:        actorID,
+		actorType:      "user",
+		action:         action,
+		subjectID:      "subject-match",
+		subjectType:    "project",
+	})
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:        actorID,
+		actorType:      "user",
+		action:         "api_key:create",
+		subjectID:      "subject-action-miss",
+		subjectType:    "api_key",
+	})
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:        "user:other",
+		actorType:      "user",
+		action:         action,
+		subjectID:      "subject-actor-miss",
+		subjectType:    "project",
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      &actorID,
+		Action:       &action,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, matchingID.String(), result.Logs[0].ID)
 }
 
 func TestAuditService_List_DeletedProjectStillReturnsProjectSlug(t *testing.T) {
@@ -307,6 +452,8 @@ func TestAuditService_List_DeletedProjectStillReturnsProjectSlug(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -328,6 +475,8 @@ func TestAuditService_List_ProjectSlugNotFound(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  &missingSlug,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.Error(t, err)
 
@@ -347,6 +496,8 @@ func TestAuditService_List_InvalidCursor(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       &invalidCursor,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.Error(t, err)
 
@@ -380,6 +531,8 @@ func TestAuditService_List_Pagination(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, page1.Logs, 50)
@@ -397,6 +550,8 @@ func TestAuditService_List_Pagination(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       page1.NextCursor,
 		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, page2.Logs, 1)
@@ -442,6 +597,8 @@ func TestAuditService_List_PaginationWithProjectFilter(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       nil,
 		ProjectSlug:  authCtx.ProjectSlug,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, page1.Logs, 50)
@@ -456,6 +613,8 @@ func TestAuditService_List_PaginationWithProjectFilter(t *testing.T) {
 		SessionToken: nil,
 		Cursor:       page1.NextCursor,
 		ProjectSlug:  authCtx.ProjectSlug,
+		ActorID:      nil,
+		Action:       nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, page2.Logs, 1)

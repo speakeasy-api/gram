@@ -11,6 +11,7 @@ export * from "./addOAuthProxyServer.js";
 export * from "./agentworkflowsCreateResponse.js";
 export * from "./agentworkflowsDeleteResponse.js";
 export * from "./agentworkflowsGetResponse.js";
+export * from "./auditLogFacets.js";
 export * from "./auditLogs.js";
 export * from "./chatGenerateTitle.js";
 export * from "./chatSessionsCreate.js";

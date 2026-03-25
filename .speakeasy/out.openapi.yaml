@@ -2060,6 +2060,20 @@ paths:
             description: Project slug to filter audit logs to a specific project.
             type: string
         - allowEmptyValue: true
+          description: Actor ID to filter audit logs to a specific actor.
+          in: query
+          name: actor_id
+          schema:
+            description: Actor ID to filter audit logs to a specific actor.
+            type: string
+        - allowEmptyValue: true
+          description: Action to filter audit logs to a specific action.
+          in: query
+          name: action
+          schema:
+            description: Action to filter audit logs to a specific action.
+            type: string
+        - allowEmptyValue: true
           description: API Key header
           in: header
           name: Gram-Key
@@ -2152,6 +2166,103 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: AuditLogs
+  /rpc/auditlogs.listFacets:
+    get:
+      description: List available audit log facet values across organization and projects.
+      operationId: listAuditLogFacets
+      parameters:
+        - allowEmptyValue: true
+          description: Project slug to filter facet values to a specific project.
+          in: query
+          name: project_slug
+          schema:
+            description: Project slug to filter facet values to a specific project.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAuditLogFacetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listFacets auditlogs
+      tags:
+        - auditlogs
+      x-speakeasy-name-override: listFacets
+      x-speakeasy-react-hook:
+        name: AuditLogFacets
   /rpc/auth.callback:
     get:
       description: Handles the authentication callback.
@@ -13939,6 +14050,23 @@ components:
         - subject_id
         - subject_type
         - created_at
+    AuditLogFacetOption:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: The number of audit logs for this facet value
+          format: int64
+        display_name:
+          type: string
+          description: The display label shown for the facet value
+        value:
+          type: string
+          description: The facet value used for filtering
+      required:
+        - value
+        - display_name
+        - count
     BaseResourceAttributes:
       type: object
       properties:
@@ -16719,9 +16847,37 @@ components:
       description: Result of listing distinct attribute keys
       required:
         - keys
+    ListAuditLogFacetsForm:
+      type: object
+      properties:
+        project_slug:
+          type: string
+          description: Project slug to filter facet values to a specific project.
+    ListAuditLogFacetsResult:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogFacetOption'
+          description: Available action facets
+        actors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogFacetOption'
+          description: Available actor facets
+      required:
+        - actors
+        - actions
     ListAuditLogsForm:
       type: object
       properties:
+        action:
+          type: string
+          description: Action to filter audit logs to a specific action.
+        actor_id:
+          type: string
+          description: Actor ID to filter audit logs to a specific actor.
         cursor:
           type: string
           description: The cursor for paginating through audit logs.

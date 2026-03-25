@@ -32,12 +32,36 @@ var _ = Service("auditlogs", func() {
 			security.SessionHeader()
 			Param("cursor")
 			Param("project_slug")
+			Param("actor_id")
+			Param("action")
 		})
 
 		shared.CursorPagination()
 		Meta("openapi:operationId", "listAuditLogs")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AuditLogs"}`)
+	})
+
+	Method("listFacets", func() {
+		Description("List available audit log facet values across organization and projects.")
+
+		Payload(func() {
+			Extend(ListAuditLogFacetsForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+		Result(ListAuditLogFacetsResult)
+
+		HTTP(func() {
+			GET("/rpc/auditlogs.listFacets")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Param("project_slug")
+		})
+
+		Meta("openapi:operationId", "listAuditLogFacets")
+		Meta("openapi:extension:x-speakeasy-name-override", "listFacets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AuditLogFacets"}`)
 	})
 })
 
@@ -82,6 +106,12 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 	Attribute("project_slug", String, func() {
 		Description("Project slug to filter audit logs to a specific project.")
 	})
+	Attribute("actor_id", String, func() {
+		Description("Actor ID to filter audit logs to a specific actor.")
+	})
+	Attribute("action", String, func() {
+		Description("Action to filter audit logs to a specific action.")
+	})
 })
 
 var ListAuditLogsResult = Type("ListAuditLogsResult", func() {
@@ -90,4 +120,24 @@ var ListAuditLogsResult = Type("ListAuditLogsResult", func() {
 	Attribute("next_cursor", String, func() {
 		Description("The cursor to be used for the next page of results.")
 	})
+})
+
+var AuditLogFacetOption = Type("AuditLogFacetOption", func() {
+	Attribute("value", String, "The facet value used for filtering")
+	Attribute("display_name", String, "The display label shown for the facet value")
+	Attribute("count", Int64, "The number of audit logs for this facet value")
+
+	Required("value", "display_name", "count")
+})
+
+var ListAuditLogFacetsForm = Type("ListAuditLogFacetsForm", func() {
+	Attribute("project_slug", String, func() {
+		Description("Project slug to filter facet values to a specific project.")
+	})
+})
+
+var ListAuditLogFacetsResult = Type("ListAuditLogFacetsResult", func() {
+	Required("actors", "actions")
+	Attribute("actors", ArrayOf(AuditLogFacetOption), "Available actor facets")
+	Attribute("actions", ArrayOf(AuditLogFacetOption), "Available action facets")
 })
