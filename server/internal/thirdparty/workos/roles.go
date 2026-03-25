@@ -180,8 +180,11 @@ func (rc *RoleClient) ListOrgUsers(ctx context.Context, orgID string) (map[strin
 
 	for {
 		resp, err := rc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
+			Email:          "",
 			OrganizationID: orgID,
 			Limit:          100,
+			Order:          "",
+			Before:         "",
 			After:          after,
 		})
 		if err != nil {
