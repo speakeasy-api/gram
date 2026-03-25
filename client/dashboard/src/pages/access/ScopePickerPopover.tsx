@@ -4,9 +4,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useOrganization } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
+import { useListMCPRegistries } from "@gram/client/react-query/listMCPRegistries";
 import { Check, ChevronDown } from "lucide-react";
-import { MOCK_MCP_SERVERS, MOCK_PROJECTS } from "./mock-data";
 import type { ResourceType } from "./types";
 
 interface ScopePickerPopoverProps {
@@ -22,6 +23,13 @@ export function ScopePickerPopover({
   resources,
   onChangeResources,
 }: ScopePickerPopoverProps) {
+  const organization = useOrganization();
+  const { data: mcpData } = useListMCPRegistries(
+    { gramSession: "" },
+    undefined,
+    { enabled: resourceType === "mcp" },
+  );
+
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
     return (
@@ -33,7 +41,9 @@ export function ScopePickerPopover({
 
   const isUnrestricted = resources === null;
   const resourceList =
-    resourceType === "project" ? MOCK_PROJECTS : MOCK_MCP_SERVERS;
+    resourceType === "project"
+      ? organization.projects.map((p) => ({ id: p.id, name: p.name }))
+      : (mcpData?.registries ?? []).map((r) => ({ id: r.id, name: r.name }));
   const label = getLabel(resourceType, resources);
 
   const toggleProject = (id: string) => {
