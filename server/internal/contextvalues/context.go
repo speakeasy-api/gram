@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"time"
 )
 
 type contextKey string
@@ -19,6 +20,8 @@ type AuthContext struct {
 	Email                 *string
 	AccountType           string
 	HasActiveSubscription bool
+	IsFreeTrial           bool
+	FreeTrialEndsAt       time.Time
 	ProjectSlug           *string
 	APIKeyScopes          []string
 }

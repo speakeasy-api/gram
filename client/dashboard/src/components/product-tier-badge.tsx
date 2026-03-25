@@ -14,6 +14,7 @@ export const ProductTierBadge = ({
     base_PAID: "Base",
     __deprecated__pro: "Pro",
     enterprise: "Enterprise",
+    enterprise_free_trial: "Enterprise Trial",
   }[finalTier];
 
   const classes = productTierColors(finalTier);
@@ -45,6 +46,11 @@ export const productTierColors = (tier: ProductTier) => {
       ring: "ring-violet-500/50",
     },
     enterprise: {
+      bg: "bg-success-foreground dark:bg-success",
+      text: "text-success dark:text-white",
+      ring: "ring-success-foreground/50 dark:ring-success/50",
+    },
+    enterprise_free_trial: {
       bg: "bg-success-foreground dark:bg-success",
       text: "text-success dark:text-white",
       ring: "ring-success-foreground/50 dark:ring-success/50",

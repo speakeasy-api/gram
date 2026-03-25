@@ -86,7 +86,10 @@ type InfoResult struct {
 	IsAdmin              bool
 	ActiveOrganizationID string
 	GramAccountType      string
-	Organizations        []*OrganizationEntry
+	IsFreeTrial          bool
+	// When the free trial ends.
+	FreeTrialEndsAt *string
+	Organizations   []*OrganizationEntry
 	// The authentication session
 	SessionToken string
 	// The authentication session

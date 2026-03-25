@@ -110,6 +110,8 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 
 	authCtx.AccountType = orgMetadata.GramAccountType
 	authCtx.HasActiveSubscription = orgMetadata.HasActiveSubscription
+	authCtx.IsFreeTrial = orgMetadata.IsFreeTrial
+	authCtx.FreeTrialEndsAt = orgMetadata.FreeTrialEndsAt
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 

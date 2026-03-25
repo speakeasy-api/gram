@@ -170,12 +170,17 @@ var _ = Service("auth", func() {
 			Attribute("is_admin", Boolean)
 			Attribute("active_organization_id", String)
 			Attribute("gram_account_type", String)
+			Attribute("is_free_trial", Boolean)
+			Attribute("free_trial_ends_at", String, func() {
+				Description("When the free trial ends.")
+				Format(FormatDateTime)
+			})
 			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 
 			Attribute("session_token", String, "The authentication session")
 			Attribute("session_cookie", String, "The authentication session")
 
-			Required("user_id", "user_email", "is_admin", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type")
+			Required("user_id", "user_email", "is_admin", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type", "is_free_trial")
 		})
 
 		HTTP(func() {

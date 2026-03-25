@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: ebb34b86696404a8a4cbab9f18f31a0f
+  docChecksum: 64551fc2c9dbe67e30a7abfdc09b407b
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.5
-  configChecksum: 3f394a5a79c23213d5493b1964f63728
+  releaseVersion: 0.32.7
+  configChecksum: 3724f5b75f62f6bc3900df3db895bb63
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -282,7 +282,7 @@ trackedFiles:
   docs/models/components/httptooldefinition.md:
     last_write_checksum: sha1:f3cffac1cdd92d5b8a8a4cacc7439d50aff4b290
   docs/models/components/inforesponsebody.md:
-    last_write_checksum: sha1:366c66e87000e6b895f19b1aafb01f5c48201ae9
+    last_write_checksum: sha1:5087a0bf964a1df21316880ad715107bb172aa46
   docs/models/components/instancemcpserver.md:
     last_write_checksum: sha1:ccc6253a85a4b02be4debf1b1c262b87d96a1cdf
   docs/models/components/integration.md:
@@ -1318,7 +1318,7 @@ trackedFiles:
   docs/models/operations/sessioninforequest.md:
     last_write_checksum: sha1:71fd4a8397c455c008e0813ecc399ccfba27c84d
   docs/models/operations/sessioninforesponse.md:
-    last_write_checksum: sha1:2564f68c067350fda2c03493bfe8b438d93f636b
+    last_write_checksum: sha1:f751d008bae9de7e4516c309e0f85c36af558c1a
   docs/models/operations/sessioninfosecurity.md:
     last_write_checksum: sha1:38062637f91e8c80f53ec89ef396accc3fc01700
   docs/models/operations/setmcpmetadatarequest.md:
@@ -1545,11 +1545,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:61ea3a87edf321294219ba134d80eb7e178a3e3b
+    last_write_checksum: sha1:a09228bc5a5e8e7a9b851709e528f5bb95c0f664
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:b62141ed8b7d3a72fa882b69ba49aefc0fab42c5
+    last_write_checksum: sha1:548dc7ccec2c861331b092b7d1345d31ec952ce6
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2035,7 +2035,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:89d660470d236a38abcf590732e760afb99a3599
+    last_write_checksum: sha1:5701a9f5a56101001a40f80b5bb0eb2ceb849c48
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2417,7 +2417,7 @@ trackedFiles:
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
-    last_write_checksum: sha1:c169c83e7ad476f7fab68737a03c4578d2494c41
+    last_write_checksum: sha1:fcee6916a68ae27d0490d16ece1bd2008baa74d5
     pristine_git_object: e93de840297e9669bc6ddfb331f965460c76442d
   src/models/components/instancemcpserver.ts:
     id: 49096c4f3d43
@@ -4301,7 +4301,7 @@ examples:
     speakeasy-default-session-info:
       responses:
         "200":
-          application/json: {"active_organization_id": "<id>", "gram_account_type": "<value>", "is_admin": false, "organizations": [{"id": "<id>", "name": "<value>", "projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}], "slug": "<value>"}], "user_email": "<value>", "user_id": "<id>"}
+          application/json: {"active_organization_id": "<id>", "gram_account_type": "<value>", "is_admin": false, "is_free_trial": false, "organizations": [{"id": "<id>", "name": "<value>", "projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}], "slug": "<value>"}], "user_email": "<value>", "user_id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

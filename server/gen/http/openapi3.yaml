@@ -16191,9 +16191,15 @@ components:
             properties:
                 active_organization_id:
                     type: string
+                free_trial_ends_at:
+                    type: string
+                    description: When the free trial ends.
+                    format: date-time
                 gram_account_type:
                     type: string
                 is_admin:
+                    type: boolean
+                is_free_trial:
                     type: boolean
                 organizations:
                     type: array
@@ -16216,6 +16222,7 @@ components:
                 - active_organization_id
                 - organizations
                 - gram_account_type
+                - is_free_trial
         InstanceMcpServer:
             type: object
             properties:

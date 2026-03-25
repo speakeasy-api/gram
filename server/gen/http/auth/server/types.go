@@ -22,15 +22,18 @@ type RegisterRequestBody struct {
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
-	UserID               string                           `form:"user_id" json:"user_id" xml:"user_id"`
-	UserEmail            string                           `form:"user_email" json:"user_email" xml:"user_email"`
-	UserSignature        *string                          `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
-	UserDisplayName      *string                          `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
-	UserPhotoURL         *string                          `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
-	IsAdmin              bool                             `form:"is_admin" json:"is_admin" xml:"is_admin"`
-	ActiveOrganizationID string                           `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
-	GramAccountType      string                           `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
-	Organizations        []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	UserID               string  `form:"user_id" json:"user_id" xml:"user_id"`
+	UserEmail            string  `form:"user_email" json:"user_email" xml:"user_email"`
+	UserSignature        *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
+	UserDisplayName      *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
+	UserPhotoURL         *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
+	IsAdmin              bool    `form:"is_admin" json:"is_admin" xml:"is_admin"`
+	ActiveOrganizationID string  `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
+	GramAccountType      string  `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
+	IsFreeTrial          bool    `form:"is_free_trial" json:"is_free_trial" xml:"is_free_trial"`
+	// When the free trial ends.
+	FreeTrialEndsAt *string                          `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
+	Organizations   []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1147,6 +1150,8 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		IsAdmin:              res.IsAdmin,
 		ActiveOrganizationID: res.ActiveOrganizationID,
 		GramAccountType:      res.GramAccountType,
+		IsFreeTrial:          res.IsFreeTrial,
+		FreeTrialEndsAt:      res.FreeTrialEndsAt,
 	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*OrganizationEntryResponseBody, len(res.Organizations))

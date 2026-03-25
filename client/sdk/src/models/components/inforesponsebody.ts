@@ -14,8 +14,13 @@ import {
 
 export type InfoResponseBody = {
   activeOrganizationId: string;
+  /**
+   * When the free trial ends.
+   */
+  freeTrialEndsAt?: Date | undefined;
   gramAccountType: string;
   isAdmin: boolean;
+  isFreeTrial: boolean;
   organizations: Array<OrganizationEntry>;
   userDisplayName?: string | undefined;
   userEmail: string;
@@ -31,8 +36,12 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     active_organization_id: z.string(),
+    free_trial_ends_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     gram_account_type: z.string(),
     is_admin: z.boolean(),
+    is_free_trial: z.boolean(),
     organizations: z.array(OrganizationEntry$inboundSchema),
     user_display_name: z.optional(z.string()),
     user_email: z.string(),
@@ -43,8 +52,10 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "active_organization_id": "activeOrganizationId",
+      "free_trial_ends_at": "freeTrialEndsAt",
       "gram_account_type": "gramAccountType",
       "is_admin": "isAdmin",
+      "is_free_trial": "isFreeTrial",
       "user_display_name": "userDisplayName",
       "user_email": "userEmail",
       "user_id": "userId",

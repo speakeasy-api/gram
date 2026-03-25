@@ -7,6 +7,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
+import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
@@ -67,6 +68,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <FreeTierExceededNotification />
+        <FreeTrialNotification />
       </SidebarFooter>
       <FeatureRequestModal
         isOpen={isUpgradeModalOpen}
@@ -80,6 +82,45 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     </Sidebar>
   );
 }
+
+const FreeTrialNotification = () => {
+  const session = useSession();
+  const routes = useOrgRoutes();
+  
+  if (!session.isFreeTrial || !session.freeTrialEndsAt) {
+    return null;
+  }
+
+  const isEndingSoon = session.freeTrialEndsAt.getTime() - Date.now() < 1000 * 60 * 60 * 24 * 7;
+  if (isEndingSoon) {
+    return (
+      <PersistentNotification variant="warning">
+        <Stack direction="vertical" gap={3} className="h-full">
+          <Type variant="subheading">Your trial is ending soon</Type>
+          <Type small>
+            Your enterprise trial will end on {session.freeTrialEndsAt?.toLocaleDateString()}.
+          </Type>
+            <routes.billing.Link className="w-full mt-auto">
+              <Button size="sm" className="w-full">
+                Upgrade →
+              </Button>
+            </routes.billing.Link>
+        </Stack>
+      </PersistentNotification>
+    );
+  }
+
+  return (
+    <PersistentNotification variant="default">
+      <Stack direction="vertical" gap={3} className="h-full">
+          <Type variant="subheading">Welcome!</Type>
+          <Type small>
+            Enjoy two weeks of enterprise access! Your trial will end on {session.freeTrialEndsAt?.toLocaleDateString()}.
+          </Type>
+        </Stack>
+    </PersistentNotification>
+  );
+};
 
 const FreeTierExceededNotification = () => {
   const productTier = useProductTier();
@@ -146,7 +187,7 @@ const PersistentNotification = ({
   );
 
   let classes =
-    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
+    "absolute bottom-2 left-1/2 h-[200px] w-[200px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
   if (isMinimized) {
     classes +=
       "h-[12px] w-[12px] left-2 translate-x-0 cursor-pointer hover:scale-110";
