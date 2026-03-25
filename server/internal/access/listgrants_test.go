@@ -7,6 +7,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -95,6 +96,44 @@ func TestListGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 
 	afterCount, err := audittest.AuditLogCount(t.Context(), ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestListGrants_UnauthorizedWithoutActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		ActiveOrganizationID:  "",
+		UserID:                authCtx.UserID,
+		ExternalUserID:        authCtx.ExternalUserID,
+		APIKeyID:              authCtx.APIKeyID,
+		SessionID:             authCtx.SessionID,
+		ProjectID:             authCtx.ProjectID,
+		OrganizationSlug:      authCtx.OrganizationSlug,
+		Email:                 authCtx.Email,
+		AccountType:           authCtx.AccountType,
+		HasActiveSubscription: authCtx.HasActiveSubscription,
+		ProjectSlug:           authCtx.ProjectSlug,
+		APIKeyScopes:          authCtx.APIKeyScopes,
+	})
+
+	_, err = ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
 }

@@ -63,7 +63,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 func (s *Service) ListGrants(ctx context.Context, payload *gen.ListGrantsPayload) (*gen.ListGrantsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
@@ -85,7 +85,7 @@ func (s *Service) ListGrants(ctx context.Context, payload *gen.ListGrantsPayload
 
 func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPayload) (*gen.UpsertGrantsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
@@ -149,7 +149,7 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 
 func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
 
@@ -208,7 +208,7 @@ func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPay
 
 func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.RemovePrincipalGrantsPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
 

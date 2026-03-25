@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -235,6 +236,46 @@ func TestUpsertGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 
 	afterCount, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionAccessGrantUpsert)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestUpsertGrants_UnauthorizedWithoutActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantUpsert)
+	require.NoError(t, err)
+
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		ActiveOrganizationID:  "",
+		UserID:                authCtx.UserID,
+		ExternalUserID:        authCtx.ExternalUserID,
+		APIKeyID:              authCtx.APIKeyID,
+		SessionID:             authCtx.SessionID,
+		ProjectID:             authCtx.ProjectID,
+		OrganizationSlug:      authCtx.OrganizationSlug,
+		Email:                 authCtx.Email,
+		AccountType:           authCtx.AccountType,
+		HasActiveSubscription: authCtx.HasActiveSubscription,
+		ProjectSlug:           authCtx.ProjectSlug,
+		APIKeyScopes:          authCtx.APIKeyScopes,
+	})
+
+	_, err = ti.service.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
+		Grants: []*gen.GrantEntry{{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"}},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantUpsert)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
 }
