@@ -73,32 +73,31 @@ func (s *Service) ensureDefaultGrants(ctx context.Context, orgID string) {
 		return
 	}
 
-	// Upsert seed grants for all system roles. Using UpsertPrincipalGrant
-	// (ON CONFLICT DO UPDATE) instead of COPY FROM to handle concurrent
-	// requests safely — two callers may race past the emptiness check above.
-	var seeded int
+	// Build seed params for all system roles.
+	var seeds []repo.SeedOrgRoleGrantsParams
 	for _, slug := range systemRoleSlugs {
 		principal := urn.NewPrincipal(urn.PrincipalTypeRole, slug)
 		for _, scope := range defaultGrants[slug] {
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			seeds = append(seeds, repo.SeedOrgRoleGrantsParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principal,
 				Scope:          scope,
 				Resource:       "*",
-			}); err != nil {
-				s.logger.WarnContext(ctx, "failed to seed default grant",
-					attr.SlogOrganizationID(orgID),
-					attr.SlogError(err),
-				)
-				return
-			}
-			seeded++
+			})
 		}
+	}
+
+	if _, err := q.SeedOrgRoleGrants(ctx, seeds); err != nil {
+		s.logger.WarnContext(ctx, "failed to seed default grants for system roles",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+		return
 	}
 
 	s.logger.InfoContext(ctx, "seeded default grants for system roles",
 		attr.SlogOrganizationID(orgID),
-		attr.SlogValueInt(seeded),
+		attr.SlogValueInt(len(seeds)),
 	)
 }
 
@@ -216,13 +215,13 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 		return nil, err
 	}
 
-	// Lazily seed default grants for system roles on first access.
-	s.ensureDefaultGrants(ctx, ac.ActiveOrganizationID)
-
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
+
+	// Lazily seed default grants for system roles on first access.
+	s.ensureDefaultGrants(ctx, ac.ActiveOrganizationID)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
