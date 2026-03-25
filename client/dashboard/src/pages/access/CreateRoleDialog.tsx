@@ -11,10 +11,14 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
+import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
+import { useListMembers } from "@gram/client/react-query/listMembers.js";
+import { invalidateAllListRoles } from "@gram/client/react-query/listRoles.js";
 import { Button } from "@speakeasy-api/moonshine";
-import { ChevronRight } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { MOCK_MEMBERS, SCOPE_GROUPS } from "./mock-data";
+import { SCOPE_GROUPS } from "./mock-data";
 import { ScopePickerPopover } from "./ScopePickerPopover";
 import type { RoleGrant, Scope } from "./types";
 
@@ -27,6 +31,8 @@ export function CreateRoleDialog({
   open,
   onOpenChange,
 }: CreateRoleDialogProps) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   // Grants keyed by scope slug — presence means the scope is enabled
   const [grants, setGrants] = useState<Record<string, RoleGrant>>({});
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -35,6 +41,17 @@ export function CreateRoleDialog({
   );
   const [showMembers, setShowMembers] = useState(false);
   const [showPermissions, setShowPermissions] = useState(true);
+
+  const queryClient = useQueryClient();
+  const { data: membersData } = useListMembers();
+  const members = membersData?.members ?? [];
+
+  const createRole = useCreateRoleMutation({
+    onSuccess: async () => {
+      await invalidateAllListRoles(queryClient);
+      handleClose();
+    },
+  });
 
   const grantCount = Object.keys(grants).length;
 
@@ -101,11 +118,28 @@ export function CreateRoleDialog({
   };
 
   const handleCreate = () => {
-    // TODO: call API when backend is implemented
-    onOpenChange(false);
+    const sdkGrants = Object.values(grants).map((g) => ({
+      scope: g.scope,
+      // Local type uses null for unrestricted; SDK uses undefined
+      resources: g.resources === null ? undefined : g.resources,
+    }));
+
+    createRole.mutate({
+      request: {
+        createRoleForm: {
+          name,
+          description,
+          grants: sdkGrants,
+          memberIds:
+            selectedMembers.size > 0 ? Array.from(selectedMembers) : undefined,
+        },
+      },
+    });
   };
 
   const handleClose = () => {
+    setName("");
+    setDescription("");
     setGrants({});
     setExpandedGroups(new Set());
     setSelectedMembers(new Set());
@@ -130,6 +164,8 @@ export function CreateRoleDialog({
             placeholder="e.g., Project Manager"
             required
             autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
           />
 
           <AnyField
@@ -140,6 +176,8 @@ export function CreateRoleDialog({
                 rows={2}
                 required
                 placeholder="Describe what this role can do..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               />
             )}
@@ -310,7 +348,7 @@ export function CreateRoleDialog({
 
             {showMembers && (
               <div className="mt-3 border border-border rounded-md divide-y divide-border">
-                {MOCK_MEMBERS.map((member) => (
+                {members.map((member) => (
                   <label
                     key={member.id}
                     className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer"
@@ -351,7 +389,24 @@ export function CreateRoleDialog({
           <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
-          <Button onClick={handleCreate}>Create Role</Button>
+          <Button
+            onClick={handleCreate}
+            disabled={
+              !name.trim() ||
+              !description.trim() ||
+              grantCount === 0 ||
+              createRole.isPending
+            }
+          >
+            {createRole.isPending && (
+              <Button.LeftIcon>
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>
+              {createRole.isPending ? "Creating…" : "Create Role"}
+            </Button.Text>
+          </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>
