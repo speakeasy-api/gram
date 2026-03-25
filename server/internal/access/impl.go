@@ -162,8 +162,8 @@ func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string,
 
 	// Insert new grants.
 	for _, g := range grants {
-		if len(g.Resources) == 0 {
-			// Unrestricted grant.
+		if g.Resources == nil {
+			// Unrestricted grant (null resources = wildcard).
 			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
@@ -172,7 +172,9 @@ func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string,
 			}); err != nil {
 				return fmt.Errorf("upsert unrestricted grant %q: %w", g.Scope, err)
 			}
-		} else {
+		} else if len(g.Resources) > 0 {
+			// Scoped grant — only the listed resources. Empty array = no
+			// grant for this scope (the scope is simply not inserted).
 			for _, res := range g.Resources {
 				if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 					OrganizationID: orgID,
