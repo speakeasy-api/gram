@@ -141,6 +141,38 @@ export function RolesTab() {
         />
       )}
 
+      <div className="mt-12 rounded-md border border-border/50 bg-muted/30 px-4 py-3">
+        <Type variant="subheading" className="mb-4">
+          About System roles
+        </Type>
+        <div className="flex items-start gap-3 text-sm">
+          <Badge
+            variant="outline"
+            size="sm"
+            className="shrink-0 mt-0.5 bg-white dark:bg-zinc-900 w-16 justify-center"
+          >
+            Member
+          </Badge>
+          <Type variant="body" className="text-muted-foreground text-sm">
+            The default role for most users. Grants read access across the
+            organization and the ability to connect to MCP servers.
+          </Type>
+        </div>
+        <div className="flex items-start gap-3 text-sm mt-2">
+          <Badge
+            variant="outline"
+            size="sm"
+            className="shrink-0 mt-0.5 bg-white dark:bg-zinc-900 w-16 justify-center"
+          >
+            Admin
+          </Badge>
+          <Type variant="body" className="text-muted-foreground text-sm">
+            Full access to all organization settings, billing, member
+            management, and every project and MCP server.
+          </Type>
+        </div>
+      </div>
+
       <CreateRoleDialog
         open={isCreateOpen || !!editingRole}
         onOpenChange={(open) => {

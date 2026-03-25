@@ -1,6 +1,7 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Sheet,
@@ -14,11 +15,14 @@ import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import { useListMembers } from "@gram/client/react-query/listMembers.js";
-import { invalidateAllListRoles } from "@gram/client/react-query/listRoles.js";
+import {
+  invalidateAllListRoles,
+  useListRoles,
+} from "@gram/client/react-query/listRoles.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { ArrowRight, ChevronRight, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { SCOPE_GROUPS } from "./mock-data";
 import { ScopePickerPopover } from "./ScopePickerPopover";
@@ -59,6 +63,10 @@ export function CreateRoleDialog({
   const queryClient = useQueryClient();
   const { data: membersData } = useListMembers();
   const members = membersData?.members ?? [];
+  const { data: rolesData } = useListRoles();
+  const roleNameById = new Map(
+    (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
+  );
 
   // Pre-populate fields when editing
   if (editingRole && !initialized) {
@@ -170,6 +178,10 @@ export function CreateRoleDialog({
             name,
             description,
             grants: sdkGrants,
+            memberIds:
+              selectedMembers.size > 0
+                ? Array.from(selectedMembers)
+                : undefined,
           },
         },
       });
@@ -381,38 +393,48 @@ export function CreateRoleDialog({
             )}
           </div>
 
-          {/* Assign Members — only shown when creating (editing uses the Members tab) */}
-          {!isEditing && (
-            <div className="border-t border-border pt-4 pb-4">
-              <button
-                type="button"
-                onClick={() => setShowMembers(!showMembers)}
-                className="flex items-center gap-1 w-full text-left"
-              >
-                <ChevronRight
-                  className={cn(
-                    "h-4 w-4 transition-transform",
-                    showMembers && "rotate-90",
-                  )}
-                />
-                <Type variant="body" className="font-medium">
-                  Assign Members
-                </Type>
-                <Type variant="body" className="text-muted-foreground ml-1">
-                  (optional, {selectedMembers.size} selected)
-                </Type>
-              </button>
+          {/* Assign Members */}
+          <div className="border-t border-border pt-4 pb-4">
+            <button
+              type="button"
+              onClick={() => setShowMembers(!showMembers)}
+              className="flex items-center gap-1 w-full text-left"
+            >
+              <ChevronRight
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  showMembers && "rotate-90",
+                )}
+              />
+              <Type variant="body" className="font-medium">
+                Assign Members
+              </Type>
+              <Type variant="body" className="text-muted-foreground ml-1">
+                (optional, {selectedMembers.size} selected)
+              </Type>
+            </button>
 
-              {showMembers && (
-                <div className="mt-3 border border-border rounded-md divide-y divide-border">
-                  {members.map((member) => (
+            {showMembers && (
+              <div className="mt-3 border border-border rounded-md divide-y divide-border">
+                {members.map((member) => {
+                  const alreadyHasRole =
+                    isEditing && member.roleId === editingRole?.id;
+                  return (
                     <label
                       key={member.id}
-                      className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer"
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer",
+                        alreadyHasRole && "opacity-50 cursor-default",
+                      )}
                     >
                       <Checkbox
-                        checked={selectedMembers.has(member.id)}
-                        onCheckedChange={() => toggleMember(member.id)}
+                        checked={
+                          alreadyHasRole || selectedMembers.has(member.id)
+                        }
+                        disabled={alreadyHasRole}
+                        onCheckedChange={() =>
+                          !alreadyHasRole && toggleMember(member.id)
+                        }
                       />
                       <Avatar className="h-7 w-7">
                         {member.photoUrl && (
@@ -430,10 +452,43 @@ export function CreateRoleDialog({
                             .slice(0, 2)}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <Type variant="body" className="font-medium text-sm">
-                          {member.name}
-                        </Type>
+                      <div className="flex-1 min-w-0 space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Type variant="body" className="font-medium text-sm">
+                            {member.name}
+                          </Type>
+                          {member.roleId && roleNameById.get(member.roleId) && (
+                            <div className="flex items-center gap-1">
+                              <Badge
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  "font-mono text-[10px] uppercase",
+                                  selectedMembers.has(member.id) &&
+                                    member.roleId !== editingRole?.id &&
+                                    name.trim() &&
+                                    "line-through opacity-60",
+                                )}
+                              >
+                                {roleNameById.get(member.roleId)}
+                              </Badge>
+                              {selectedMembers.has(member.id) &&
+                                member.roleId !== editingRole?.id &&
+                                name.trim() && (
+                                  <>
+                                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                    <Badge
+                                      variant="outline"
+                                      size="sm"
+                                      className="font-mono text-[10px] uppercase border-primary text-primary"
+                                    >
+                                      {name}
+                                    </Badge>
+                                  </>
+                                )}
+                            </div>
+                          )}
+                        </div>
                         <Type
                           variant="body"
                           className="text-muted-foreground text-xs"
@@ -442,11 +497,11 @@ export function CreateRoleDialog({
                         </Type>
                       </div>
                     </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         <SheetFooter className="border-t border-border flex-row justify-end">

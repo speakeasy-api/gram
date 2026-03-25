@@ -347,24 +347,6 @@ const ROUTE_STRUCTURE = {
     icon: "settings",
     component: Settings,
   },
-  access: {
-    title: "Roles & Permissions",
-    url: "access",
-    icon: "shield",
-    component: Access,
-    subPages: {
-      roles: {
-        title: "Roles & Permissions",
-        url: "roles",
-        component: Access,
-      },
-      members: {
-        title: "Roles & Permissions",
-        url: "members",
-        component: Access,
-      },
-    },
-  },
   billing: {
     title: "Billing",
     url: "billing",
@@ -584,11 +566,23 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
-  auditLogs: {
-    title: "Audit Logs",
-    url: "audit-logs",
-    icon: "history",
-    component: OrgAuditLogs,
+  access: {
+    title: "Roles & Permissions",
+    url: "access",
+    icon: "shield",
+    component: Access,
+    subPages: {
+      roles: {
+        title: "Roles & Permissions",
+        url: "roles",
+        component: Access,
+      },
+      members: {
+        title: "Roles & Permissions",
+        url: "members",
+        component: Access,
+      },
+    },
   },
   adminSettings: {
     title: "Super Admin",

@@ -8,6 +8,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useIsAdmin, useOrganization } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
@@ -17,6 +18,8 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const isAdmin = useIsAdmin();
+  const telemetry = useTelemetry();
+  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const teamUrl =
     organization?.userWorkspaceSlugs &&
@@ -42,7 +45,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 orgRoutes.apiKeys,
                 orgRoutes.domains,
                 orgRoutes.logs,
-                orgRoutes.auditLogs,
+                ...(isRbacEnabled ? [orgRoutes.access] : []),
                 ...(isAdmin ? [orgRoutes.adminSettings] : []),
               ]}
             >
