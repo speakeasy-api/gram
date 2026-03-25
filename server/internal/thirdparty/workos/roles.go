@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/roles"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -18,10 +19,11 @@ import (
 // RoleClient wraps WorkOS API calls for role and membership management.
 // It is designed to have a caching layer added later.
 type RoleClient struct {
-	logger *slog.Logger
-	apiKey string
-	orgs   *organizations.Client
-	um     *usermanagement.Client
+	logger     *slog.Logger
+	apiKey     string
+	httpClient *http.Client
+	orgs       *organizations.Client
+	um         *usermanagement.Client
 }
 
 func NewRoleClient(logger *slog.Logger, apiKey string) *RoleClient {
@@ -30,10 +32,11 @@ func NewRoleClient(logger *slog.Logger, apiKey string) *RoleClient {
 	}
 
 	return &RoleClient{
-		logger: logger,
-		apiKey: apiKey,
-		orgs:   &organizations.Client{APIKey: apiKey},
-		um:     usermanagement.NewClient(apiKey),
+		logger:     logger,
+		apiKey:     apiKey,
+		httpClient: retryablehttp.NewClient().StandardClient(),
+		orgs:       &organizations.Client{APIKey: apiKey},
+		um:         usermanagement.NewClient(apiKey),
 	}
 }
 
@@ -201,7 +204,7 @@ func (rc *RoleClient) doAPI(ctx context.Context, method, path string, body []byt
 	req.Header.Set("Authorization", "Bearer "+rc.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := rc.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send request: %w", err)
 	}
