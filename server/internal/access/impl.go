@@ -99,36 +99,37 @@ func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to access grants").Log(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	tr := repo.New(dbtx)
-
-	grants := make([]*gen.Grant, 0, len(payload.Grants))
-
+	var params []repo.UpsertPrincipalGrantParams
 	for _, form := range payload.Grants {
 		if form == nil {
 			continue
 		}
-
-		row, err := tr.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		params = append(params, repo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   form.PrincipalUrn,
 			Scope:          form.Scope,
 			Resource:       form.Resource,
 		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to add or update grant").Log(ctx, s.logger)
-		}
+	}
 
-		grants = append(grants, grantFromRow(row))
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	rows, err := upsertGrantsOn(ctx, dbtx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert grants").Log(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated grants").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit grants").Log(ctx, s.logger)
+	}
+
+	grants := make([]*gen.Grant, len(rows))
+	for i, row := range rows {
+		grants[i] = grantFromRow(row)
 	}
 
 	return &gen.UpsertGrantsResult{Grants: grants}, nil
@@ -277,6 +278,46 @@ func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug stri
 	return grants, nil
 }
 
+// upsertGrantsOn inserts or updates grant rows using the provided DBTX connection.
+// Callers are responsible for transaction management.
+func upsertGrantsOn(ctx context.Context, db repo.DBTX, params []repo.UpsertPrincipalGrantParams) ([]repo.PrincipalGrant, error) {
+	q := repo.New(db)
+	rows := make([]repo.PrincipalGrant, 0, len(params))
+	for _, p := range params {
+		row, err := q.UpsertPrincipalGrant(ctx, p)
+		if err != nil {
+			return nil, fmt.Errorf("upsert grant %q: %w", p.Scope, err)
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+// roleGrantParams expands RoleGrants (scope + resources[]) into flat upsert params.
+func roleGrantParams(orgID string, principalURN urn.Principal, grants []*gen.RoleGrant) []repo.UpsertPrincipalGrantParams {
+	var params []repo.UpsertPrincipalGrantParams
+	for _, g := range grants {
+		if len(g.Resources) == 0 {
+			params = append(params, repo.UpsertPrincipalGrantParams{
+				OrganizationID: orgID,
+				PrincipalUrn:   principalURN,
+				Scope:          g.Scope,
+				Resource:       "*",
+			})
+		} else {
+			for _, res := range g.Resources {
+				params = append(params, repo.UpsertPrincipalGrantParams{
+					OrganizationID: orgID,
+					PrincipalUrn:   principalURN,
+					Scope:          g.Scope,
+					Resource:       res,
+				})
+			}
+		}
+	}
+	return params
+}
+
 // syncGrants replaces all principal_grants for a role with the provided grants.
 // The delete-then-insert is wrapped in a transaction so a partial failure does
 // not leave the role with missing grants.
@@ -287,41 +328,19 @@ func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string,
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op; error is safe to ignore
 
-	q := repo.New(tx)
 	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
 	// Delete existing grants for this role.
-	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+	if _, err := repo.New(tx).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
 		OrganizationID: orgID,
 		PrincipalUrn:   principalURN,
 	}); err != nil {
 		return fmt.Errorf("delete existing grants: %w", err)
 	}
 
-	// Insert new grants.
-	for _, g := range grants {
-		if len(g.Resources) == 0 {
-			// Unrestricted grant.
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-				OrganizationID: orgID,
-				PrincipalUrn:   principalURN,
-				Scope:          g.Scope,
-				Resource:       "*",
-			}); err != nil {
-				return fmt.Errorf("upsert unrestricted grant %q: %w", g.Scope, err)
-			}
-		} else {
-			for _, res := range g.Resources {
-				if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-					OrganizationID: orgID,
-					PrincipalUrn:   principalURN,
-					Scope:          g.Scope,
-					Resource:       res,
-				}); err != nil {
-					return fmt.Errorf("upsert grant %q resource %q: %w", g.Scope, res, err)
-				}
-			}
-		}
+	// Insert the new grants.
+	if _, err := upsertGrantsOn(ctx, tx, roleGrantParams(orgID, principalURN, grants)); err != nil {
+		return err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
