@@ -28,8 +28,15 @@ import {
   useAuditLogFacets,
 } from "@gram/client/react-query";
 import { Icon } from "@speakeasy-api/moonshine";
-import { useMemo, type ReactNode } from "react";
+import React, { Suspense, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { HighlightProvider } from "@/components/diffs/provider";
+
+const StaticDiff = React.lazy(() =>
+  import("@/components/auditlogs/diff").then((mod) => ({
+    default: mod.StaticDiff,
+  })),
+);
 
 type FacetOption = {
   count?: number;
@@ -166,6 +173,18 @@ function getResourceLabel(resource: string) {
     default:
       return resource.replace(/_/g, " ");
   }
+}
+
+function formatAuditAction(action: string) {
+  const [resource, verb] = action.split(":");
+
+  if (!resource || !verb) {
+    return action;
+  }
+
+  const resourceLabel = resource === "toolset" ? "mcp" : resource;
+
+  return `${resourceLabel}:${verb}`;
 }
 
 function FacetSelect({
@@ -425,7 +444,14 @@ export default function OrgAuditLogs() {
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
   });
 
-  const actionOptions: Array<FacetOption> = facetsData?.actions ?? [];
+  const actionOptions: Array<FacetOption> = useMemo(
+    () =>
+      (facetsData?.actions ?? []).map((option) => ({
+        ...option,
+        displayName: formatAuditAction(option.value),
+      })),
+    [facetsData?.actions],
+  );
   const actorOptions: Array<FacetOption> = facetsData?.actors ?? [];
 
   const {
@@ -553,96 +579,103 @@ export default function OrgAuditLogs() {
           </div>
 
           <div className="overflow-hidden rounded-lg border bg-background">
-            <Table>
-              <TableHeader className="bg-muted/30">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="h-11 w-[240px] text-xs uppercase tracking-wide text-muted-foreground">
-                    Timestamp
-                  </TableHead>
-                  <TableHead className="h-11 w-[180px] text-xs uppercase tracking-wide text-muted-foreground">
-                    Project
-                  </TableHead>
-                  <TableHead className="h-11 text-xs uppercase tracking-wide text-muted-foreground">
-                    Event
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
+            <HighlightProvider>
+              <Table>
+                <TableHeader className="bg-muted/30">
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={3} className="py-12">
-                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                        <Icon
-                          name="loader-circle"
-                          className="size-4 animate-spin"
-                        />
-                        <span>Loading audit logs...</span>
-                      </div>
-                    </TableCell>
+                    <TableHead className="h-11 w-[240px] text-xs uppercase tracking-wide text-muted-foreground">
+                      Timestamp
+                    </TableHead>
+                    <TableHead className="h-11 w-[180px] text-xs uppercase tracking-wide text-muted-foreground">
+                      Project
+                    </TableHead>
+                    <TableHead className="h-11 text-xs uppercase tracking-wide text-muted-foreground">
+                      Event
+                    </TableHead>
                   </TableRow>
-                ) : error ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={3} className="py-12">
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <Type className="font-medium">
-                          Error loading audit logs
-                        </Type>
-                        <Type muted small>
-                          {error.message}
-                        </Type>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : logs.length === 0 ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={3} className="py-12">
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <Type className="font-medium">No audit logs found</Type>
-                        <Type muted small>
-                          {selectedProjectSlug === "all" &&
-                          selectedAction === "all" &&
-                          selectedActor === "all"
-                            ? "Activity will appear here as changes are made across your organization."
-                            : "No audit logs match the selected filters."}
-                        </Type>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  logs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {formatTimestamp(
-                          log.createdAt,
-                          timestampMode === "local" ? "local" : "utc",
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {log.projectSlug ? (
-                          <Link
-                            to={`/${orgSlug}/projects/${log.projectSlug}`}
-                            className="text-primary hover:underline"
-                          >
-                            {log.projectSlug}
-                          </Link>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="whitespace-normal text-sm leading-6">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className="font-mono text-[11px]"
-                          >
-                            {log.action}
-                          </Badge>
-                          <span>{renderAuditMessage(log, orgSlug)}</span>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={3} className="py-12">
+                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                          <Icon
+                            name="loader-circle"
+                            className="size-4 animate-spin"
+                          />
+                          <span>Loading audit logs...</span>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : error ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={3} className="py-12">
+                        <div className="flex flex-col items-center gap-2 text-center">
+                          <Type className="font-medium">
+                            Error loading audit logs
+                          </Type>
+                          <Type muted small>
+                            {error.message}
+                          </Type>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : logs.length === 0 ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={3} className="py-12">
+                        <div className="flex flex-col items-center gap-2 text-center">
+                          <Type className="font-medium">
+                            No audit logs found
+                          </Type>
+                          <Type muted small>
+                            {selectedProjectSlug === "all" &&
+                            selectedAction === "all" &&
+                            selectedActor === "all"
+                              ? "Activity will appear here as changes are made across your organization."
+                              : "No audit logs match the selected filters."}
+                          </Type>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    logs.map((log) => {
+                      return (
+                        <TableRow key={log.id}>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {formatTimestamp(
+                              log.createdAt,
+                              timestampMode === "local" ? "local" : "utc",
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {log.projectSlug ? (
+                              <Link
+                                to={`/${orgSlug}/projects/${log.projectSlug}`}
+                                className="text-primary hover:underline"
+                              >
+                                {log.projectSlug}
+                              </Link>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="whitespace-normal text-sm leading-6">
+                            <div className="flex flex-nowrap items-baseline gap-2">
+                              <Badge
+                                variant="outline"
+                                className="font-mono text-[11px]"
+                              >
+                                {formatAuditAction(log.action)}
+                              </Badge>
+                              <span>{renderAuditMessage(log, orgSlug)}</span>
+                            </div>
+                            {renderDiff(log)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </HighlightProvider>
 
             {(logs.length > 0 || isFetchingNextPage) && (
               <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-3">
@@ -681,5 +714,51 @@ export default function OrgAuditLogs() {
         </div>
       </Page.Body>
     </Page>
+  );
+}
+
+function renderDiff(log: AuditLog) {
+  if (log.action.startsWith("deployments:")) {
+    return null;
+  }
+
+  if (log.beforeSnapshot == null && log.afterSnapshot == null) {
+    return null;
+  }
+
+  return <AuditLogDiff log={log} />;
+}
+
+function AuditLogDiff({ log }: { log: AuditLog }) {
+  const [isVisible, setIsVisible] = useState(false);
+
+  return (
+    <div className="mt-2">
+      <Button
+        className="font-bold"
+        type="button"
+        variant="link"
+        size="sm"
+        onClick={() => setIsVisible((visible) => !visible)}
+        aria-expanded={isVisible}
+      >
+        {isVisible ? "Hide diff" : "Show diff"}
+      </Button>
+
+      {isVisible ? (
+        <div className="mt-2">
+          <Suspense
+            fallback={
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Icon name="loader-circle" className="size-4 animate-spin" />
+                <span>Loading diff...</span>
+              </div>
+            }
+          >
+            <StaticDiff log={log} />
+          </Suspense>
+        </div>
+      ) : null}
+    </div>
   );
 }
