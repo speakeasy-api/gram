@@ -61,6 +61,8 @@ type UpdateRoleRequestBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Updated scope grants
 	Grants []*RoleGrantRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
+	// Optional member IDs to reassign to this role
+	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
 }
 
 // UpdateMemberRoleRequestBody is the type of the "access" service
@@ -2537,6 +2539,12 @@ func NewUpdateRoleRequestBody(p *access.UpdateRolePayload) *UpdateRoleRequestBod
 				continue
 			}
 			body.Grants[i] = marshalAccessRoleGrantToRoleGrantRequestBody(val)
+		}
+	}
+	if p.MemberIds != nil {
+		body.MemberIds = make([]string, len(p.MemberIds))
+		for i, val := range p.MemberIds {
+			body.MemberIds[i] = val
 		}
 	}
 	return body

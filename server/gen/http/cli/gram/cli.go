@@ -2546,7 +2546,7 @@ func accessUpdateRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func accessDeleteRoleUsage() {
