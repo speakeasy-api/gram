@@ -400,6 +400,15 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 			continue
 		}
 
+		// Set the WorkOS org ID on organization_metadata so the access
+		// service can look it up for WorkOS role/membership API calls.
+		if err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+			ID:       org.ID,
+			WorkosID: conv.ToPGText(org.ID),
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to set org workos ID", attr.SlogError(err))
+		}
+
 		orgMembership, err := s.workos.GetOrgMembership(ctx, workosUser.ID, org.ID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "failed to get workos org membership", attr.SlogError(err))

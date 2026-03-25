@@ -180,6 +180,17 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 
+	// When the org has an SSO connection, org.ID is the WorkOS org ID —
+	// store it in the workos_id column so the access service can use it.
+	if activeOrg.SsoConnectionID != nil {
+		if err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+			ID:       activeOrg.ID,
+			WorkosID: conv.ToPGText(activeOrg.ID),
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to set org workos ID", attr.SlogError(err))
+		}
+	}
+
 	if orgMetadata.DisabledAt.Valid {
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
 	}

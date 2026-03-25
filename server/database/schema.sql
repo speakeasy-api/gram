@@ -1529,7 +1529,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   actor_type TEXT NOT NULL,
   actor_display_name TEXT,
   actor_slug TEXT,
-  
+
   action TEXT NOT NULL,
 
   subject_id TEXT NOT NULL,
@@ -1559,3 +1559,5 @@ ON audit_logs (organization_id, seq DESC);
 
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
 ON audit_logs (organization_id, project_id, seq DESC);
+
+

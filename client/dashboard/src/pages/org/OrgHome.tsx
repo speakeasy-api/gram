@@ -52,9 +52,46 @@ export default function OrgHome() {
           className="mb-4"
         />
         {projects.length === 0 && search ? (
-          <Type muted className="py-8 text-center">
-            No projects matching &ldquo;{search}&rdquo;
-          </Type>
+          <div className="space-y-8 pt-6">
+            <Type muted className="text-center">
+              No projects matching &ldquo;{search}&rdquo;
+            </Type>
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewProjectName(search);
+                  setCreateDialogOpen(true);
+                }}
+                className="text-left hover:no-underline w-full max-w-md"
+              >
+                <DotCard
+                  icon={
+                    <Plus className="h-10 w-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                  }
+                  className="border-dashed !border-foreground/10 hover:!border-foreground/20"
+                >
+                  <Type
+                    variant="subheading"
+                    as="div"
+                    className="text-md text-muted-foreground group-hover:text-primary transition-colors"
+                  >
+                    Create &ldquo;{search}&rdquo;
+                  </Type>
+                  <Type small muted className="mb-3">
+                    Create a new project with this name
+                  </Type>
+
+                  <div className="flex items-center justify-end mt-auto pt-2">
+                    <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+                      <span>Create</span>
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                </DotCard>
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {projects.map((project) => (
