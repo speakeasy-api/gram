@@ -43,7 +43,6 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 
 	// If the org is in a free trial, the account type is "enterprise" for the purposes of the rest of the system.
 	if orgMetadata.FreeTrialEndsAt.Valid && orgMetadata.FreeTrialEndsAt.Time.After(time.Now().UTC()) {
-		println("HERE I AM 2")
 		org.GramAccountType = "enterprise"
 		org.IsFreeTrial = true
 		org.FreeTrialEndsAt = org.FreeTrialEndsAt
