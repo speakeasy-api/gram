@@ -543,7 +543,6 @@ function LogsContent() {
         isFetching={isFetching}
         error={error}
         allTraces={allTraces}
-        searchQuery={searchQuery}
         searchInput={searchInput}
         setSearchInput={setSearchInput}
         onSearchSubmit={handleSearchSubmit}
@@ -586,7 +585,6 @@ function LogsInnerContent({
   isFetching,
   error,
   allTraces,
-  searchQuery,
   searchInput,
   setSearchInput,
   onSearchSubmit,
@@ -624,7 +622,6 @@ function LogsInnerContent({
   isFetching: boolean;
   error: Error | null;
   allTraces: ToolCallSummary[];
-  searchQuery: string | null;
   searchInput: string;
   setSearchInput: (value: string) => void;
   onSearchSubmit: (query: string) => void;
