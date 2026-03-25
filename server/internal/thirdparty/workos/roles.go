@@ -22,6 +22,7 @@ import (
 type RoleClient struct {
 	logger     *slog.Logger
 	apiKey     string
+	endpoint   string // base URL for raw HTTP calls (doAPI); defaults to workosBaseURL
 	httpClient *http.Client
 	orgs       *organizations.Client
 	um         *usermanagement.Client
@@ -35,9 +36,32 @@ func NewRoleClient(logger *slog.Logger, apiKey string) *RoleClient {
 	return &RoleClient{
 		logger:     logger,
 		apiKey:     apiKey,
+		endpoint:   workosBaseURL,
 		httpClient: newRetryableClient(30 * time.Second),
 		orgs:       &organizations.Client{APIKey: apiKey},
 		um:         usermanagement.NewClient(apiKey),
+	}
+}
+
+// NewRoleClientWithEndpoint creates a RoleClient that targets a custom endpoint
+// instead of the real WorkOS API. Used in tests with httptest.Server.
+func NewRoleClientWithEndpoint(logger *slog.Logger, apiKey string, endpoint string) *RoleClient {
+	um := usermanagement.NewClient(apiKey)
+	um.Endpoint = endpoint
+	um.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+	return &RoleClient{
+		logger:   logger,
+		apiKey:   apiKey,
+		endpoint: endpoint,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+		orgs: &organizations.Client{
+			APIKey:   apiKey,
+			Endpoint: endpoint,
+		},
+		um: um,
 	}
 }
 
@@ -238,7 +262,12 @@ func (rc *RoleClient) doAPI(ctx context.Context, method, path string, body []byt
 		bodyReader = bytes.NewReader(body)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, workosBaseURL+path, bodyReader)
+	baseURL := rc.endpoint
+	if baseURL == "" {
+		baseURL = workosBaseURL
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, bodyReader)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
