@@ -51,6 +51,7 @@ export function CreateRoleDialog({
   editingRole,
 }: CreateRoleDialogProps) {
   const isEditing = !!editingRole;
+  const isSystemRole = !!editingRole?.isSystem;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   // Grants keyed by scope slug — presence means the scope is enabled
@@ -322,6 +323,7 @@ export function CreateRoleDialog({
                       <div className="flex items-center justify-between px-3 py-2">
                         <div className="flex items-center gap-2">
                           <Checkbox
+                            disabled={isSystemRole}
                             checked={
                               allSelected
                                 ? true
@@ -374,6 +376,7 @@ export function CreateRoleDialog({
                               >
                                 <label className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
                                   <Checkbox
+                                    disabled={isSystemRole}
                                     checked={isChecked}
                                     onCheckedChange={() =>
                                       toggleScope(scopeDef.slug)
@@ -397,7 +400,7 @@ export function CreateRoleDialog({
                                 </label>
 
                                 <div className="w-[110px] shrink-0 flex justify-end">
-                                  {isChecked && (
+                                  {isChecked && !isSystemRole && (
                                     <ScopePickerPopover
                                       resourceType={scopeDef.resourceType}
                                       resources={grant.resources}
