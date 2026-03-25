@@ -1,6 +1,5 @@
 ---
 "server": minor
-"@gram/client": minor
 "dashboard": minor
 ---
 
