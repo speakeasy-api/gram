@@ -15,7 +15,7 @@ read -r -d '' GRANTS_SQL <<'SQL' || true
 INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
 SELECT org_id, principal_urn, scope, resource
 FROM (
-  SELECT unnest(ARRAY[:'org_ids']) AS org_id
+  SELECT unnest(:'org_ids'::text[]) AS org_id
 ) orgs
 CROSS JOIN (
   VALUES
@@ -43,10 +43,10 @@ run_psql() {
 }
 
 if [[ -n "${ORG_ID}" ]]; then
-  ORG_IDS_VALUE="${ORG_ID}"
+  ORG_IDS_VALUE="{${ORG_ID}}"
   echo "Seeding default RBAC grants for org: ${ORG_ID}"
 else
-  ORG_IDS_VALUE=$(run_psql -Atc "SELECT string_agg(id, ',') FROM organization_metadata")
+  ORG_IDS_VALUE=$(run_psql -Atc "SELECT '{' || string_agg(id, ',') || '}' FROM organization_metadata")
   if [[ -z "${ORG_IDS_VALUE}" ]]; then
     echo "No organizations found."
     exit 0
@@ -57,7 +57,7 @@ fi
 
 if [[ "${DRY_RUN}" == "true" ]]; then
   echo "--- DRY RUN (no changes will be made) ---"
-  echo "${GRANTS_SQL}" | sed "s/:'org_ids'/'${ORG_IDS_VALUE}'/g"
+  echo "${GRANTS_SQL}" | sed "s/:'org_ids'::text\[\]/'${ORG_IDS_VALUE}'::text[]/g"
   exit 0
 fi
 
