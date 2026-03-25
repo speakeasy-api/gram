@@ -86,9 +86,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 const FreeTrialNotification = () => {
   const session = useSession();
   const routes = useOrgRoutes();
+  const productTier = useProductTier();
   
-  if (!session.isFreeTrial || !session.freeTrialEndsAt) {
+  // Don't show this if they are on any sort of paid plan
+  if (!session.freeTrialEndsAt || productTier === "enterprise" || productTier === "__deprecated__pro" || productTier === "base_PAID") {
     return null;
+  }
+
+  const hasEnded = session.freeTrialEndsAt.getTime() < Date.now();
+  if (hasEnded) {
+    return (
+      <PersistentNotification variant="error">
+        <Stack direction="vertical" gap={3} className="h-full">
+          <Type variant="subheading">Your trial has ended</Type>
+          <Type small>
+            Upgrade to continue using Gram.
+          </Type>
+          <routes.billing.Link className="w-full mt-auto">
+            <Button size="sm" className="w-full">
+              Upgrade →
+            </Button>
+          </routes.billing.Link>
+        </Stack>
+      </PersistentNotification>
+    );
   }
 
   const isEndingSoon = session.freeTrialEndsAt.getTime() - Date.now() < 1000 * 60 * 60 * 24 * 7;
