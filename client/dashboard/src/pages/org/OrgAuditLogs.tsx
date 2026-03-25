@@ -23,8 +23,10 @@ import { Switch } from "@/components/ui/switch";
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import type { AuditLog } from "@gram/client/models/components";
-import { useAuditLogsInfinite } from "@gram/client/react-query";
-import * as GramReactQuery from "@gram/client/react-query";
+import {
+  useAuditLogsInfinite,
+  useAuditLogFacets,
+} from "@gram/client/react-query";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -35,15 +37,8 @@ type FacetOption = {
   value: string;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const useAuditLogFacets = (GramReactQuery as any).useAuditLogFacets as
-  | ((request?: { projectSlug?: string }) => {
-      data?: { actions?: Array<FacetOption>; actors?: Array<FacetOption> };
-    })
-  | undefined;
-
 function getTimestampFormatter(mode: "utc" | "local") {
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(undefined, {
     ...(mode === "utc" ? { timeZone: "UTC" } : {}),
     year: "numeric",
     month: "2-digit",
