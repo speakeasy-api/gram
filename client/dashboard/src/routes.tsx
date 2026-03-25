@@ -42,7 +42,12 @@ import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
-// OrgTeam is managed externally via Speakeasy IDP for now
+import Access from "./pages/access/Access";
+import OrgApiKeys from "./pages/org/OrgApiKeys";
+import OrgDomains from "./pages/org/OrgDomains";
+import OrgLogs from "./pages/org/OrgLogs";
+import OrgHome from "./pages/org/OrgHome";
+import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
@@ -341,6 +346,30 @@ const ROUTE_STRUCTURE = {
     url: "settings",
     icon: "settings",
     component: Settings,
+  },
+  access: {
+    title: "Roles & Permissions",
+    url: "access",
+    icon: "shield",
+    component: Access,
+    subPages: {
+      roles: {
+        title: "Roles & Permissions",
+        url: "roles",
+        component: Access,
+      },
+      members: {
+        title: "Roles & Permissions",
+        url: "members",
+        component: Access,
+      },
+    },
+  },
+  billing: {
+    title: "Billing",
+    url: "billing",
+    icon: "credit-card",
+    component: Billing,
   },
   docs: {
     title: "Docs",
