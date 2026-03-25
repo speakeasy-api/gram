@@ -3,7 +3,6 @@ package hooks
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"

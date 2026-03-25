@@ -291,6 +291,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorHookPayload) (*
 		}),
 	)
 
+	// TODO: cursor auth
 	s.recordCursorToolEvent(ctx, payload)
 
 	// Route to appropriate handler based on hook type
