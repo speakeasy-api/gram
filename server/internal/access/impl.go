@@ -235,17 +235,15 @@ func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.Remove
 		return oops.E(oops.CodeUnexpected, err, "failed to remove principal grants").Log(ctx, s.logger)
 	}
 
-	if len(existingRows) > 0 {
-		for _, row := range existingRows {
-			if err := audit.LogAccessGrantRemovePrincipal(ctx, dbtx, audit.LogAccessGrantRemovePrincipalEvent{
-				OrganizationID:   authCtx.ActiveOrganizationID,
-				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-				ActorDisplayName: authCtx.Email,
-				ActorSlug:        nil,
-				Grant:            grantFromRow(row),
-			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "failed to create principal grant removal audit log").Log(ctx, s.logger)
-			}
+	for _, row := range existingRows {
+		if err := audit.LogAccessGrantRemovePrincipal(ctx, dbtx, audit.LogAccessGrantRemovePrincipalEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			Grant:            grantFromRow(row),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to create principal grant removal audit log").Log(ctx, s.logger)
 		}
 	}
 
