@@ -73,31 +73,32 @@ func (s *Service) ensureDefaultGrants(ctx context.Context, orgID string) {
 		return
 	}
 
-	// Build seed params for all system roles.
-	var seeds []repo.SeedOrgRoleGrantsParams
+	// Upsert seed grants for all system roles. Using UpsertPrincipalGrant
+	// (ON CONFLICT DO UPDATE) instead of COPY FROM to handle concurrent
+	// requests safely — two callers may race past the emptiness check above.
+	var seeded int
 	for _, slug := range systemRoleSlugs {
 		principal := urn.NewPrincipal(urn.PrincipalTypeRole, slug)
 		for _, scope := range defaultGrants[slug] {
-			seeds = append(seeds, repo.SeedOrgRoleGrantsParams{
+			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principal,
 				Scope:          scope,
 				Resource:       "*",
-			})
+			}); err != nil {
+				s.logger.WarnContext(ctx, "failed to seed default grant",
+					attr.SlogOrganizationID(orgID),
+					attr.SlogError(err),
+				)
+				return
+			}
+			seeded++
 		}
-	}
-
-	if _, err := q.SeedOrgRoleGrants(ctx, seeds); err != nil {
-		s.logger.WarnContext(ctx, "failed to seed default grants for system roles",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-		return
 	}
 
 	s.logger.InfoContext(ctx, "seeded default grants for system roles",
 		attr.SlogOrganizationID(orgID),
-		attr.SlogValueInt(len(seeds)),
+		attr.SlogValueInt(seeded),
 	)
 }
 
@@ -345,6 +346,7 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 	}
 
 	// Assign members if requested.
+	var assignedCount int
 	if len(p.MemberIds) > 0 {
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
@@ -363,6 +365,8 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 						attr.SlogRoleSlug(wr.Slug),
 						attr.SlogError(err),
 					)
+				} else {
+					assignedCount++
 				}
 			}
 		}
@@ -376,7 +380,7 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 		Description: wr.Description,
 		IsSystem:    false,
 		Grants:      grants,
-		MemberCount: len(p.MemberIds),
+		MemberCount: assignedCount,
 		CreatedAt:   wr.CreatedAt,
 		UpdatedAt:   wr.UpdatedAt,
 	}, nil
