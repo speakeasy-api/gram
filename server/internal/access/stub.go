@@ -42,65 +42,6 @@ func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, er
 	return org.WorkosID.String, nil
 }
 
-// systemRoleSlugs are the WorkOS environment roles that get default grants on first access.
-var systemRoleSlugs = []string{"admin", "member"}
-
-// defaultGrants defines the seed grants for each system role.
-var defaultGrants = map[string][]string{
-	"admin":  {"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect"},
-	"member": {"org:read", "build:read", "mcp:read", "mcp:connect"},
-}
-
-// ensureDefaultGrants lazily seeds the default principal_grants for system
-// roles (admin, member) the first time an org uses RBAC. If any grants
-// already exist for the org we skip seeding entirely.
-func (s *Service) ensureDefaultGrants(ctx context.Context, orgID string) {
-	q := repo.New(s.db)
-
-	// Check if any grants exist for this org (empty PrincipalUrn = no filter).
-	existing, err := q.ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   "",
-	})
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to check existing grants for default seeding",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-		return
-	}
-	if len(existing) > 0 {
-		return
-	}
-
-	// Build seed params for all system roles.
-	var seeds []repo.SeedOrgRoleGrantsParams
-	for _, slug := range systemRoleSlugs {
-		principal := urn.NewPrincipal(urn.PrincipalTypeRole, slug)
-		for _, scope := range defaultGrants[slug] {
-			seeds = append(seeds, repo.SeedOrgRoleGrantsParams{
-				OrganizationID: orgID,
-				PrincipalUrn:   principal,
-				Scope:          scope,
-				Resource:       "*",
-			})
-		}
-	}
-
-	if _, err := q.SeedOrgRoleGrants(ctx, seeds); err != nil {
-		s.logger.WarnContext(ctx, "failed to seed default grants for system roles",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-		return
-	}
-
-	s.logger.InfoContext(ctx, "seeded default grants for system roles",
-		attr.SlogOrganizationID(orgID),
-		attr.SlogValueInt(len(seeds)),
-	)
-}
-
 // grantsForRole loads principal_grants for a role slug (principal_urn = "role:<slug>").
 func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug string) ([]*gen.RoleGrant, error) {
 	q := repo.New(s.db)
@@ -219,9 +160,6 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
-
-	// Lazily seed default grants for system roles on first access.
-	s.ensureDefaultGrants(ctx, ac.ActiveOrganizationID)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
