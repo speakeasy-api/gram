@@ -26,6 +26,7 @@ import {
   type DateRangePreset,
 } from "@gram-ai/elements";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
+import { Operator } from "@gram/client/models/components/logfilter";
 import {
   TelemetryLogRecord,
   ToolCallSummary,
@@ -312,7 +313,23 @@ function LogsContent() {
     parseFilters(searchParams.get("af")),
   );
 
-  const hasLogFilters = logFilters.length > 0;
+  const hasAttributeFilters = logFilters.length > 0;
+
+  const serverFilters = useMemo(
+    () =>
+      selectedServer
+        ? [
+            {
+              path: "gram.toolset.slug",
+              operator: Operator.Eq,
+              values: [selectedServer],
+            },
+          ]
+        : [],
+    [selectedServer],
+  );
+
+  const hasStructuredFilters = hasAttributeFilters || serverFilters.length > 0;
 
   const handleLogFiltersChange = useCallback(
     (filters: ActiveLogFilter[]) => {
@@ -334,30 +351,7 @@ function LogsContent() {
     [setSearchParams],
   );
 
-  // Derive URN prefix from selected server's toolUrns
-  const serverUrnPrefix = useMemo(() => {
-    if (!selectedServer) return null;
-    const selectedToolset = toolsets.find((t) => t.slug === selectedServer);
-    if (selectedToolset?.toolUrns?.length) {
-      // Extract common URN prefix from the first tool URN
-      // e.g., "tools:http:gram:some_tool" -> "tools:http:gram"
-      const firstUrn = selectedToolset.toolUrns[0];
-      const parts = firstUrn.split(":");
-      if (parts.length >= 3) {
-        // Take first 3 parts: "tools:http:gram"
-        return parts.slice(0, 3).join(":");
-      }
-    }
-    return null;
-  }, [selectedServer, toolsets]);
-
-  // Combine search query with server filter - server filter takes precedence
-  const effectiveGramUrn = useMemo(() => {
-    if (serverUrnPrefix) {
-      return serverUrnPrefix;
-    }
-    return searchQuery;
-  }, [serverUrnPrefix, searchQuery]);
+  const effectiveGramUrn = searchQuery;
 
   // Fetch attribute keys for filter bar
   const { data: attributeKeysData, isLoading: isLoadingAttributeKeys } =
@@ -368,13 +362,12 @@ function LogsContent() {
     );
   const attributeKeys = attributeKeysData?.keys ?? [];
 
-  // Standard tool calls query (used when no attribute filters active)
+  // Standard tool calls query (used when no structured filters are active)
   const toolCallsQuery = useLogsEnabledErrorCheck(
     useInfiniteQuery({
       queryKey: [
         "tool-calls",
         effectiveGramUrn,
-        selectedServer,
         from.toISOString(),
         to.toISOString(),
       ],
@@ -395,23 +388,24 @@ function LogsContent() {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      enabled: !hasLogFilters,
+      enabled: !hasStructuredFilters,
       throwOnError: false,
     }),
   );
 
-  // Attribute-filtered logs query (used when attribute filters are active)
+  // Logs query used when attribute filters or server filters are active.
   const attrLogsQuery = useLogsEnabledErrorCheck(
     useAttributeLogsQuery({
       logFilters,
+      extraFilters: serverFilters,
       gramUrn: effectiveGramUrn,
       from,
       to,
-      enabled: hasLogFilters,
+      enabled: hasStructuredFilters,
     }),
   );
 
-  // Pick the active query based on whether attribute filters are active
+  // Pick the active query based on whether structured filters are active.
   const {
     data,
     error,
@@ -421,14 +415,14 @@ function LogsContent() {
     isFetchingNextPage,
     refetch,
     isLogsDisabled,
-  } = hasLogFilters ? attrLogsQuery : toolCallsQuery;
+  } = hasStructuredFilters ? attrLogsQuery : toolCallsQuery;
 
   // Flatten all pages into a single array of traces, merging duplicates that
   // span page boundaries (attribute-filtered logs are grouped per-page, so the
   // same traceId can appear in multiple pages with partial counts).
   const allTraces = useMemo(() => {
     const raw = data?.pages.flatMap((page) => page.toolCalls) ?? [];
-    if (!hasLogFilters) return raw;
+    if (!hasStructuredFilters) return raw;
 
     const merged = new Map<string, ToolCallSummary>();
     for (const trace of raw) {
@@ -447,7 +441,7 @@ function LogsContent() {
     return Array.from(merged.values()).sort((a, b) =>
       a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
     );
-  }, [data?.pages, hasLogFilters]);
+  }, [data?.pages, hasStructuredFilters]);
 
   // Handler for server filter change
   const handleServerChange = useCallback(
@@ -516,6 +510,8 @@ function LogsContent() {
   };
 
   const isLoading = isFetching && allTraces.length === 0;
+  const hasActiveFilters =
+    !!selectedServer || !!searchQuery || logFilters.length > 0;
 
   return (
     <InsightsSidebar
@@ -578,6 +574,7 @@ function LogsContent() {
         onLogFiltersChange={handleLogFiltersChange}
         attributeKeys={attributeKeys}
         isLoadingAttributeKeys={isLoadingAttributeKeys}
+        hasActiveFilters={hasActiveFilters}
       />
     </InsightsSidebar>
   );
@@ -620,6 +617,7 @@ function LogsInnerContent({
   onLogFiltersChange,
   attributeKeys,
   isLoadingAttributeKeys,
+  hasActiveFilters,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -632,7 +630,7 @@ function LogsInnerContent({
   onSearchSubmit: (query: string) => void;
   selectedServer: string | null;
   onServerChange: (serverSlug: string | null) => void;
-  toolsets: Array<{ slug: string; name: string; toolUrns: string[] }>;
+  toolsets: Array<{ slug: string; name: string }>;
   isLoadingToolsets?: boolean;
   expandedTraceId: string | null;
   toggleExpand: (traceId: string) => void;
@@ -657,6 +655,7 @@ function LogsInnerContent({
   onLogFiltersChange: (filters: ActiveLogFilter[]) => void;
   attributeKeys: string[];
   isLoadingAttributeKeys?: boolean;
+  hasActiveFilters: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
 
@@ -764,8 +763,7 @@ function LogsInnerContent({
                         error={error}
                         isLoading={isLoading}
                         allTraces={allTraces}
-                        searchQuery={searchQuery}
-                        hasLogFilters={logFilters.length > 0}
+                        hasActiveFilters={hasActiveFilters}
                         expandedTraceId={expandedTraceId}
                         isFetchingNextPage={isFetchingNextPage}
                         onToggleExpand={toggleExpand}
@@ -804,8 +802,7 @@ function TraceListContent({
   error,
   isLoading,
   allTraces,
-  searchQuery,
-  hasLogFilters,
+  hasActiveFilters,
   expandedTraceId,
   isFetchingNextPage,
   onToggleExpand,
@@ -814,8 +811,7 @@ function TraceListContent({
   error: Error | null;
   isLoading: boolean;
   allTraces: ToolCallSummary[];
-  searchQuery: string | null;
-  hasLogFilters: boolean;
+  hasActiveFilters: boolean;
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
   onToggleExpand: (traceId: string) => void;
@@ -838,9 +834,7 @@ function TraceListContent({
   }
 
   if (allTraces.length === 0) {
-    return (
-      <LogsEmptyState searchQuery={searchQuery} hasLogFilters={hasLogFilters} />
-    );
+    return <LogsEmptyState hasActiveFilters={hasActiveFilters} />;
   }
 
   return (
@@ -888,14 +882,7 @@ function LogsLoading() {
   );
 }
 
-function LogsEmptyState({
-  searchQuery,
-  hasLogFilters,
-}: {
-  searchQuery: string | null;
-  hasLogFilters: boolean;
-}) {
-  const hasActiveFilters = !!searchQuery || hasLogFilters;
+function LogsEmptyState({ hasActiveFilters }: { hasActiveFilters: boolean }) {
   return (
     <div className="py-12 text-center">
       <div className="flex flex-col items-center gap-3">
