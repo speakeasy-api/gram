@@ -1,5 +1,5 @@
 import { AuditLog } from "@gram/client/models/components";
-import { FileContents, FileDiffOptions, ThemeTypes } from "@pierre/diffs";
+import { FileDiffOptions, ThemeTypes } from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import React from "react";
