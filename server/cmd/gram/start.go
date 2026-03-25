@@ -451,6 +451,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			workosClient := workos.New(logger, c.String("workos-api-key"))
+			workosRoleClient := workos.NewRoleClient(logger, c.String("workos-api-key"))
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {
@@ -677,7 +678,7 @@ func newStartCommand() *cli.Command {
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager))
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, workosRoleClient))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, temporalEnv))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager))
