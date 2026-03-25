@@ -1,38 +1,66 @@
 #!/usr/bin/env bash
 
-#MISE description="Seed default RBAC grants for an organization"
-#USAGE arg "<org_id>" help="The organization ID to seed grants for"
+#MISE description="Seed default RBAC grants for an organization (or all orgs)"
+#USAGE arg "[org_id]" help="Organization ID to seed (omit to seed all orgs)"
+#USAGE flag "--dry-run" help="Print the SQL without executing"
 
 set -eo pipefail
 
-ORG_ID="${usage_org_id:?Usage: mise run db:seed-rbac <org_id>}"
+ORG_ID="${usage_org_id:-}"
+DRY_RUN="${usage_dry_run:-false}"
 
 # Default grants for system roles.
 # admin gets full access; member gets read + connect.
-GRANTS_SQL=$(cat <<'SQL'
+read -r -d '' GRANTS_SQL <<'SQL' || true
 INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
-VALUES
-  ($1, 'role:admin', 'org:read',    '*'),
-  ($1, 'role:admin', 'org:admin',   '*'),
-  ($1, 'role:admin', 'build:read',  '*'),
-  ($1, 'role:admin', 'build:write', '*'),
-  ($1, 'role:admin', 'mcp:read',    '*'),
-  ($1, 'role:admin', 'mcp:write',   '*'),
-  ($1, 'role:admin', 'mcp:connect', '*'),
-  ($1, 'role:member', 'org:read',    '*'),
-  ($1, 'role:member', 'build:read',  '*'),
-  ($1, 'role:member', 'mcp:read',    '*'),
-  ($1, 'role:member', 'mcp:connect', '*')
+SELECT org_id, principal_urn, scope, resource
+FROM (
+  SELECT unnest(ARRAY[:'org_ids']) AS org_id
+) orgs
+CROSS JOIN (
+  VALUES
+    ('role:admin', 'org:read',    '*'),
+    ('role:admin', 'org:admin',   '*'),
+    ('role:admin', 'build:read',  '*'),
+    ('role:admin', 'build:write', '*'),
+    ('role:admin', 'mcp:read',    '*'),
+    ('role:admin', 'mcp:write',   '*'),
+    ('role:admin', 'mcp:connect', '*'),
+    ('role:member', 'org:read',    '*'),
+    ('role:member', 'build:read',  '*'),
+    ('role:member', 'mcp:read',    '*'),
+    ('role:member', 'mcp:connect', '*')
+) AS grants(principal_urn, scope, resource)
 ON CONFLICT (organization_id, principal_urn, scope, resource) DO NOTHING;
 SQL
-)
 
-echo "Seeding default RBAC grants for org: ${ORG_ID}"
+run_psql() {
+  if [[ -n "${DATABASE_URL:-}" ]]; then
+    psql "${DATABASE_URL}" "$@"
+  else
+    docker compose exec -T gram-db psql -U "${DB_USER}" -d "${DB_NAME}" "$@"
+  fi
+}
 
-if [[ -n "${DATABASE_URL:-}" ]]; then
-  psql "${DATABASE_URL}" -c "${GRANTS_SQL}" -v "1=${ORG_ID}"
+if [[ -n "${ORG_ID}" ]]; then
+  ORG_IDS_VALUE="${ORG_ID}"
+  echo "Seeding default RBAC grants for org: ${ORG_ID}"
 else
-  docker compose exec -T gram-db psql -U "${DB_USER}" -d "${DB_NAME}" -c "${GRANTS_SQL}" -v "1=${ORG_ID}"
+  ORG_IDS_VALUE=$(run_psql -Atc "SELECT string_agg(id, ',') FROM organization_metadata")
+  if [[ -z "${ORG_IDS_VALUE}" ]]; then
+    echo "No organizations found."
+    exit 0
+  fi
+  ORG_COUNT=$(echo "${ORG_IDS_VALUE}" | tr ',' '\n' | wc -l | tr -d ' ')
+  echo "Seeding default RBAC grants for ${ORG_COUNT} orgs"
 fi
+
+if [[ "${DRY_RUN}" == "true" ]]; then
+  echo "--- DRY RUN (no changes will be made) ---"
+  echo "${GRANTS_SQL}" | sed "s/:'org_ids'/'${ORG_IDS_VALUE}'/g"
+  exit 0
+fi
+
+run_psql -v "org_ids=${ORG_IDS_VALUE}" -c "${GRANTS_SQL}"
 
 echo "Done."
