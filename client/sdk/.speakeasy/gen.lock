@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 69e95fcebd659386e53ec5c477523ff3
+  docChecksum: 6d5b4e385fff4bc963522d56d95a73b4
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.28.0
-  configChecksum: c964a403554a2d4fcd1cb883f39657c4
+  releaseVersion: 0.27.26
+  configChecksum: f032509357c9b2772dd3dd238f43e7c2
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -586,7 +586,7 @@ trackedFiles:
   docs/models/components/updateprompttemplateresult.md:
     last_write_checksum: sha1:2c3026fda1bac0c4bb6819757d917b5cb2be7a9c
   docs/models/components/updateroleform.md:
-    last_write_checksum: sha1:54d5e360ea97960517928fb99c7c0989a89a5672
+    last_write_checksum: sha1:c703b824530b8f99130ce7e4021ce33c544f2351
   docs/models/components/updateslackapprequestbody.md:
     last_write_checksum: sha1:5a464bb3c9d5605bf21fe365b43fbe1fd73f8f4c
   docs/models/components/updatetoolsetrequestbody.md:
@@ -1595,11 +1595,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:4fd1534e12098b4dbbdbc08715e9db5229696540
+    last_write_checksum: sha1:56b57237623e09a8ec06f0fe5e9afa136ac9610e
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:96ef9d3b6fa800e8f086f114d140f2d090e589de
+    last_write_checksum: sha1:7d56984a8e4555da8cb46a3d91d3ec08a93e994b
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2099,7 +2099,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:2d1ab3239bea94f01d5929eaaa65eb2d3d2a867f
+    last_write_checksum: sha1:2d9c1a66f2a24142b38a330060d021531d533000
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2894,7 +2894,7 @@ trackedFiles:
     last_write_checksum: sha1:5a041b5080adcfc65c1afef00705abcfa4073103
     pristine_git_object: 4d90a023fd313599d92a275675d9aa52574d9ab1
   src/models/components/updateroleform.ts:
-    last_write_checksum: sha1:3378cbfd904d8a430b9ae53777d74988e3d2c7cc
+    last_write_checksum: sha1:32f50f4bc57ca09136bdcf1effa1d22dd630f7ac
   src/models/components/updateslackapprequestbody.ts:
     last_write_checksum: sha1:e14d54c11f206f273fb529912d6684e14135aec7
   src/models/components/updatetoolsetrequestbody.ts:

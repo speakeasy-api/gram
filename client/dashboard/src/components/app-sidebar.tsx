@@ -8,7 +8,6 @@ import {
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
@@ -24,16 +23,9 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
-  const telemetry = useTelemetry();
-
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
-
   const settingsItems = [routes.settings, routes.billing] as AppRoute[];
-  if (isRbacEnabled) {
-    settingsItems.splice(1, 0, routes.access);
-  }
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],

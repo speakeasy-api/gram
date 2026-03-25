@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import {
   RoleGrant,
   RoleGrant$Outbound,
@@ -23,6 +24,10 @@ export type UpdateRoleForm = {
    */
   id: string;
   /**
+   * Optional member IDs to reassign to this role
+   */
+  memberIds?: Array<string> | undefined;
+  /**
    * Updated display name
    */
   name?: string | undefined;
@@ -33,6 +38,7 @@ export type UpdateRoleForm$Outbound = {
   description?: string | undefined;
   grants?: Array<RoleGrant$Outbound> | undefined;
   id: string;
+  member_ids?: Array<string> | undefined;
   name?: string | undefined;
 };
 
@@ -40,12 +46,20 @@ export type UpdateRoleForm$Outbound = {
 export const UpdateRoleForm$outboundSchema: z.ZodMiniType<
   UpdateRoleForm$Outbound,
   UpdateRoleForm
-> = z.object({
-  description: z.optional(z.string()),
-  grants: z.optional(z.array(RoleGrant$outboundSchema)),
-  id: z.string(),
-  name: z.optional(z.string()),
-});
+> = z.pipe(
+  z.object({
+    description: z.optional(z.string()),
+    grants: z.optional(z.array(RoleGrant$outboundSchema)),
+    id: z.string(),
+    memberIds: z.optional(z.array(z.string())),
+    name: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      memberIds: "member_ids",
+    });
+  }),
+);
 
 export function updateRoleFormToJSON(updateRoleForm: UpdateRoleForm): string {
   return JSON.stringify(UpdateRoleForm$outboundSchema.parse(updateRoleForm));

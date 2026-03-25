@@ -298,7 +298,7 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleSession
 	{
 		err = json.Unmarshal([]byte(accessUpdateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
 		}
 		for _, e := range body.Grants {
 			if e != nil {
@@ -330,6 +330,12 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleSession
 				continue
 			}
 			v.Grants[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	}
+	if body.MemberIds != nil {
+		v.MemberIds = make([]string, len(body.MemberIds))
+		for i, val := range body.MemberIds {
+			v.MemberIds[i] = val
 		}
 	}
 	v.SessionToken = sessionToken
