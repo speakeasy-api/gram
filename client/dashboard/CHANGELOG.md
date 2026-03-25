@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.35.0
+
+### Minor Changes
+
+- c4d9bdd: Introduced a new "Audit Logs" page to the organization dashboard, allowing Gram users to view a history of actions taken within the organization.
+
+### Patch Changes
+
+- 3d28f83: Fixes bug with server selection in logs page.
+
 ## 0.34.3
 
 ### Patch Changes
