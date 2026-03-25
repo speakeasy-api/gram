@@ -43,21 +43,21 @@ export function StaticDiff(props: { log: AuditLog; lang?: string }) {
   const { theme } = useMoonshineConfig();
 
   const { log, lang } = props;
-  const ref = React.useRef<{
-    oldFile: FileContents;
-    newFile: FileContents;
-  }>({
-    oldFile: {
-      name: "before",
-      contents: prepareSnapshot(log.action, log.beforeSnapshot),
-      lang,
-    },
-    newFile: {
-      name: "after",
-      contents: prepareSnapshot(log.action, log.afterSnapshot),
-      lang,
-    },
-  });
+  const { oldFile, newFile } = React.useMemo(
+    () => ({
+      oldFile: {
+        name: "before",
+        contents: prepareSnapshot(log.action, log.beforeSnapshot),
+        lang,
+      },
+      newFile: {
+        name: "after",
+        contents: prepareSnapshot(log.action, log.afterSnapshot),
+        lang,
+      },
+    }),
+    [log.action, log.beforeSnapshot, log.afterSnapshot, lang],
+  );
 
   let themeType: ThemeTypes = "system";
   if (theme === "light") {
@@ -70,8 +70,8 @@ export function StaticDiff(props: { log: AuditLog; lang?: string }) {
 
   return (
     <MultiFileDiff
-      oldFile={ref.current.oldFile}
-      newFile={ref.current.newFile}
+      oldFile={oldFile}
+      newFile={newFile}
       options={{ ...staticDiffOptions, themeType }}
     />
   );
