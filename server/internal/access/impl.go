@@ -318,9 +318,16 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 		return nil, gen.MakeGatewayError(fmt.Errorf("create role in workos: %w", err))
 	}
 
-	// Sync scope grants to local DB.
+	// Sync scope grants to local DB. If this fails, clean up the WorkOS role
+	// to avoid leaving an orphan.
 	if len(p.Grants) > 0 {
 		if err := s.syncGrants(ctx, ac.ActiveOrganizationID, wr.Slug, p.Grants); err != nil {
+			if delErr := s.roles.DeleteRole(ctx, workosOrgID, wr.Slug); delErr != nil {
+				s.logger.ErrorContext(ctx, "failed to clean up WorkOS role after grant sync failure",
+					attr.SlogRoleSlug(wr.Slug),
+					attr.SlogError(delErr),
+				)
+			}
 			return nil, gen.MakeUnexpected(fmt.Errorf("sync grants: %w", err))
 		}
 	}
@@ -352,7 +359,10 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 		}
 	}
 
-	grants, _ := s.grantsForRole(ctx, ac.ActiveOrganizationID, wr.Slug)
+	grants, err := s.grantsForRole(ctx, ac.ActiveOrganizationID, wr.Slug)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to load grants for newly created role", attr.SlogRoleSlug(wr.Slug), attr.SlogError(err))
+	}
 
 	return &gen.Role{
 		ID:          wr.ID,
@@ -418,8 +428,9 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 		roleUpdatedAt = wr.UpdatedAt
 	}
 
-	// Sync grants if provided.
-	if p.Grants != nil {
+	// Sync grants if provided — skip for system roles whose grants are
+	// managed by the seed/backfill script, not by users.
+	if p.Grants != nil && !isSystem {
 		if err := s.syncGrants(ctx, ac.ActiveOrganizationID, roleSlug, p.Grants); err != nil {
 			return nil, gen.MakeUnexpected(fmt.Errorf("sync grants: %w", err))
 		}
@@ -448,10 +459,16 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 		}
 	}
 
-	grants, _ := s.grantsForRole(ctx, ac.ActiveOrganizationID, roleSlug)
+	grants, err := s.grantsForRole(ctx, ac.ActiveOrganizationID, roleSlug)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to load grants for updated role", attr.SlogRoleSlug(roleSlug), attr.SlogError(err))
+	}
 
 	// Recount members after any reassignments.
-	allMembers, _ := s.roles.ListMembers(ctx, workosOrgID)
+	allMembers, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to list members for count", attr.SlogRoleSlug(roleSlug), attr.SlogError(err))
+	}
 	count := 0
 	for _, m := range allMembers {
 		if m.Role.Slug == roleSlug {
