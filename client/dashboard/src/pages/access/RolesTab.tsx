@@ -6,6 +6,7 @@ import {
   invalidateAllListRoles,
   useListRoles,
 } from "@gram/client/react-query/listRoles.js";
+import { invalidateAllListMembers } from "@gram/client/react-query/listMembers.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
@@ -31,7 +32,10 @@ export function RolesTab() {
 
   const deleteRole = useDeleteRoleMutation({
     onSuccess: async () => {
-      await invalidateAllListRoles(queryClient);
+      await Promise.all([
+        invalidateAllListRoles(queryClient),
+        invalidateAllListMembers(queryClient),
+      ]);
     },
   });
 
