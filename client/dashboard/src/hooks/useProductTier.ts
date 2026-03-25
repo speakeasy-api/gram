@@ -6,7 +6,8 @@ export type ProductTier =
   | "base"
   | "base_PAID"
   | "__deprecated__pro"
-  | "enterprise";
+  | "enterprise"
+  | "enterprise_free_trial";
 
 export const useProductTier = () => {
   const session = useSession();
@@ -15,6 +16,9 @@ export const useProductTier = () => {
   });
 
   const productTier = useMemo(() => {
+    if (session.isFreeTrial) {
+      return "enterprise_free_trial";
+    }
     if (session.rawGramAccountType === "enterprise") {
       return "enterprise";
     }
@@ -26,7 +30,7 @@ export const useProductTier = () => {
       return "base_PAID";
     }
     return "base";
-  }, [periodUsage, session.rawGramAccountType]);
+  }, [periodUsage, session.rawGramAccountType, session.isFreeTrial]);
 
   return productTier;
 };

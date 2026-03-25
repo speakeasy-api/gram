@@ -3,6 +3,7 @@ package mv
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -13,6 +14,8 @@ import (
 type OrganizationDescription struct {
 	org_repo.OrganizationMetadatum
 	HasActiveSubscription bool
+	IsFreeTrial           bool
+	FreeTrialEndsAt       time.Time
 }
 
 // Necessary to properly populate account type
@@ -26,11 +29,23 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 	org := OrganizationDescription{
 		OrganizationMetadatum: orgMetadata,
 		HasActiveSubscription: false,
+		IsFreeTrial:           false,
+		FreeTrialEndsAt:       orgMetadata.FreeTrialEndsAt.Time,
 	}
 
 	// An org is enterprise if it's explicitly set to enterprise in the database
 	if org.GramAccountType == "enterprise" {
 		org.HasActiveSubscription = true
+		org.IsFreeTrial = false
+		org.FreeTrialEndsAt = orgMetadata.FreeTrialEndsAt.Time
+		return &org, nil
+	}
+
+	// If the org is in a free trial, the account type is "enterprise" for the purposes of the rest of the system.
+	if orgMetadata.FreeTrialEndsAt.Valid && orgMetadata.FreeTrialEndsAt.Time.After(time.Now().UTC()) {
+		org.GramAccountType = "enterprise"
+		org.IsFreeTrial = true
+		org.FreeTrialEndsAt = org.FreeTrialEndsAt
 		return &org, nil
 	}
 

@@ -24,15 +24,18 @@ type RegisterRequestBody struct {
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
-	UserID               *string                          `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	UserEmail            *string                          `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	UserSignature        *string                          `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
-	UserDisplayName      *string                          `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
-	UserPhotoURL         *string                          `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
-	IsAdmin              *bool                            `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
-	ActiveOrganizationID *string                          `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
-	GramAccountType      *string                          `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
-	Organizations        []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	UserID               *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	UserEmail            *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	UserSignature        *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
+	UserDisplayName      *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
+	UserPhotoURL         *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
+	IsAdmin              *bool   `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
+	ActiveOrganizationID *string `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
+	GramAccountType      *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
+	IsFreeTrial          *bool   `form:"is_free_trial,omitempty" json:"is_free_trial,omitempty" xml:"is_free_trial,omitempty"`
+	// When the free trial ends.
+	FreeTrialEndsAt *string                          `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
+	Organizations   []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1926,6 +1929,8 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 		IsAdmin:              *body.IsAdmin,
 		ActiveOrganizationID: *body.ActiveOrganizationID,
 		GramAccountType:      *body.GramAccountType,
+		IsFreeTrial:          *body.IsFreeTrial,
+		FreeTrialEndsAt:      body.FreeTrialEndsAt,
 	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -2102,6 +2107,12 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.GramAccountType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("gram_account_type", "body"))
+	}
+	if body.IsFreeTrial == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_free_trial", "body"))
+	}
+	if body.FreeTrialEndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.free_trial_ends_at", *body.FreeTrialEndsAt, goa.FormatDateTime))
 	}
 	for _, e := range body.Organizations {
 		if e != nil {

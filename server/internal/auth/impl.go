@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -371,11 +372,15 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		})
 	}
 
+	freeTrialEndsAt := authCtx.FreeTrialEndsAt.Format(time.RFC3339)
+
 	return &gen.InfoResult{
 		SessionToken:         *authCtx.SessionID,
 		SessionCookie:        *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		GramAccountType:      authCtx.AccountType,
+		IsFreeTrial:          authCtx.IsFreeTrial,
+		FreeTrialEndsAt:      &freeTrialEndsAt,
 		UserID:               userInfo.UserID,
 		UserEmail:            userInfo.Email,
 		UserSignature:        userInfo.UserPylonSignature,
