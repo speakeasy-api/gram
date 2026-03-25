@@ -429,7 +429,7 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 		case openapi.SecuritySchemeTypeAPIKey:
 			envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key))
 		case openapi.SecuritySchemeTypeHTTP:
-			switch sec.GetScheme() {
+			switch strings.ToLower(sec.GetScheme()) {
 			case "bearer":
 				envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key))
 			case "basic":
@@ -490,7 +490,7 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 			Type:                conv.ToPGText(sec.GetType().String()),
 			Name:                conv.ToPGTextEmpty(sec.GetName()),
 			InPlacement:         conv.ToPGTextEmpty(sec.GetIn().String()),
-			Scheme:              conv.ToPGTextEmpty(sec.GetScheme()),
+			Scheme:              conv.ToPGTextEmpty(strings.ToLower(sec.GetScheme())),
 			// No real reason to store this since it's purely for documentation
 			// purposes and we should eventually drop the DB column. Setting it
 			// to NULL.
