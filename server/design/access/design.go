@@ -456,6 +456,7 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("name", String, "Updated display name")
 	Attribute("description", String, "Updated description")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Updated scope grants")
+	Attribute("member_ids", ArrayOf(String), "Optional member IDs to reassign to this role")
 })
 
 // ---------------------------------------------------------------------------

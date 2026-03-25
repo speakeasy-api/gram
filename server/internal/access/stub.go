@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -330,6 +331,9 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 		Description: p.Description,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "409") || strings.Contains(err.Error(), "slug_conflict") || strings.Contains(err.Error(), "already in use") {
+			return nil, gen.MakeConflict(fmt.Errorf("a role with the name %q already exists", p.Name))
+		}
 		return nil, gen.MakeGatewayError(fmt.Errorf("create role in workos: %w", err))
 	}
 
@@ -389,59 +393,97 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 		return nil, err
 	}
 
-	// Find the existing role to get its slug.
+	// Find the existing role to get its slug and type.
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
 		return nil, gen.MakeGatewayError(fmt.Errorf("list roles: %w", err))
 	}
-	var currentSlug string
+	var roleName, roleDesc, roleCreatedAt, roleUpdatedAt, roleSlug string
+	var isSystem bool
+	var roleFound bool
 	for _, wr := range wRoles {
 		if wr.ID == p.ID {
-			currentSlug = wr.Slug
+			roleSlug = wr.Slug
+			isSystem = wr.Type == "EnvironmentRole"
+			roleName = wr.Name
+			roleDesc = wr.Description
+			roleCreatedAt = wr.CreatedAt
+			roleUpdatedAt = wr.UpdatedAt
+			roleFound = true
 			break
 		}
 	}
-	if currentSlug == "" {
+	if !roleFound {
 		return nil, gen.MakeNotFound(fmt.Errorf("role %q not found", p.ID))
 	}
 
-	// Update role metadata in WorkOS (identified by slug, not ID).
-	opts := workos.UpdateRoleOpts{
-		Name:        p.Name,
-		Description: p.Description,
-		Permissions: nil,
-	}
-	wr, err := s.roles.UpdateRole(ctx, workosOrgID, currentSlug, opts)
-	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("update role in workos: %w", err))
+	// Update role metadata in WorkOS — skip for system/environment roles
+	// as they cannot be renamed via the organization roles API.
+	if !isSystem {
+		opts := workos.UpdateRoleOpts{
+			Name:        p.Name,
+			Description: p.Description,
+			Permissions: nil,
+		}
+		wr, err := s.roles.UpdateRole(ctx, workosOrgID, roleSlug, opts)
+		if err != nil {
+			return nil, gen.MakeGatewayError(fmt.Errorf("update role in workos: %w", err))
+		}
+		roleName = wr.Name
+		roleDesc = wr.Description
+		roleUpdatedAt = wr.UpdatedAt
 	}
 
 	// Sync grants if provided.
 	if p.Grants != nil {
-		if err := s.syncGrants(ctx, ac.ActiveOrganizationID, wr.Slug, p.Grants); err != nil {
+		if err := s.syncGrants(ctx, ac.ActiveOrganizationID, roleSlug, p.Grants); err != nil {
 			return nil, gen.MakeUnexpected(fmt.Errorf("sync grants: %w", err))
 		}
 	}
 
-	grants, _ := s.grantsForRole(ctx, ac.ActiveOrganizationID, wr.Slug)
+	// Reassign members if provided.
+	if len(p.MemberIds) > 0 {
+		members, err := s.roles.ListMembers(ctx, workosOrgID)
+		if err != nil {
+			return nil, gen.MakeGatewayError(fmt.Errorf("list members for reassignment: %w", err))
+		}
+		membershipByUser := make(map[string]string, len(members))
+		for _, m := range members {
+			membershipByUser[m.UserID] = m.ID
+		}
+		for _, uid := range p.MemberIds {
+			if mid, ok := membershipByUser[uid]; ok {
+				if _, err := s.roles.UpdateMemberRole(ctx, mid, roleSlug); err != nil {
+					s.logger.WarnContext(ctx, "failed to reassign member during role update",
+						attr.SlogUserID(uid),
+						attr.SlogRoleSlug(roleSlug),
+						attr.SlogError(err),
+					)
+				}
+			}
+		}
+	}
 
-	members, _ := s.roles.ListMembers(ctx, workosOrgID)
+	grants, _ := s.grantsForRole(ctx, ac.ActiveOrganizationID, roleSlug)
+
+	// Recount members after any reassignments.
+	allMembers, _ := s.roles.ListMembers(ctx, workosOrgID)
 	count := 0
-	for _, m := range members {
-		if m.Role.Slug == wr.Slug {
+	for _, m := range allMembers {
+		if m.Role.Slug == roleSlug {
 			count++
 		}
 	}
 
 	return &gen.Role{
-		ID:          wr.ID,
-		Name:        wr.Name,
-		Description: wr.Description,
-		IsSystem:    wr.Type == "EnvironmentRole",
+		ID:          p.ID,
+		Name:        roleName,
+		Description: roleDesc,
+		IsSystem:    isSystem,
 		Grants:      grants,
 		MemberCount: count,
-		CreatedAt:   wr.CreatedAt,
-		UpdatedAt:   wr.UpdatedAt,
+		CreatedAt:   roleCreatedAt,
+		UpdatedAt:   roleUpdatedAt,
 	}, nil
 }
 

@@ -20159,6 +20159,11 @@ components:
                 id:
                     type: string
                     description: The ID of the role to update
+                member_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional member IDs to reassign to this role
                 name:
                     type: string
                     description: Updated display name

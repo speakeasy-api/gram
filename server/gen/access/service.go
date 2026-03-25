@@ -273,6 +273,8 @@ type UpdateRolePayload struct {
 	Description *string
 	// Updated scope grants
 	Grants []*RoleGrant
+	// Optional member IDs to reassign to this role
+	MemberIds []string
 }
 
 // UpsertGrantsPayload is the payload type of the access service upsertGrants
