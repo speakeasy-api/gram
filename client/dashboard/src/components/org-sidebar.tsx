@@ -11,7 +11,7 @@ import { useIsAdmin, useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
-import { ExternalLink } from "lucide-react";
+import { BookOpen, ExternalLink, MessageCircle, Newspaper } from "lucide-react";
 import * as React from "react";
 
 export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -61,6 +61,48 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   href={teamUrl}
                   target="_blank"
                   Icon={(props) => <Icon name="users-round" {...props} />}
+                />
+              </SidebarMenuItem>
+            </NavMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>get help</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavMenu items={[]}>
+              <SidebarMenuItem>
+                <NavButton
+                  title="Get Support"
+                  Icon={(props) => <MessageCircle {...props} />}
+                  onClick={() => window.Pylon?.("show")}
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <NavButton
+                  title="Docs"
+                  titleNode={
+                    <span className="flex items-center gap-1.5">
+                      Docs
+                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    </span>
+                  }
+                  href="https://www.speakeasy.com/docs/mcp"
+                  target="_blank"
+                  Icon={(props) => <BookOpen {...props} />}
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <NavButton
+                  title="Changelog"
+                  titleNode={
+                    <span className="flex items-center gap-1.5">
+                      Changelog
+                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    </span>
+                  }
+                  href="https://www.speakeasy.com/changelog?product=mcp-platform"
+                  target="_blank"
+                  Icon={(props) => <Newspaper {...props} />}
                 />
               </SidebarMenuItem>
             </NavMenu>
