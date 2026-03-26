@@ -24,7 +24,7 @@ uv = "0.10.9"
 yq = "4.52.4"
 hk = "1.38.0"
 pkl = "0.31.0"
-"github:speakeasy-api/madprocs" = "0.1.22"
+"github:speakeasy-api/madprocs" = "0.1.25"
 "github:temporalio/cli" = "1.6.1"
 
 # ℹ️ The settings below are sensible defaults for local development. When
