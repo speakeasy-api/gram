@@ -1158,3 +1158,59 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		TotalSessions: totalSessions,
 	}, nil
 }
+
+// ListHooksTraces retrieves hook trace summaries with pagination and filtering.
+// Uses materialized columns for efficient querying while accessing user_email from JSON.
+func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHooksTracesPayload) (res *telem_gen.ListHooksTracesResult, err error) {
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert attribute filters
+	attributeFilters := toRepoAttributeFilters(payload.Filters)
+
+	// Query with limit+1 to detect if there are more results
+	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
+		GramProjectID: params.projectID,
+		TimeStart:     params.timeStart,
+		TimeEnd:       params.timeEnd,
+		Filters:       attributeFilters,
+		SortOrder:     params.sortOrder,
+		Cursor:        params.cursor,
+		Limit:         params.limit + 1,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "error listing hooks traces", attr.SlogError(err))
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hooks traces")
+	}
+
+	// Compute next cursor using limit+1 pattern
+	var nextCursor *string
+	if len(items) > params.limit {
+		nextCursor = &items[params.limit-1].TraceID
+		items = items[:params.limit]
+	}
+
+	// Convert repo models to Goa types
+	traces := make([]*telem_gen.HookTraceSummary, len(items))
+	for i, item := range items {
+		traces[i] = &telem_gen.HookTraceSummary{
+			TraceID:           item.TraceID,
+			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
+			LogCount:          item.LogCount,
+			HTTPStatusCode:    item.HTTPStatusCode,
+			GramUrn:           item.GramURN,
+			ToolName:          item.ToolName,
+			ToolSource:        item.ToolSource,
+			EventSource:       item.EventSource,
+			UserEmail:         item.UserEmail,
+			HookSource:        item.HookSource,
+		}
+	}
+
+	return &telem_gen.ListHooksTracesResult{
+		Traces:     traces,
+		NextCursor: nextCursor,
+	}, nil
+}

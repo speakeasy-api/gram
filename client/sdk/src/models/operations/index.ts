@@ -76,6 +76,7 @@ export * from "./listenvironments.js";
 export * from "./listfilteroptions.js";
 export * from "./listglobalvariations.js";
 export * from "./listgrants.js";
+export * from "./listhookstraces.js";
 export * from "./listintegrations.js";
 export * from "./listmcpcatalog.js";
 export * from "./listmcpregistries.js";

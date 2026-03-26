@@ -76,7 +76,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
 		"resources list-resources",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
@@ -746,6 +746,12 @@ func ParseEndpoint(
 		telemetryGetHooksSummarySessionTokenFlag     = telemetryGetHooksSummaryFlags.String("session-token", "", "")
 		telemetryGetHooksSummaryProjectSlugInputFlag = telemetryGetHooksSummaryFlags.String("project-slug-input", "", "")
 
+		telemetryListHooksTracesFlags                = flag.NewFlagSet("list-hooks-traces", flag.ExitOnError)
+		telemetryListHooksTracesBodyFlag             = telemetryListHooksTracesFlags.String("body", "REQUIRED", "")
+		telemetryListHooksTracesApikeyTokenFlag      = telemetryListHooksTracesFlags.String("apikey-token", "", "")
+		telemetryListHooksTracesSessionTokenFlag     = telemetryListHooksTracesFlags.String("session-token", "", "")
+		telemetryListHooksTracesProjectSlugInputFlag = telemetryListHooksTracesFlags.String("project-slug-input", "", "")
+
 		templatesFlags = flag.NewFlagSet("templates", flag.ContinueOnError)
 
 		templatesCreateTemplateFlags                = flag.NewFlagSet("create-template", flag.ExitOnError)
@@ -1056,6 +1062,7 @@ func ParseEndpoint(
 	telemetryListFilterOptionsFlags.Usage = telemetryListFilterOptionsUsage
 	telemetryListAttributeKeysFlags.Usage = telemetryListAttributeKeysUsage
 	telemetryGetHooksSummaryFlags.Usage = telemetryGetHooksSummaryUsage
+	telemetryListHooksTracesFlags.Usage = telemetryListHooksTracesUsage
 
 	templatesFlags.Usage = templatesUsage
 	templatesCreateTemplateFlags.Usage = templatesCreateTemplateUsage
@@ -1606,6 +1613,9 @@ func ParseEndpoint(
 
 			case "get-hooks-summary":
 				epf = telemetryGetHooksSummaryFlags
+
+			case "list-hooks-traces":
+				epf = telemetryListHooksTracesFlags
 
 			}
 
@@ -2161,6 +2171,9 @@ func ParseEndpoint(
 			case "get-hooks-summary":
 				endpoint = c.GetHooksSummary()
 				data, err = telemetryc.BuildGetHooksSummaryPayload(*telemetryGetHooksSummaryBodyFlag, *telemetryGetHooksSummaryApikeyTokenFlag, *telemetryGetHooksSummarySessionTokenFlag, *telemetryGetHooksSummaryProjectSlugInputFlag)
+			case "list-hooks-traces":
+				endpoint = c.ListHooksTraces()
+				data, err = telemetryc.BuildListHooksTracesPayload(*telemetryListHooksTracesBodyFlag, *telemetryListHooksTracesApikeyTokenFlag, *telemetryListHooksTracesSessionTokenFlag, *telemetryListHooksTracesProjectSlugInputFlag)
 			}
 		case "templates":
 			c := templatesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4832,6 +4845,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    list-filter-options: List available filter options (API keys or users) for the observability overview`)
 	fmt.Fprintln(os.Stderr, `    list-attribute-keys: List distinct attribute keys available for filtering`)
 	fmt.Fprintln(os.Stderr, `    get-hooks-summary: Get aggregated hooks metrics grouped by server`)
+	fmt.Fprintln(os.Stderr, `    list-hooks-traces: List hook traces aggregated by trace_id with user information`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s telemetry COMMAND --help\n", os.Args[0])
@@ -5100,6 +5114,30 @@ func telemetryGetHooksSummaryUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-hooks-summary --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryListHooksTracesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry list-hooks-traces", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List hook traces aggregated by trace_id with user information`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-hooks-traces --body '{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // templatesUsage displays the usage of the templates command and its

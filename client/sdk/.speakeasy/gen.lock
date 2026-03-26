@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 8694c13e4017d5409564dc26edaf6229
+  docChecksum: 260304b39056da56d8bf0e4bef502e0d
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.7
-  configChecksum: 3724f5b75f62f6bc3900df3db895bb63
+  releaseVersion: 0.32.10
+  configChecksum: 523f99256f12e88881dcbf7552ad1999
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -277,6 +277,8 @@ trackedFiles:
     last_write_checksum: sha1:65f741f7c4c0dd72b7fcc482bdc7b586b2419629
   docs/models/components/hooksusersummary.md:
     last_write_checksum: sha1:527d021e36b1f44fd86ee89dfd9814d2046e6797
+  docs/models/components/hooktracesummary.md:
+    last_write_checksum: sha1:87c0d747187c9c251a96e247c19a05683320ad8c
   docs/models/components/httpmethod.md:
     last_write_checksum: sha1:f4bf8618fef5279a71cd413d3f6ca989ab29e766
   docs/models/components/httptooldefinition.md:
@@ -321,6 +323,10 @@ trackedFiles:
     last_write_checksum: sha1:0a7293c0f5068a8f829b94023ecce6c5449ff4c3
   docs/models/components/listgrantsresult.md:
     last_write_checksum: sha1:a81cc566602e1d43a996812174e780ce0f94e9f0
+  docs/models/components/listhookstracespayload.md:
+    last_write_checksum: sha1:76b333fa38b60cbcd80f8683380ce581856292bc
+  docs/models/components/listhookstracesresult.md:
+    last_write_checksum: sha1:d225a13c045feb2ea2cb826c6058b56542f0691e
   docs/models/components/listintegrationsresult.md:
     last_write_checksum: sha1:dbd19d7f8194a90e03634ec4a636f07d426409a1
   docs/models/components/listkeysresult.md:
@@ -456,7 +462,9 @@ trackedFiles:
   docs/models/components/searchchatsfilter.md:
     last_write_checksum: sha1:6030d1eef228e96402dce043397ceb548383a655
   docs/models/components/searchchatspayload.md:
-    last_write_checksum: sha1:9fda8003b2f5fd89950dd014e9f14f641a10323e
+    last_write_checksum: sha1:c80dfc8805c9a9c719100b70c7d7038e06a29896
+  docs/models/components/searchchatspayloadsort.md:
+    last_write_checksum: sha1:e809d452b939c6ab9ce1e98b68443507df91151d
   docs/models/components/searchchatsresult.md:
     last_write_checksum: sha1:5a706f6ec430feb1a8b451ca86f7bdebddbfbf09
   docs/models/components/searchlogsfilter.md:
@@ -1093,6 +1101,14 @@ trackedFiles:
     last_write_checksum: sha1:6bd83a9f6b025dd61979cb1be98aa577b0655522
   docs/models/operations/listgrantssecurity.md:
     last_write_checksum: sha1:db221d73399912c33428b3a06604b032a50b4054
+  docs/models/operations/listhookstracesrequest.md:
+    last_write_checksum: sha1:64a968233f9ccb4560c4d6c174b85acab01e8e08
+  docs/models/operations/listhookstracessecurity.md:
+    last_write_checksum: sha1:4c2773a6c14689ee97453555dc1ec34d9296e6d8
+  docs/models/operations/listhookstracessecurityoption1.md:
+    last_write_checksum: sha1:73dd3b38ba7c8e17c78a4a3f4fd017597f7e46d4
+  docs/models/operations/listhookstracessecurityoption2.md:
+    last_write_checksum: sha1:d5001e0eb7be01834a9bc87ae380da69ed7d800f
   docs/models/operations/listintegrationsrequest.md:
     last_write_checksum: sha1:173228c86a11b2ec44275a97e4c2c1191797bef7
   docs/models/operations/listintegrationssecurity.md:
@@ -1514,7 +1530,7 @@ trackedFiles:
   docs/sdks/slack/README.md:
     last_write_checksum: sha1:6b45aed94ea43bd45ec8d54f844bb070d1b8829f
   docs/sdks/telemetry/README.md:
-    last_write_checksum: sha1:c2fd43c6e0795ffcf9cca3ce94c8962925089254
+    last_write_checksum: sha1:5d150bc69b39d75ce9f8e2c67bab0a7641c53972
   docs/sdks/templates/README.md:
     last_write_checksum: sha1:ef637e7fa604cc11f4cd5a22d4b3e478b47ad375
   docs/sdks/tools/README.md:
@@ -1545,11 +1561,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:a09228bc5a5e8e7a9b851709e528f5bb95c0f664
+    last_write_checksum: sha1:78ec60d8b20dcaa92b12250adaeca901dc5e22f6
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:548dc7ccec2c861331b092b7d1345d31ec952ce6
+    last_write_checksum: sha1:9415d0bc2b86806a76febeb7c75db742ab10549e
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1901,6 +1917,8 @@ trackedFiles:
     last_write_checksum: sha1:980e0df0c545f38916bd4831e8225af8ee602037
   src/funcs/telemetryListFilterOptions.ts:
     last_write_checksum: sha1:a1f32dd67b5b9e8c88888ac58b5e56995d8a4029
+  src/funcs/telemetryListHooksTraces.ts:
+    last_write_checksum: sha1:269dba5c4d43bc0c3b4adf77fb6c3ea98c4a7215
   src/funcs/telemetrySearchChats.ts:
     last_write_checksum: sha1:d15118d57522ffe76d8232338077dcc53bc2a060
   src/funcs/telemetrySearchLogs.ts:
@@ -2035,7 +2053,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:5701a9f5a56101001a40f80b5bb0eb2ceb849c48
+    last_write_checksum: sha1:a7a425180733e585493f8393c87693de663033de
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2407,13 +2425,15 @@ trackedFiles:
     last_write_checksum: sha1:654233f904a052364881cbe25a2092a9fe85eb4c
   src/models/components/hooksusersummary.ts:
     last_write_checksum: sha1:3eeb9121e84176a2d5134fbf9b129ab0c6096933
+  src/models/components/hooktracesummary.ts:
+    last_write_checksum: sha1:887fb63ef2ee56db24d2bca50625ce8f29554c80
   src/models/components/httptooldefinition.ts:
     id: 4530c9b75199
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:f4dd36dcf8b85aa5684ce40c8e3a0dbc8c293971
+    last_write_checksum: sha1:92dfaaf268485ff55346534258f58e7db95b6813
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -2477,6 +2497,10 @@ trackedFiles:
     last_write_checksum: sha1:9f85492fd003b62241e3b882703bca3bf7f5fafe
   src/models/components/listgrantsresult.ts:
     last_write_checksum: sha1:180af5c888122c54190f598157ff067c8162654d
+  src/models/components/listhookstracespayload.ts:
+    last_write_checksum: sha1:ed5fe8a92204f7e68581919a946f768fbcfa126e
+  src/models/components/listhookstracesresult.ts:
+    last_write_checksum: sha1:2c7f07e0c30a4e07a9fb90c2ceba32cde70cd943
   src/models/components/listintegrationsresult.ts:
     id: ebf76f602049
     last_write_checksum: sha1:6ebe0905ba888340ee36a5e0043288692d1cdcc1
@@ -2672,7 +2696,7 @@ trackedFiles:
   src/models/components/searchchatsfilter.ts:
     last_write_checksum: sha1:d32819c682e8b5987f9f1f1513c4d31392e03dc9
   src/models/components/searchchatspayload.ts:
-    last_write_checksum: sha1:72e92478e0ffa0e6a3a911e7ca5db71d79e70dc9
+    last_write_checksum: sha1:9abc3a12f8bcb1e0e79d897e6b6b22751b077c3c
   src/models/components/searchchatsresult.ts:
     last_write_checksum: sha1:b15b08beb941073899e99e451812525f1a4ece3b
   src/models/components/searchlogsfilter.ts:
@@ -3123,7 +3147,7 @@ trackedFiles:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:d3e7b3a63bc7bf6ec240e62302cf379caa63a796
+    last_write_checksum: sha1:e0bcd6b8a6ba40ec240e8e2429a635fc9ae9b6ec
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3169,6 +3193,8 @@ trackedFiles:
     pristine_git_object: b2b20fef9c9d4ffe03cf336550390c227f0fa7a3
   src/models/operations/listgrants.ts:
     last_write_checksum: sha1:dfdd68585f6eb5b58ffe0c843664d8572dce399a
+  src/models/operations/listhookstraces.ts:
+    last_write_checksum: sha1:b1eccf66420d93f992798d3eb96a072e9a9b52f2
   src/models/operations/listintegrations.ts:
     id: 3875c615ae12
     last_write_checksum: sha1:d1f5efb2f10fa5721caffca10b95c3fa9834f1e0
@@ -3651,7 +3677,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:17b08d99aba8dbe99dc573bd03d8816427474b6a
+    last_write_checksum: sha1:2f373cceb12bb7c0cb9d89a73e4c719cc6ad5d1a
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -3737,6 +3763,10 @@ trackedFiles:
     last_write_checksum: sha1:d9ed81cdf5d3adee73278c038674056c4eee16ae
   src/react-query/listFilterOptions.ts:
     last_write_checksum: sha1:3d3dbce0ca6e0c419980717be32ac1d61c2ed6a9
+  src/react-query/listHooksTraces.core.ts:
+    last_write_checksum: sha1:54e308059c976633b65773e97725ea46110d8593
+  src/react-query/listHooksTraces.ts:
+    last_write_checksum: sha1:5ca84029de67db9bc0441db510a13da1d46cb5ef
   src/react-query/listIntegrations.core.ts:
     id: 7d518fa50d25
     last_write_checksum: sha1:b453969e33379bcb8eac241cd02deebac9a56173
@@ -4131,7 +4161,7 @@ trackedFiles:
     pristine_git_object: d16d819fa66b8897901a9ca21562ae2f6aeeb581
   src/sdk/telemetry.ts:
     id: f916b9d9fdfc
-    last_write_checksum: sha1:37bf8ec656cd2119eeb5c08e6cbb53c199a15f44
+    last_write_checksum: sha1:e3ab874468192eb6c3349883ad65560b6cda27b9
     pristine_git_object: 6daba3b204763bbe78967b2e29cbfadb6d01e1b5
   src/sdk/templates.ts:
     id: 4792df8a2835
@@ -5807,6 +5837,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listHooksTraces:
+    speakeasy-default-list-hooks-traces:
+      requestBody:
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "limit": 50, "sort": "desc", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"traces": [{"gram_urn": "<value>", "log_count": 134919, "start_time_unix_nano": "<value>", "trace_id": "<id>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
