@@ -2,6 +2,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
+import { toast } from "sonner";
 import { OpenApiSourceInput } from "../OpenApiSourceInput";
 import { Type } from "../ui/type";
 import { useStep } from "./step";
@@ -47,7 +48,6 @@ export default function UploadFileStep() {
       );
 
       if (!response.ok) {
-        step.setState("failed");
         throw new Error(`Upload failed`);
       }
 
@@ -55,6 +55,9 @@ export default function UploadFileStep() {
       stepper.meta.current.file = uploadingFile;
       stepper.next();
       step.setState("completed");
+    } catch (_error) {
+      step.setState("failed");
+      toast.error("Failed to upload OpenAPI spec");
     } finally {
       setIsUploading(false);
     }

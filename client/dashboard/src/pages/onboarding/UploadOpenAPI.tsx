@@ -256,37 +256,44 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
         setApiName(slugify(file?.name.split(".")[0] ?? "My API"));
       }
     } catch (_error) {
-      // Error will be shown to user via toast notifications
+      toast.error("Failed to upload OpenAPI spec");
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleUrlUpload = async (result: UploadOpenAPIv3Result) => {
-    setAsset(result);
-    const response = await assetsServeOpenAPIv3(client, {
-      id: result.asset.id,
-      projectId: project.id,
-    });
-    if (!response.ok) {
-      toast.error(`Failed to fetch OpenAPI content: ${response.error.message}`);
-      return;
-    }
+    setIsUploading(true);
+    try {
+      setAsset(result);
+      const response = await assetsServeOpenAPIv3(client, {
+        id: result.asset.id,
+        projectId: project.id,
+      });
+      if (!response.ok) {
+        toast.error(
+          `Failed to fetch OpenAPI content: ${response.error.message}`,
+        );
+        return;
+      }
 
-    // Convert ReadableStream to Blob
-    const blob = await new Response(response.value.result).blob();
-    setFile(
-      new File([blob], "My API", {
-        type: result.asset.contentType,
-      }),
-    );
+      // Convert ReadableStream to Blob
+      const blob = await new Response(response.value.result).blob();
+      setFile(
+        new File([blob], "My API", {
+          type: result.asset.contentType,
+        }),
+      );
 
-    telemetry.capture("onboarding_event", {
-      action: "spec_uploaded",
-      source: "url",
-    });
-    if (!apiName) {
-      setApiName("My API");
+      telemetry.capture("onboarding_event", {
+        action: "spec_uploaded",
+        source: "url",
+      });
+      if (!apiName) {
+        setApiName("My API");
+      }
+    } finally {
+      setIsUploading(false);
     }
   };
 
