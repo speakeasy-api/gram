@@ -404,20 +404,29 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		return
 	}
 
-	workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
-		return
-	}
-	if workosUser == nil {
-		return
-	}
+	var workosUserID string
 
-	if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
-		ID:       user.ID,
-		WorkosID: conv.ToPGText(workosUser.ID),
-	}); err != nil {
-		s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
+	if user.WorkosID.Valid && user.WorkosID.String != "" {
+		// Already have the user's WorkOS ID — skip the API lookup
+		workosUserID = user.WorkosID.String
+	} else {
+		workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
+			return
+		}
+		if workosUser == nil {
+			return
+		}
+
+		workosUserID = workosUser.ID
+
+		if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+			ID:       user.ID,
+			WorkosID: conv.ToPGText(workosUserID),
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
+		}
 	}
 
 	for _, org := range validateResp.Organizations {
@@ -425,7 +434,7 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 			continue
 		}
 
-		orgMembership, err := s.workos.GetOrgMembership(ctx, workosUser.ID, org.ID)
+		orgMembership, err := s.workos.GetOrgMembership(ctx, workosUserID, org.ID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "failed to get workos org membership", attr.SlogError(err))
 			continue
