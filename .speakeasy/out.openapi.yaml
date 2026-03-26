@@ -1936,6 +1936,13 @@ paths:
           schema:
             description: Optional URL to redirect to after successful authentication
             type: string
+        - allowEmptyValue: true
+          description: Optional invite token to process after authentication
+          in: query
+          name: invite_token
+          schema:
+            description: Optional invite token to process after authentication
+            type: string
       responses:
         "307":
           description: Temporary Redirect response.
@@ -7875,6 +7882,623 @@ paths:
       x-speakeasy-name-override: updateSlackConnection
       x-speakeasy-react-hook:
         name: updateSlackConnection
+  /rpc/teams.cancelInvite:
+    delete:
+      description: Cancel a pending invite.
+      operationId: cancelTeamInvite
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the invite to cancel
+          in: query
+          name: invite_id
+          required: true
+          schema:
+            description: The ID of the invite to cancel
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: cancelInvite teams
+      tags:
+        - teams
+      x-speakeasy-name-override: cancelInvite
+      x-speakeasy-react-hook:
+        name: CancelTeamInvite
+  /rpc/teams.getInviteInfo:
+    get:
+      description: Get information about a team invite by its token. Used to display invite details before accepting.
+      operationId: getTeamInviteInfo
+      parameters:
+        - allowEmptyValue: true
+          description: The invite token from the email link
+          in: query
+          name: token
+          required: true
+          schema:
+            description: The invite token from the email link
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteInfoResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getInviteInfo teams
+      tags:
+        - teams
+      x-speakeasy-name-override: getInviteInfo
+      x-speakeasy-react-hook:
+        name: GetTeamInviteInfo
+  /rpc/teams.invite:
+    post:
+      description: Invite a new member to the organization.
+      operationId: inviteTeamMember
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteMemberResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: inviteMember teams
+      tags:
+        - teams
+      x-speakeasy-name-override: inviteMember
+      x-speakeasy-react-hook:
+        name: InviteTeamMember
+  /rpc/teams.listInvites:
+    get:
+      description: List pending invites for an organization.
+      operationId: listTeamInvites
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the organization
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: The ID of the organization
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInvitesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listInvites teams
+      tags:
+        - teams
+      x-speakeasy-name-override: listInvites
+      x-speakeasy-react-hook:
+        name: ListTeamInvites
+  /rpc/teams.listMembers:
+    get:
+      description: List all members of an organization.
+      operationId: listTeamMembers
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the organization
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: The ID of the organization
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMembersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listMembers teams
+      tags:
+        - teams
+      x-speakeasy-name-override: listMembers
+      x-speakeasy-react-hook:
+        name: ListTeamMembers
+  /rpc/teams.removeMember:
+    delete:
+      description: Remove a member from the organization.
+      operationId: removeTeamMember
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the organization
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: The ID of the organization
+            type: string
+        - allowEmptyValue: true
+          description: The ID of the user to remove
+          in: query
+          name: user_id
+          required: true
+          schema:
+            description: The ID of the user to remove
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: removeMember teams
+      tags:
+        - teams
+      x-speakeasy-name-override: removeMember
+      x-speakeasy-react-hook:
+        name: RemoveTeamMember
+  /rpc/teams.resendInvite:
+    post:
+      description: Resend an invite email.
+      operationId: resendTeamInvite
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendInviteRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendInviteResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: resendInvite teams
+      tags:
+        - teams
+      x-speakeasy-name-override: resendInvite
+      x-speakeasy-react-hook:
+        name: ResendTeamInvite
   /rpc/telemetry.captureEvent:
     post:
       description: Capture a telemetry event and forward it to PostHog
@@ -13617,6 +14241,52 @@ components:
       required:
         - version
         - created_at
+    InviteInfoResult:
+      type: object
+      properties:
+        email:
+          type: string
+          description: The email address the invite was sent to
+        inviter_name:
+          type: string
+          description: Display name of the user who sent the invite
+        organization_name:
+          type: string
+          description: Name of the organization
+        status:
+          type: string
+          description: Current status of the invite
+          enum:
+            - pending
+            - accepted
+            - expired
+            - cancelled
+      required:
+        - inviter_name
+        - organization_name
+        - email
+        - status
+    InviteMemberForm:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Email address to invite
+          format: email
+          maxLength: 255
+        organization_id:
+          type: string
+          description: The ID of the organization
+      required:
+        - organization_id
+        - email
+    InviteMemberResult:
+      type: object
+      properties:
+        invite:
+          $ref: '#/components/schemas/TeamInvite'
+      required:
+        - invite
     Key:
       type: object
       properties:
@@ -13757,6 +14427,16 @@ components:
           items:
             $ref: '#/components/schemas/IntegrationEntry'
           description: List of available third-party integrations
+    ListInvitesResult:
+      type: object
+      properties:
+        invites:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamInvite'
+          description: List of pending invites
+      required:
+        - invites
     ListKeysResult:
       type: object
       properties:
@@ -13766,6 +14446,16 @@ components:
             $ref: '#/components/schemas/Key'
       required:
         - keys
+    ListMembersResult:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamMember'
+          description: List of organization members
+      required:
+        - members
     ListPackagesResult:
       type: object
       properties:
@@ -14731,6 +15421,22 @@ components:
           description: The rendered prompt
       required:
         - prompt
+    ResendInviteRequestBody:
+      type: object
+      properties:
+        invite_id:
+          type: string
+          description: The ID of the invite to resend
+          format: uuid
+      required:
+        - invite_id
+    ResendInviteResult:
+      type: object
+      properties:
+        invite:
+          $ref: '#/components/schemas/TeamInvite'
+      required:
+        - invite
     Resource:
       type: object
       properties:
@@ -15354,6 +16060,65 @@ components:
         - source_kind
         - source_slug
         - environment_id
+    TeamInvite:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the invite was created
+          format: date-time
+        email:
+          type: string
+          description: The invited email address
+        expires_at:
+          type: string
+          description: When the invite expires
+          format: date-time
+        id:
+          type: string
+          description: The invite ID
+          format: uuid
+        invited_by:
+          type: string
+          description: Name of the user who sent the invite
+        status:
+          type: string
+          enum:
+            - pending
+            - accepted
+            - expired
+            - cancelled
+      required:
+        - id
+        - email
+        - status
+        - invited_by
+        - created_at
+        - expires_at
+    TeamMember:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: The user's display name
+        email:
+          type: string
+          description: The user's email address
+        id:
+          type: string
+          description: The user's ID
+        joined_at:
+          type: string
+          description: When the user joined the organization
+          format: date-time
+        photo_url:
+          type: string
+          description: URL to the user's profile photo
+      required:
+        - id
+        - email
+        - display_name
+        - joined_at
     TelemetryFilter:
       type: object
       properties:
@@ -16447,6 +17212,8 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: slack
     description: Auth and interactions for the Gram Slack App.
+  - name: teams
+    description: Manages team members and invites for organizations in Gram.
   - name: telemetry
     description: Fetch telemetry data for tools in Gram.
   - name: templates

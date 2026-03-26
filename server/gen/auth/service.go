@@ -97,6 +97,8 @@ type InfoResult struct {
 type LoginPayload struct {
 	// Optional URL to redirect to after successful authentication
 	Redirect *string
+	// Optional invite token to process after authentication
+	InviteToken *string
 }
 
 // LoginResult is the result type of the auth service login method.

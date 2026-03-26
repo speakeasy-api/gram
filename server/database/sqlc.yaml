@@ -385,3 +385,4 @@ sql:
         out: "../internal/externalmcp/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+

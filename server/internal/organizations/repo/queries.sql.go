@@ -11,23 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
-UPDATE organization_user_relationships
-SET deleted_at = clock_timestamp()
-WHERE organization_id = $1
-  AND user_id = $2
-`
-
-type DeleteOrganizationUserRelationshipParams struct {
-	OrganizationID string
-	UserID         string
-}
-
-func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg DeleteOrganizationUserRelationshipParams) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
-	return err
-}
-
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
 SELECT id, name, slug, gram_account_type, sso_connection_id, created_at, updated_at, disabled_at
 FROM organization_metadata

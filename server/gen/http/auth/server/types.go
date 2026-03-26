@@ -2013,9 +2013,10 @@ func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
 }
 
 // NewLoginPayload builds a auth service login endpoint payload.
-func NewLoginPayload(redirect *string) *auth.LoginPayload {
+func NewLoginPayload(redirect *string, inviteToken *string) *auth.LoginPayload {
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
+	v.InviteToken = inviteToken
 
 	return v
 }
