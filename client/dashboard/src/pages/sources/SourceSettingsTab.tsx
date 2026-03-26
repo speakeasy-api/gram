@@ -66,6 +66,7 @@ export function SourceSettingsTab({
       await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.deployment?.id,
+          nonBlocking: true,
           ...(type === "openapi"
             ? { excludeOpenapiv3Assets: [assetId] }
             : { excludeFunctions: [assetId] }),

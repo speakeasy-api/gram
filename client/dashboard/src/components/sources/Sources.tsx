@@ -189,6 +189,7 @@ export default function Sources() {
       await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.id,
+          nonBlocking: true,
           ...(type === "openapi"
             ? { excludeOpenapiv3Assets: [assetId] }
             : type === "function"

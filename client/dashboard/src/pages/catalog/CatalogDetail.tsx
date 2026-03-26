@@ -78,6 +78,7 @@ export default function CatalogDetail() {
       await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.id,
+          nonBlocking: true,
           excludeExternalMcps: [slug],
         },
       });
