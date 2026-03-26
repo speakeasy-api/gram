@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO. Will be replaced by workos_org_id.
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
 
+  whitelisted boolean NOT NULL DEFAULT TRUE,
   free_trial_started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   free_trial_ends_at timestamptz NOT NULL DEFAULT clock_timestamp() + INTERVAL '14 days',
 
