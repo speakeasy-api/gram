@@ -25,16 +25,20 @@ func deterministicUUID(input string) string {
 func deriveOrgs(claims *OidcClaims) []organization {
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// WorkOS org claims
+	// WorkOS org claims — use the real WorkOS org ID so the server's
+	// syncWorkOSIDs loop can call GetOrgMembership with the correct ID
+	// and set SSOConnectionID so the loop doesn't skip it.
 	if claims.OrgID != "" && claims.OrgName != "" {
+		ssoConn := "workos"
 		return []organization{
 			{
-				ID:                 deterministicUUID("org:" + claims.OrgID),
+				ID:                 claims.OrgID,
 				Name:               claims.OrgName,
 				Slug:               slugify(claims.OrgName),
 				CreatedAt:          now,
 				UpdatedAt:          now,
 				AccountType:        "free",
+				SSOConnectionID:    &ssoConn,
 				UserWorkspaceSlugs: []string{},
 			},
 		}

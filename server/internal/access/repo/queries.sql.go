@@ -188,11 +188,36 @@ func (q *Queries) RemoveResourceFromGrants(ctx context.Context, arg RemoveResour
 	return result.RowsAffected(), nil
 }
 
-type SeedOrgRoleGrantsParams struct {
+const syncPrincipalGrants = `-- name: SyncPrincipalGrants :exec
+WITH deleted AS (
+  DELETE FROM principal_grants
+  WHERE organization_id = $1
+    AND principal_urn = $2
+)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
+SELECT $1, $2, unnest($3::text[]), unnest($4::text[])
+ON CONFLICT (organization_id, principal_urn, scope, resource)
+DO UPDATE SET updated_at = clock_timestamp()
+`
+
+type SyncPrincipalGrantsParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
-	Scope          string
-	Resource       string
+	Scopes         []string
+	Resources      []string
+}
+
+// Replaces all grants for a principal in one statement: deletes existing grants
+// then inserts the new set. Pass parallel arrays of scopes and resources.
+// An empty array set effectively revokes all grants for the principal.
+func (q *Queries) SyncPrincipalGrants(ctx context.Context, arg SyncPrincipalGrantsParams) error {
+	_, err := q.db.Exec(ctx, syncPrincipalGrants,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scopes,
+		arg.Resources,
+	)
+	return err
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one

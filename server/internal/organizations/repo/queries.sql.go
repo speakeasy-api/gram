@@ -159,6 +159,24 @@ func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) 
 	return err
 }
 
+const setOrgWorkosID = `-- name: SetOrgWorkosID :exec
+UPDATE organization_metadata
+SET workos_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2 AND
+    workos_id IS NULL
+`
+
+type SetOrgWorkosIDParams struct {
+	WorkosID pgtype.Text
+	ID       string
+}
+
+func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, setOrgWorkosID, arg.WorkosID, arg.ID)
+	return err
+}
+
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
 INSERT INTO organization_metadata (
     id,
