@@ -22,6 +22,7 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 // NewTestManager creates a sessions.Manager backed by a mock IDP httptest.Server.
@@ -51,6 +52,34 @@ func NewTestManager(t *testing.T, logger *slog.Logger, db *pgxpool.Pool, redisCl
 		fakePosthog,
 		billingRepo,
 		nil,
+	)
+}
+
+// NewTestManagerWithWorkOS is like NewTestManager but injects a WorkOS client.
+func NewTestManagerWithWorkOS(t *testing.T, logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository, wos *workos.WorkOS) *sessions.Manager {
+	t.Helper()
+
+	cfg := mockidp.NewConfig()
+	srv := httptest.NewServer(mockidp.Handler(cfg))
+	t.Cleanup(srv.Close)
+
+	fakePylon, err := pylon.NewPylon(logger, "")
+	require.NoError(t, err)
+
+	fakePosthog := posthog.New(context.Background(), logger, "test-posthog-key", "test-posthog-host", "")
+
+	return sessions.NewManager(
+		logger,
+		NewTracerProvider(t),
+		db,
+		redisClient,
+		suffix,
+		srv.URL,
+		mockidp.MockSecretKey,
+		fakePylon,
+		fakePosthog,
+		billingRepo,
+		wos,
 	)
 }
 

@@ -84,6 +84,31 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 	return i, err
 }
 
+const getOrganizationMetadataByWorkosID = `-- name: GetOrganizationMetadataByWorkosID :one
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE workos_id = $1
+`
+
+func (q *Queries) GetOrganizationMetadataByWorkosID(ctx context.Context, workosID pgtype.Text) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, getOrganizationMetadataByWorkosID, workosID)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.SsoConnectionID,
+		&i.WorkosID,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const hasOrganizationUserRelationship = `-- name: HasOrganizationUserRelationship :one
 SELECT EXISTS(
   SELECT 1

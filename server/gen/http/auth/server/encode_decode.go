@@ -241,13 +241,19 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 	return func(r *http.Request) (*auth.LoginPayload, error) {
 		var payload *auth.LoginPayload
 		var (
-			redirect *string
+			redirect    *string
+			inviteToken *string
 		)
-		redirectRaw := r.URL.Query().Get("redirect")
+		qp := r.URL.Query()
+		redirectRaw := qp.Get("redirect")
 		if redirectRaw != "" {
 			redirect = &redirectRaw
 		}
-		payload = NewLoginPayload(redirect)
+		inviteTokenRaw := qp.Get("invite_token")
+		if inviteTokenRaw != "" {
+			inviteToken = &inviteTokenRaw
+		}
+		payload = NewLoginPayload(redirect, inviteToken)
 
 		return payload, nil
 	}

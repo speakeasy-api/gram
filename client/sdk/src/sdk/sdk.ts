@@ -25,6 +25,7 @@ import { Packages } from "./packages.js";
 import { Projects } from "./projects.js";
 import { Resources } from "./resources.js";
 import { Slack } from "./slack.js";
+import { Teams } from "./teams.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
@@ -136,6 +137,11 @@ export class Gram extends ClientSDK {
   private _slack?: Slack;
   get slack(): Slack {
     return (this._slack ??= new Slack(this._options));
+  }
+
+  private _teams?: Teams;
+  get teams(): Teams {
+    return (this._teams ??= new Teams(this._options));
   }
 
   private _telemetry?: Telemetry;
