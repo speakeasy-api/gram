@@ -83,7 +83,7 @@ Report:
 
 - Total requests in the last 24h
 - % change between the two 12h periods (flag if > 30% change)
-- Per-service breakdown (`gram-server`, `gram-worker`, `gram-dashboard`, `gram`, `fly`)
+- Per-service breakdown (`gram-server`, `gram-worker`, `gram`, `fly`)
 
 ---
 
