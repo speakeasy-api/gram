@@ -49,6 +49,108 @@ export default async function handler(
 }`;
 }
 
+export function getSessionComponentCode(params: CodeGenParams): string {
+  const { framework, projectSlug, mcpUrl, config } = params;
+  const isNextjs = framework === "nextjs";
+  const useClientDirective = isNextjs ? `"use client";\n\n` : "";
+  const sessionEndpoint = isNextjs
+    ? "/api/session"
+    : "http://localhost:3001/chat/session";
+
+  const configLines: string[] = [];
+  configLines.push(`  projectSlug: "${projectSlug}",`);
+  configLines.push(`  mcp: "${mcpUrl}",`);
+
+  if (config.variant !== "standalone") {
+    configLines.push(`  variant: "${config.variant}",`);
+  }
+  if (config.colorScheme !== "system") {
+    configLines.push(`  colorScheme: "${config.colorScheme}",`);
+  }
+  if (config.density !== "normal") {
+    configLines.push(`  density: "${config.density}",`);
+  }
+  if (config.radius !== "soft") {
+    configLines.push(`  radius: "${config.radius}",`);
+  }
+
+  const welcomeParts: string[] = [];
+  if (config.welcomeTitle && config.welcomeTitle !== "Welcome") {
+    welcomeParts.push(`    title: "${config.welcomeTitle}",`);
+  }
+  if (
+    config.welcomeSubtitle &&
+    config.welcomeSubtitle !== "How can I help you today?"
+  ) {
+    welcomeParts.push(`    subtitle: "${config.welcomeSubtitle}",`);
+  }
+  if (welcomeParts.length > 0) {
+    configLines.push(`  welcome: {\n${welcomeParts.join("\n")}\n  },`);
+  }
+
+  if (
+    config.composerPlaceholder &&
+    config.composerPlaceholder !== "Send a message..."
+  ) {
+    configLines.push(
+      `  composer: {\n    placeholder: "${config.composerPlaceholder}",\n  },`,
+    );
+  }
+  if (config.showModelPicker) {
+    configLines.push(`  model: {\n    showModelPicker: true,\n  },`);
+  }
+  if (config.systemPrompt) {
+    const escapedPrompt = config.systemPrompt
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n");
+    configLines.push(`  systemPrompt: "${escapedPrompt}",`);
+  }
+  if (config.variant === "widget") {
+    const modalParts: string[] = [];
+    if (config.modalTitle && config.modalTitle !== "Chat") {
+      modalParts.push(`    title: "${config.modalTitle}",`);
+    }
+    if (config.modalPosition !== "bottom-right") {
+      modalParts.push(`    position: "${config.modalPosition}",`);
+    }
+    if (config.modalDefaultOpen) {
+      modalParts.push(`    defaultOpen: true,`);
+    }
+    if (modalParts.length > 0) {
+      configLines.push(`  modal: {\n${modalParts.join("\n")}\n  },`);
+    }
+  }
+  if (config.expandToolGroupsByDefault) {
+    configLines.push(`  tools: {\n    expandToolGroupsByDefault: true,\n  },`);
+  }
+
+  configLines.push(`  api: {\n    session: getSession,\n  },`);
+
+  return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const getSession = async () => {
+  return fetch("${sessionEndpoint}", {
+    method: "POST",
+    headers: { "Gram-Project": "${projectSlug}" },
+  })
+    .then((res) => res.json())
+    .then((data) => data.client_token);
+};
+
+const config: ElementsConfig = {
+${configLines.join("\n")}
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}`;
+}
+
 export function getViteApiRoute(): string {
   return `// server.ts (Express)
 import express from "express";

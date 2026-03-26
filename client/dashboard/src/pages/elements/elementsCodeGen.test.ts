@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  type CodeGenParams,
   getEnvContent,
   getPeerDeps,
   getElementsInstall,
   getNextjsApiRoute,
+  getSessionComponentCode,
   getViteApiRoute,
 } from "./elementsCodeGen";
 
@@ -34,5 +36,67 @@ describe("getElementsInstall", () => {
 
   it("renders for react", () => {
     expect(getElementsInstall({ framework: "react" })).toMatchSnapshot();
+  });
+});
+
+const defaultParams: CodeGenParams = {
+  apiKey: "sk_test",
+  framework: "nextjs",
+  projectSlug: "my-project",
+  mcpUrl: "https://app.getgram.ai/mcp/my-project",
+  config: {
+    mcp: "",
+    variant: "standalone",
+    colorScheme: "system",
+    density: "normal",
+    radius: "soft",
+    welcomeTitle: "Welcome",
+    welcomeSubtitle: "How can I help you today?",
+    composerPlaceholder: "Send a message...",
+    showModelPicker: false,
+    systemPrompt: "",
+    modalTitle: "Chat",
+    modalPosition: "bottom-right",
+    modalDefaultOpen: false,
+    expandToolGroupsByDefault: false,
+  },
+};
+
+describe("getSessionComponentCode", () => {
+  it("renders for nextjs with defaults", () => {
+    expect(getSessionComponentCode(defaultParams)).toMatchSnapshot();
+  });
+
+  it("renders for react with defaults", () => {
+    expect(
+      getSessionComponentCode({ ...defaultParams, framework: "react" }),
+    ).toMatchSnapshot();
+  });
+
+  it("renders with widget variant and modal options", () => {
+    expect(
+      getSessionComponentCode({
+        ...defaultParams,
+        config: {
+          ...defaultParams.config,
+          variant: "widget",
+          modalDefaultOpen: true,
+          modalPosition: "top-left",
+          modalTitle: "Help",
+        },
+      }),
+    ).toMatchSnapshot();
+  });
+});
+
+describe("getNextjsApiRoute", () => {
+  it("renders the Next.js session API route", () => {
+    expect(getNextjsApiRoute()).toMatchSnapshot();
+  });
+});
+
+describe("getViteApiRoute", () => {
+  it("renders the Express session endpoint", () => {
+    expect(getViteApiRoute()).toMatchSnapshot();
   });
 });

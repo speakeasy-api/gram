@@ -7,6 +7,7 @@ import {
   getElementsInstall,
   getNextjsApiRoute,
   getPeerDeps,
+  getSessionComponentCode,
   getViteApiRoute,
 } from "./elementsCodeGen";
 import { Page } from "@/components/page-layout";
@@ -983,123 +984,12 @@ function InstallationGuide({
 
   const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;
 
-  const getComponentCode = () => {
-    const isNextjs = selectedFramework === "nextjs";
-    const useClientDirective = isNextjs ? `"use client";\n\n` : "";
-    const sessionEndpoint = isNextjs
-      ? "/api/session"
-      : "http://localhost:3001/chat/session";
-
-    // Build config options - only include non-default values
-    const configLines: string[] = [];
-    configLines.push(`  projectSlug: "${projectSlug}",`);
-    configLines.push(`  mcp: "${mcpUrl}",`);
-
-    if (config.variant !== "standalone") {
-      configLines.push(`  variant: "${config.variant}",`);
-    }
-
-    if (config.colorScheme !== "system") {
-      configLines.push(`  colorScheme: "${config.colorScheme}",`);
-    }
-
-    if (config.density !== "normal") {
-      configLines.push(`  density: "${config.density}",`);
-    }
-
-    if (config.radius !== "soft") {
-      configLines.push(`  radius: "${config.radius}",`);
-    }
-
-    // Welcome config
-    const welcomeParts: string[] = [];
-    if (config.welcomeTitle && config.welcomeTitle !== "Welcome") {
-      welcomeParts.push(`    title: "${config.welcomeTitle}",`);
-    }
-    if (
-      config.welcomeSubtitle &&
-      config.welcomeSubtitle !== "How can I help you today?"
-    ) {
-      welcomeParts.push(`    subtitle: "${config.welcomeSubtitle}",`);
-    }
-    if (welcomeParts.length > 0) {
-      configLines.push(`  welcome: {\n${welcomeParts.join("\n")}\n  },`);
-    }
-
-    // Composer config
-    if (
-      config.composerPlaceholder &&
-      config.composerPlaceholder !== "Send a message..."
-    ) {
-      configLines.push(
-        `  composer: {\n    placeholder: "${config.composerPlaceholder}",\n  },`,
-      );
-    }
-
-    // Model config
-    if (config.showModelPicker) {
-      configLines.push(`  model: {\n    showModelPicker: true,\n  },`);
-    }
-
-    // System prompt
-    if (config.systemPrompt) {
-      const escapedPrompt = config.systemPrompt
-        .replace(/\\/g, "\\\\")
-        .replace(/"/g, '\\"')
-        .replace(/\n/g, "\\n");
-      configLines.push(`  systemPrompt: "${escapedPrompt}",`);
-    }
-
-    // Modal config (only for widget variant)
-    if (config.variant === "widget") {
-      const modalParts: string[] = [];
-      if (config.modalTitle && config.modalTitle !== "Chat") {
-        modalParts.push(`    title: "${config.modalTitle}",`);
-      }
-      if (config.modalPosition !== "bottom-right") {
-        modalParts.push(`    position: "${config.modalPosition}",`);
-      }
-      if (config.modalDefaultOpen) {
-        modalParts.push(`    defaultOpen: true,`);
-      }
-      if (modalParts.length > 0) {
-        configLines.push(`  modal: {\n${modalParts.join("\n")}\n  },`);
-      }
-    }
-
-    // Tools config
-    if (config.expandToolGroupsByDefault) {
-      configLines.push(
-        `  tools: {\n    expandToolGroupsByDefault: true,\n  },`,
-      );
-    }
-
-    // Add the api.session config
-    configLines.push(`  api: {\n    session: getSession,\n  },`);
-
-    return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
-
-// Custom session function for non-standard session endpoint
-const getSession = async () => {
-  return fetch("${sessionEndpoint}", {
-    method: "POST",
-    headers: { "Gram-Project": "${projectSlug}" },
-  })
-    .then((res) => res.json())
-    .then((data) => data.client_token);
-};
-
-const config: ElementsConfig = {
-${configLines.join("\n")}
-};
-
-export default function GramChat() {
-  return (
-    <GramElementsProvider config={config}>
-      <Chat />
-    </GramElementsProvider>
-  );
-}`;
+  const codeGenParams = {
+    apiKey: generatedApiKey,
+    framework: selectedFramework!,
+    projectSlug,
+    mcpUrl,
+    config,
   };
 
   const products = [
@@ -1391,7 +1281,7 @@ export default function GramChat() {
               }
             >
               <CodeBlock
-                code={getComponentCode()}
+                code={getSessionComponentCode(codeGenParams)}
                 language="typescript"
                 className="max-h-[300px] overflow-y-auto"
               >
