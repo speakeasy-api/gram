@@ -51,8 +51,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     tool_source String MATERIALIZED toString(attributes.gram.tool_call.source) COMMENT 'Tool call source (materialized from attributes.gram.tool_call.source).',
     event_source String MATERIALIZED toString(attributes.gram.event.source) COMMENT 'Event source (materialized from attributes.gram.event.source).',
     toolset_slug String MATERIALIZED toString(attributes.gram.toolset.slug) COMMENT 'Toolset slug (materialized from attributes.gram.toolset.slug).',
-    user_email String MATERIALIZED toString(attributes.`user.email`) COMMENT 'User email (materialized from attributes.user.email).',
-    hook_source String MATERIALIZED toString(attributes.`gram.hook.source`) COMMENT 'Hook source (materialized from attributes.gram.hook.source).'
+    user_email String MATERIALIZED toString(attributes.user.email) COMMENT 'User email (materialized from attributes.user.email).',
+    hook_source String MATERIALIZED toString(attributes.gram.hook.source) COMMENT 'Hook source (materialized from attributes.gram.hook.source).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
