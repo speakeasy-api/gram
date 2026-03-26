@@ -1472,7 +1472,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 	sb := sq.Select(
 		"trace_id",
 		"min(start_time_unix_nano) as start_time_unix_nano",
-		"count(*) as log_count",
+		"sum(log_count) as log_count",
 		"any(gram_urn) as gram_urn",
 		"tool_name",
 		"tool_source",
