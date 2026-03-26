@@ -265,7 +265,6 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
   const handleUrlUpload = async (result: UploadOpenAPIv3Result) => {
     setIsUploading(true);
     try {
-      setAsset(result);
       const response = await assetsServeOpenAPIv3(client, {
         id: result.asset.id,
         projectId: project.id,
@@ -279,6 +278,8 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
       // Convert ReadableStream to Blob
       const blob = await new Response(response.value.result).blob();
+
+      setAsset(result);
       setFile(
         new File([blob], "My API", {
           type: result.asset.contentType,
