@@ -221,14 +221,14 @@ The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
      }
    }
    ```
-6. **gram (frontend) error rate timeseries cell** — uses RUM or log volume:
+6. **gram (frontend) trace errors timeseries cell** — `gram` is an APM service, so use trace metrics:
    ```json
    {
      "type": "notebook_cells",
      "attributes": {
        "definition": {
          "type": "timeseries",
-         "title": "gram (frontend) Error Log Volume (1h buckets)",
+         "title": "gram (frontend) Trace Errors (1h buckets)",
          "requests": [
            {
              "q": "sum:trace.http.server.request.errors{service:gram,env:prod}.rollup(sum, 3600)",
@@ -242,36 +242,33 @@ The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
      }
    }
    ```
-7. **fly (functions) error rate timeseries cell**:
-   ```json
-   {
-     "type": "notebook_cells",
-     "attributes": {
-       "definition": {
-         "type": "timeseries",
-         "title": "fly (functions) Error Log Volume (1h buckets)",
-         "requests": [
-           {
-             "q": "sum:trace.http.server.request.errors{source:fly,env:prod}.rollup(sum, 3600)",
-             "display_type": "bars",
-             "style": { "palette": "warm" }
-           }
-         ],
-         "show_legend": true,
-         "yaxis": { "scale": "linear" }
-       }
-     }
-   }
-   ```
-8. **Slow endpoints + top errors markdown table cell** with the real data from Steps 1–4.
-9. **All Gram services error log stream cell**:
+7. **fly (functions) error log stream cell** — `fly` is a log source (not an APM service), so use a log stream, not a trace metric:
    ```json
    {
      "type": "notebook_cells",
      "attributes": {
        "definition": {
          "type": "log_stream",
-         "query": "service:(gram-server OR gram-worker OR gram) env:prod status:error",
+         "title": "fly (functions) Error Logs (24h)",
+         "query": "source:fly env:prod status:error",
+         "columns": ["timestamp", "host", "message"],
+         "message_display": "inline",
+         "show_date_column": true,
+         "show_message_column": true,
+         "sort": { "column": "timestamp", "order": "desc" }
+       }
+     }
+   }
+   ```
+8. **Slow endpoints + top errors markdown table cell** with the real data from Steps 1–4.
+9. **All Gram services error log stream cell** — includes `source:fly` for Gram Functions logs:
+   ```json
+   {
+     "type": "notebook_cells",
+     "attributes": {
+       "definition": {
+         "type": "log_stream",
+         "query": "(service:(gram-server OR gram-worker OR gram) OR source:fly) env:prod status:error",
          "columns": ["timestamp", "host", "service", "message"],
          "message_display": "inline",
          "show_date_column": true,
