@@ -61,6 +61,11 @@ SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND user_id = @user_id;
 
+-- name: GetOrganizationMetadataByWorkosID :one
+SELECT *
+FROM organization_metadata
+WHERE workos_id = @workos_id;
+
 -- name: AttachWorkOSUserToOrg :exec
 -- Attach a WorkOS membership ID to an existing organization-user relationship. This is
 -- used to link a WorkOS user to an organization in our system. If the relationship

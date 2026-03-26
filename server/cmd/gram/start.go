@@ -695,7 +695,7 @@ func newStartCommand() *cli.Command {
 				},
 			))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
-			teams.Attach(mux, teams.NewService(logger, sessionManager))
+			teams.Attach(mux, teams.NewService(logger, db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient))
 			toolsets.Attach(mux, toolsetsSvc)
