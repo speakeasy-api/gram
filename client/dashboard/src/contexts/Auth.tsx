@@ -250,7 +250,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   }
 
   // Show book demo page if organization is not whitelisted
-  // Check this before activeOrganizationId check so users without an org but with a session can be redirected
+  // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
   if (
     session.activeOrganizationId &&
     !session.whitelisted
