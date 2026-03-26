@@ -18,6 +18,10 @@ WHERE id = $1;
 SELECT * FROM users
 WHERE email = $1;
 
+-- name: GetUserByWorkosID :one
+SELECT * FROM users
+WHERE workos_id = @workos_id;
+
 -- name: SetUserWorkosID :exec
 UPDATE users 
 SET workos_id = @workos_id, 
