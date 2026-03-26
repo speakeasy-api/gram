@@ -1409,7 +1409,7 @@ type GetHooksUserSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSummaryParams) ([]HooksUserSummaryRow, error) {
 	sb := sq.Select(
-		"user_email",
+		"ifNull(toString(attributes.`user.email`), 'Unknown') as user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
 		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
