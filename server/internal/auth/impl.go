@@ -372,17 +372,18 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}
 
 	return &gen.InfoResult{
-		SessionToken:         *authCtx.SessionID,
-		SessionCookie:        *authCtx.SessionID,
-		ActiveOrganizationID: authCtx.ActiveOrganizationID,
-		GramAccountType:      authCtx.AccountType,
-		UserID:               userInfo.UserID,
-		UserEmail:            userInfo.Email,
-		UserSignature:        userInfo.UserPylonSignature,
-		UserDisplayName:      userInfo.DisplayName,
-		UserPhotoURL:         userInfo.PhotoURL,
-		IsAdmin:              userInfo.Admin,
-		Organizations:        organizations,
+		SessionToken:          *authCtx.SessionID,
+		SessionCookie:         *authCtx.SessionID,
+		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
+		GramAccountType:       authCtx.AccountType,
+		HasActiveSubscription: authCtx.HasActiveSubscription,
+		UserID:                userInfo.UserID,
+		UserEmail:             userInfo.Email,
+		UserSignature:         userInfo.UserPylonSignature,
+		UserDisplayName:       userInfo.DisplayName,
+		UserPhotoURL:          userInfo.PhotoURL,
+		IsAdmin:               userInfo.Admin,
+		Organizations:         organizations,
 	}, nil
 }
 
