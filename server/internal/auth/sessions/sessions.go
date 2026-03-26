@@ -141,6 +141,10 @@ func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, 
 	return s.Authenticate(ctx, "")
 }
 
+func (s *Manager) WorkOS() *workos.WorkOS {
+	return s.workos
+}
+
 func (s *Manager) Billing() billing.Repository {
 	return s.billingRepo
 }
