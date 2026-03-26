@@ -82,14 +82,6 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // Roles & Members — WorkOS-backed role management
 // ---------------------------------------------------------------------------
 
-func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "missing auth context").Log(ctx, s.logger)
-	}
-	return ac, nil
-}
-
 // workosOrgID resolves the WorkOS organization ID from the Gram org ID stored
 // in the auth context.
 func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, error) {
@@ -183,9 +175,9 @@ func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string,
 }
 
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, err
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
@@ -233,9 +225,9 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 }
 
 func (s *Service) GetRole(ctx context.Context, p *gen.GetRolePayload) (*gen.Role, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, err
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
@@ -284,9 +276,9 @@ func (s *Service) GetRole(ctx context.Context, p *gen.GetRolePayload) (*gen.Role
 }
 
 func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*gen.Role, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, err
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
@@ -366,9 +358,9 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 }
 
 func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*gen.Role, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, err
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
@@ -478,9 +470,9 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 }
 
 func (s *Service) DeleteRole(ctx context.Context, p *gen.DeleteRolePayload) error {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return err
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return oops.C(oops.CodeUnauthorized)
 	}
 
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
@@ -543,9 +535,9 @@ func (s *Service) ListScopes(_ context.Context, _ *gen.ListScopesPayload) (*gen.
 }
 
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, err
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
@@ -611,9 +603,9 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 }
 
 func (s *Service) UpdateMemberRole(ctx context.Context, p *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, err
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
