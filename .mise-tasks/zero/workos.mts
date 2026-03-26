@@ -21,10 +21,10 @@ async function run() {
     "💬 If you don't have WorkOS access, skip this step and the mock IDP will use a hardcoded test user instead.",
   );
 
-  const answer = await question("💬 Do you want to configure WorkOS? [y/N] ", {
-    choices: ["y", "N"],
-  });
-  if (answer.toLowerCase() !== "y") {
+  const clientId = await question(
+    "💬 Paste your WorkOS Client ID or press enter to skip: ",
+  );
+  if (!clientId) {
     console.log("⏭️  Skipping WorkOS setup. Mock IDP will run in mock mode.");
     process.exit(0);
   }
@@ -36,12 +36,6 @@ async function run() {
   );
   console.log(`\thttp://${host}:${port}/v1/speakeasy_provider/oidc/callback`);
   console.log();
-
-  const clientId = await question("💬 Paste your WorkOS Client ID: ");
-  if (!clientId) {
-    console.log("❌ Client ID is required.");
-    process.exit(1);
-  }
 
   const clientSecret = await question("💬 Paste your WorkOS Client Secret: ");
   if (!clientSecret) {
