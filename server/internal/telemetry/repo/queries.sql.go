@@ -1473,7 +1473,6 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"trace_id",
 		"min(time_unix_nano) as start_time_unix_nano",
 		"count(*) as log_count",
-		"anyIf(toInt32OrNull(toString(attributes.`http.response.status_code`)), toString(attributes.`http.response.status_code`) != '') as http_status_code",
 		"any(gram_urn) as gram_urn",
 		"tool_name",
 		"tool_source",
