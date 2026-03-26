@@ -190,8 +190,6 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing telemetry logs")
 	}
 
-	println(fmt.Sprintf("items length: %d", len(items)))
-
 	// Compute next cursor using limit+1 pattern
 	var nextCursor *string
 	if len(items) > params.limit {
