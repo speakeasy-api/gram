@@ -1409,7 +1409,7 @@ type GetHooksUserSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSummaryParams) ([]HooksUserSummaryRow, error) {
 	sb := sq.Select(
-		"ifNull(toString(attributes.`user.email`), 'Unknown') as user_email",
+		"user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
 		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
@@ -1471,7 +1471,7 @@ type ListHooksTracesParams struct {
 func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams) ([]HookTraceSummary, error) {
 	sb := sq.Select(
 		"trace_id",
-		"min(time_unix_nano) as start_time_unix_nano",
+		"min(start_time_unix_nano) as start_time_unix_nano",
 		"count(*) as log_count",
 		"any(gram_urn) as gram_urn",
 		"tool_name",
@@ -1479,13 +1479,13 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"event_source",
 		"any(user_email) as user_email",
 		"any(hook_source) as hook_source",
-		"anyIf(toInt32OrNull(toString(attributes.http.response.status_code)), toString(attributes.http.response.status_code) != '') as http_status_code",
+		"anyIfMerge(http_status_code) as http_status_code",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Having("start_time_unix_nano >= ?", arg.TimeStart).
+		Having("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("trace_id IS NOT NULL AND trace_id != ''")
 
 	// Apply arbitrary attribute filters

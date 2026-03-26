@@ -23,7 +23,7 @@ import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksT
 import type {
   GetHooksSummaryResult,
   HooksServerSummary,
-  HookTraceSummary,
+  HookTraceSummary as HookTrace,
   LogFilter,
   TelemetryLogRecord,
 } from "@gram/client/models/components";
@@ -56,9 +56,6 @@ const validPresets: DateRangePreset[] = [
 function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
 }
-
-// HookTrace is now the same as HookTraceSummary from the backend
-type HookTrace = HookTraceSummary;
 
 // Generic filter chip that displays one thing but filters on multiple values
 interface FilterChip {
