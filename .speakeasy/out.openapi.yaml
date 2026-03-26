@@ -16508,6 +16508,9 @@ components:
           type: string
         user_signature:
           type: string
+        whitelisted:
+          type: boolean
+          description: Whether the organization is whitelisted to access the platform
       required:
         - user_id
         - user_email
@@ -16516,6 +16519,7 @@ components:
         - organizations
         - gram_account_type
         - has_active_subscription
+        - whitelisted
     InstanceMcpServer:
       type: object
       properties:
