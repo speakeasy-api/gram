@@ -592,6 +592,7 @@ type OrganizationMetadatum struct {
 	GramAccountType    string
 	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
+	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
