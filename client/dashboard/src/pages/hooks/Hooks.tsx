@@ -91,7 +91,7 @@ function safeBase64Decode(str: string): string | null {
   }
 }
 
-const perPage = 2;
+const perPage = 100;
 
 export default function HooksPage() {
   return <HooksContent />;
