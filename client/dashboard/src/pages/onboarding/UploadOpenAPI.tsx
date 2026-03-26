@@ -181,6 +181,7 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
   const [file, setFile] = useState<File>();
   const [asset, setAsset] = useState<UploadOpenAPIv3Result>();
+  const [isUploading, setIsUploading] = useState(false);
   const [creatingDeployment, setCreatingDeployment] = useState(false);
   const [apiName, setApiName] = useState<string | undefined>();
   const [deployment, setDeployment] = useState<Deployment>();
@@ -222,64 +223,80 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
   const handleSpecUpload = async (file: File) => {
     try {
-      setFile(file);
+      setIsUploading(true);
 
       telemetry.capture("onboarding_event", {
         action: "spec_uploaded",
       });
 
       // Need to use fetch directly because the SDK doesn't support file uploads
-      fetch(`${getServerURL()}/rpc/assets.uploadOpenAPIv3`, {
-        method: "POST",
-        headers: {
-          "content-type": getContentType(file),
-          "content-length": file.size.toString(),
-          "gram-session": session.session,
-          "gram-project": project.slug,
+      const response = await fetch(
+        `${getServerURL()}/rpc/assets.uploadOpenAPIv3`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": getContentType(file),
+            "content-length": file.size.toString(),
+            "gram-session": session.session,
+            "gram-project": project.slug,
+          },
+          body: file,
         },
-        body: file,
-      }).then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Upload failed`);
-        }
+      );
 
-        const result: UploadOpenAPIv3Result = await response.json();
+      if (!response.ok) {
+        throw new Error(`Upload failed`);
+      }
 
-        setAsset(result);
-        if (!apiName) {
-          setApiName(slugify(file?.name.split(".")[0] ?? "My API"));
-        }
-      });
+      const result: UploadOpenAPIv3Result = await response.json();
+
+      setAsset(result);
+      setFile(file);
+      if (!apiName) {
+        setApiName(slugify(file?.name.split(".")[0] ?? "My API"));
+      }
     } catch (_error) {
-      // Error will be shown to user via toast notifications
+      toast.error("Failed to upload OpenAPI spec");
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleUrlUpload = async (result: UploadOpenAPIv3Result) => {
-    setAsset(result);
-    const response = await assetsServeOpenAPIv3(client, {
-      id: result.asset.id,
-      projectId: project.id,
-    });
-    if (!response.ok) {
-      toast.error(`Failed to fetch OpenAPI content: ${response.error.message}`);
-      return;
-    }
+    setIsUploading(true);
+    try {
+      const response = await assetsServeOpenAPIv3(client, {
+        id: result.asset.id,
+        projectId: project.id,
+      });
+      if (!response.ok) {
+        toast.error(
+          `Failed to fetch OpenAPI content: ${response.error.message}`,
+        );
+        return;
+      }
 
-    // Convert ReadableStream to Blob
-    const blob = await new Response(response.value.result).blob();
-    setFile(
-      new File([blob], "My API", {
-        type: result.asset.contentType,
-      }),
-    );
+      // Convert ReadableStream to Blob
+      const blob = await new Response(response.value.result).blob();
 
-    telemetry.capture("onboarding_event", {
-      action: "spec_uploaded",
-      source: "url",
-    });
-    if (!apiName) {
-      setApiName("My API");
+      setAsset(result);
+      setFile(
+        new File([blob], "My API", {
+          type: result.asset.contentType,
+        }),
+      );
+
+      telemetry.capture("onboarding_event", {
+        action: "spec_uploaded",
+        source: "url",
+      });
+      if (!apiName) {
+        setApiName("My API");
+      }
+    } catch (_error) {
+      toast.error("Failed to load OpenAPI spec from URL");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -381,6 +398,7 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
     createDeployment,
     file,
     asset,
+    isUploading,
     createdDeployment: deployment,
     creatingDeployment,
   };
@@ -427,6 +445,7 @@ export function UploadOpenAPIContent({
     apiNameError,
     file,
     asset,
+    isUploading,
   } = useUploadOpenAPISteps();
   const routes = useRoutes();
 
@@ -440,6 +459,7 @@ export function UploadOpenAPIContent({
         <FullWidthUpload
           onUpload={handleSpecUpload}
           allowedExtensions={["yaml", "yml", "json"]}
+          isLoading={isUploading}
         />
       ),
       displayComplete: (

@@ -2,7 +2,7 @@ import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
 import { Asset, UploadImageResult } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
-import { UploadIcon } from "lucide-react";
+import { Loader2, UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";
 import { Type } from "./ui/type";
@@ -131,11 +131,13 @@ export function FullWidthUpload({
   allowedExtensions,
   className,
   label,
+  isLoading,
 }: {
   onUpload: (file: File) => void;
   allowedExtensions?: string[];
   label?: React.ReactNode;
   className?: string;
+  isLoading?: boolean;
 }) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -149,37 +151,53 @@ export function FullWidthUpload({
     <div
       tabIndex={0}
       className={cn("grid gap-4 w-full max-w-2xl", className)}
-      {...handlers}
+      {...(isLoading ? {} : handlers)}
     >
       <div className="flex items-center justify-center w-full">
         <label
           htmlFor="dropzone-file"
-          className={`flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg cursor-pointer trans ${
-            !handlers.isValidFile
-              ? "border-destructive bg-destructive/10"
-              : "border-muted-foreground/50 hover:bg-input/20"
-          }`}
+          className={cn(
+            "flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg trans",
+            isLoading
+              ? "border-primary/50 bg-primary/5 cursor-default"
+              : !handlers.isValidFile
+                ? "border-destructive bg-destructive/10 cursor-pointer"
+                : "border-muted-foreground/50 hover:bg-input/20 cursor-pointer",
+          )}
         >
-          <Stack align={"center"} justify={"center"} gap={3}>
-            <UploadIcon className="w-4 h-4" />
-            <p className="my-2 text-sm text-card-foreground">
-              {label ?? (
-                <>
-                  <span className="font-semibold">Click to upload</span> or drag
-                  and drop
-                </>
-              )}
-            </p>
-            <Type small mono muted>
-              {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max
-              8MiB)
-            </Type>
-          </Stack>
+          {isLoading ? (
+            <Stack align={"center"} justify={"center"} gap={3}>
+              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              <p className="my-2 text-sm text-card-foreground font-semibold">
+                Uploading and validating...
+              </p>
+              <Type small mono muted>
+                This may take a few seconds
+              </Type>
+            </Stack>
+          ) : (
+            <Stack align={"center"} justify={"center"} gap={3}>
+              <UploadIcon className="w-4 h-4" />
+              <p className="my-2 text-sm text-card-foreground">
+                {label ?? (
+                  <>
+                    <span className="font-semibold">Click to upload</span> or
+                    drag and drop
+                  </>
+                )}
+              </p>
+              <Type small mono muted>
+                {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max
+                8MiB)
+              </Type>
+            </Stack>
+          )}
           <input
             id="dropzone-file"
             type="file"
             className="hidden"
             onChange={handleFileChange}
+            disabled={isLoading}
             accept={allowedExtensions?.map((ext) => `.${ext}`)?.join(",")}
           />
         </label>

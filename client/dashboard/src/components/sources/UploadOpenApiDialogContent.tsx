@@ -23,6 +23,7 @@ export function UploadOpenApiDialogContent({
     createDeployment,
     file,
     undoSpecUpload,
+    isUploading,
   } = useUploadOpenAPISteps();
   const [isDeploying, setIsDeploying] = React.useState(false);
 
@@ -58,6 +59,7 @@ export function UploadOpenApiDialogContent({
           onUpload={handleSpecUpload}
           onUrlUpload={handleUrlUpload}
           documentSlug={documentSlug}
+          isLoading={isUploading}
         />
       ) : (
         <UploadedDocument
