@@ -3,6 +3,8 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import {
+  getDangerousApiKeyComponentCode,
+  getDangerousApiKeyEnvContent,
   getEnvContent,
   getElementsInstall,
   getNextjsApiRoute,
@@ -23,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Dialog } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -916,6 +918,7 @@ function InstallationGuide({
   >(null);
   const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
   const [keyCreationAttempted, setKeyCreationAttempted] = useState(false);
+  const [authMode, setAuthMode] = useState<"lax" | "session">("lax");
   const telemetry = useTelemetry();
   const { theme } = useMoonshineConfig();
 
@@ -1176,118 +1179,209 @@ function InstallationGuide({
       >
         {currentStep >= 3 && selectedFramework && (
           <div className="mt-6 space-y-6">
-            {/* Step 3a: Install */}
-            <SetupStep
-              number="a"
-              title="Install packages"
-              description="Run these commands in your terminal"
+            <Tabs
+              value={authMode}
+              onValueChange={(v) => setAuthMode(v as "lax" | "session")}
             >
-              <div className="space-y-2">
-                <CodeBlock
-                  code={getPeerDeps({ framework: selectedFramework! })}
-                  language="bash"
-                >
-                  <CodeBlockCopyButton />
-                </CodeBlock>
-                <CodeBlock
-                  code={getElementsInstall({ framework: selectedFramework! })}
-                  language="bash"
-                >
-                  <CodeBlockCopyButton />
-                </CodeBlock>
-              </div>
-            </SetupStep>
+              <TabsList>
+                <TabsTrigger value="lax">Quick Start</TabsTrigger>
+                <TabsTrigger value="session">Production</TabsTrigger>
+              </TabsList>
 
-            {/* Step 3b: Environment */}
-            <SetupStep
-              number="b"
-              title="Add environment variables"
-              description={
-                <>
-                  Add to{" "}
-                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                    .env.local
-                  </code>
-                </>
-              }
-            >
-              <CodeBlock
-                code={getEnvContent({ apiKey: generatedApiKey })}
-                language="bash"
-              >
-                <CodeBlockCopyButton />
-              </CodeBlock>
-            </SetupStep>
+              <TabsContent value="lax">
+                <div className="mt-4 space-y-6">
+                  <SetupStep
+                    number="a"
+                    title="Install packages"
+                    description="Run these commands in your terminal"
+                  >
+                    <div className="space-y-2">
+                      <CodeBlock
+                        code={getPeerDeps({ framework: selectedFramework })}
+                        language="bash"
+                      >
+                        <CodeBlockCopyButton />
+                      </CodeBlock>
+                      <CodeBlock
+                        code={getElementsInstall({
+                          framework: selectedFramework,
+                        })}
+                        language="bash"
+                      >
+                        <CodeBlockCopyButton />
+                      </CodeBlock>
+                    </div>
+                  </SetupStep>
 
-            {/* Step 3c: API Route */}
-            <SetupStep
-              number="c"
-              title={
-                selectedFramework === "nextjs"
-                  ? "Create session API route"
-                  : "Create session endpoint"
-              }
-              description={
-                selectedFramework === "nextjs" ? (
-                  <>
-                    Create{" "}
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                      pages/api/session.ts
-                    </code>
-                  </>
-                ) : (
-                  <>
-                    Create{" "}
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                      server.ts
-                    </code>
-                  </>
-                )
-              }
-            >
-              <CodeBlock
-                code={
-                  selectedFramework === "nextjs"
-                    ? getNextjsApiRoute()
-                    : getViteApiRoute()
-                }
-                language="typescript"
-                className="max-h-[300px] overflow-y-auto"
-              >
-                <CodeBlockCopyButton />
-              </CodeBlock>
-            </SetupStep>
+                  <SetupStep
+                    number="b"
+                    title="Add environment variables"
+                    description={
+                      <>
+                        Add to{" "}
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                          .env.local
+                        </code>
+                      </>
+                    }
+                  >
+                    <CodeBlock
+                      code={getDangerousApiKeyEnvContent({
+                        apiKey: generatedApiKey,
+                      })}
+                      language="bash"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
 
-            {/* Step 3d: Component */}
-            <SetupStep
-              number="d"
-              title="Add the chat component"
-              description={
-                selectedFramework === "nextjs" ? (
-                  <>
-                    Update{" "}
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                      app/page.tsx
-                    </code>
-                  </>
-                ) : (
-                  <>
-                    Update{" "}
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                      src/App.tsx
-                    </code>
-                  </>
-                )
-              }
-            >
-              <CodeBlock
-                code={getSessionComponentCode(codeGenParams)}
-                language="typescript"
-                className="max-h-[300px] overflow-y-auto"
-              >
-                <CodeBlockCopyButton />
-              </CodeBlock>
-            </SetupStep>
+                  <SetupStep
+                    number="c"
+                    title="Add the chat component"
+                    description={
+                      selectedFramework === "nextjs" ? (
+                        <>
+                          Update{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            app/page.tsx
+                          </code>
+                        </>
+                      ) : (
+                        <>
+                          Update{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            src/App.tsx
+                          </code>
+                        </>
+                      )
+                    }
+                  >
+                    <CodeBlock
+                      code={getDangerousApiKeyComponentCode(codeGenParams)}
+                      language="typescript"
+                      className="max-h-[300px] overflow-y-auto"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="session">
+                <div className="mt-4 space-y-6">
+                  <SetupStep
+                    number="a"
+                    title="Install packages"
+                    description="Run these commands in your terminal"
+                  >
+                    <div className="space-y-2">
+                      <CodeBlock
+                        code={getPeerDeps({ framework: selectedFramework })}
+                        language="bash"
+                      >
+                        <CodeBlockCopyButton />
+                      </CodeBlock>
+                      <CodeBlock
+                        code={getElementsInstall({
+                          framework: selectedFramework,
+                        })}
+                        language="bash"
+                      >
+                        <CodeBlockCopyButton />
+                      </CodeBlock>
+                    </div>
+                  </SetupStep>
+
+                  <SetupStep
+                    number="b"
+                    title="Add environment variables"
+                    description={
+                      <>
+                        Add to{" "}
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                          .env.local
+                        </code>
+                      </>
+                    }
+                  >
+                    <CodeBlock
+                      code={getEnvContent({ apiKey: generatedApiKey })}
+                      language="bash"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
+
+                  <SetupStep
+                    number="c"
+                    title={
+                      selectedFramework === "nextjs"
+                        ? "Create session API route"
+                        : "Create session endpoint"
+                    }
+                    description={
+                      selectedFramework === "nextjs" ? (
+                        <>
+                          Create{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            pages/api/session.ts
+                          </code>
+                        </>
+                      ) : (
+                        <>
+                          Create{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            server.ts
+                          </code>
+                        </>
+                      )
+                    }
+                  >
+                    <CodeBlock
+                      code={
+                        selectedFramework === "nextjs"
+                          ? getNextjsApiRoute()
+                          : getViteApiRoute()
+                      }
+                      language="typescript"
+                      className="max-h-[300px] overflow-y-auto"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
+
+                  <SetupStep
+                    number="d"
+                    title="Add the chat component"
+                    description={
+                      selectedFramework === "nextjs" ? (
+                        <>
+                          Update{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            app/page.tsx
+                          </code>
+                        </>
+                      ) : (
+                        <>
+                          Update{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            src/App.tsx
+                          </code>
+                        </>
+                      )
+                    }
+                  >
+                    <CodeBlock
+                      code={getSessionComponentCode(codeGenParams)}
+                      language="typescript"
+                      className="max-h-[300px] overflow-y-auto"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </WizardStep>
