@@ -97,6 +97,8 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     tool_name SimpleAggregateFunction(any, String),
     tool_source SimpleAggregateFunction(any, String),
     event_source SimpleAggregateFunction(any, String),
+    user_email SimpleAggregateFunction(any, String),
+    hook_source SimpleAggregateFunction(any, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
@@ -119,6 +121,8 @@ SELECT
     any(tool_name) AS tool_name,
     any(tool_source) AS tool_source,
     any(event_source) AS event_source,
+    any(user_email) AS user_email,
+    any(hook_source) AS hook_source,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(
