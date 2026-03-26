@@ -42,11 +42,13 @@ type RoleProvider interface {
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	roles  RoleProvider
+	tracer  trace.Tracer
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	auth    *auth.Auth
+	roles   RoleProvider
+	repo    *repo.Queries
+	orgRepo *orgrepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,11 +58,13 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions),
-		roles:  roles,
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:  logger,
+		db:      db,
+		auth:    auth.New(logger, db, sessions),
+		roles:   roles,
+		repo:    repo.New(db),
+		orgRepo: orgrepo.New(db),
 	}
 }
 
@@ -85,8 +89,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // workosOrgID resolves the WorkOS organization ID from the Gram org ID stored
 // in the auth context.
 func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, error) {
-	q := orgrepo.New(s.db)
-	org, err := q.GetOrganizationMetadata(ctx, gramOrgID)
+	org, err := s.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
 	if err != nil {
 		return "", fmt.Errorf("get organization metadata: %w", err)
 	}
@@ -98,9 +101,8 @@ func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, er
 
 // grantsForRole loads principal_grants for a role slug (principal_urn = "role:<slug>").
 func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug string) ([]*gen.RoleGrant, error) {
-	q := repo.New(s.db)
 	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-	rows, err := q.ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
+	rows, err := s.repo.ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: orgID,
 		PrincipalUrn:   principalURN.String(),
 	})
@@ -166,7 +168,7 @@ func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string,
 
 	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
-	return repo.New(s.db).SyncPrincipalGrants(ctx, repo.SyncPrincipalGrantsParams{
+	return s.repo.SyncPrincipalGrants(ctx, repo.SyncPrincipalGrantsParams{
 		OrganizationID: orgID,
 		PrincipalUrn:   principalURN,
 		Scopes:         scopes,
@@ -505,9 +507,8 @@ func (s *Service) DeleteRole(ctx context.Context, p *gen.DeleteRolePayload) erro
 	}
 
 	// Clean up local grants for this role.
-	q := repo.New(s.db)
 	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+	if _, err := s.repo.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		PrincipalUrn:   principalURN,
 	}); err != nil {
