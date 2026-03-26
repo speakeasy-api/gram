@@ -354,8 +354,10 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 		return nil, oops.E(oops.CodeGatewayError, err, "failed to resend invitation via WorkOS").Log(ctx, s.logger)
 	}
 
+	inviterName := s.resolveInviterName(ctx, wos, inv.InviterUserID)
+
 	return &gen.ResendInviteResult{
-		Invite: invitationToGenInvite(inv, ""),
+		Invite: invitationToGenInvite(inv, inviterName),
 	}, nil
 }
 
