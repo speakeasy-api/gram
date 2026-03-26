@@ -54,7 +54,7 @@ export class Usage extends ClientSDK {
    * getPeriodUsage usage
    *
    * @remarks
-   * Get the usage for a project for a given period
+   * Get the usage for an organization for a given period
    */
   async getPeriodUsage(
     request?: operations.GetPeriodUsageRequest | undefined,

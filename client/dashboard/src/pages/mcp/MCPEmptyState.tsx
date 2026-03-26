@@ -1,11 +1,16 @@
 import { EmptyState } from "@/components/page-layout";
 
-export function MCPEmptyState() {
+export function MCPEmptyState({
+  nonEmptyProjectCTA,
+}: {
+  nonEmptyProjectCTA?: React.ReactNode;
+}) {
   return (
     <EmptyState
       heading="No MCP servers yet"
       description="Gram generates MCP-ready tools from your OpenAPI documents. Get a hosted MCP server in seconds, not days."
       graphic={<MCPEmptyGraphic />}
+      nonEmptyProjectCTA={nonEmptyProjectCTA}
     />
   );
 }

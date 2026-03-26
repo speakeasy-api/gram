@@ -1,35 +1,31 @@
-'use client'
+"use client";
 
-import { useRadius } from '@/hooks/useRadius'
-import { cn } from '@/lib/utils'
-import { FC } from 'react'
+import { cn } from "@/lib/utils";
+import { FC } from "react";
+import { MacOSWindowFrame } from "./MacOSWindowFrame";
 
 interface PluginLoadingStateProps {
-  text: string
-  className?: string
+  text: string;
+  className?: string;
 }
 
 /**
  * Shared loading state component for plugins.
- * Displays a shimmer effect with loading text.
+ * Displays a shimmer effect with loading text inside a macOS-style window.
  */
 export const PluginLoadingState: FC<PluginLoadingStateProps> = ({
   text,
   className,
 }) => {
-  const r = useRadius()
-
   return (
-    <div
-      className={cn(
-        'border-border bg-card relative min-h-[400px] w-fit max-w-full min-w-[400px] overflow-hidden border after:hidden',
-        r('lg'),
-        className
-      )}
-    >
-      <div className="bg-muted absolute inset-0 flex items-center justify-center">
-        <span className="shimmer text-muted-foreground text-sm">{text}</span>
+    <MacOSWindowFrame className={className}>
+      <div
+        className={cn(
+          "relative flex min-h-[400px] items-center justify-center bg-background",
+        )}
+      >
+        <span className="shimmer text-sm text-muted-foreground">{text}</span>
       </div>
-    </div>
-  )
-}
+    </MacOSWindowFrame>
+  );
+};

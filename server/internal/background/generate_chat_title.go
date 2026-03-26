@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -13,8 +14,9 @@ import (
 )
 
 type GenerateChatTitleParams struct {
-	ChatID string
-	OrgID  string
+	ChatID    string
+	OrgID     string
+	ProjectID string
 }
 
 // ChatTitleGenerator schedules async chat title generation.
@@ -24,23 +26,24 @@ type ChatTitleGenerator interface {
 
 // TemporalChatTitleGenerator implements ChatTitleGenerator using Temporal.
 type TemporalChatTitleGenerator struct {
-	Temporal client.Client
+	TemporalEnv *tenv.Environment
 }
 
-func (t *TemporalChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error {
-	_, err := ExecuteGenerateChatTitleWorkflow(ctx, t.Temporal, GenerateChatTitleParams{
-		ChatID: chatID,
-		OrgID:  orgID,
+func (t *TemporalChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
+	_, err := ExecuteGenerateChatTitleWorkflow(ctx, t.TemporalEnv, GenerateChatTitleParams{
+		ChatID:    chatID,
+		OrgID:     orgID,
+		ProjectID: projectID,
 	})
 	return err
 }
 
-func ExecuteGenerateChatTitleWorkflow(ctx context.Context, temporalClient client.Client, params GenerateChatTitleParams) (client.WorkflowRun, error) {
+func ExecuteGenerateChatTitleWorkflow(ctx context.Context, env *tenv.Environment, params GenerateChatTitleParams) (client.WorkflowRun, error) {
 	id := fmt.Sprintf("v1:generate-chat-title:%s", params.ChatID)
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
-		TaskQueue:             string(TaskQueueMain),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		TaskQueue:             string(env.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    1 * time.Minute,
 	}, GenerateChatTitleWorkflow, params)
 }
@@ -61,8 +64,9 @@ func GenerateChatTitleWorkflow(ctx workflow.Context, params GenerateChatTitlePar
 		ctx,
 		a.GenerateChatTitle,
 		activities.GenerateChatTitleArgs{
-			ChatID: params.ChatID,
-			OrgID:  params.OrgID,
+			ChatID:    params.ChatID,
+			OrgID:     params.OrgID,
+			ProjectID: params.ProjectID,
 		},
 	).Get(ctx, nil)
 	if err != nil {

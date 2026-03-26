@@ -66,7 +66,7 @@ func canOpenBrowser() bool {
 }
 
 func openBrowser(url string) error {
-	cmd := exec.Command("open", url)
+	cmd := exec.Command("open", url) //#nosec G204 -- url is a constructed auth URL, not user-controlled shell input
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start browser: %w", err)
 	}

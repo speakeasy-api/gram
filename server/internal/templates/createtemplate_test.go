@@ -8,8 +8,9 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestTemplatesService_CreateTemplate_Success(t *testing.T) {
@@ -23,11 +24,11 @@ func TestTemplatesService_CreateTemplate_Success(t *testing.T) {
 		ProjectSlugInput: nil,
 		Name:             types.Slug("test-template"),
 		Prompt:           "Hello {{name}}!",
-		Description:      conv.Ptr("A test template"),
+		Description:      new("A test template"),
 		Engine:           "mustache",
 		Kind:             "prompt",
 		ToolsHint:        []string{"assistant"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 	})
 	require.NoError(t, err, "create template")
 
@@ -177,7 +178,7 @@ func TestTemplatesService_CreateTemplate_EmptyArgumentsSchema(t *testing.T) {
 		Engine:           "",
 		Kind:             "prompt",
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object"}`),
+		Arguments:        new(`{"type": "object"}`),
 	})
 	require.NoError(t, err, "create template with empty arguments schema should succeed")
 	require.NotNil(t, result, "result is nil")
@@ -199,7 +200,7 @@ func TestTemplatesService_CreateTemplate_ArgumentsWithoutEngine(t *testing.T) {
 		Engine:           "", // No engine specified
 		Kind:             "prompt",
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 	})
 	require.NoError(t, err, "creating template with arguments but no engine should succeed")
 	require.NotNil(t, result, "result should not be nil")
@@ -228,4 +229,111 @@ func TestTemplatesService_CreateTemplate_Unauthorized(t *testing.T) {
 	})
 	require.Error(t, err, "expected error for unauthorized request")
 	require.Contains(t, err.Error(), "unauthorized")
+}
+
+func TestTemplatesService_CreateTemplate_AuditLogCount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateCreate)
+	require.NoError(t, err)
+
+	result, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("audit-create-template"),
+		Prompt:           "Hello {{name}}!",
+		Description:      new("Audit create template"),
+		Engine:           "mustache",
+		Kind:             "prompt",
+		ToolsHint:        []string{"assistant"},
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestTemplatesService_CreateTemplate_DuplicateName_DoesNotAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	_, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("audit-duplicate-template"),
+		Prompt:           "First template",
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateCreate)
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("audit-duplicate-template"),
+		Prompt:           "Second template",
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+	})
+	require.Error(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestTemplatesService_CreateTemplate_AuditLogMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateCreate)
+	require.NoError(t, err)
+
+	result, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("audit-create-metadata"),
+		Prompt:           "Hello {{name}}!",
+		Description:      nil,
+		Engine:           "mustache",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionTemplateCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionTemplateCreate), record.Action)
+	require.Equal(t, "template", record.SubjectType)
+	require.Equal(t, result.Template.Name, record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "tools:prompt:prompt:audit-create-metadata", metadata["template_urn"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }

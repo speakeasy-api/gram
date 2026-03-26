@@ -1,5 +1,103 @@
 # @gram-ai/elements
 
+## 1.27.5
+
+### Patch Changes
+
+- 6108c5a: fix: message feedback tooltip position
+- 686fee5: Add gpt-5.4 support in playground.
+
+## 1.27.4
+
+### Patch Changes
+
+- ee711ab: Fix feedback UI:
+  - Set `showFeedback` default to `true` (matching documentation)
+  - Improve dark mode styling for feedback buttons
+  - Update system prompt to prevent multiple generative UI widgets per response
+- fb7439b: Improve settings page with tabs routing and logging API
+
+## 1.27.3
+
+### Patch Changes
+
+- 7063e97: Fix stale toolsToInclude when client-side navigating between pages
+
+## 1.27.2
+
+### Patch Changes
+
+- 62c6784: Show Elements errors inside the actual chat
+- c26afea: Auto-refresh expired session tokens before chat requests. Adds JWT expiry detection with a 30s buffer, deduplicates concurrent refresh calls via `fetchQuery`, and falls back to the stale token on failure so the server can decide via 401. Refresh is automatic for non-static sessions and skipped during replays.
+
+## 1.27.1
+
+### Patch Changes
+
+- e5500f7: fix: remove createTanStackStartSessionFn to prevent API key exposure
+
+## 1.27.0
+
+### Minor Changes
+
+- 3d0ce56: Add `dangerousApiKey` auth option for quick dev/testing without a backend session endpoint. The client exchanges the API key for a session token automatically.
+
+  Also introduce a unified `session` field on `ApiConfig` that accepts either a static token string or an async fetcher function. The previous `sessionToken` and `sessionFn` fields both still work but are now deprecated in favour of the new `session` field.
+
+## 1.26.1
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+## 1.26.0
+
+### Minor Changes
+
+- 9cb2f0e: Chart plugin and generative UI overhaul
+
+  **Chart Plugin**
+
+  - Replace Vega-Lite with Recharts for React 19 compatibility
+  - Add themed tooltips using CSS variables (oklch colors)
+  - Update chart stories to use MCP orders summary tool
+
+  **Generative UI**
+
+  - Add macOS-style window frames with traffic light buttons
+  - Add whimsical cycling loading messages (50 messages, 2s fade transitions)
+  - Streamline LLM prompt from ~150 lines to concise bulleted format
+
+  **Component Fixes**
+
+  - ActionButton executes tools via useToolExecution hook
+  - Align Text, Badge, Progress props with LLM prompt specification
+  - Fix catalog schema toolName → action mismatch
+  - Fix setTimeout cleanup in CyclingLoadingMessage
+
+  **Storybook**
+
+  - Fix theme toggle causing full component remount
+
+## 1.25.2
+
+### Patch Changes
+
+- e08b45e: Adds support for forwarding and storing user feedback. Incorporates the stored user feedback into chat resolution analysis
+
 ## 1.25.1
 
 ### Patch Changes
@@ -42,6 +140,7 @@
 ### Patch Changes
 
 - c17b9f7: Fix logs page performance, responsive charts, tool output rendering, and streaming indicator
+
   - Memoize config objects and callbacks in Logs page and thread to prevent unnecessary re-renders
   - Fix tool group count using startIndex/endIndex instead of filtering all message parts
   - Fix shimmer CSS in shadow DOM by setting custom properties on .gram-elements
@@ -278,6 +377,7 @@
 - eb72619: Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.
 
   The first release of Gram Elements includes:
+
   - An all-in-one `<Chat />` component that encapsulates the entire chat lifecycle, including built-in support for tool calling and streaming responses.
   - A powerful configuration framework to refine the chat experience, including different layouts, theming, and much more.
 

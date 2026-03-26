@@ -9,10 +9,99 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/projects"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
+
+func TestSetLogo_CreatesAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+
+	assetID := uuid.New()
+	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		SessionToken:     nil,
+		AssetID:          assetID.String(),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Project)
+	require.NotNil(t, result.Project.LogoAssetID)
+	require.Equal(t, assetID.String(), *result.Project.LogoAssetID)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestSetLogo_InvalidAssetID_DoesNotCreateAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+
+	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		SessionToken:     nil,
+		AssetID:          "invalid-uuid",
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestSetLogo_AuditLogSnapshots(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	assetID := uuid.New()
+
+	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		SessionToken:     nil,
+		AssetID:          assetID.String(),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Project)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionProjectUpdate), record.Action)
+	require.Equal(t, "project", record.SubjectType)
+	require.Equal(t, result.Project.Name, record.SubjectDisplay)
+	require.Equal(t, string(result.Project.Slug), record.SubjectSlug)
+	require.Nil(t, record.Metadata)
+	require.NotNil(t, record.BeforeSnapshot)
+	require.NotNil(t, record.AfterSnapshot)
+
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, result.Project.ID, beforeSnapshot["ID"])
+	require.Equal(t, result.Project.Name, beforeSnapshot["Name"])
+	require.Equal(t, string(result.Project.Slug), beforeSnapshot["Slug"])
+	require.Nil(t, beforeSnapshot["LogoAssetID"])
+
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, result.Project.ID, afterSnapshot["ID"])
+	require.Equal(t, result.Project.Name, afterSnapshot["Name"])
+	require.Equal(t, string(result.Project.Slug), afterSnapshot["Slug"])
+	require.Equal(t, assetID.String(), afterSnapshot["LogoAssetID"])
+}
 
 func TestSetLogo_Success(t *testing.T) {
 	t.Parallel()
@@ -109,12 +198,13 @@ func TestSetLogo_UnauthorizedNoAuthContext(t *testing.T) {
 
 func TestSetLogo_UnauthorizedNoProjectID(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	_, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t)
 
-	// Create auth context without project ID
-	ctx, err := ti.sessionManager.Authenticate(ctx, "", true)
-	require.NoError(t, err)
+	// Clear project ID from auth context
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ProjectID = nil
+	authCtx.ProjectSlug = nil
 
 	// Call SetLogo without project ID in auth context
 	payload := &projects.SetLogoPayload{
@@ -139,9 +229,7 @@ func TestSetLogo_UnauthorizedNoProjectID(t *testing.T) {
 func TestSetLogo_DatabaseErrorProjectNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProjectsService(t)
-
-	// Create auth context with non-existent project ID
-	ctx, err := ti.sessionManager.Authenticate(ctx, "", true)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
 	require.NoError(t, err)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -169,7 +257,11 @@ func TestSetLogo_DatabaseErrorProjectNotFound(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	assert.Equal(t, oops.CodeUnexpected, oopsErr.Code)
-	assert.Contains(t, oopsErr.Error(), "error updating project logo")
+	assert.Contains(t, oopsErr.Error(), "error getting project")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestSetLogo_EmptyAssetID(t *testing.T) {

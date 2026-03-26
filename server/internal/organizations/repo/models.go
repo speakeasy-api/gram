@@ -9,22 +9,26 @@ import (
 )
 
 type OrganizationMetadatum struct {
-	ID              string
-	Name            string
-	Slug            string
-	GramAccountType string
-	SsoConnectionID pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DisabledAt      pgtype.Timestamptz
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	SsoConnectionID    pgtype.Text
+	WorkosID           pgtype.Text
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
-	ID             int64
-	OrganizationID string
-	UserID         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                 int64
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
 }

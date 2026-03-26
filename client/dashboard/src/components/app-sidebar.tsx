@@ -7,37 +7,42 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
-import { useSession } from "@/contexts/Auth";
-import { AppRoute, useRoutes } from "@/routes";
+import { useSlugs } from "@/contexts/Sdk";
+import { useProductTier } from "@/hooks/useProductTier";
+import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import { AlertTriangleIcon, MinusIcon, TestTube2Icon } from "lucide-react";
+import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
+  const { orgSlug } = useSlugs();
+
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
-    build: [routes.elements, routes.mcp],
-    observe: [routes.logs, routes.metrics],
-    settings: [
-      routes.settings,
-      routes.team,
-      routes.billing,
-      routes.docs,
-    ] as AppRoute[],
+    build: [routes.elements, routes.mcp, routes.slackApps, routes.clis],
+    observe: [
+      routes.observability,
+      routes.logs,
+      routes.chatSessions,
+      routes.hooks,
+    ],
+    settings: [routes.settings] as AppRoute[],
   };
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarContent className="pt-2">
         <SidebarGroup>
+          <SidebarGroupLabel>project</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavMenu items={[routes.home]} />
           </SidebarGroupContent>
@@ -50,6 +55,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+        <div className="mt-auto px-2 py-3">
+          <Link
+            to={`/${orgSlug}`}
+            className="flex items-center gap-1.5 px-2 py-1 text-sm text-muted-foreground hover:text-foreground transition-colors hover:no-underline"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span>Back to org</span>
+          </Link>
+        </div>
       </SidebarContent>
       <SidebarFooter>
         <FreeTierExceededNotification />
@@ -68,47 +82,35 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 }
 
 const FreeTierExceededNotification = () => {
-  const session = useSession();
+  const productTier = useProductTier();
+  // Only fetch usage data for free-tier users — this notification is
+  // irrelevant for paid/enterprise tiers and the request takes ~3s.
   const { data: usage } = useGetPeriodUsage(undefined, undefined, {
     throwOnError: false,
+    enabled: productTier === "base",
   });
-  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
 
-  if (!usage || !session || session.gramAccountType !== "free") {
+  if (!usage || productTier !== "base") {
     return null;
   }
 
   if (
-    usage.toolCalls > usage.maxToolCalls ||
-    usage.servers > usage.maxServers
+    usage.toolCalls > usage.includedToolCalls ||
+    usage.servers > usage.includedServers
   ) {
     return (
       <PersistentNotification variant="error">
         <Stack direction="vertical" gap={3} className="h-full">
-          <Stack direction="horizontal" align="center" gap={1}>
-            <AlertTriangleIcon className="w-4 h-4" />
-            <Type variant="subheading">Free tier exceeded</Type>
-          </Stack>
+          <Type variant="subheading">Limits exceeded</Type>
           <Type small>
-            You've used{" "}
-            <span className="font-medium">
-              {usage.toolCalls} / {usage.maxToolCalls} tool calls
-            </span>{" "}
-            and{" "}
-            <span className="font-medium">
-              {usage.servers} / {usage.maxServers} servers
-            </span>
-            .
+            Free tier limits exceeded. Upgrade to continue using Gram.
           </Type>
-          <Type small>
-            Your MCP server will be disabled soon. Upgrade to continue using
-            Gram.
-          </Type>
-          <routes.billing.Link className="w-full mt-auto">
+          <orgRoutes.billing.Link className="w-full mt-auto">
             <Button size="sm" className="w-full">
               Billing →
             </Button>
-          </routes.billing.Link>
+          </orgRoutes.billing.Link>
         </Stack>
       </PersistentNotification>
     );
@@ -139,7 +141,7 @@ const PersistentNotification = ({
     <Button
       variant="ghost"
       size="icon"
-      className="absolute top-1 right-1 hover:bg-transparent"
+      className="absolute top-0 right-0 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
     >
       <MinusIcon className="w-4 h-4" />
@@ -147,7 +149,7 @@ const PersistentNotification = ({
   );
 
   let classes =
-    "absolute bottom-2 left-1/2 h-[236px] w-[236px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
+    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
   if (isMinimized) {
     classes +=
       "h-[12px] w-[12px] left-2 translate-x-0 cursor-pointer hover:scale-110";

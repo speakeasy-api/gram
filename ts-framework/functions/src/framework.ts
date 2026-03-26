@@ -31,6 +31,10 @@ export type ToolDefinition<
    */
   inputSchema: TInputSchema;
   /**
+   * Optional annotations describing tool behavior hints (aligned with MCP spec).
+   */
+  annotations?: ToolAnnotations;
+  /**
    * The function that implements the tool call.
    */
   execute: (
@@ -64,16 +68,29 @@ type InferInput<T> = ToolSignature<T>[1];
 
 type InferResult<T> = ToolSignature<T>[3];
 
+export type ToolAnnotations = {
+  /**
+   * A human-readable title for the tool.
+   */
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
+
 export type ManifestVariables = Record<string, { description?: string }>;
 
 export type ManifestTool = {
   name: string;
   description?: string;
   inputSchema: unknown;
+  annotations?: ToolAnnotations;
   variables?: ManifestVariables;
   authInput?: {
     type: "oauth2";
     variable: string;
+    gramEmail?: boolean;
   };
   meta?: unknown;
 };
@@ -217,6 +234,7 @@ export class Gram<
   #authInput?: {
     type: "oauth2";
     variable: string;
+    gramEmail?: boolean;
   };
 
   constructor(opts?: {
@@ -245,6 +263,11 @@ export class Gram<
        * Must be a key in envSchema.
        */
       oauthVariable: keyof EnvSchema & string;
+      /**
+       * When true, the authenticated Gram user's email will be available to
+       * the function as the GRAM_USER_EMAIL environment variable.
+       */
+      gramEmail?: boolean;
     };
   }) {
     this.#tools = new Map();
@@ -255,6 +278,7 @@ export class Gram<
       ? {
           type: "oauth2",
           variable: opts.authInput.oauthVariable,
+          gramEmail: opts.authInput.gramEmail,
         }
       : undefined;
   }
@@ -394,10 +418,12 @@ export class Gram<
         name: string;
         description?: string;
         inputSchema: unknown;
+        annotations?: ToolAnnotations;
         variables?: ManifestVariables;
         authInput?: {
           type: "oauth2";
           variable: string;
+          gramEmail?: boolean;
         };
       } = {
         name: tool.name,
@@ -405,6 +431,10 @@ export class Gram<
       };
       if (tool.description != null) {
         result.description = tool.description;
+      }
+
+      if (tool.annotations != null) {
+        result.annotations = tool.annotations;
       }
 
       if (tool.envSchema != null) {

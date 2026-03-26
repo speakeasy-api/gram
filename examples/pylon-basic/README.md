@@ -11,6 +11,7 @@ Gram Functions are tools for LLMs and MCP servers that can do arbitrary tasks su
 Creates a new task in Pylon using the Pylon API.
 
 **Parameters:**
+
 - `title` (required): The title of the task
 - `body_html` (optional): HTML content for the task body
 - `status` (optional): Task status - one of `not_started`, `in_progress`, or `completed`
@@ -22,9 +23,11 @@ Creates a new task in Pylon using the Pylon API.
 - `milestone_id` (optional): ID of the associated milestone
 
 **Environment Variables:**
+
 - `PYLON_API_KEY`: Your Pylon API key for authentication
 
 **Example Usage:**
+
 ```ts
 {
   "title": "Review customer feedback",

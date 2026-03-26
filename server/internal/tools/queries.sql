@@ -46,6 +46,10 @@ SELECT
   htd.created_at,
   htd.updated_at,
   htd.tags,
+  htd.read_only_hint,
+  htd.destructive_hint,
+  htd.idempotent_hint,
+  htd.open_world_hint,
   (CASE
     WHEN htd.project_id = @project_id THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
@@ -167,6 +171,10 @@ SELECT
   ftd.runtime,
   ftd.function_id,
   ftd.meta,
+  ftd.read_only_hint,
+  ftd.destructive_hint,
+  ftd.idempotent_hint,
+  ftd.open_world_hint,
   df.asset_id,
   ftd.created_at,
   ftd.updated_at

@@ -10,7 +10,7 @@ import {
   PencilIcon,
   Settings2,
   Square,
-} from 'lucide-react'
+} from "lucide-react";
 
 import {
   ActionBarPrimitive,
@@ -21,108 +21,153 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAssistantState,
-} from '@assistant-ui/react'
+} from "@assistant-ui/react";
 
-import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
-import * as m from 'motion/react-m'
+import {
+  AnimatePresence,
+  LazyMotion,
+  MotionConfig,
+  domAnimation,
+} from "motion/react";
+import * as m from "motion/react-m";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type FC,
-} from 'react'
-import { AnimatePresence } from 'motion/react'
+} from "react";
 
 import {
   ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
-} from '@/components/assistant-ui/attachment'
-import { FollowOnSuggestions } from '@/components/assistant-ui/follow-on-suggestions'
-import { MarkdownText } from '@/components/assistant-ui/markdown-text'
-import { MessageFeedback } from '@/components/assistant-ui/message-feedback'
-import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
-import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
-import { ToolMentionAutocomplete } from '@/components/assistant-ui/tool-mention-autocomplete'
-import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
-import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
-import { Button } from '@/components/ui/button'
-import { useToolMentions } from '@/hooks/useToolMentions'
-
-import { useDensity } from '@/hooks/useDensity'
-import { useElements } from '@/hooks/useElements'
-import { useRadius } from '@/hooks/useRadius'
-import { useThemeProps } from '@/hooks/useThemeProps'
-import { EASE_OUT_QUINT } from '@/lib/easing'
-import { MODELS } from '@/lib/models'
-import { cn } from '@/lib/utils'
-import { useRecordCassette } from '@/hooks/useRecordCassette'
-import { useReplayContext } from '@/contexts/ReplayContext'
-import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
+} from "@/components/assistant-ui/attachment";
+import { FollowOnSuggestions } from "@/components/assistant-ui/follow-on-suggestions";
+import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { MentionedToolsBadges } from "@/components/assistant-ui/mentioned-tools-badges";
+import { MessageFeedback } from "@/components/assistant-ui/message-feedback";
+import { Reasoning, ReasoningGroup } from "@/components/assistant-ui/reasoning";
+import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
+import { ToolMentionAutocomplete } from "@/components/assistant-ui/tool-mention-autocomplete";
+import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { Button } from "@/components/ui/button";
+import { useChatId } from "@/contexts/ChatIdContext";
+import { useReplayContext } from "@/contexts/ReplayContext";
+import { useAuth } from "@/hooks/useAuth";
+import { useDensity } from "@/hooks/useDensity";
+import { useElements } from "@/hooks/useElements";
+import { isLocalThreadId } from "@/hooks/useGramThreadListAdapter";
+import { useRadius } from "@/hooks/useRadius";
+import { useRecordCassette } from "@/hooks/useRecordCassette";
+import { useThemeProps } from "@/hooks/useThemeProps";
+import { useToolMentions } from "@/hooks/useToolMentions";
+import { getApiUrl } from "@/lib/api";
+import { EASE_OUT_QUINT } from "@/lib/easing";
+import { MODELS } from "@/lib/models";
+import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../ui/tooltip'
-import { ToolGroup } from './tool-group'
+} from "../ui/tooltip";
+import { ConnectionStatusIndicatorSafe } from "./connection-status-indicator";
+import { ToolGroup } from "./tool-group";
+
+type Feedback = "success" | "failure";
 
 // Context for chat resolution state
 const ChatResolutionContext = createContext<{
-  isResolved: boolean
-  feedbackHidden: boolean
-  setResolved: () => void
-  setUnresolved: () => void
-  resetFeedbackHidden: () => void
+  isResolved: boolean;
+  feedbackHidden: boolean;
+  setResolved: () => void;
+  setUnresolved: () => void;
+  resetFeedbackHidden: () => void;
+  submitFeedback: (feedback: Feedback) => Promise<void>;
 }>({
   isResolved: false,
   feedbackHidden: false,
   setResolved: () => {},
   setUnresolved: () => {},
   resetFeedbackHidden: () => {},
-})
+  submitFeedback: async () => {},
+});
 
-const useChatResolution = () => useContext(ChatResolutionContext)
+const useChatResolution = () => useContext(ChatResolutionContext);
 
-const StaticSessionWarning = () => (
-  <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
-    <strong>Warning:</strong> You are using a static session token in the
-    client. It will expire shortly. Please{' '}
-    <a
-      href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
-    >
-      set up a session endpoint to avoid this warning.
-    </a>
+const DangerousApiKeyWarning = () => (
+  <div className="m-2 rounded-md border border-red-500 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-600 dark:bg-red-900/30 dark:text-red-200">
+    <strong>Danger:</strong> You are using a Gram API key directly in the
+    browser. This exposes your key to anyone who inspects this page. Do NOT use
+    this in production.
   </div>
-)
+);
 
 interface ThreadProps {
-  className?: string
+  className?: string;
 }
 
 export const Thread: FC<ThreadProps> = ({ className }) => {
-  const themeProps = useThemeProps()
-  const d = useDensity()
-  const { config } = useElements()
-  const components = config.components ?? {}
-  const showStaticSessionWarning = config.api && 'sessionToken' in config.api
-  const showFeedback = config.thread?.experimental_showFeedback ?? false
-  const [isResolved, setIsResolved] = useState(false)
-  const [feedbackHidden, setFeedbackHidden] = useState(false)
+  const themeProps = useThemeProps();
+  const d = useDensity();
+  const { config } = useElements();
+  const components = config.components ?? {};
+  const showDangerousApiKeyWarning =
+    config.api && "dangerousApiKey" in config.api;
+  const showFeedback = config.thread?.showFeedback ?? true;
+  const [isResolved, setIsResolved] = useState(false);
+  const [feedbackHidden, setFeedbackHidden] = useState(false);
+  const chatId = useChatId();
 
-  const setResolved = () => setIsResolved(true)
+  const apiUrl = getApiUrl(config);
+  const auth = useAuth({
+    auth: config.api,
+    projectSlug: config.projectSlug,
+  });
+
+  const setResolved = () => setIsResolved(true);
   const setUnresolved = () => {
-    setIsResolved(false)
-    setFeedbackHidden(true)
-  }
-  const resetFeedbackHidden = () => setFeedbackHidden(false)
+    setIsResolved(false);
+    setFeedbackHidden(true);
+  };
+  const resetFeedbackHidden = () => setFeedbackHidden(false);
+
+  // Submit feedback to the API
+  const submitFeedback = useCallback(
+    async (feedback: Feedback) => {
+      if (!chatId) return;
+      if (isLocalThreadId(chatId)) {
+        console.error("Local thread ID, can't submit feedback");
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/rpc/chat.submitFeedback`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...auth.headers,
+          },
+          body: JSON.stringify({
+            id: chatId,
+            feedback,
+          }),
+        });
+
+        if (!response.ok) {
+          console.error("Failed to submit feedback:", response.statusText);
+        }
+      } catch (error) {
+        console.error("Failed to submit feedback:", error);
+      }
+    },
+    [chatId, apiUrl, auth.headers],
+  );
 
   return (
     <ChatResolutionContext.Provider
@@ -132,22 +177,23 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
         setResolved,
         setUnresolved,
         resetFeedbackHidden,
+        submitFeedback,
       }}
     >
       <LazyMotion features={domAnimation}>
         <MotionConfig reducedMotion="user">
           <ThreadPrimitive.Root
             className={cn(
-              'aui-root aui-thread-root bg-background @container relative flex h-full flex-col',
+              "aui-root aui-thread-root @container relative flex h-full flex-col bg-background",
               themeProps.className,
-              className
+              className,
             )}
           >
             <ConnectionStatusIndicatorSafe />
             <ThreadPrimitive.Viewport
               className={cn(
-                'aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!',
-                d('p-lg')
+                "aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!",
+                d("p-lg"),
               )}
             >
               <ThreadPrimitive.If empty>
@@ -158,7 +204,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
                 )}
               </ThreadPrimitive.If>
 
-              {showStaticSessionWarning && <StaticSessionWarning />}
+              {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
 
               <ThreadPrimitive.Messages
                 components={{
@@ -184,7 +230,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
             <AnimatePresence>
               {showFeedback && isResolved && (
                 <m.div
-                  className="bg-background/40 pointer-events-none absolute inset-0 z-50"
+                  className="pointer-events-none absolute inset-0 z-50 bg-background/40"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -196,8 +242,8 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
         </MotionConfig>
       </LazyMotion>
     </ChatResolutionContext.Provider>
-  )
-}
+  );
+};
 
 const ThreadScrollToBottom: FC = () => {
   return (
@@ -205,41 +251,41 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom dark:bg-background dark:text-foreground dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible dark:bg-background dark:text-foreground dark:hover:bg-accent"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
     </ThreadPrimitive.ScrollToBottom>
-  )
-}
+  );
+};
 
 const ThreadWelcome: FC = () => {
-  const { config } = useElements()
-  const d = useDensity()
-  const { title, subtitle } = config.welcome ?? {}
-  const isStandalone = config.variant === 'standalone'
+  const { config } = useElements();
+  const d = useDensity();
+  const { title, subtitle } = config.welcome ?? {};
+  const isStandalone = config.variant === "standalone";
 
   return (
     <div
       className={cn(
-        'aui-thread-welcome-root my-auto flex w-full grow flex-col',
-        isStandalone ? 'items-center justify-center' : '',
-        d('gap-lg')
+        "aui-thread-welcome-root my-auto flex w-full grow flex-col",
+        isStandalone ? "items-center justify-center" : "",
+        d("gap-lg"),
       )}
     >
       <div
         className={cn(
-          'aui-thread-welcome-center flex w-full grow flex-col items-center justify-start'
+          "aui-thread-welcome-center flex w-full grow flex-col items-center justify-start",
         )}
       >
         <div
           className={cn(
-            'aui-thread-welcome-message flex flex-col',
+            "aui-thread-welcome-message flex flex-col",
             isStandalone
-              ? 'items-center text-center'
-              : 'size-full justify-start',
-            d('gap-sm'),
-            !isStandalone && d('py-md')
+              ? "items-center text-center"
+              : "size-full justify-start",
+            d("gap-sm"),
+            !isStandalone && d("py-md"),
           )}
         >
           <m.div
@@ -248,8 +294,8 @@ const ThreadWelcome: FC = () => {
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}
             className={cn(
-              'aui-thread-welcome-message-motion-1 text-foreground font-semibold',
-              d('text-title')
+              "aui-thread-welcome-message-motion-1 font-semibold text-foreground",
+              d("text-title"),
             )}
           >
             {title}
@@ -260,8 +306,8 @@ const ThreadWelcome: FC = () => {
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.25, delay: 0.05, ease: EASE_OUT_QUINT }}
             className={cn(
-              'aui-thread-welcome-message-motion-2 text-muted-foreground/65',
-              d('text-subtitle')
+              "aui-thread-welcome-message-motion-2 text-muted-foreground/65",
+              d("text-subtitle"),
             )}
           >
             {subtitle}
@@ -270,29 +316,29 @@ const ThreadWelcome: FC = () => {
       </div>
       <ThreadSuggestions />
     </div>
-  )
-}
+  );
+};
 
 const ThreadSuggestions: FC = () => {
-  const { config } = useElements()
-  const r = useRadius()
-  const d = useDensity()
-  const suggestions = config.welcome?.suggestions ?? []
-  const isStandalone = config.variant === 'standalone'
+  const { config } = useElements();
+  const r = useRadius();
+  const d = useDensity();
+  const suggestions = config.welcome?.suggestions ?? [];
+  const isStandalone = config.variant === "standalone";
 
-  if (suggestions.length === 0) return null
+  if (suggestions.length === 0) return null;
 
   return (
     <div
       className={cn(
-        'aui-thread-welcome-suggestions w-full',
-        d('gap-md'),
-        d('py-lg'),
+        "aui-thread-welcome-suggestions w-full",
+        d("gap-md"),
+        d("py-lg"),
         isStandalone
-          ? 'flex flex-col @sm:flex-row @sm:flex-wrap @sm:items-center @sm:justify-center'
+          ? "flex flex-col @sm:flex-row @sm:flex-wrap @sm:items-center @sm:justify-center"
           : suggestions.length === 1
-            ? 'flex'
-            : 'grid max-w-fit @md:grid-cols-2'
+            ? "flex"
+            : "grid max-w-fit @md:grid-cols-2",
       )}
     >
       {suggestions.map((suggestion, index) => (
@@ -307,26 +353,26 @@ const ThreadSuggestions: FC = () => {
           }}
           key={`suggested-action-${suggestion.title}-${index}`}
           className={cn(
-            'aui-thread-welcome-suggestion-display',
-            !isStandalone && 'nth-[n+3]:hidden @md:nth-[n+3]:block'
+            "aui-thread-welcome-suggestion-display",
+            !isStandalone && "nth-[n+3]:hidden @md:nth-[n+3]:block",
           )}
         >
           <ThreadPrimitive.Suggestion prompt={suggestion.prompt} send asChild>
             <Button
               variant="ghost"
               className={cn(
-                'aui-thread-welcome-suggestion dark:hover:bg-accent/60 h-auto w-full border text-left whitespace-break-spaces',
-                d('text-base'),
+                "aui-thread-welcome-suggestion h-auto w-full border text-left whitespace-break-spaces dark:hover:bg-accent/60",
+                d("text-base"),
                 isStandalone
-                  ? `flex-col items-start @sm:flex-row @sm:items-center ${d('gap-sm')} ${d('px-lg')} ${d('py-sm')} ${r('full')}`
-                  : `w-full flex-1 flex-col flex-wrap items-start justify-start ${d('gap-sm')} ${d('px-lg')} ${d('py-md')} ${r('xl')}`
+                  ? `flex-col items-start @sm:flex-row @sm:items-center ${d("gap-sm")} ${d("px-lg")} ${d("py-sm")} ${r("full")}`
+                  : `w-full flex-1 flex-col flex-wrap items-start justify-start ${d("gap-sm")} ${d("px-lg")} ${d("py-md")} ${r("xl")}`,
               )}
               aria-label={suggestion.prompt}
             >
-              <span className="aui-thread-welcome-suggestion-text-1 text-foreground text-sm font-medium">
+              <span className="aui-thread-welcome-suggestion-text-1 text-sm font-medium text-foreground">
                 {suggestion.title}
               </span>
-              <span className="aui-thread-welcome-suggestion-text-2 text-muted-foreground text-sm">
+              <span className="aui-thread-welcome-suggestion-text-2 text-sm text-muted-foreground">
                 {suggestion.label}
               </span>
             </Button>
@@ -334,17 +380,17 @@ const ThreadSuggestions: FC = () => {
         </m.div>
       ))}
     </div>
-  )
-}
+  );
+};
 
 /**
  * Component that handles tool mentions (@tool) in the composer.
  * Shows autocomplete dropdown and badges for mentioned tools.
  */
 const ComposerToolMentions: FC<{
-  tools: Record<string, unknown> | undefined
+  tools: Record<string, unknown> | undefined;
 }> = ({ tools }) => {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const {
     mentionableTools,
@@ -356,61 +402,61 @@ const ComposerToolMentions: FC<{
     handleAutocompleteChange,
     removeMention,
     isActive,
-  } = useToolMentions({ tools })
+  } = useToolMentions({ tools });
 
   // Find and attach to the textarea within the composer.
   // Uses getRootNode() so it works inside Shadow DOM (where document.querySelector can't reach).
   useEffect(() => {
-    if (!isActive) return
+    if (!isActive) return;
 
     const rootNode = containerRef.current?.getRootNode() as
       | Document
       | ShadowRoot
-      | undefined
-    if (!rootNode) return
+      | undefined;
+    if (!rootNode) return;
 
     const observeTarget =
-      rootNode instanceof ShadowRoot ? rootNode : document.body
+      rootNode instanceof ShadowRoot ? rootNode : document.body;
 
     const findTextarea = () => {
       const textarea = rootNode.querySelector(
-        '.aui-composer-input'
-      ) as HTMLTextAreaElement | null
+        ".aui-composer-input",
+      ) as HTMLTextAreaElement | null;
       if (textarea && textareaRef.current !== textarea) {
-        textareaRef.current = textarea
+        textareaRef.current = textarea;
 
-        const handleSelectionChange = () => updateCursorPosition()
-        textarea.addEventListener('click', handleSelectionChange)
-        textarea.addEventListener('keyup', handleSelectionChange)
-        textarea.addEventListener('input', handleSelectionChange)
+        const handleSelectionChange = () => updateCursorPosition();
+        textarea.addEventListener("click", handleSelectionChange);
+        textarea.addEventListener("keyup", handleSelectionChange);
+        textarea.addEventListener("input", handleSelectionChange);
 
         return () => {
-          textarea.removeEventListener('click', handleSelectionChange)
-          textarea.removeEventListener('keyup', handleSelectionChange)
-          textarea.removeEventListener('input', handleSelectionChange)
-        }
+          textarea.removeEventListener("click", handleSelectionChange);
+          textarea.removeEventListener("keyup", handleSelectionChange);
+          textarea.removeEventListener("input", handleSelectionChange);
+        };
       }
-    }
+    };
 
-    const cleanup = findTextarea()
+    const cleanup = findTextarea();
 
     const observer = new MutationObserver(() => {
-      findTextarea()
-    })
+      findTextarea();
+    });
 
     observer.observe(observeTarget, {
       childList: true,
       subtree: true,
-    })
+    });
 
     return () => {
-      cleanup?.()
-      observer.disconnect()
-    }
-  }, [isActive, textareaRef, updateCursorPosition])
+      cleanup?.();
+      observer.disconnect();
+    };
+  }, [isActive, textareaRef, updateCursorPosition]);
 
   if (!isActive) {
-    return null
+    return null;
   }
 
   return (
@@ -433,22 +479,31 @@ const ComposerToolMentions: FC<{
         />
       </AnimatePresence>
     </div>
-  )
-}
+  );
+};
 
 // Resets feedbackHidden when a new message starts generating
 const FeedbackHiddenResetter: FC = () => {
-  const { resetFeedbackHidden } = useChatResolution()
+  const { resetFeedbackHidden } = useChatResolution();
 
   useEffect(() => {
-    resetFeedbackHidden()
-  }, [resetFeedbackHidden])
+    resetFeedbackHidden();
+  }, [resetFeedbackHidden]);
 
-  return null
-}
+  return null;
+};
 
 const ComposerFeedback: FC = () => {
-  const { isResolved, feedbackHidden, setResolved } = useChatResolution()
+  const { isResolved, feedbackHidden, setResolved, submitFeedback } =
+    useChatResolution();
+
+  const handleFeedback = useCallback(
+    async (type: "like" | "dislike") => {
+      const feedback = type === "like" ? "success" : "failure";
+      await submitFeedback(feedback);
+    },
+    [submitFeedback],
+  );
 
   return (
     <ThreadPrimitive.If empty={false}>
@@ -466,65 +521,69 @@ const ComposerFeedback: FC = () => {
               transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
               className="mb-3"
             >
-              <MessageFeedback className="mx-auto" onResolved={setResolved} />
+              <MessageFeedback
+                className="mx-auto"
+                onResolved={setResolved}
+                onFeedback={handleFeedback}
+              />
             </m.div>
           )}
         </AnimatePresence>
       </ThreadPrimitive.If>
     </ThreadPrimitive.If>
-  )
-}
+  );
+};
 
 interface ComposerProps {
-  showFeedback?: boolean
+  showFeedback?: boolean;
 }
 
 const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
-  const { config, mcpTools } = useElements()
-  const { isResolved, setUnresolved } = useChatResolution()
-  const r = useRadius()
-  const d = useDensity()
-  const replayCtx = useReplayContext()
+  const { config, mcpTools } = useElements();
+  const { isResolved, setUnresolved } = useChatResolution();
+  const r = useRadius();
+  const d = useDensity();
+  const replayCtx = useReplayContext();
 
-  const isReplay = replayCtx?.isReplay ?? false
+  const isReplay = replayCtx?.isReplay ?? false;
   const composerConfig = config.composer ?? {
-    placeholder: 'Send a message...',
+    placeholder: "Send a message...",
     attachments: true,
-  }
-  const components = config.components ?? {}
+  };
+  const components = config.components ?? {};
 
   // Determine if tool mentions are enabled (default: true)
   const toolMentionsEnabled =
     composerConfig.toolMentions === undefined ||
     composerConfig.toolMentions === true ||
-    (typeof composerConfig.toolMentions === 'object' &&
-      composerConfig.toolMentions.enabled !== false)
+    (typeof composerConfig.toolMentions === "object" &&
+      composerConfig.toolMentions.enabled !== false);
 
-  const composerRootRef = useRef<HTMLFormElement>(null)
+  const composerRootRef = useRef<HTMLFormElement>(null);
 
   if (components.Composer) {
-    return <components.Composer />
+    return <components.Composer />;
   }
 
   return (
     <div
       className={cn(
-        'aui-composer-wrapper bg-background sticky bottom-0 z-[60] flex w-full flex-col overflow-visible',
-        d('gap-md'),
-        d('py-md'),
-        r('xl')
+        "aui-composer-wrapper sticky bottom-0 z-[60] flex w-full flex-col overflow-visible bg-background",
+        d("gap-md"),
+        d("py-md"),
+        r("xl"),
       )}
     >
       {showFeedback && <ComposerFeedback />}
       <ThreadScrollToBottom />
       {showFeedback && isResolved ? (
         <m.div
-          className="aui-composer-resolved border-input flex min-h-[118px] flex-col items-center justify-center gap-2 border-t px-1"
+          className="aui-composer-resolved flex min-h-[118px] flex-col items-center justify-center gap-2 border-t border-input px-1"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
         >
-          <span className="text-muted-foreground text-sm">
+          <span className="text-sm text-muted-foreground">
             This conversation has been resolved
           </span>
           <Button
@@ -540,9 +599,9 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
         <ComposerPrimitive.Root
           ref={composerRootRef}
           className={cn(
-            'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex min-h-[118px] w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
-            r('xl'),
-            isReplay && 'pointer-events-none opacity-50'
+            "aui-composer-root group/input-group relative flex min-h-[118px] w-full flex-col border border-input bg-background px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-1 has-[textarea:focus-visible]:ring-ring/5 dark:bg-background",
+            r("xl"),
+            isReplay && "pointer-events-none opacity-50",
           )}
         >
           {composerConfig.attachments && <ComposerAttachments />}
@@ -552,9 +611,9 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
           <ComposerPrimitive.Input
             placeholder={composerConfig.placeholder}
             className={cn(
-              'aui-composer-input text-foreground placeholder:text-muted-foreground mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 outline-none focus-visible:ring-0',
-              d('h-input'),
-              d('text-base')
+              "aui-composer-input mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0",
+              d("h-input"),
+              d("text-base"),
             )}
             rows={1}
             autoFocus={!isReplay}
@@ -565,41 +624,41 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
         </ComposerPrimitive.Root>
       )}
     </div>
-  )
-}
+  );
+};
 
 const ComposerModelPicker: FC = () => {
-  const { model, setModel } = useElements()
-  const [popoverOpen, setPopoverOpen] = useState(false)
-  const [tooltipOpen, setTooltipOpen] = useState(false)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const savedScrollPosition = useRef(0)
-  const previousOpenRef = useRef(false)
+  const { model, setModel } = useElements();
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollPosition = useRef(0);
+  const previousOpenRef = useRef(false);
 
   useEffect(() => {
     // Restore scroll position when opening
     if (popoverOpen && !previousOpenRef.current) {
       requestAnimationFrame(() => {
-        const container = scrollContainerRef.current
+        const container = scrollContainerRef.current;
         if (container && container.scrollHeight > 0) {
-          container.scrollTop = savedScrollPosition.current
+          container.scrollTop = savedScrollPosition.current;
         }
-      })
+      });
     }
 
-    previousOpenRef.current = popoverOpen
-  }, [popoverOpen])
+    previousOpenRef.current = popoverOpen;
+  }, [popoverOpen]);
 
   // Close tooltip when popover opens
   useEffect(() => {
     if (popoverOpen) {
-      setTooltipOpen(false)
+      setTooltipOpen(false);
     }
-  }, [popoverOpen])
+  }, [popoverOpen]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    savedScrollPosition.current = e.currentTarget.scrollTop
-  }
+    savedScrollPosition.current = e.currentTarget.scrollTop;
+  };
 
   return (
     <TooltipProvider>
@@ -610,8 +669,8 @@ const ComposerModelPicker: FC = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                data-state={popoverOpen ? 'open' : 'closed'}
-                className="aui-composer-model-picker data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30 flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold"
+                data-state={popoverOpen ? "open" : "closed"}
+                className="aui-composer-model-picker flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
                 aria-label="Model Settings"
               >
                 <Settings2 className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
@@ -632,7 +691,7 @@ const ComposerModelPicker: FC = () => {
                 <Button
                   key={m}
                   onClick={() => {
-                    setModel(m)
+                    setModel(m);
                   }}
                   variant="ghost"
                   className="w-full justify-start gap-2 rounded-none px-2"
@@ -655,21 +714,21 @@ const ComposerModelPicker: FC = () => {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  )
-}
+  );
+};
 
 const CASSETTE_RECORDING_ENABLED =
-  import.meta.env.VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING === 'true'
+  import.meta.env.VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING === "true";
 
 const ComposerCassetteRecorder: FC = () => {
-  const [popoverOpen, setPopoverOpen] = useState(false)
-  const [tooltipOpen, setTooltipOpen] = useState(false)
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
   const { isRecording, startRecording, stopRecording, download } =
-    useRecordCassette()
+    useRecordCassette();
 
   useEffect(() => {
-    if (popoverOpen) setTooltipOpen(false)
-  }, [popoverOpen])
+    if (popoverOpen) setTooltipOpen(false);
+  }, [popoverOpen]);
 
   return (
     <TooltipProvider>
@@ -680,17 +739,17 @@ const ComposerCassetteRecorder: FC = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                data-state={popoverOpen ? 'open' : 'closed'}
+                data-state={popoverOpen ? "open" : "closed"}
                 className={cn(
-                  'aui-composer-cassette-recorder data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30 flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold',
-                  isRecording && 'text-red-500'
+                  "aui-composer-cassette-recorder flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30",
+                  isRecording && "text-red-500",
                 )}
                 aria-label="Cassette Recorder"
               >
                 <CircleIcon
                   className={cn(
-                    'size-5 stroke-[1.5px]',
-                    isRecording && 'animate-pulse fill-red-500 text-red-500'
+                    "size-5 stroke-[1.5px]",
+                    isRecording && "animate-pulse fill-red-500 text-red-500",
                   )}
                 />
               </Button>
@@ -715,9 +774,9 @@ const ComposerCassetteRecorder: FC = () => {
                   variant="outline"
                   className="w-full justify-start gap-2"
                   onClick={() => {
-                    stopRecording()
-                    download()
-                    setPopoverOpen(false)
+                    stopRecording();
+                    download();
+                    setPopoverOpen(false);
                   }}
                 >
                   <DownloadIcon className="size-3" />
@@ -728,20 +787,20 @@ const ComposerCassetteRecorder: FC = () => {
           </PopoverContent>
         </Popover>
         <TooltipContent side="bottom" align="start">
-          {isRecording ? 'Recording…' : 'Cassette Recorder'}
+          {isRecording ? "Recording…" : "Cassette Recorder"}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  )
-}
+  );
+};
 
 const ComposerAction: FC = () => {
-  const { config } = useElements()
-  const r = useRadius()
-  const composerConfig = config.composer ?? { attachments: true }
+  const { config } = useElements();
+  const r = useRadius();
+  const composerConfig = config.composer ?? { attachments: true };
   return (
     <div className="aui-composer-action-wrapper relative mx-1 mt-2 mb-2 flex items-center justify-between">
-      <div className="aui-composer-action-wrapper-inner text-muted-foreground flex items-center">
+      <div className="aui-composer-action-wrapper-inner flex items-center text-muted-foreground">
         {composerConfig.attachments ? (
           <ComposerAddAttachment />
         ) : (
@@ -763,7 +822,7 @@ const ComposerAction: FC = () => {
             type="submit"
             variant="default"
             size="icon"
-            className={cn('aui-composer-send size-[34px] p-1', r('full'))}
+            className={cn("aui-composer-send size-[34px] p-1", r("full"))}
             aria-label="Send message"
           >
             <ArrowUpIcon className="aui-composer-send-icon size-5" />
@@ -778,8 +837,8 @@ const ComposerAction: FC = () => {
             variant="default"
             size="icon"
             className={cn(
-              'aui-composer-cancel border-muted-foreground/60 hover:bg-primary/75 dark:border-muted-foreground/90 size-[34px] border',
-              r('full')
+              "aui-composer-cancel size-[34px] border border-muted-foreground/60 hover:bg-primary/75 dark:border-muted-foreground/90",
+              r("full"),
             )}
             aria-label="Stop generating"
           >
@@ -788,18 +847,18 @@ const ComposerAction: FC = () => {
         </ComposerPrimitive.Cancel>
       </ThreadPrimitive.If>
     </div>
-  )
-}
+  );
+};
 
 const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive dark:bg-destructive/5 dark:text-red-200">
         <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
-  )
-}
+  );
+};
 
 /**
  * Shows the pulsing dot indicator when the message is still running but the
@@ -808,18 +867,18 @@ const MessageError: FC = () => {
  */
 const ToolCallStreamingIndicator: FC = () => {
   const show = useAssistantState(({ message }) => {
-    if (message.status?.type !== 'running') return false
-    const lastPart = message.parts[message.parts.length - 1]
-    return lastPart?.type === 'tool-call'
-  })
-  if (!show) return null
-  return <div className="aui-md mt-2" data-status="running" />
-}
+    if (message.status?.type !== "running") return false;
+    const lastPart = message.parts[message.parts.length - 1];
+    return lastPart?.type === "tool-call";
+  });
+  if (!show) return null;
+  return <div className="aui-md mt-2" data-status="running" />;
+};
 
 const AssistantMessage: FC = () => {
-  const { config } = useElements()
-  const toolsConfig = config.tools ?? {}
-  const components = config.components ?? {}
+  const { config } = useElements();
+  const toolsConfig = config.tools ?? {};
+  const components = config.components ?? {};
 
   const partsComponents = useMemo(
     () => ({
@@ -833,16 +892,16 @@ const AssistantMessage: FC = () => {
       ReasoningGroup: components.ReasoningGroup ?? ReasoningGroup,
       ToolGroup: components.ToolGroup ?? ToolGroup,
     }),
-    [components, toolsConfig.components]
-  )
+    [components, toolsConfig.components],
+  );
 
   return (
     <MessagePrimitive.Root asChild>
       <div
-        className="aui-assistant-message-root animate-in fade-in slide-in-from-bottom-1 relative mx-auto w-full py-4 duration-150 ease-out last:mb-24"
+        className="aui-assistant-message-root relative mx-auto w-full animate-in py-4 duration-150 ease-out fade-in slide-in-from-bottom-1 last:mb-24"
         data-role="assistant"
       >
-        <div className="aui-assistant-message-content text-foreground mx-2 leading-7 wrap-break-word">
+        <div className="aui-assistant-message-content mx-2 leading-7 wrap-break-word text-foreground">
           <MessagePrimitive.Parts components={partsComponents} />
           <ToolCallStreamingIndicator />
           <MessageError />
@@ -854,12 +913,12 @@ const AssistantMessage: FC = () => {
         </div>
       </div>
     </MessagePrimitive.Root>
-  )
-}
+  );
+};
 
 const Image: FC<ImageMessagePartProps> = (props) => {
-  return <img src={props.image} />
-}
+  return <img src={props.image} />;
+};
 
 const AssistantActionBar: FC = () => {
   return (
@@ -867,7 +926,7 @@ const AssistantActionBar: FC = () => {
       hideWhenRunning
       autohide="not-last"
       autohideFloat="single-branch"
-      className="aui-assistant-action-bar-root text-muted-foreground data-floating:bg-background col-start-3 row-start-2 -ml-1 flex gap-1 data-floating:absolute data-floating:rounded-md data-floating:border data-floating:p-1 data-floating:shadow-sm"
+      className="aui-assistant-action-bar-root col-start-3 row-start-2 -ml-1 flex gap-1 text-muted-foreground data-floating:absolute data-floating:rounded-md data-floating:border data-floating:bg-background data-floating:p-1 data-floating:shadow-sm"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
@@ -885,15 +944,15 @@ const AssistantActionBar: FC = () => {
         </TooltipIconButton>
       </ActionBarPrimitive.Reload> */}
     </ActionBarPrimitive.Root>
-  )
-}
+  );
+};
 
 const UserMessage: FC = () => {
-  const r = useRadius()
+  const r = useRadius();
   return (
     <MessagePrimitive.Root asChild>
       <div
-        className="aui-user-message-root animate-in fade-in slide-in-from-bottom-1 mx-auto grid w-full auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-2 px-2 py-4 duration-150 ease-out first:mt-3 last:mb-5 [&:where(>*)]:col-start-2"
+        className="aui-user-message-root mx-auto grid w-full animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-2 px-2 py-4 duration-150 ease-out fade-in slide-in-from-bottom-1 first:mt-3 last:mb-5 [&:where(>*)]:col-start-2"
         data-role="user"
       >
         <UserMessageAttachments />
@@ -901,8 +960,8 @@ const UserMessage: FC = () => {
         <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
           <div
             className={cn(
-              'aui-user-message-content bg-muted text-foreground px-5 py-2.5 wrap-break-word',
-              r('xl')
+              "aui-user-message-content bg-muted px-5 py-2.5 wrap-break-word text-foreground",
+              r("xl"),
             )}
           >
             <MessagePrimitive.Parts />
@@ -915,8 +974,8 @@ const UserMessage: FC = () => {
         <BranchPicker className="aui-user-branch-picker col-span-full col-start-1 row-start-3 -mr-1 justify-end" />
       </div>
     </MessagePrimitive.Root>
-  )
-}
+  );
+};
 
 const UserActionBar: FC = () => {
   return (
@@ -931,15 +990,15 @@ const UserActionBar: FC = () => {
         </TooltipIconButton>
       </ActionBarPrimitive.Edit>
     </ActionBarPrimitive.Root>
-  )
-}
+  );
+};
 
 const EditComposer: FC = () => {
   return (
     <div className="aui-edit-composer-wrapper mx-auto flex w-full flex-col gap-4 px-2 first:mt-4">
-      <ComposerPrimitive.Root className="aui-edit-composer-root bg-muted ml-auto flex w-full max-w-7/8 flex-col rounded-xl">
+      <ComposerPrimitive.Root className="aui-edit-composer-root ml-auto flex w-full max-w-7/8 flex-col rounded-xl bg-muted">
         <ComposerPrimitive.Input
-          className="aui-edit-composer-input text-foreground flex min-h-[60px] w-full resize-none bg-transparent p-4 outline-none"
+          className="aui-edit-composer-input flex min-h-[60px] w-full resize-none bg-transparent p-4 text-foreground outline-none"
           autoFocus
         />
 
@@ -957,8 +1016,8 @@ const EditComposer: FC = () => {
         </div>
       </ComposerPrimitive.Root>
     </div>
-  )
-}
+  );
+};
 
 const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
   className,
@@ -968,8 +1027,8 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
     <BranchPickerPrimitive.Root
       hideWhenSingleBranch
       className={cn(
-        'aui-branch-picker-root text-muted-foreground mr-2 -ml-2 inline-flex items-center text-xs',
-        className
+        "aui-branch-picker-root mr-2 -ml-2 inline-flex items-center text-xs text-muted-foreground",
+        className,
       )}
       {...rest}
     >
@@ -987,5 +1046,5 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
         </TooltipIconButton>
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>
-  )
-}
+  );
+};

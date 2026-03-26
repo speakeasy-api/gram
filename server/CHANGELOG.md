@@ -1,5 +1,204 @@
 # server
 
+## 0.32.0
+
+### Minor Changes
+
+- fbb1c43: Introduced faceted search capabilities to the audit logs, allowing users to filter logs based on actor and action attributes.
+
+  A new endpoint, `GET /rpc/auditlogs.listFacets`, is introduced to retrieve available facets for actors and actions. The existing `GET /rpc/auditlogs.list` endpoint is updated to support filtering by these facets.
+
+### Patch Changes
+
+- e97105d: Normalized OpenAPI HTTP auth scheme casing so extraction and stored metadata behave gracefully for variants like Bearer and Basic
+
+## 0.31.0
+
+### Minor Changes
+
+- 658bef4: Adds new API endpoints for access and permissions management.
+
+### Patch Changes
+
+- 0e5f639: Prevent clobbering API Key Headers when Client Credentials exchange is unconfigured
+
+## 0.30.0
+
+### Minor Changes
+
+- 6265f73: Introduced the audit logs API service and supplementary code to start recording audit logs in other services including new URN types to represent various subjects in Gram.
+
+## 0.29.1
+
+### Patch Changes
+
+- 41d507c: Fixed `GET /rpc/chat.creditUsage` authentication so org-scoped credit usage works correctly for customers with multiple projects, requiring only session auth and no longer allowing chat-session access.
+
+## 0.29.0
+
+### Minor Changes
+
+- 9c75407: Updated the Gram Function runners to run with 1GB of memory instead of 512MB providing more headroom for memory-intensive operations.
+
+## 0.28.1
+
+### Patch Changes
+
+- 7aaeb96: Fix playground OAuth discovery to use toolset-level configuration instead of removed tool-definition fields.
+
+  The frontend now detects OAuth requirements from `toolset.oauthProxyServer` and `toolset.externalOauthServer` instead of inspecting individual external MCP tool definitions (whose `requiresOauth` field was removed in a prior PR). The backend `getExternalOAuthConfig()` gains two new resolution paths — OAuth proxy providers with pre-configured client credentials (skipping DCR) and external OAuth server metadata — before falling back to the legacy tool-definition lookup for backward compatibility.
+
+## 0.28.0
+
+### Minor Changes
+
+- 8c72d8c: Renames attribute_filters to filters in searchLogs, and introduces "in" operator.
+
+### Patch Changes
+
+- 3b0c2c9: Modified deployment logging so that non-https server urls in openapi documents are logged as warnings instead of errors. These urls do not block deployment processing. They are ignored when present.
+- d8133af: Suite of hooks improvements
+- 3bbf15a: Adds agent loop support for all tool types (mainly applicable to slack apps)
+- 686fee5: Add gpt-5.4 support in playground.
+
+## 0.27.1
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- e616da7: Add admin-only cache purging functionality
+
+## 0.27.0
+
+### Minor Changes
+
+- 63d10d0: ## Changeset
+
+  External MCP servers now use the same OAuth configuration pathway as all other toolsets — no more special-cased token resolution.
+
+  The "Configure OAuth" button is now enabled for external MCP servers that require OAuth. When discovered OAuth metadata is available, the configuration form can be auto-populated with a single click.
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+
+## 0.26.1
+
+### Patch Changes
+
+- 1821e46: Adds an initial pass "POC" implementation of Gram hooks for tool capture
+- fb7439b: Improve settings page with tabs routing and logging API
+- 0dab374: Adds ability to track external auth user IDs in telemetry logs.
+- 998102f: Update telemetry search logs API response to sent unix nano timestamps as strings instead of int.
+
+## 0.26.0
+
+### Minor Changes
+
+- 125d6c9: adds the ability to install slack apps through the Gram UI
+
+## 0.25.0
+
+### Minor Changes
+
+- f364cc0: Adds listAttributeKeys endpoint to retrieve distinct attribute keys for telemetry filtering.
+
+### Patch Changes
+
+- e2c00cb: Adds a new filtering option to the search logs endpoint to filter any attribute.
+
+## 0.24.0
+
+### Minor Changes
+
+- 0f4f5dd: Adds an opt-in toggle for recording tool call inputs/outputs in logs
+
+### Patch Changes
+
+- 3f5e4e9: Open CORS policy on /openapi.yaml and serve as text/yaml to avoid browser download.
+- c4baf37: Redesign source detail page with two-panel deployments and invocation activity to give users a high level overview of a sources's utilisation in any MCP servers.
+
+## 0.23.5
+
+### Patch Changes
+
+- 3c3e2c2: Refactored the server codebase to make the Temporal task queue configurable to unblock staging and preview deploys.
+
+## 0.23.4
+
+### Patch Changes
+
+- 62c6784: Show Elements errors inside the actual chat
+
+## 0.23.3
+
+### Patch Changes
+
+- bc50d89: Attempt OAuth discovery for MCP servers returning AuthRejectedError. Previously when a user adds a catalog MCP server without OAuth2.1 (like HubSpot) to their project and opens it
+  in the playground, there's no way to configure authentication — the AUTHENTICATION section is completely missing. This happens because the server returns `401` without a `WWW-Authenticate header` (or `403`)
+  during the initial connection probe, which triggers the `AuthRejectedError` path. That path currently just logs and continues, storing zero auth metadata. The frontend then sees no OAuth config and no header
+  definitions, so it shows "No authentication required." Servers like linear with Oauth2.1 works correctly because its MCP server returns 401 with a WWW-Authenticate header, triggering the `OAuthRequiredError` path which runs full OAuth discovery.
+- e00adba: Fix same-origin requests failing with "Origin does not match audience claim" error in chat sessions CORS middleware.
+
+  Browsers don't send Origin headers for same-origin GET/HEAD requests. The middleware now validates the Host header against audience claims when Origin is absent, allowing legitimate same-origin requests while still preventing cross-origin bypass attacks.
+
+## 0.23.2
+
+### Patch Changes
+
+- 84736c7: Support tool annotations in functions framework. Adds `ToolAnnotations` type allowing function authors to specify annotations via `Gram.tool({ annotations: { ... } })`
+- 7dae1a8: Persist annotations from external MCP servers in the Catalog to the database
+
+## 0.23.1
+
+### Patch Changes
+
+- 02503b5: fix an issue wherein we fail to account external MCP tools in deployment stats
+
+## 0.23.0
+
+### Minor Changes
+
+- 9df7d84: Add observability features including telemetry logs, traces, chat logs with AI-powered resolution analysis, and an overview dashboard with time-series metrics.
+
+## 0.22.5
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+## 0.22.4
+
+### Patch Changes
+
+- b2347fc: Adds a new telemetry endpoint to fetch user usage data
+- cd7a003: feat: record api key id in telemetry logs
+- a34d18a: Adds chat resolution stats in telemetry metrics
+
+## 0.22.3
+
+### Patch Changes
+
+- e246458: Starts writing chat resolution telemetry data.
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 4ef4d5e: fix: allow surfacing openapi parse errors in the UI
+- 6e29702: Adds a new endpoint to get metrics per user. Allows filtering logs per user.
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+
 ## 0.22.2
 
 ### Patch Changes
@@ -180,6 +379,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level
@@ -602,11 +802,13 @@
   ```
 
   Notably:
+
   - The file must export an async function called `handleToolCall` which takes the tool name and input object as parameters.
   - This function must return a `Response` object.
   - You can use any npm packages you like but you must ensure they are included in the zip file.
 
   ## What is currently supported?
+
   - We currently only support TypeScript/JavaScript functions and deploy them into small Firecracker microVMs running Node.js v22.
   - Each function zip file must be a little under 750KiB in size or less than 1MiB when encoded in base64.
   - Third-party dependencies are supported but you must decide how to include in zip archives. You may bundle everything into a single file or include a `package.json` and node_modules directory in the zip file. As long as the total size is under the limit, it should work.

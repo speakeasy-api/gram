@@ -45,6 +45,12 @@ func (s *Service) CreateLog(params LogParams) {
 		return
 	}
 
+	// Scrub tool IO content if the feature is disabled for this organization.
+	if !s.CheckToolIOLogsEnabled(ctx, params.ToolInfo.OrganizationID) {
+		delete(params.Attributes, attr.GenAIToolCallArgumentsKey)
+		delete(params.Attributes, attr.GenAIToolCallResultKey)
+	}
+
 	logParams, err := buildTelemetryLogParams(params)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))
@@ -72,8 +78,6 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	observedTimeUnixNano := time.Now().UnixNano()
 	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
-
-	// Manually add service name, as it's always going to be gram server
 	allAttrs[attr.ServiceNameKey] = serviceName
 
 	spanAttrs, resourceAttrs, err := parseAttributes(allAttrs)
@@ -100,9 +104,9 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		GramDeploymentID:     deploymentID,
 		GramFunctionID:       params.ToolInfo.FunctionID,
 		GramURN:              params.ToolInfo.URN,
-		ServiceName:    serviceName,
-		ServiceVersion: getStringPtr(allAttrs, attr.ServiceVersionKey),
-		GramChatID:     getStringPtr(allAttrs, attr.GenAIConversationIDKey),
+		ServiceName:          serviceName,
+		ServiceVersion:       getStringPtr(allAttrs, attr.ServiceVersionKey),
+		GramChatID:           getStringPtr(allAttrs, attr.GenAIConversationIDKey),
 	}, nil
 }
 
@@ -222,4 +226,42 @@ func getStringPtr(attrs map[attr.Key]any, key attribute.Key) *string {
 		return nil
 	}
 	return &s
+}
+
+// UpdateToolSourceBulk updates the tool_call.source attribute in ClickHouse for all logs
+// matching the given project and old source name. This is used to backfill historical
+// records when a name mapping is discovered.
+//
+// Note: This uses ALTER TABLE...UPDATE which is an async mutation in ClickHouse.
+// Materialized columns (tool_source) derive from the attributes JSON and will reflect
+// changes on next read, but the mutation itself may take time to complete.
+func (s *Service) UpdateToolSourceBulk(ctx context.Context, projectID, oldSource, newSource string) error {
+	if oldSource == "" || newSource == "" {
+		return fmt.Errorf("oldSource and newSource cannot be empty")
+	}
+
+	// ClickHouse doesn't have JSONSet. We use replaceAll on the JSON string representation
+	// to update the nested value. This is safe because we're matching the exact JSON key-value pair.
+	query := `
+		ALTER TABLE telemetry_logs
+		UPDATE attributes = CAST(
+			replaceAll(
+				toString(attributes),
+				concat('"gram.tool_call.source":"', ?, '"'),
+				concat('"gram.tool_call.source":"', ?, '"')
+			),
+			'JSON'
+		)
+		WHERE project_id = ?
+		  AND toString(attributes.gram.tool_call.source) = ?
+	`
+
+	err := s.chConn.Exec(ctx, query, oldSource, newSource, projectID, oldSource)
+	if err != nil {
+		return fmt.Errorf("execute ClickHouse mutation: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, fmt.Sprintf("initiated ClickHouse tool source update mutation: project_id=%s old_source=%s new_source=%s", projectID, oldSource, newSource))
+
+	return nil
 }

@@ -33,7 +33,7 @@ var (
 	}
 )
 
-var supportedRuntimes = map[string]struct{}{"nodejs:22": {}}
+var supportedRuntimes = map[string]struct{}{"nodejs:22": {}, "nodejs:24": {}}
 
 type StageFunctionOptions struct {
 	ConfigFile string

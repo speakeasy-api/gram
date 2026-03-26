@@ -1,7 +1,7 @@
-@import 'tw-animate-css';
-@import 'tw-shimmer';
+@import "tw-animate-css";
+@import "tw-shimmer";
 @layer theme, base, components, utilities;
-@import 'tailwindcss/theme.css' layer(theme);
+@import "tailwindcss/theme.css" layer(theme);
 
 @custom-variant dark (&:is(.dark *));
 
@@ -55,8 +55,8 @@
 
   /* Scoped preflight/base styles */
   font-family:
-    ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-    'Segoe UI Symbol', 'Noto Color Emoji';
+    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
   font-feature-settings: normal;
   font-variation-settings: normal;
   -webkit-font-smoothing: antialiased;
@@ -215,9 +215,9 @@
     }
 
     button,
-    input:where([type='button']),
-    input:where([type='reset']),
-    input:where([type='submit']) {
+    input:where([type="button"]),
+    input:where([type="reset"]),
+    input:where([type="submit"]) {
       appearance: button;
       -webkit-appearance: button;
       background-color: transparent;
@@ -239,20 +239,20 @@
 }
 
 /* Theme: Radius variants via data attribute - scoped */
-.gram-elements[data-radius='sharp'],
-[data-radius='sharp'] .gram-elements {
+.gram-elements[data-radius="sharp"],
+[data-radius="sharp"] .gram-elements {
   --radius: 0.25rem;
 }
-.gram-elements[data-radius='soft'],
-[data-radius='soft'] .gram-elements {
+.gram-elements[data-radius="soft"],
+[data-radius="soft"] .gram-elements {
   --radius: 0.625rem;
 }
-.gram-elements[data-radius='round'],
-[data-radius='round'] .gram-elements {
+.gram-elements[data-radius="round"],
+[data-radius="round"] .gram-elements {
   --radius: 1rem;
 }
-.gram-elements[data-radius='pill'],
-[data-radius='pill'] .gram-elements {
+.gram-elements[data-radius="pill"],
+[data-radius="pill"] .gram-elements {
   --radius: 9999px;
 }
 
@@ -263,26 +263,26 @@
   }
 }
 
-.gram-elements :where(.aui-md[data-status='running']):empty::after,
+.gram-elements :where(.aui-md[data-status="running"]):empty::after,
 .gram-elements
-  :where(.aui-md[data-status='running'])
+  :where(.aui-md[data-status="running"])
   > :where(:not(ol):not(ul):not(pre)):last-child::after,
 .gram-elements
-  :where(.aui-md[data-status='running'])
+  :where(.aui-md[data-status="running"])
   > pre:last-child
   code::after,
 .gram-elements
-  :where(.aui-md[data-status='running'])
+  :where(.aui-md[data-status="running"])
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child:not(:has(* > li)))::after,
 .gram-elements
-  :where(.aui-md[data-status='running'])
+  :where(.aui-md[data-status="running"])
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child)
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child:not(:has(* > li)))::after,
 .gram-elements
-  :where(.aui-md[data-status='running'])
+  :where(.aui-md[data-status="running"])
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child)
   > :where(:is(ol, ul):last-child)
@@ -291,9 +291,9 @@
   > :where(li:last-child)::after {
   animation: aui-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   font-family:
-    ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-    'Segoe UI Symbol', 'Noto Color Emoji';
-  --aui-content: '\25cf';
+    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+  --aui-content: "\25cf";
   content: var(--aui-content);
   margin-left: 0.25rem;
   margin-right: 0.25rem;

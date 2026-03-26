@@ -1,5 +1,4 @@
 import { CodeBlock } from "@/components/code";
-import { Textarea } from "@/components/moon/textarea";
 import { Dialog } from "@/components/ui/dialog";
 import { Label as Heading } from "@/components/ui/label";
 import { Link } from "@/components/ui/link";
@@ -7,10 +6,8 @@ import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import type { McpMetadata } from "@gram/client/models/components";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateGetMcpMetadata,
-  useGetMcpMetadata,
   useMcpMetadataSetMutation,
 } from "@gram/client/react-query";
 import { Button, cn, Icon, Input, Stack } from "@speakeasy-api/moonshine";
@@ -28,6 +25,8 @@ import { CompactUpload, useAssetImageUploadHandler } from "../upload";
 
 interface ConfigFormProps {
   toolset: Toolset;
+  form: UseMcpMetadataMetadataFormResult;
+  isLoading: boolean;
 }
 
 interface MetadataParams {
@@ -48,9 +47,11 @@ type ValidationResult =
       message: string;
     };
 
-interface UseMcpMetadataMetadataFormResult {
+export interface UseMcpMetadataMetadataFormResult {
   valid: ValidationResult;
   dirty: boolean;
+  brandingDirty: boolean;
+  instructionsDirty: boolean;
   isLoading: boolean;
   metadataParams: MetadataParams;
   logoUploadHandlers: {
@@ -77,7 +78,10 @@ interface UseMcpMetadataMetadataFormResult {
     onChange: ChangeEventHandler<HTMLInputElement>;
   };
   reset: () => void;
+  resetBranding: () => void;
+  resetInstructions: () => void;
   save: () => void;
+  saveAsync: () => Promise<void>;
 }
 
 /*This is better implemented by taking a slice of the server state and running
@@ -92,7 +96,7 @@ function equalsServerState(
   });
 }
 
-function useMcpMetadataMetadataForm(
+export function useMcpMetadataMetadataForm(
   toolsetSlug: string,
   currentMetadata?: McpMetadata,
 ): UseMcpMetadataMetadataFormResult {
@@ -178,6 +182,28 @@ function useMcpMetadataMetadataForm(
     return false;
   }, [currentMetadata, metadataParams]);
 
+  const brandingDirty = useMemo(() => {
+    const brandingKeys = [
+      "logoAssetId",
+      "externalDocumentationUrl",
+      "externalDocumentationText",
+      "installationOverrideUrl",
+    ] as const;
+    if (!currentMetadata) {
+      return brandingKeys.some((key) => metadataParams[key] !== undefined);
+    }
+    return brandingKeys.some(
+      (key) => metadataParams[key] !== currentMetadata[key],
+    );
+  }, [currentMetadata, metadataParams]);
+
+  const instructionsDirty = useMemo(() => {
+    if (!currentMetadata) {
+      return metadataParams.instructions !== undefined;
+    }
+    return metadataParams.instructions !== currentMetadata.instructions;
+  }, [currentMetadata, metadataParams.instructions]);
+
   const handleUpload = useAssetImageUploadHandler((assetResult) => {
     setMetadataParams((prev) => ({
       ...prev,
@@ -195,8 +221,36 @@ function useMcpMetadataMetadataForm(
     });
   }, [currentMetadata]);
 
+  const resetBranding = useCallback(() => {
+    setMetadataParams((prev) => ({
+      ...prev,
+      logoAssetId: currentMetadata?.logoAssetId,
+      externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
+      externalDocumentationText: currentMetadata?.externalDocumentationText,
+      installationOverrideUrl: currentMetadata?.installationOverrideUrl,
+    }));
+  }, [currentMetadata]);
+
+  const resetInstructions = useCallback(() => {
+    setMetadataParams((prev) => ({
+      ...prev,
+      instructions: currentMetadata?.instructions,
+    }));
+  }, [currentMetadata]);
+
   const save = useCallback(() => {
     mutation.mutate({
+      request: {
+        setMcpMetadataRequestBody: {
+          toolsetSlug,
+          ...metadataParams,
+        },
+      },
+    });
+  }, [toolsetSlug, metadataParams, mutation]);
+
+  const saveAsync = useCallback(async () => {
+    await mutation.mutateAsync({
       request: {
         setMcpMetadataRequestBody: {
           toolsetSlug,
@@ -209,6 +263,8 @@ function useMcpMetadataMetadataForm(
   return {
     valid: urlValid,
     dirty,
+    brandingDirty,
+    instructionsDirty,
     isLoading: mutation.isPending,
     metadataParams,
     logoUploadHandlers: {
@@ -262,26 +318,20 @@ function useMcpMetadataMetadataForm(
         })),
     },
     reset,
+    resetBranding,
+    resetInstructions,
     save,
+    saveAsync,
   };
 }
 
-export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
+export function InstallPageConfigForm({
+  toolset,
+  form,
+  isLoading,
+}: ConfigFormProps) {
   const { installPageUrl } = useMcpUrl(toolset);
   const [open, setOpen] = useState(false);
-
-  const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
-    retry: (_, err) => {
-      if (err instanceof GramError && err.statusCode === 404) {
-        return false;
-      }
-      return true;
-    },
-    throwOnError: false,
-  });
-
-  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
-  const isLoading = result.isLoading || form.isLoading;
 
   if (!installPageUrl) {
     return null;
@@ -304,16 +354,24 @@ export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
           </Button.RightIcon>
         </Button>
       </Link>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            form.resetBranding();
+          }
+          setOpen(nextOpen);
+        }}
+      >
         <Dialog.Trigger asChild>
           <Button variant="secondary">
-            <Button.Text>Edit</Button.Text>
+            <Button.Text>Branding</Button.Text>
             <Button.RightIcon>
               <Icon name="settings" />
             </Button.RightIcon>
           </Button>
         </Dialog.Trigger>
-        <Dialog.Content className="min-w-2xl max-w-3xl">
+        <Dialog.Content>
           <Dialog.Header>
             <Dialog.Title>Install Page Configuration</Dialog.Title>
           </Dialog.Header>
@@ -391,43 +449,12 @@ export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
                 </span>
               )}
             </div>
-            <div>
-              <Heading> Server Instructions </Heading>
-              <Type muted small className="max-w-2xl">
-                Instructions returned to LLMs when they connect to your MCP
-                server. Use this to provide context about your tools, usage
-                patterns, and any important constraints.
-              </Type>
-            </div>
-            <div>
-              <Textarea
-                placeholder={`[Server Name] - [One-line purpose]
-
-## Key Capabilities
-
-[Brief list of main features]
-
-## Usage Patterns
-
-[How tools/resources work together]
-
-## Important Notes
-
-[Critical constraints or requirements]
-
-## Performance
-
-[Expected behavior, timing, limits]`}
-                className="w-full min-h-[120px] max-h-[200px]"
-                {...form.instructionsHandlers}
-              />
-            </div>
           </Stack>
           <Dialog.Footer>
             <Button
               variant="tertiary"
-              disabled={!form.dirty}
-              onClick={form.reset}
+              disabled={!form.brandingDirty}
+              onClick={form.resetBranding}
             >
               <Button.Text>Discard</Button.Text>
             </Button>
@@ -436,7 +463,7 @@ export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
                 form.save();
                 setOpen(false);
               }}
-              disabled={isLoading || !form.valid.valid || !form.dirty}
+              disabled={isLoading || !form.valid.valid || !form.brandingDirty}
             >
               <Button.Text>Save</Button.Text>
             </Button>

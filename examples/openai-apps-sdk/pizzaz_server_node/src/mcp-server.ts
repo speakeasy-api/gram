@@ -28,7 +28,8 @@ type PizzazWidget = {
 };
 
 function getWidgetHtml(componentName: string): string {
-  const html = WIDGET_HTML_TEMPLATES[componentName as keyof typeof WIDGET_HTML_TEMPLATES];
+  const html =
+    WIDGET_HTML_TEMPLATES[componentName as keyof typeof WIDGET_HTML_TEMPLATES];
   if (!html) {
     throw new Error(`Widget HTML template for "${componentName}" not found.`);
   }
@@ -54,7 +55,7 @@ const widgets: PizzazWidget[] = [
     invoked: "Served a fresh map",
     html: getWidgetHtml("pizzaz"),
     responseText: "Rendered a pizza map!",
-  }
+  },
 ];
 
 const widgetsById = new Map<string, PizzazWidget>();
@@ -122,14 +123,14 @@ export function createPizzazServer(): Server {
         resources: {},
         tools: {},
       },
-    }
+    },
   );
 
   server.setRequestHandler(
     ListResourcesRequestSchema,
     async (_request: ListResourcesRequest) => ({
       resources,
-    })
+    }),
   );
 
   server.setRequestHandler(
@@ -151,21 +152,21 @@ export function createPizzazServer(): Server {
           },
         ],
       };
-    }
+    },
   );
 
   server.setRequestHandler(
     ListResourceTemplatesRequestSchema,
     async (_request: ListResourceTemplatesRequest) => ({
       resourceTemplates,
-    })
+    }),
   );
 
   server.setRequestHandler(
     ListToolsRequestSchema,
     async (_request: ListToolsRequest) => ({
       tools,
-    })
+    }),
   );
 
   server.setRequestHandler(
@@ -191,7 +192,7 @@ export function createPizzazServer(): Server {
         },
         _meta: widgetMeta(widget),
       };
-    }
+    },
   );
 
   return server;

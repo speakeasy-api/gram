@@ -1,27 +1,27 @@
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
+import { Chat } from "..";
+import type { Meta, StoryFn } from "@storybook/react-vite";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/Sidecar',
+  title: "Chat/Sidecar",
   component: Chat,
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
 export const Sidecar: StoryFn<typeof Chat> = () => {
-  return <Chat />
-}
+  return <Chat />;
+};
 
 Sidecar.parameters = {
-  elements: { config: { variant: 'sidecar' } },
-}
+  elements: { config: { variant: "sidecar" } },
+};
 
 export const SidecarWithTitle: StoryFn<typeof Chat> = () => {
-  return <Chat />
-}
+  return <Chat />;
+};
 
 SidecarWithTitle.parameters = {
   elements: {
-    config: { variant: 'sidecar', sidecar: { title: 'Chat with me' } },
+    config: { variant: "sidecar", sidecar: { title: "Chat with me" } },
   },
-}
+};

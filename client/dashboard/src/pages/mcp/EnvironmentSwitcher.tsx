@@ -1,7 +1,7 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Button } from "@speakeasy-api/moonshine";
-import { Plus } from "lucide-react";
+import { Plus, Unlink } from "lucide-react";
 import {
   EnvironmentVariable,
   environmentHasAllRequiredVariables,
@@ -25,6 +25,7 @@ interface EnvironmentSwitcherProps {
   onSaveAll: () => void;
   onCancelAll: () => void;
   onSetDefaultEnvironment: () => void;
+  onDetachEnvironment: () => void;
   onCreateEnvironment: () => void;
 }
 
@@ -40,28 +41,33 @@ export function EnvironmentSwitcher({
   onSaveAll,
   onCancelAll,
   onSetDefaultEnvironment,
+  onDetachEnvironment,
   onCreateEnvironment,
 }: EnvironmentSwitcherProps) {
-  // Sort environments with attached environment first
-  const attachedEnvSlug =
+  // Sort environments with attached environment first, falling back to default for sort order only
+  const sortSlug =
     mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default";
   const sortedEnvironments = [...environments].sort((a, b) => {
-    if (a.slug === attachedEnvSlug) return -1;
-    if (b.slug === attachedEnvSlug) return 1;
+    if (a.slug === sortSlug) return -1;
+    if (b.slug === sortSlug) return 1;
     return 0;
   });
 
   // Helper to get display name for environment
   const getEnvironmentDisplayName = (env: Environment) => {
-    if (env.slug === "default") return "Project";
+    if (env.slug === "default") return "Default";
     return env.name;
   };
 
-  const isViewingNonDefault = selectedEnvironmentView !== attachedEnvSlug;
-  const hasAllRequired = environmentHasAllRequiredVariables(
-    attachedEnvSlug,
-    requiredVars,
-  );
+  const isViewingNonAttached = mcpAttachedEnvironmentSlug
+    ? selectedEnvironmentView !== mcpAttachedEnvironmentSlug
+    : true; // If nothing is attached, every environment is "non-attached"
+  const hasAllRequired = mcpAttachedEnvironmentSlug
+    ? environmentHasAllRequiredVariables(
+        mcpAttachedEnvironmentSlug,
+        requiredVars,
+      )
+    : false;
 
   if (environments.length === 0) {
     return null;
@@ -72,7 +78,9 @@ export function EnvironmentSwitcher({
       {/* Environment tabs */}
       {sortedEnvironments.map((env) => {
         const isSelected = selectedEnvironmentView === env.slug;
-        const isAttachedEnv = env.slug === attachedEnvSlug;
+        const isAttachedEnv =
+          mcpAttachedEnvironmentSlug != null &&
+          env.slug === mcpAttachedEnvironmentSlug;
         const envHasAllRequired = environmentHasAllRequiredVariables(
           env.slug,
           requiredVars,
@@ -138,31 +146,45 @@ export function EnvironmentSwitcher({
               <span className="text-xs text-muted-foreground">
                 Fill in required values to save
               </span>
-            ) : isViewingNonDefault ? (
-              // Viewing non-default env - show Make Default
-              <SimpleTooltip tooltip="Set this as the default environment for this MCP server">
+            ) : isViewingNonAttached ? (
+              // Viewing non-attached env - show Attach
+              <SimpleTooltip tooltip="Attach this environment to this MCP server">
                 <Button
                   onClick={onSetDefaultEnvironment}
                   variant="secondary"
                   size="xs"
                 >
-                  <Button.Text>Make Default</Button.Text>
+                  <Button.Text>Attach</Button.Text>
                 </Button>
               </SimpleTooltip>
             ) : hasExistingConfigs ? (
-              // Has configs, on default env - show new environment option
-              <SimpleTooltip tooltip="Create a new environment with different values">
-                <Button
-                  onClick={onCreateEnvironment}
-                  variant="secondary"
-                  size="xs"
-                >
-                  <Button.LeftIcon>
-                    <Plus className="w-3.5 h-3.5" />
-                  </Button.LeftIcon>
-                  <Button.Text>New Environment</Button.Text>
-                </Button>
-              </SimpleTooltip>
+              // Has configs, on attached env - show new environment and detach options
+              <>
+                <SimpleTooltip tooltip="Create a new environment with different values">
+                  <Button
+                    onClick={onCreateEnvironment}
+                    variant="secondary"
+                    size="xs"
+                  >
+                    <Button.LeftIcon>
+                      <Plus className="w-3.5 h-3.5" />
+                    </Button.LeftIcon>
+                    <Button.Text>New Environment</Button.Text>
+                  </Button>
+                </SimpleTooltip>
+                <SimpleTooltip tooltip="Detach this environment from this MCP server">
+                  <Button
+                    onClick={onDetachEnvironment}
+                    variant="tertiary"
+                    size="xs"
+                  >
+                    <Button.LeftIcon>
+                      <Unlink className="w-3.5 h-3.5" />
+                    </Button.LeftIcon>
+                    <Button.Text>Detach</Button.Text>
+                  </Button>
+                </SimpleTooltip>
+              </>
             ) : null}
           </>
         )}

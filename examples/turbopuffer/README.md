@@ -82,6 +82,7 @@ npm run seed
 ```
 
 This command will:
+
 1. Check if data already exists (to avoid duplicates)
 2. Extract ~5,000 movies from the shared dataset at `/assets/movies_dataset_with_embeddings.csv.zip`
 3. Upload movies with pre-computed embeddings to Turbopuffer
@@ -108,6 +109,7 @@ This opens an interactive playground where you can test the `search` tool. Try t
 ### Search Tool Parameters
 
 The `search` tool accepts:
+
 - `query` (required): Your natural language search query
 - `limit` (optional): Maximum number of results (1-100, default: 10)
 
@@ -146,6 +148,7 @@ The semantic search system works in three steps:
 ### Why Semantic Search?
 
 Traditional keyword search only matches exact words. Vector similarity search understands semantic meaning:
+
 - "space adventure" matches "Star Wars" even though those exact words aren't in the description
 - "romantic comedy" matches movies tagged as "Romance" or "Comedy"
 - Searches work across different phrasings of the same concept
@@ -169,6 +172,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 ### Key Files
 
 **`src/gram.ts`**: Defines the `search` tool that:
+
 - Generates embeddings for search queries using OpenRouter
 - Queries Turbopuffer using vector similarity search
 - Returns ranked results with similarity scores
@@ -199,5 +203,6 @@ After deploying, users can install your MCP server and use the semantic search t
 ## Learn More
 
 To learn more about building Gram Functions, check out:
+
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Framework usage guide
 - [CLAUDE.md](./CLAUDE.md) - Development guidelines

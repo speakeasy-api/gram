@@ -1,68 +1,3 @@
-create table if not exists http_requests_raw
-(
-    id                  UUID DEFAULT generateUUIDv7(),
-    ts                  DateTime64(3, 'UTC'),
-    organization_id     UUID,
-    project_id          UUID,
-    deployment_id       Nullable(UUID),
-    tool_id             UUID,
-    tool_urn            String,
-    tool_type           LowCardinality(String),
-
-    trace_id            FixedString(32),
-    span_id             FixedString(16),
-
-    http_method         LowCardinality(String),
-    http_server_url     String,
-    http_route          String,
-    status_code         Int64,
-    duration_ms         Float64,
-    user_agent          LowCardinality(String),
-
-    request_headers     Map(String, String) CODEC (ZSTD),
-    request_body_bytes  Int64,
-
-    response_headers    Map(String, String) CODEC (ZSTD),
-    response_body_bytes Int64
-) engine = MergeTree
-      ORDER BY (toUInt128(project_id), ts)
-      TTL ts + toIntervalDay(30)
-      SETTINGS index_granularity = 8192
-      COMMENT 'Stores raw HTTP tool call requests and responses';
-
-CREATE INDEX IF NOT EXISTS idx_tool_type ON http_requests_raw (tool_type) TYPE set (0) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_status_code ON http_requests_raw (status_code) TYPE set (100) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_tool_urn_exact ON http_requests_raw (tool_urn) TYPE bloom_filter(0.01) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_tool_urn_substring ON http_requests_raw (tool_urn) TYPE ngrambf_v1(4, 30720, 3, 0) GRANULARITY 4;
-
-CREATE TABLE IF NOT EXISTS tool_logs (
-    id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
-    timestamp DateTime64(3, 'UTC') COMMENT 'Timestamp at which log was generated.' CODEC(Delta, ZSTD),
-    instance String COMMENT 'Name of the machine instance that generated the log (e.g. snowy-water-123).' CODEC(ZSTD),
-    level LowCardinality(String) COMMENT 'Log level.',
-    source LowCardinality(String) COMMENT 'The log source (server or user).',
-
-    raw_log String COMMENT 'Full log as sent by the server (function logs are wrapped by this log).' CODEC(ZSTD),
-    message Nullable(String) COMMENT 'The message output from the function log.' CODEC(ZSTD),
-    attributes JSON COMMENT 'The log attributes (extra fields from structured json logs).' CODEC(ZSTD),
-
-    project_id UUID COMMENT 'ID of the project where the gram function ran.',
-    deployment_id UUID COMMENT 'Deployment ID associated with the gram function run.',
-    function_id UUID COMMENT 'ID of the gram function.'
-) ENGINE = MergeTree()
-PARTITION BY toYYYYMMDD(timestamp)
-ORDER BY (project_id, timestamp, instance)
-TTL timestamp + INTERVAL 30 DAY
-SETTINGS index_granularity = 8192
-COMMENT 'Stores logs from Gram function executions';
-
-CREATE INDEX IF NOT EXISTS idx_project_id ON tool_logs (project_id) TYPE bloom_filter(0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_deployment_id ON tool_logs (deployment_id) TYPE bloom_filter(0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_function_id ON tool_logs (function_id) TYPE bloom_filter(0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_instance ON tool_logs (instance) TYPE bloom_filter(0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_source ON tool_logs (source) TYPE set(0) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_level ON tool_logs (level) TYPE set(0) GRANULARITY 4;
-
 CREATE TABLE IF NOT EXISTS telemetry_logs (
     -- OTel Log Record Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
@@ -71,13 +6,13 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
     observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta, ZSTD),
     observed_timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(observed_time_unix_nano) COMMENT 'Human-readable timestamp derived from observed_time_unix_nano.',
-    
+
     -- OTel Severity
     severity_text LowCardinality(Nullable(String)) COMMENT 'Text representation of severity (DEBUG, INFO, WARN, ERROR, FATAL).',
-    
+
     -- OTel Body (the actual log content/message)
     body String COMMENT 'The primary log message extracted from the log record. For structured logs, this is the human-readable message component.' CODEC(ZSTD),
-    
+
     -- OTel Trace Context (for distributed tracing)
     trace_id Nullable(FixedString(32)) COMMENT 'W3C trace ID linking related logs across services.',
     span_id Nullable(FixedString(16)) COMMENT 'W3C span ID for specific operation within a trace.',
@@ -95,7 +30,27 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     gram_urn String COMMENT 'The Gram URN (e.g. tools:function:my-source:my-tool).',
     service_name LowCardinality(String) COMMENT 'Logical service name (e.g., gram-functions, gram-http-gateway).',
     service_version Nullable(String) COMMENT 'Service version.',
-    gram_chat_id Nullable(String) COMMENT 'The Chat ID associated with the log (if generated by chat).'
+    gram_chat_id Nullable(String) COMMENT 'The Chat ID associated with the log (if generated by chat).',
+
+    -- Materialized fields (auto-extracted from JSON for fast filtering)
+    -- These duplicate the above denormalized fields but are auto-computed from JSON at insert time.
+    -- New code should prefer these over the gram_* columns above.
+    -- Note: We avoid Nullable for observability data per ClickHouse best practices (storage overhead, query performance).
+    -- Note: ClickHouse auto-unflattens dotted keys (e.g. "gram.project.id" becomes nested {gram:{project:{id:...}}})
+    --       so we use dot notation to access nested paths. See: https://github.com/ClickHouse/ClickHouse/issues/69846
+    project_id String MATERIALIZED toString(attributes.gram.project.id) COMMENT 'Project ID (materialized from attributes.gram.project.id).',
+    deployment_id String MATERIALIZED toString(resource_attributes.gram.deployment.id) COMMENT 'Deployment ID (materialized from resource_attributes.gram.deployment.id).',
+    function_id String MATERIALIZED toString(attributes.gram.function.id) COMMENT 'Function ID (materialized from attributes.gram.function.id).',
+    urn String MATERIALIZED toString(attributes.gram.tool.urn) COMMENT 'Tool URN (materialized from attributes.gram.tool.urn).',
+    chat_id String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id).',
+    user_id String MATERIALIZED toString(attributes.user.id) COMMENT 'User ID (materialized from attributes.user.id).',
+    external_user_id String MATERIALIZED toString(attributes.gram.external_user.id) COMMENT 'External user ID (materialized from attributes.gram.external_user.id).',
+    api_key_id String MATERIALIZED toString(attributes.gram.api_key.id) COMMENT 'API key ID (materialized from attributes.gram.api_key.id).',
+    evaluation_score_label String MATERIALIZED toString(attributes.gen_ai.evaluation.score.label) COMMENT 'Evaluation result label (success, failure, partial, abandoned).',
+    tool_name String MATERIALIZED toString(attributes.gram.tool.name) COMMENT 'Tool name (materialized from attributes.gram.tool.name).',
+    tool_source String MATERIALIZED toString(attributes.gram.tool_call.source) COMMENT 'Tool call source (materialized from attributes.gram.tool_call.source).',
+    event_source String MATERIALIZED toString(attributes.gram.event.source) COMMENT 'Event source (materialized from attributes.gram.event.source).',
+    toolset_slug String MATERIALIZED toString(attributes.gram.toolset.slug) COMMENT 'Toolset slug (materialized from attributes.gram.toolset.slug).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -104,7 +59,7 @@ SETTINGS index_granularity = 8192
 COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requests, function logs, etc.)';
 
 -- Note: gram_project_id is already first in ORDER BY, so no bloom filter index needed for it
--- Primary query patterns 
+-- Primary query patterns
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_gram_urn ON telemetry_logs (gram_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_trace_id ON telemetry_logs (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_deployment_id ON telemetry_logs (gram_deployment_id) TYPE bloom_filter(0.01) GRANULARITY 1;
@@ -112,3 +67,185 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_deployment_id ON telemetry_logs (g
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_function_id ON telemetry_logs (gram_function_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_severity ON telemetry_logs (severity_text) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_chat_id ON telemetry_logs (gram_chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+-- Indexes for materialized columns (used by new code)
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_deployment_id ON telemetry_logs (deployment_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_function_id ON telemetry_logs (function_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_urn ON telemetry_logs (urn) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_chat_id ON telemetry_logs (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_id ON telemetry_logs (user_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_user_id ON telemetry_logs (external_user_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_api_key_id ON telemetry_logs (api_key_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_evaluation_score_label ON telemetry_logs (evaluation_score_label) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_tool_name ON telemetry_logs (tool_name) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_tool_source ON telemetry_logs (tool_source) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_event_source ON telemetry_logs (event_source) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_toolset_slug ON telemetry_logs (toolset_slug) TYPE bloom_filter(0.01) GRANULARITY 1;
+
+CREATE TABLE IF NOT EXISTS trace_summaries (
+    -- Key cols
+    trace_id FixedString(32),
+    gram_project_id UUID,
+
+    -- Filter cols. Plain vailes, filterable using WHERE
+    gram_deployment_id SimpleAggregateFunction(any, Nullable(UUID)),
+    gram_function_id SimpleAggregateFunction(any, Nullable(UUID)),
+    gram_urn SimpleAggregateFunction(any, String),
+    tool_name SimpleAggregateFunction(any, String),
+    tool_source SimpleAggregateFunction(any, String),
+    event_source SimpleAggregateFunction(any, String),
+
+    -- Aggregates
+    start_time_unix_nano SimpleAggregateFunction(min, Int64),
+    log_count SimpleAggregateFunction(sum, UInt64),
+
+    http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8)
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, trace_id)
+TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without needing to scan all logs';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
+SELECT
+    trace_id,
+    gram_project_id,
+    any(gram_deployment_id) AS gram_deployment_id,
+    any(gram_function_id) AS gram_function_id,
+    any(gram_urn) AS gram_urn,
+    any(tool_name) AS tool_name,
+    any(tool_source) AS tool_source,
+    any(event_source) AS event_source,
+    min(time_unix_nano) AS start_time_unix_nano,
+    toUInt64(count(*)) AS log_count,
+    anyIfState(
+        toInt32OrNull(toString(attributes.http.response.status_code)),
+        toString(attributes.http.response.status_code) != ''
+    ) AS http_status_code
+FROM telemetry_logs
+WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
+GROUP BY trace_id, gram_project_id;
+
+CREATE TABLE IF NOT EXISTS metrics_summaries (
+    -- Key columns
+    gram_project_id UUID,
+    time_bucket DateTime('UTC'),
+
+    -- Activity timestamps
+    first_seen_unix_nano SimpleAggregateFunction(min, Int64),
+    last_seen_unix_nano SimpleAggregateFunction(max, Int64),
+
+    -- Cardinality
+    total_chats AggregateFunction(uniqExactIf, String, UInt8),
+    distinct_models AggregateFunction(uniqExactIf, String, UInt8),
+    distinct_providers AggregateFunction(uniqExactIf, String, UInt8),
+
+    -- Token sums
+    total_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+    total_output_tokens AggregateFunction(sumIf, Int64, UInt8),
+    total_tokens AggregateFunction(sumIf, Int64, UInt8),
+
+    -- Avg tokens per request
+    avg_tokens_per_request AggregateFunction(avgIf, Float64, UInt8),
+
+    -- Chat request count
+    total_chat_requests AggregateFunction(countIf, UInt8),
+
+    -- Avg chat duration
+    avg_chat_duration_ms AggregateFunction(avgIf, Float64, UInt8),
+
+    -- Finish reasons
+    finish_reason_stop AggregateFunction(countIf, UInt8),
+    finish_reason_tool_calls AggregateFunction(countIf, UInt8),
+
+    -- Tool call metrics
+    total_tool_calls AggregateFunction(countIf, UInt8),
+    tool_call_success AggregateFunction(countIf, UInt8),
+    tool_call_failure AggregateFunction(countIf, UInt8),
+    avg_tool_duration_ms AggregateFunction(avgIf, Float64, UInt8),
+
+    -- Chat resolution metrics
+    chat_resolution_success AggregateFunction(countIf, UInt8),
+    chat_resolution_failure AggregateFunction(countIf, UInt8),
+    chat_resolution_partial AggregateFunction(countIf, UInt8),
+    chat_resolution_abandoned AggregateFunction(countIf, UInt8),
+    avg_chat_resolution_score AggregateFunction(avgIf, Float64, UInt8),
+
+    -- Overview: evaluated chat counts (distinct chats by resolution status)
+    evaluated_chats AggregateFunction(uniqExactIf, String, UInt8),
+    resolved_chats AggregateFunction(uniqExactIf, String, UInt8),
+    failed_chats AggregateFunction(uniqExactIf, String, UInt8),
+    avg_resolution_time_ms AggregateFunction(avgIf, Float64, UInt8),
+
+    -- Model breakdown
+    models AggregateFunction(sumMapIf, Map(String, UInt64), UInt8),
+
+    -- Tool breakdowns
+    tool_counts AggregateFunction(sumMapIf, Map(String, UInt64), UInt8),
+    tool_success_counts AggregateFunction(sumMapIf, Map(String, UInt64), UInt8),
+    tool_failure_counts AggregateFunction(sumMapIf, Map(String, UInt64), UInt8)
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, time_bucket)
+TTL time_bucket + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Pre-aggregated metrics summaries for fast dashboard reads without scanning all telemetry logs';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS metrics_summaries_mv TO metrics_summaries AS
+SELECT
+    gram_project_id,
+    toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
+
+    -- Activity timestamps
+    min(time_unix_nano) AS first_seen_unix_nano,
+    max(time_unix_nano) AS last_seen_unix_nano,
+
+    -- Cardinality
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats,
+    uniqExactIfState(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') AS distinct_models,
+    uniqExactIfState(toString(attributes.gen_ai.provider.name), toString(attributes.gen_ai.provider.name) != '') AS distinct_providers,
+
+    -- Token sums
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_input_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_output_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_tokens,
+
+    -- Avg tokens per request
+    avgIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_tokens_per_request,
+
+    -- Chat request count
+    countIfState(toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_chat_requests,
+
+    -- Avg chat duration
+    avgIfState(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_chat_duration_ms,
+
+    -- Finish reasons
+    countIfState(position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) AS finish_reason_stop,
+    countIfState(position(toString(attributes.gen_ai.response.finish_reasons), 'tool_calls') > 0) AS finish_reason_tool_calls,
+
+    -- Tool call metrics
+    countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls,
+    countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_call_success,
+    countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_call_failure,
+    avgIfState(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS avg_tool_duration_ms,
+
+    -- Chat resolution metrics
+    countIfState(evaluation_score_label = 'success') AS chat_resolution_success,
+    countIfState(evaluation_score_label = 'failure') AS chat_resolution_failure,
+    countIfState(evaluation_score_label = 'partial') AS chat_resolution_partial,
+    countIfState(evaluation_score_label = 'abandoned') AS chat_resolution_abandoned,
+    avgIfState(toFloat64OrZero(toString(attributes.gen_ai.evaluation.score.value)), evaluation_score_label != '') AS avg_chat_resolution_score,
+
+    -- Overview: chat counts by resolution status (uses gen_ai.conversation.id to stay consistent with total_chats)
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label != '') AS evaluated_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label = 'success') AS resolved_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label = 'failure') AS failed_chats,
+    avgIfState(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') AS avg_resolution_time_ms,
+
+    -- Model breakdown
+    sumMapIfState(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') AS models,
+
+    -- Tool breakdowns
+    sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts,
+    sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts,
+    sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts
+FROM telemetry_logs
+GROUP BY gram_project_id, time_bucket;

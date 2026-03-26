@@ -1,56 +1,56 @@
-import React from 'react'
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
+import React from "react";
+import { Chat } from "..";
+import type { Meta, StoryFn } from "@storybook/react-vite";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/ToolMentions',
+  title: "Chat/ToolMentions",
   component: Chat,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
-type Story = StoryFn<typeof Chat>
+type Story = StoryFn<typeof Chat>;
 
 /**
  * Default behavior - tool mentions are enabled automatically when tools are available.
  * Type @ followed by a tool name to see the autocomplete dropdown.
  */
-export const Default: Story = () => <Chat />
+export const Default: Story = () => <Chat />;
 Default.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
+      variant: "standalone",
     },
   },
-}
+};
 
 /**
  * Tool mentions can be explicitly disabled via configuration.
  */
-export const Disabled: Story = () => <Chat />
+export const Disabled: Story = () => <Chat />;
 Disabled.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
+      variant: "standalone",
       composer: {
         toolMentions: false,
       },
     },
   },
-}
+};
 
 /**
  * Tool mentions with custom configuration.
  * Limits the number of suggestions shown in the dropdown.
  */
-export const CustomConfig: Story = () => <Chat />
+export const CustomConfig: Story = () => <Chat />;
 CustomConfig.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
+      variant: "standalone",
       composer: {
         toolMentions: {
           enabled: true,
@@ -59,4 +59,4 @@ CustomConfig.parameters = {
       },
     },
   },
-}
+};

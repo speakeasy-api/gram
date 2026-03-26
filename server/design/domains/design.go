@@ -28,15 +28,14 @@ var CustomDomain = Type("CustomDomain", func() {
 
 var _ = Service("domains", func() {
 	Description("Manage custom domains for gram.")
-	Security(security.Session, security.ProjectSlug)
+	Security(security.Session)
 	shared.DeclareErrorResponses()
 
 	Method("getDomain", func() {
-		Description("Get the custom domain for a project")
+		Description("Get the custom domain for an organization")
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		Result(CustomDomain)
@@ -44,7 +43,6 @@ var _ = Service("domains", func() {
 		HTTP(func() {
 			GET("/rpc/domain.get")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -54,11 +52,10 @@ var _ = Service("domains", func() {
 	})
 
 	Method("createDomain", func() {
-		Description("Create a custom domain for a organization")
+		Description("Create a custom domain for an organization")
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
 			Attribute("domain", String, "The custom domain")
 			Required("domain")
 		})
@@ -66,7 +63,6 @@ var _ = Service("domains", func() {
 		HTTP(func() {
 			POST("/rpc/domain.register")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -80,13 +76,11 @@ var _ = Service("domains", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		HTTP(func() {
 			DELETE("/rpc/domain.delete")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 

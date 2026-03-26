@@ -12,151 +12,606 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createSlackAppConnection = `-- name: CreateSlackAppConnection :one
-INSERT INTO slack_app_connections (
+const addSlackAppToolset = `-- name: AddSlackAppToolset :one
+INSERT INTO slack_app_toolsets (
+    slack_app_id
+  , toolset_id
+) VALUES (
+    $1
+  , $2
+)
+RETURNING id, slack_app_id, toolset_id, created_at
+`
+
+type AddSlackAppToolsetParams struct {
+	SlackAppID uuid.UUID
+	ToolsetID  uuid.UUID
+}
+
+func (q *Queries) AddSlackAppToolset(ctx context.Context, arg AddSlackAppToolsetParams) (SlackAppToolset, error) {
+	row := q.db.QueryRow(ctx, addSlackAppToolset, arg.SlackAppID, arg.ToolsetID)
+	var i SlackAppToolset
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.ToolsetID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const configureSlackApp = `-- name: ConfigureSlackApp :one
+UPDATE slack_apps
+SET
+    slack_client_id = $1,
+    slack_client_secret = $2,
+    slack_signing_secret = $3,
+    status = 'active',
+    updated_at = clock_timestamp()
+WHERE id = $4
+  AND project_id = $5
+  AND deleted IS FALSE
+RETURNING created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+`
+
+type ConfigureSlackAppParams struct {
+	SlackClientID      pgtype.Text
+	SlackClientSecret  pgtype.Text
+	SlackSigningSecret pgtype.Text
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+}
+
+func (q *Queries) ConfigureSlackApp(ctx context.Context, arg ConfigureSlackAppParams) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, configureSlackApp,
+		arg.SlackClientID,
+		arg.SlackClientSecret,
+		arg.SlackSigningSecret,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i SlackApp
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
+		&i.SlackTeamID,
+		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
+		&i.ProjectID,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createSlackApp = `-- name: CreateSlackApp :one
+INSERT INTO slack_apps (
     organization_id
   , project_id
-  , access_token
-  , slack_team_name
-  , slack_team_id
-  , default_toolset_slug
+  , name
+  , system_prompt
+  , icon_asset_id
+  , status
 ) VALUES (
     $1
   , $2
   , $3
   , $4
   , $5
-  , $6
+  , 'unconfigured'
 )
-RETURNING slack_team_id, organization_id, project_id, access_token, slack_team_name, default_toolset_slug, created_at, updated_at
+RETURNING created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
 `
 
-type CreateSlackAppConnectionParams struct {
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	AccessToken        string
-	SlackTeamName      string
-	SlackTeamID        string
-	DefaultToolsetSlug pgtype.Text
+type CreateSlackAppParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	SystemPrompt   pgtype.Text
+	IconAssetID    uuid.NullUUID
 }
 
-func (q *Queries) CreateSlackAppConnection(ctx context.Context, arg CreateSlackAppConnectionParams) (SlackAppConnection, error) {
-	row := q.db.QueryRow(ctx, createSlackAppConnection,
+func (q *Queries) CreateSlackApp(ctx context.Context, arg CreateSlackAppParams) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, createSlackApp,
 		arg.OrganizationID,
 		arg.ProjectID,
-		arg.AccessToken,
-		arg.SlackTeamName,
-		arg.SlackTeamID,
-		arg.DefaultToolsetSlug,
+		arg.Name,
+		arg.SystemPrompt,
+		arg.IconAssetID,
 	)
-	var i SlackAppConnection
+	var i SlackApp
 	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
 		&i.SlackTeamID,
 		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
 		&i.ProjectID,
-		&i.AccessToken,
-		&i.SlackTeamName,
-		&i.DefaultToolsetSlug,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createSlackRegistration = `-- name: CreateSlackRegistration :one
+INSERT INTO slack_registrations (slack_app_id, slack_account_id, user_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (slack_app_id, slack_account_id) DO UPDATE SET user_id = $3, updated_at = clock_timestamp()
+RETURNING id, slack_app_id, slack_account_id, user_id, created_at, updated_at
+`
+
+type CreateSlackRegistrationParams struct {
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+	UserID         uuid.UUID
+}
+
+func (q *Queries) CreateSlackRegistration(ctx context.Context, arg CreateSlackRegistrationParams) (SlackRegistration, error) {
+	row := q.db.QueryRow(ctx, createSlackRegistration, arg.SlackAppID, arg.SlackAccountID, arg.UserID)
+	var i SlackRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.SlackAccountID,
+		&i.UserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const deleteSlackAppConnection = `-- name: DeleteSlackAppConnection :exec
-DELETE FROM slack_app_connections
-WHERE organization_id = $1
+const getSlackApp = `-- name: GetSlackApp :one
+SELECT created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+FROM slack_apps
+WHERE id = $1
   AND project_id = $2
+  AND deleted IS FALSE
 `
 
-type DeleteSlackAppConnectionParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
+type GetSlackAppParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
 }
 
-func (q *Queries) DeleteSlackAppConnection(ctx context.Context, arg DeleteSlackAppConnectionParams) error {
-	_, err := q.db.Exec(ctx, deleteSlackAppConnection, arg.OrganizationID, arg.ProjectID)
+func (q *Queries) GetSlackApp(ctx context.Context, arg GetSlackAppParams) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, getSlackApp, arg.ID, arg.ProjectID)
+	var i SlackApp
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
+		&i.SlackTeamID,
+		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
+		&i.ProjectID,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getSlackAppByID = `-- name: GetSlackAppByID :one
+SELECT created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+FROM slack_apps
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetSlackAppByID(ctx context.Context, id uuid.UUID) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, getSlackAppByID, id)
+	var i SlackApp
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
+		&i.SlackTeamID,
+		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
+		&i.ProjectID,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getSlackAppByTeamID = `-- name: GetSlackAppByTeamID :one
+SELECT created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+FROM slack_apps
+WHERE slack_team_id = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetSlackAppByTeamID(ctx context.Context, slackTeamID pgtype.Text) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, getSlackAppByTeamID, slackTeamID)
+	var i SlackApp
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
+		&i.SlackTeamID,
+		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
+		&i.ProjectID,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getSlackRegistration = `-- name: GetSlackRegistration :one
+SELECT id, slack_app_id, slack_account_id, user_id, created_at, updated_at
+FROM slack_registrations
+WHERE slack_app_id = $1
+  AND slack_account_id = $2
+`
+
+type GetSlackRegistrationParams struct {
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+}
+
+func (q *Queries) GetSlackRegistration(ctx context.Context, arg GetSlackRegistrationParams) (SlackRegistration, error) {
+	row := q.db.QueryRow(ctx, getSlackRegistration, arg.SlackAppID, arg.SlackAccountID)
+	var i SlackRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.SlackAccountID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSlackRegistrationWithUser = `-- name: GetSlackRegistrationWithUser :one
+SELECT sr.id, sr.slack_app_id, sr.slack_account_id, sr.user_id, sr.created_at, sr.updated_at, u.display_name AS user_display_name, u.email AS user_email
+FROM slack_registrations sr
+JOIN users u ON u.id = sr.user_id::text
+WHERE sr.slack_app_id = $1
+  AND sr.slack_account_id = $2
+`
+
+type GetSlackRegistrationWithUserParams struct {
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+}
+
+type GetSlackRegistrationWithUserRow struct {
+	ID              uuid.UUID
+	SlackAppID      uuid.UUID
+	SlackAccountID  string
+	UserID          uuid.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	UserDisplayName string
+	UserEmail       string
+}
+
+func (q *Queries) GetSlackRegistrationWithUser(ctx context.Context, arg GetSlackRegistrationWithUserParams) (GetSlackRegistrationWithUserRow, error) {
+	row := q.db.QueryRow(ctx, getSlackRegistrationWithUser, arg.SlackAppID, arg.SlackAccountID)
+	var i GetSlackRegistrationWithUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.SlackAccountID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserDisplayName,
+		&i.UserEmail,
+	)
+	return i, err
+}
+
+const installSlackApp = `-- name: InstallSlackApp :one
+UPDATE slack_apps
+SET
+    slack_bot_token  = $1,
+    slack_team_id    = $2,
+    slack_team_name  = $3,
+    slack_bot_user_id = $4,
+    updated_at       = clock_timestamp()
+WHERE id = $5
+  AND deleted IS FALSE
+RETURNING created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+`
+
+type InstallSlackAppParams struct {
+	SlackBotToken  pgtype.Text
+	SlackTeamID    pgtype.Text
+	SlackTeamName  pgtype.Text
+	SlackBotUserID pgtype.Text
+	ID             uuid.UUID
+}
+
+func (q *Queries) InstallSlackApp(ctx context.Context, arg InstallSlackAppParams) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, installSlackApp,
+		arg.SlackBotToken,
+		arg.SlackTeamID,
+		arg.SlackTeamName,
+		arg.SlackBotUserID,
+		arg.ID,
+	)
+	var i SlackApp
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
+		&i.SlackTeamID,
+		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
+		&i.ProjectID,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const listSlackAppToolsetNames = `-- name: ListSlackAppToolsetNames :many
+SELECT t.name, t.slug
+FROM slack_app_toolsets sat
+JOIN toolsets t ON t.id = sat.toolset_id
+JOIN slack_apps sa ON sa.id = sat.slack_app_id
+WHERE sat.slack_app_id = $1
+  AND sa.deleted IS FALSE
+  AND t.deleted IS FALSE
+ORDER BY t.name ASC
+`
+
+type ListSlackAppToolsetNamesRow struct {
+	Name string
+	Slug string
+}
+
+func (q *Queries) ListSlackAppToolsetNames(ctx context.Context, slackAppID uuid.UUID) ([]ListSlackAppToolsetNamesRow, error) {
+	rows, err := q.db.Query(ctx, listSlackAppToolsetNames, slackAppID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlackAppToolsetNamesRow
+	for rows.Next() {
+		var i ListSlackAppToolsetNamesRow
+		if err := rows.Scan(&i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSlackAppToolsets = `-- name: ListSlackAppToolsets :many
+SELECT sat.id, sat.slack_app_id, sat.toolset_id, sat.created_at
+FROM slack_app_toolsets sat
+JOIN slack_apps sa ON sa.id = sat.slack_app_id
+WHERE sat.slack_app_id = $1
+  AND sa.project_id = $2
+  AND sa.deleted IS FALSE
+ORDER BY sat.created_at ASC
+`
+
+type ListSlackAppToolsetsParams struct {
+	SlackAppID uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+func (q *Queries) ListSlackAppToolsets(ctx context.Context, arg ListSlackAppToolsetsParams) ([]SlackAppToolset, error) {
+	rows, err := q.db.Query(ctx, listSlackAppToolsets, arg.SlackAppID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SlackAppToolset
+	for rows.Next() {
+		var i SlackAppToolset
+		if err := rows.Scan(
+			&i.ID,
+			&i.SlackAppID,
+			&i.ToolsetID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSlackApps = `-- name: ListSlackApps :many
+SELECT created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+FROM slack_apps
+WHERE project_id = $1
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListSlackApps(ctx context.Context, projectID uuid.UUID) ([]SlackApp, error) {
+	rows, err := q.db.Query(ctx, listSlackApps, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SlackApp
+	for rows.Next() {
+		var i SlackApp
+		if err := rows.Scan(
+			&i.CreatedAt,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+			&i.SlackTeamName,
+			&i.SlackBotUserID,
+			&i.SlackClientSecret,
+			&i.SlackSigningSecret,
+			&i.SlackTeamID,
+			&i.OrganizationID,
+			&i.SlackBotToken,
+			&i.SlackClientID,
+			&i.SystemPrompt,
+			&i.Name,
+			&i.Status,
+			&i.IconAssetID,
+			&i.ProjectID,
+			&i.ID,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeSlackAppToolset = `-- name: RemoveSlackAppToolset :exec
+DELETE FROM slack_app_toolsets
+WHERE slack_app_id = $1
+  AND toolset_id = $2
+`
+
+type RemoveSlackAppToolsetParams struct {
+	SlackAppID uuid.UUID
+	ToolsetID  uuid.UUID
+}
+
+func (q *Queries) RemoveSlackAppToolset(ctx context.Context, arg RemoveSlackAppToolsetParams) error {
+	_, err := q.db.Exec(ctx, removeSlackAppToolset, arg.SlackAppID, arg.ToolsetID)
 	return err
 }
 
-const getSlackAppConnection = `-- name: GetSlackAppConnection :one
-SELECT slack_team_id, organization_id, project_id, access_token, slack_team_name, default_toolset_slug, created_at, updated_at
-FROM slack_app_connections
-WHERE organization_id = $1
-  AND project_id = $2
-`
-
-type GetSlackAppConnectionParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-func (q *Queries) GetSlackAppConnection(ctx context.Context, arg GetSlackAppConnectionParams) (SlackAppConnection, error) {
-	row := q.db.QueryRow(ctx, getSlackAppConnection, arg.OrganizationID, arg.ProjectID)
-	var i SlackAppConnection
-	err := row.Scan(
-		&i.SlackTeamID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.AccessToken,
-		&i.SlackTeamName,
-		&i.DefaultToolsetSlug,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getSlackAppConnectionByTeamID = `-- name: GetSlackAppConnectionByTeamID :one
-SELECT slack_team_id, organization_id, project_id, access_token, slack_team_name, default_toolset_slug, created_at, updated_at
-FROM slack_app_connections
-WHERE slack_team_id = $1
-`
-
-func (q *Queries) GetSlackAppConnectionByTeamID(ctx context.Context, slackTeamID string) (SlackAppConnection, error) {
-	row := q.db.QueryRow(ctx, getSlackAppConnectionByTeamID, slackTeamID)
-	var i SlackAppConnection
-	err := row.Scan(
-		&i.SlackTeamID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.AccessToken,
-		&i.SlackTeamName,
-		&i.DefaultToolsetSlug,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const updateSlackAppConnection = `-- name: UpdateSlackAppConnection :one
-UPDATE slack_app_connections
+const softDeleteSlackApp = `-- name: SoftDeleteSlackApp :exec
+UPDATE slack_apps
 SET
-    default_toolset_slug = $1,
+    deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND project_id = $3
-RETURNING slack_team_id, organization_id, project_id, access_token, slack_team_name, default_toolset_slug, created_at, updated_at
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
 `
 
-type UpdateSlackAppConnectionParams struct {
-	DefaultToolsetSlug pgtype.Text
-	OrganizationID     string
-	ProjectID          uuid.UUID
+type SoftDeleteSlackAppParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
 }
 
-func (q *Queries) UpdateSlackAppConnection(ctx context.Context, arg UpdateSlackAppConnectionParams) (SlackAppConnection, error) {
-	row := q.db.QueryRow(ctx, updateSlackAppConnection, arg.DefaultToolsetSlug, arg.OrganizationID, arg.ProjectID)
-	var i SlackAppConnection
+func (q *Queries) SoftDeleteSlackApp(ctx context.Context, arg SoftDeleteSlackAppParams) error {
+	_, err := q.db.Exec(ctx, softDeleteSlackApp, arg.ID, arg.ProjectID)
+	return err
+}
+
+const updateSlackApp = `-- name: UpdateSlackApp :one
+UPDATE slack_apps
+SET
+    name = COALESCE($1, name),
+    system_prompt = COALESCE($2, system_prompt),
+    icon_asset_id = COALESCE($3, icon_asset_id),
+    updated_at = clock_timestamp()
+WHERE id = $4
+  AND project_id = $5
+  AND deleted IS FALSE
+RETURNING created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+`
+
+type UpdateSlackAppParams struct {
+	Name         pgtype.Text
+	SystemPrompt pgtype.Text
+	IconAssetID  uuid.NullUUID
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) UpdateSlackApp(ctx context.Context, arg UpdateSlackAppParams) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, updateSlackApp,
+		arg.Name,
+		arg.SystemPrompt,
+		arg.IconAssetID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i SlackApp
 	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
 		&i.SlackTeamID,
 		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
 		&i.ProjectID,
-		&i.AccessToken,
-		&i.SlackTeamName,
-		&i.DefaultToolsetSlug,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.ID,
+		&i.Deleted,
 	)
 	return i, err
 }

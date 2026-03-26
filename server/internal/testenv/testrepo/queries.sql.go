@@ -76,7 +76,7 @@ func (q *Queries) ListDeploymentFunctionsResources(ctx context.Context, deployme
 }
 
 const listDeploymentFunctionsTools = `-- name: ListDeploymentFunctionsTools :many
-SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions
 WHERE deployment_id = $1
 `
@@ -103,6 +103,10 @@ func (q *Queries) ListDeploymentFunctionsTools(ctx context.Context, deploymentID
 			&i.Variables,
 			&i.AuthInput,
 			&i.Meta,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -119,7 +123,7 @@ func (q *Queries) ListDeploymentFunctionsTools(ctx context.Context, deploymentID
 }
 
 const listDeploymentHTTPTools = `-- name: ListDeploymentHTTPTools :many
-SELECT id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE deployment_id = $1
 `
@@ -164,6 +168,10 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 			&i.PathSettings,
 			&i.RequestContentType,
 			&i.ResponseFilter,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

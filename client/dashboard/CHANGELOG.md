@@ -1,5 +1,314 @@
 # dashboard
 
+## 0.35.0
+
+### Minor Changes
+
+- c4d9bdd: Introduced a new "Audit Logs" page to the organization dashboard, allowing Gram users to view a history of actions taken within the organization.
+
+### Patch Changes
+
+- 3d28f83: Fixes bug with server selection in logs page.
+
+## 0.34.3
+
+### Patch Changes
+
+- 68177ef: Upgrade insights copilot to anthropic/claude-sonnet-4.5 and inject current date into system prompt
+- 544fac2: Revamp login page with Speakeasy brand styling, distributed platform diagram, and updated copy.
+
+  - Right pane: new copy, Build/Secure/Observe/Distribute badges, off-white background with moving dot pattern, RGB gradient bar, Terms of Service and Privacy Policy links
+  - Left pane: distributed AI agents and product agents view, Control Plane and Tools Platform sections, pulse flow animations, hover-activated dot background, docs social link
+  - Accessibility: prefers-reduced-motion support for all animations
+
+- cbc16a9: Suppress skeleton flash on logout by skipping the loading shell on unauthenticated routes
+- Updated dependencies [658bef4]
+  - @gram/client@0.33.0
+
+## 0.34.2
+
+### Patch Changes
+
+- 045f51a: Replace hardcoded org slugs in MCP URLs for the built in MCP logs server
+
+## 0.34.1
+
+### Patch Changes
+
+- 558c158: Show coming soon placeholder on CLIs page
+- 41d507c: Fixed `GET /rpc/chat.creditUsage` authentication so org-scoped credit usage works correctly for customers with multiple projects, requiring only session auth and no longer allowing chat-session access.
+- Updated dependencies [7ef727b]
+  - @gram/client@0.28.5
+
+## 0.34.0
+
+### Minor Changes
+
+- 30036db: Add table view toggle for list pages (MCP, Sources, Catalog) with grid/table switching, animated dot-pattern rows, and localStorage persistence
+
+### Patch Changes
+
+- 17788a8: fix: MCP environments section shows wrong default when none attached
+- b0120d4: Prevent double-back-button on detail pages
+
+## 0.33.2
+
+### Patch Changes
+
+- 7aaeb96: Fix playground OAuth discovery to use toolset-level configuration instead of removed tool-definition fields.
+
+  The frontend now detects OAuth requirements from `toolset.oauthProxyServer` and `toolset.externalOauthServer` instead of inspecting individual external MCP tool definitions (whose `requiresOauth` field was removed in a prior PR). The backend `getExternalOAuthConfig()` gains two new resolution paths — OAuth proxy providers with pre-configured client credentials (skipping DCR) and external OAuth server metadata — before falling back to the legacy tool-definition lookup for backward compatibility.
+
+## 0.33.1
+
+### Patch Changes
+
+- 3b26329: Display audience field in OAuth proxy server details view
+
+## 0.33.0
+
+### Minor Changes
+
+- 8c72d8c: Renames attribute_filters to filters in searchLogs, and introduces "in" operator.
+
+### Patch Changes
+
+- 110f5b1: Replace Claude Desktop mcpb download with Connections instructions on MCP install page
+- d8133af: Suite of hooks improvements
+- 5c7aa32: Rename MCP environment tab labels for clarity. `Project` tab renamed to `default` to match environment name.
+- 76b411d: Update hooks UI to better accomodate many servers/users
+- 686fee5: Add gpt-5.4 support in playground.
+- Updated dependencies [d8133af]
+- Updated dependencies [6108c5a]
+- Updated dependencies [686fee5]
+- Updated dependencies [8c72d8c]
+  - @gram/client@0.28.0
+  - @gram-ai/elements@1.27.5
+
+## 0.32.1
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- 1500853: Surface correct http status attribute references in MCP logs search
+- e616da7: Add admin-only cache purging functionality
+- Updated dependencies [1765931]
+- Updated dependencies [e616da7]
+  - @gram/client@0.27.20
+
+## 0.32.0
+
+### Minor Changes
+
+- 63d10d0: ## Changeset
+
+  External MCP servers now use the same OAuth configuration pathway as all other toolsets — no more special-cased token resolution.
+
+  The "Configure OAuth" button is now enabled for external MCP servers that require OAuth. When discovered OAuth metadata is available, the configuration form can be auto-populated with a single click.
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+- Updated dependencies [0c90e1e]
+  - @gram/client@0.27.24
+
+## 0.31.0
+
+### Minor Changes
+
+- be6dcae: Upgrade zod to v4 across the monorepo. Bump @modelcontextprotocol/sdk
+- f066870: Adds ability to telemetry logs page to filter by dynamic attributes.
+
+### Patch Changes
+
+- 907ea0b: Move server instructions to dedicated section with LLM generation with best practices for mcp server instructions based on [mcp release](https://blog.modelcontextprotocol.io/posts/2025-11-03-using-server-instructions/)
+- 1821e46: Adds an initial pass "POC" implementation of Gram hooks for tool capture
+- fb7439b: Improve settings page with tabs routing and logging API
+- 998102f: Update telemetry search logs API response to sent unix nano timestamps as strings instead of int.
+- Updated dependencies [ee711ab]
+- Updated dependencies [1821e46]
+- Updated dependencies [be6dcae]
+- Updated dependencies [fb7439b]
+- Updated dependencies [998102f]
+  - @gram-ai/elements@1.27.4
+  - @gram/client@0.28.0
+
+## 0.30.0
+
+### Minor Changes
+
+- 125d6c9: adds the ability to install slack apps through the Gram UI
+
+### Patch Changes
+
+- 823e7ab: feat(cli): add `gram redeploy` command to clone and redeploy existing deployments
+
+  fix(dashboard): show redeploy button on every deployment detail page and add visible Deployments navigation to sources page
+
+- f293092: fix: tool call logs count shown but empty state
+
+## 0.29.4
+
+### Patch Changes
+
+- Updated dependencies [f364cc0]
+- Updated dependencies [e2c00cb]
+  - @gram/client@0.28.0
+
+## 0.29.3
+
+### Patch Changes
+
+- 3cae542: Improve logs page timestamp display (no wrapping, remove comma, hide duplicate child timestamps)
+  Fix tree line alignment with parent chevron in expanded log rows
+  Fix loading state layout shift in expanded logs
+  Filter out chat completion logs (urn:uuid:) from tool calls list
+  Fix breadcrumb scrolling issue on insights page
+  Add click-outside-to-close for AI Insights sidebar
+  Remove Beta labels from AI Insights
+- Updated dependencies [3cae542]
+  - @gram/client@0.28.1
+
+## 0.29.2
+
+### Patch Changes
+
+- 833263c: Prevent source detail page crash when logs are not enabled. The telemetry query now uses useLogsEnabledErrorCheck and throwOnError: false to gracefully degrade without metrics instead of crashing the entire page.
+
+## 0.29.1
+
+### Patch Changes
+
+- 6a585c5: Expose customer's mcp logs as built-in logs mcp server that comes pre deployed for a project. This enables customers to interact with their logs through their favorite LLM client just as they would with
+  any MCP server created on the platform
+
+## 0.29.0
+
+### Minor Changes
+
+- 0f4f5dd: Adds an opt-in toggle for recording tool call inputs/outputs in logs
+
+### Patch Changes
+
+- 2c8987d: Wire up add another button in environment variables sheet
+- c4baf37: Redesign source detail page with two-panel deployments and invocation activity to give users a high level overview of a sources's utilisation in any MCP servers.
+- Updated dependencies [0f4f5dd]
+  - @gram/client@0.28.0
+
+## 0.28.5
+
+### Patch Changes
+
+- Updated dependencies [7063e97]
+  - @gram-ai/elements@1.27.3
+
+## 0.28.4
+
+### Patch Changes
+
+- 987ce35: Reorder insights dashboard to show tool metrics first
+- Updated dependencies [62c6784]
+- Updated dependencies [c26afea]
+  - @gram-ai/elements@1.27.2
+
+## 0.28.3
+
+### Patch Changes
+
+- bb8f3d2: Add CLI commands tab to OpenAPI version update modal
+- Updated dependencies [e5500f7]
+  - @gram-ai/elements@1.27.1
+
+## 0.28.2
+
+### Patch Changes
+
+- Updated dependencies [3d0ce56]
+  - @gram-ai/elements@1.27.0
+
+## 0.28.1
+
+### Patch Changes
+
+- 78f81f6: Bring back resources and prompts tabs to MCP details page
+- d9506c5: Show tool annotation badges in tool list sidebar
+- e87ada8:
+
+## 0.28.0
+
+### Minor Changes
+
+- 514fce6: Improve observability chat logs with server-side sorting (sort_by/sort_order params), sticky pagination with page count, N/A score indicator with tooltip for unscored sessions, Shiki syntax highlighting for code blocks, character-based truncation with "Show more" button, System Prompt tab in chat detail panel, and Tool Result labeling for tool messages.
+- 9df7d84: Add observability features including telemetry logs, traces, chat logs with AI-powered resolution analysis, and an overview dashboard with time-series metrics.
+- ab5142f: fix UI bug where the openapi spec provided by URL upload is not fetched, leading to a blank preview.
+
+### Patch Changes
+
+- 292eab4: Add system prompt instruction to treat 4xx HTTP responses as errors in AI observability analysis.
+- Updated dependencies [514fce6]
+  - @gram/client@0.27.0
+
+## 0.27.9
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+- Updated dependencies [f635e22]
+  - @gram/client@0.27.4
+  - @gram-ai/elements@1.26.1
+
+## 0.27.8
+
+### Patch Changes
+
+- 6d195c5: Show date in deployment log line timestamps on the deployments page
+- Updated dependencies [b2347fc]
+- Updated dependencies [a34d18a]
+  - @gram/client@0.27.3
+
+## 0.27.7
+
+### Patch Changes
+
+- Updated dependencies [9cb2f0e]
+  - @gram-ai/elements@1.26.0
+
+## 0.27.6
+
+### Patch Changes
+
+- Updated dependencies [e08b45e]
+  - @gram/client@0.27.1
+  - @gram-ai/elements@1.25.2
+
+## 0.27.5
+
+### Patch Changes
+
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 7505433: fix: allow creating MCP server when project has sources but no toolsets
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+- Updated dependencies [a7422f8]
+- Updated dependencies [a753172]
+- Updated dependencies [6e29702]
+- Updated dependencies [1f74200]
+  - @gram/client@0.26.18
+
 ## 0.27.4
 
 ### Patch Changes
@@ -286,6 +595,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level

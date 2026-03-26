@@ -66,11 +66,12 @@ func (q *Queries) DeleteExternalOAuthClientRegistration(ctx context.Context, arg
 	return err
 }
 
-const deleteExternalOAuthServerMetadata = `-- name: DeleteExternalOAuthServerMetadata :exec
+const deleteExternalOAuthServerMetadata = `-- name: DeleteExternalOAuthServerMetadata :one
 UPDATE external_oauth_server_metadata SET
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE project_id = $1 AND id = $2
+RETURNING id, slug
 `
 
 type DeleteExternalOAuthServerMetadataParams struct {
@@ -78,9 +79,16 @@ type DeleteExternalOAuthServerMetadataParams struct {
 	ID        uuid.UUID
 }
 
-func (q *Queries) DeleteExternalOAuthServerMetadata(ctx context.Context, arg DeleteExternalOAuthServerMetadataParams) error {
-	_, err := q.db.Exec(ctx, deleteExternalOAuthServerMetadata, arg.ProjectID, arg.ID)
-	return err
+type DeleteExternalOAuthServerMetadataRow struct {
+	ID   uuid.UUID
+	Slug string
+}
+
+func (q *Queries) DeleteExternalOAuthServerMetadata(ctx context.Context, arg DeleteExternalOAuthServerMetadataParams) (DeleteExternalOAuthServerMetadataRow, error) {
+	row := q.db.QueryRow(ctx, deleteExternalOAuthServerMetadata, arg.ProjectID, arg.ID)
+	var i DeleteExternalOAuthServerMetadataRow
+	err := row.Scan(&i.ID, &i.Slug)
+	return i, err
 }
 
 const deleteOAuthProxyProvider = `-- name: DeleteOAuthProxyProvider :exec
@@ -208,7 +216,7 @@ func (q *Queries) GetExternalOAuthServerMetadata(ctx context.Context, arg GetExt
 }
 
 const getOAuthProxyServer = `-- name: GetOAuthProxyServer :one
-SELECT id, project_id, slug, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, audience, created_at, updated_at, deleted_at, deleted
 FROM oauth_proxy_servers s
 WHERE s.project_id = $1 AND s.id = $2 AND s.deleted IS FALSE
 `
@@ -225,6 +233,7 @@ func (q *Queries) GetOAuthProxyServer(ctx context.Context, arg GetOAuthProxyServ
 		&i.ID,
 		&i.ProjectID,
 		&i.Slug,
+		&i.Audience,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -585,28 +594,33 @@ const upsertOAuthProxyServer = `-- name: UpsertOAuthProxyServer :one
 
 INSERT INTO oauth_proxy_servers (
     project_id,
-    slug
+    slug,
+    audience
 ) VALUES (
     $1,
-    $2
+    $2,
+    $3
 ) ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO UPDATE SET
+    audience = $3,
     updated_at = clock_timestamp()
-RETURNING id, project_id, slug, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, slug, audience, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertOAuthProxyServerParams struct {
 	ProjectID uuid.UUID
 	Slug      string
+	Audience  pgtype.Text
 }
 
 // OAuth Proxy Servers Queries
 func (q *Queries) UpsertOAuthProxyServer(ctx context.Context, arg UpsertOAuthProxyServerParams) (OauthProxyServer, error) {
-	row := q.db.QueryRow(ctx, upsertOAuthProxyServer, arg.ProjectID, arg.Slug)
+	row := q.db.QueryRow(ctx, upsertOAuthProxyServer, arg.ProjectID, arg.Slug, arg.Audience)
 	var i OauthProxyServer
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
 		&i.Slug,
+		&i.Audience,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

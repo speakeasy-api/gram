@@ -99,7 +99,6 @@ func TestSearchChats_AggregatesByChatID(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.Len(t, result.Chats, 2)
 
 	// Find both chats
@@ -111,11 +110,11 @@ func TestSearchChats_AggregatesByChatID(t *testing.T) {
 	// Chat 1 assertions
 	c1 := chatsByID[chatID1]
 	require.NotNil(t, c1)
-	require.Equal(t, uint64(3), c1.LogCount)        // 2 completions + 1 tool call
-	require.Equal(t, uint64(1), c1.ToolCallCount)    // 1 tool call
-	require.Equal(t, uint64(2), c1.MessageCount)     // 2 completions
+	require.Equal(t, uint64(3), c1.LogCount)      // 2 completions + 1 tool call
+	require.Equal(t, uint64(1), c1.ToolCallCount) // 1 tool call
+	require.Equal(t, uint64(2), c1.MessageCount)  // 2 completions
 	require.Greater(t, c1.DurationSeconds, float64(0))
-	require.Equal(t, "success", c1.Status)           // no failed tool calls
+	require.Equal(t, "success", c1.Status) // no failed tool calls
 	require.NotNil(t, c1.Model)
 	require.Equal(t, "gpt-4", *c1.Model)
 	require.Equal(t, int64(300), c1.TotalInputTokens)  // 100 + 200
@@ -127,10 +126,10 @@ func TestSearchChats_AggregatesByChatID(t *testing.T) {
 	// Chat 2 assertions
 	c2 := chatsByID[chatID2]
 	require.NotNil(t, c2)
-	require.Equal(t, uint64(2), c2.LogCount)        // 1 completion + 1 tool call
+	require.Equal(t, uint64(2), c2.LogCount) // 1 completion + 1 tool call
 	require.Equal(t, uint64(1), c2.ToolCallCount)
 	require.Equal(t, uint64(1), c2.MessageCount)
-	require.Equal(t, "error", c2.Status)            // failed tool call (status 500)
+	require.Equal(t, "error", c2.Status) // failed tool call (status 500)
 	require.NotNil(t, c2.Model)
 	require.Equal(t, "claude-3", *c2.Model)
 	require.Equal(t, int64(150), c2.TotalInputTokens)

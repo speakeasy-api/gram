@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
@@ -14,7 +15,10 @@ import {
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
+import { Confirm } from "@gram/client/models/components";
 import {
+  invalidateAllToolset,
+  invalidateTemplate,
   queryKeyInstance,
   queryKeyListToolsets,
   useListToolsets,
@@ -29,7 +33,7 @@ import { toast } from "sonner";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
-import { EditToolDialog } from "./EditToolDialog";
+import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
 import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
@@ -48,6 +52,7 @@ export default function Playground() {
 function PlaygroundInner() {
   const [searchParams] = useSearchParams();
   const chat = useChatContext();
+  const routes = useRoutes();
 
   const [selectedToolset, setSelectedToolset] = useState<string | null>(
     searchParams.get("toolset") ?? null,
@@ -62,6 +67,9 @@ function PlaygroundInner() {
   const [userProvidedHeaders, setUserProvidedHeaders] = useState<
     Record<string, string>
   >({});
+
+  const { data: toolsetsData } = useListToolsets();
+  const toolsets = toolsetsData?.toolsets;
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
@@ -82,6 +90,23 @@ function PlaygroundInner() {
   useRegisterEnvironmentTelemetry({
     environmentSlug: selectedEnvironment ?? "",
   });
+
+  // If toolsets have loaded and there are none, show full-page empty state
+  // If toolsets have loaded and there are none, show full-page empty state
+  if (toolsets !== undefined && !toolsets.length) {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs fullWidth />
+        </Page.Header>
+        <Page.Body>
+          <div className="h-full flex m-8">
+            <ToolsetsEmptyState onCreateToolset={() => routes.mcp.goTo()} />
+          </div>
+        </Page.Body>
+      </Page>
+    );
+  }
 
   const logsButton = (
     <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
@@ -176,6 +201,7 @@ export function ToolsetPanel({
 
   const { data: toolsetsData } = useListToolsets();
   const routes = useRoutes();
+  const client = useSdkClient();
   const updateToolsetMutation = useUpdateToolsetMutation();
   const queryClient = useQueryClient();
 
@@ -310,6 +336,37 @@ export function ToolsetPanel({
     );
   };
 
+  const handleToolUpdate = async (tool: Tool, updates: ToolUpdatePayload) => {
+    if (tool.type === "prompt") {
+      await client.templates.update({
+        updatePromptTemplateForm: {
+          ...tool,
+          ...updates,
+        },
+      });
+      invalidateTemplate(queryClient, [{ name: tool.name }]);
+    } else {
+      const form = {
+        ...tool.variation,
+        confirm: tool.variation?.confirm as Confirm,
+        ...updates,
+        srcToolName: tool.canonicalName,
+        srcToolUrn: tool.toolUrn,
+      };
+      await client.variations.upsertGlobal({
+        upsertGlobalToolVariationForm: form,
+      });
+    }
+
+    // Invalidate to refresh tool data in the sidebar
+    invalidateAllToolset(queryClient);
+    if (selectedToolset) {
+      queryClient.invalidateQueries({
+        queryKey: queryKeyInstance({ toolsetSlug: selectedToolset }),
+      });
+    }
+  };
+
   // If listToolsets has completed and there's nothing there, show the onboarding panel
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
     return (
@@ -418,10 +475,15 @@ export function ToolsetPanel({
         tool={editingTool}
         documentIdToName={documentIdToName}
         functionIdToName={functionIdToName}
-        onSave={() => {
-          // TODO: Implement tool variation updates
-          toast.success("Tool updated");
-          setEditingTool(null);
+        onSave={async (updates) => {
+          if (!editingTool) return;
+          try {
+            await handleToolUpdate(editingTool, updates);
+            toast.success("Tool updated");
+          } catch (err) {
+            toast.error("Failed to update tool");
+            throw err;
+          }
         }}
         onRemove={() => {
           if (editingTool?.toolUrn) {

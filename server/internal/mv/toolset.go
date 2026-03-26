@@ -281,7 +281,7 @@ func DescribeToolsetEntry(
 		promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
 			ID:   pt.ID.String(),
 			Name: types.Slug(pt.Name),
-			Kind: conv.Ptr(parseKind(pt)),
+			Kind: new(parseKind(pt)),
 		})
 	}
 
@@ -412,6 +412,7 @@ func DescribeToolset(
 			Summarizer:    nil,
 			Canonical:     nil,
 			Variation:     nil,
+			Annotations:   nil,
 		})
 	}
 
@@ -427,7 +428,7 @@ func DescribeToolset(
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
 		}
 		if len(externalOauthMetadata.Metadata) > 0 {
-			var metadata interface{}
+			var metadata any
 			if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").Log(ctx, logger)
 			}
@@ -493,6 +494,7 @@ func DescribeToolset(
 				ID:                  oauthProxyServerData.ID.String(),
 				ProjectID:           oauthProxyServerData.ProjectID.String(),
 				Slug:                types.Slug(oauthProxyServerData.Slug),
+				Audience:            conv.FromPGText[string](oauthProxyServerData.Audience),
 				OauthProxyProviders: providers,
 				CreatedAt:           oauthProxyServerData.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:           oauthProxyServerData.UpdatedAt.Time.Format(time.RFC3339),
@@ -520,6 +522,13 @@ func DescribeToolset(
 	for _, functionEnvironmentVariable := range functionEnvVars {
 		if functionEnvironmentVariable != nil && functionEnvironmentVariable.AuthInputType != nil && *functionEnvironmentVariable.AuthInputType == "oauth2" {
 			oauth2AuthCodeSecurityCount++
+		}
+	}
+
+	for _, tool := range toolsetTools.Tools {
+		if tool.ExternalMcpToolDefinition != nil && tool.ExternalMcpToolDefinition.RequiresOauth {
+			oauth2AuthCodeSecurityCount++
+			break
 		}
 	}
 
@@ -627,7 +636,7 @@ func readToolsetTools(
 			tool := &types.HTTPToolDefinition{
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ToolUrn:             def.HttpToolDefinition.ToolUrn.String(),
-				ProjectID:           def.HttpToolDefinition.Description,
+				ProjectID:           def.HttpToolDefinition.ProjectID.String(),
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
 				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
 				AssetID:             def.AssetID.UUID.String(),
@@ -635,7 +644,7 @@ func readToolsetTools(
 				CanonicalName:       name,
 				Summary:             "", // Slowly phasing this out
 				Description:         description,
-				Confirm:             conv.Ptr(string(confirm)),
+				Confirm:             new(string(confirm)),
 				ConfirmPrompt:       confirmPrompt,
 				Summarizer:          summarizer,
 				Tags:                tags,
@@ -652,6 +661,12 @@ func readToolsetTools(
 				ResponseFilter:      responseFilter,
 				Variation:           nil, // Applied later
 				Canonical:           nil,
+				Annotations: conv.AnnotationsFromColumns(
+					def.HttpToolDefinition.ReadOnlyHint,
+					def.HttpToolDefinition.DestructiveHint,
+					def.HttpToolDefinition.IdempotentHint,
+					def.HttpToolDefinition.OpenWorldHint,
+				),
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -698,6 +713,7 @@ func readToolsetTools(
 					Summarizer:    nil,
 					Canonical:     nil,
 					Variation:     nil,
+					Annotations:   nil,
 				},
 			})
 		}
@@ -740,6 +756,12 @@ func readToolsetTools(
 				Canonical:     nil,
 				Variation:     nil,
 				Meta:          meta,
+				Annotations: conv.AnnotationsFromColumns(
+					def.FunctionToolDefinition.ReadOnlyHint,
+					def.FunctionToolDefinition.DestructiveHint,
+					def.FunctionToolDefinition.IdempotentHint,
+					def.FunctionToolDefinition.OpenWorldHint,
+				),
 			}
 			if functionTool.Schema == "" {
 				functionTool.Schema = constants.DefaultEmptyToolSchema
@@ -781,7 +803,7 @@ func readToolsetTools(
 					ID:          def.ID.String(),
 					ProjectID:   pid.String(),
 					ToolUrn:     def.ToolUrn,
-					Type:        conv.Ptr(def.Type),
+					Type:        new(def.Type),
 					Name:        def.Name.String,
 					Description: def.Description.String,
 					Schema:      string(def.Schema),
@@ -809,6 +831,7 @@ func readToolsetTools(
 					Summarizer:                 nil,
 					Canonical:                  nil,
 					Variation:                  nil,
+					Annotations:                nil,
 				},
 			})
 
@@ -915,17 +938,22 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 	urnToVariation := make(map[string]types.ToolVariation, len(allVariations))
 	for _, variation := range allVariations {
 		urnToVariation[variation.SrcToolUrn.String()] = types.ToolVariation{
-			ID:            variation.ID.String(),
-			GroupID:       variation.GroupID.String(),
-			SrcToolUrn:    variation.SrcToolUrn.String(),
-			SrcToolName:   variation.SrcToolName,
-			Confirm:       conv.FromPGText[string](variation.Confirm),
-			ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),
-			Name:          conv.FromPGText[string](variation.Name),
-			Description:   conv.FromPGText[string](variation.Description),
-			Summarizer:    conv.FromPGText[string](variation.Summarizer),
-			CreatedAt:     variation.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:     variation.UpdatedAt.Time.Format(time.RFC3339),
+			ID:              variation.ID.String(),
+			GroupID:         variation.GroupID.String(),
+			SrcToolUrn:      variation.SrcToolUrn.String(),
+			SrcToolName:     variation.SrcToolName,
+			Confirm:         conv.FromPGText[string](variation.Confirm),
+			ConfirmPrompt:   conv.FromPGText[string](variation.ConfirmPrompt),
+			Name:            conv.FromPGText[string](variation.Name),
+			Description:     conv.FromPGText[string](variation.Description),
+			Summarizer:      conv.FromPGText[string](variation.Summarizer),
+			Title:           conv.FromPGText[string](variation.Title),
+			ReadOnlyHint:    conv.FromPGBool[bool](variation.ReadOnlyHint),
+			DestructiveHint: conv.FromPGBool[bool](variation.DestructiveHint),
+			IdempotentHint:  conv.FromPGBool[bool](variation.IdempotentHint),
+			OpenWorldHint:   conv.FromPGBool[bool](variation.OpenWorldHint),
+			CreatedAt:       variation.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:       variation.UpdatedAt.Time.Format(time.RFC3339),
 		}
 	}
 

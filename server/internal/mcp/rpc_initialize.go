@@ -29,7 +29,7 @@ type serverInfo struct {
 
 func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, toolsetsRepoParam *toolsets_repo.Queries, metadataRepoParam *metadata_repo.Queries) (json.RawMessage, error) {
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		if err := productMetrics.CaptureEvent(ctx, "mcp_initialized", payload.sessionID, map[string]interface{}{
+		if err := productMetrics.CaptureEvent(ctx, "mcp_initialized", payload.sessionID, map[string]any{
 			"project_id":           payload.projectID.String(),
 			"authenticated":        payload.authenticated,
 			"mcp_domain":           requestContext.Host,

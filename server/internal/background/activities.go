@@ -11,11 +11,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 
-	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -58,6 +60,7 @@ type Activities struct {
 	segmentChat                   *resolution_activities.SegmentChat
 	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
 	analyzeSegment                *resolution_activities.AnalyzeSegment
+	getUserFeedbackForChat        *resolution_activities.GetUserFeedbackForChat
 }
 
 func NewActivities(
@@ -69,9 +72,8 @@ func NewActivities(
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
-	chatClient *chat.ChatClient,
 	openrouterProvisioner openrouter.Provisioner,
-	openrouterChatClient *openrouter.ChatClient,
+	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
 	billingTracker billing.Tracker,
@@ -83,14 +85,18 @@ func NewActivities(
 	agentsService *agents.Service,
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalClient client.Client,
+	telemetryService *telemetry.Service,
+	cacheAdapter cache.Cache,
 ) *Activities {
+	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
+
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
 		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
-		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(logger, openrouterProvisioner),
+		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
-		generateChatTitle:             activities.NewGenerateChatTitle(logger, db, openrouterChatClient),
+		generateChatTitle:             activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
@@ -110,9 +116,10 @@ func NewActivities(
 		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
 		loadAgentTools:                activities.NewLoadAgentTools(logger, agentsService),
 		recordAgentExecution:          activities.NewRecordAgentExecution(logger, db),
-		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, openrouterChatClient),
+		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient),
+		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryService),
+		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 	}
 }
 
@@ -236,4 +243,12 @@ func (a *Activities) AnalyzeSegment(ctx context.Context, input resolution_activi
 		return fmt.Errorf("analyze segment: %w", err)
 	}
 	return nil
+}
+
+func (a *Activities) GetUserFeedbackForChat(ctx context.Context, input resolution_activities.GetUserFeedbackForChatArgs) (*resolution_activities.GetUserFeedbackForChatResult, error) {
+	result, err := a.getUserFeedbackForChat.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get user feedback for chat: %w", err)
+	}
+	return result, nil
 }

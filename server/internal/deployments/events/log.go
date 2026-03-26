@@ -25,6 +25,8 @@ type LogHandler struct {
 	attrDeploymentID   uuid.UUID
 	attrProjectID      uuid.UUID
 	attrOpenAPIAssetID uuid.UUID
+	attrExternalMCPID  uuid.UUID
+	attrFunctionsID    uuid.UUID
 	attrEvent          string
 	buffer             *logBuffer
 	level              slog.Leveler
@@ -40,6 +42,8 @@ func NewLogHandler() *LogHandler {
 		attrDeploymentID:   uuid.Nil,
 		attrProjectID:      uuid.Nil,
 		attrOpenAPIAssetID: uuid.Nil,
+		attrExternalMCPID:  uuid.Nil,
+		attrFunctionsID:    uuid.Nil,
 		attrEvent:          "",
 		buffer:             &logBuffer{msgs: []repo.BatchLogEventsParams{}},
 	}
@@ -58,6 +62,8 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	projectID := l.attrProjectID
 	deploymentID := l.attrDeploymentID
 	openAPIAssetID := l.attrOpenAPIAssetID
+	externalMCPID := l.attrExternalMCPID
+	functionsID := l.attrFunctionsID
 
 	record.Attrs(func(a slog.Attr) bool {
 		switch {
@@ -76,6 +82,14 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 		case a.Key == string(attr.DeploymentOpenAPIIDKey) && a.Value.Kind() == slog.KindString:
 			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				openAPIAssetID = id
+			}
+		case a.Key == string(attr.ExternalMCPIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				externalMCPID = id
+			}
+		case a.Key == string(attr.DeploymentFunctionsIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				functionsID = id
 			}
 		}
 
@@ -106,6 +120,12 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	if openAPIAssetID != uuid.Nil {
 		msg.AttachmentID = uuid.NullUUID{UUID: openAPIAssetID, Valid: true}
 		msg.AttachmentType = conv.ToPGText("openapi")
+	} else if externalMCPID != uuid.Nil {
+		msg.AttachmentID = uuid.NullUUID{UUID: externalMCPID, Valid: true}
+		msg.AttachmentType = conv.ToPGText("external_mcp")
+	} else if functionsID != uuid.Nil {
+		msg.AttachmentID = uuid.NullUUID{UUID: functionsID, Valid: true}
+		msg.AttachmentType = conv.ToPGText("functions")
 	}
 	l.buffer.msgs = append(l.buffer.msgs, msg)
 	l.mut.Unlock()
@@ -151,6 +171,14 @@ func (l *LogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		case a.Key == string(attr.DeploymentOpenAPIIDKey) && a.Value.Kind() == slog.KindString:
 			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				clone.attrOpenAPIAssetID = id
+			}
+		case a.Key == string(attr.ExternalMCPIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				clone.attrExternalMCPID = id
+			}
+		case a.Key == string(attr.DeploymentFunctionsIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				clone.attrFunctionsID = id
 			}
 		}
 	}

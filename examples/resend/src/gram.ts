@@ -36,7 +36,7 @@ const gram = new Gram({
           error: "Failed to send email",
           details: error instanceof Error ? error.message : String(error),
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
   },

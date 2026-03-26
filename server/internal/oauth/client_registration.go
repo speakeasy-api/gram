@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -242,10 +243,8 @@ func (s *ClientRegistrationService) IsValidRedirectURI(ctx context.Context, mcpU
 		return false, fmt.Errorf("failed to get client: %w", err)
 	}
 
-	for _, uri := range client.RedirectURIs {
-		if uri == redirectURI {
-			return true, nil
-		}
+	if slices.Contains(client.RedirectURIs, redirectURI) {
+		return true, nil
 	}
 
 	return false, nil

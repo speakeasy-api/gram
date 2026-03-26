@@ -1,45 +1,45 @@
-import React from 'react'
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
+import React from "react";
+import { Chat } from "..";
+import type { Meta, StoryFn } from "@storybook/react-vite";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/Density',
+  title: "Chat/Density",
   component: Chat,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
-type Story = StoryFn<typeof Chat>
+type Story = StoryFn<typeof Chat>;
 
-export const Compact: Story = () => <Chat />
+export const Compact: Story = () => <Chat />;
 Compact.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
-      theme: { density: 'compact' },
+      variant: "standalone",
+      theme: { density: "compact" },
     },
   },
-}
+};
 
-export const Normal: Story = () => <Chat />
+export const Normal: Story = () => <Chat />;
 Normal.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
-      theme: { density: 'normal' },
+      variant: "standalone",
+      theme: { density: "normal" },
     },
   },
-}
+};
 
-export const Spacious: Story = () => <Chat />
+export const Spacious: Story = () => <Chat />;
 Spacious.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
-      theme: { density: 'spacious' },
+      variant: "standalone",
+      theme: { density: "spacious" },
     },
   },
-}
+};

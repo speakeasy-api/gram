@@ -1,4 +1,5 @@
 import { Heading } from "@/components/ui/heading";
+import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentLogsSuspense } from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
@@ -30,6 +31,11 @@ const TIMESTAMP_PATTERNS = [
 ];
 
 const LEVEL_PATTERN = /^\[?(WARN|WARNING|INFO|DEBUG|ERROR|OK)\]?\s+(.*)$/i;
+
+function formatLogTimestamp(createdAt: string): string {
+  const date = new Date(createdAt);
+  return dateTimeFormatters.logTimestamp.format(date);
+}
 
 function parseLogMessage(message: string, event: string): ParsedLogEntry {
   let source: string | undefined;
@@ -101,10 +107,19 @@ function parseLogMessage(message: string, event: string): ParsedLogEntry {
   };
 }
 
-export const LogsTabContent = () => {
-  const { deploymentId } = useParams();
+export const LogsTabContent = ({
+  deploymentId: propDeploymentId,
+  embeddedMode = false,
+  attachmentType,
+}: {
+  deploymentId?: string;
+  embeddedMode?: boolean;
+  attachmentType?: string;
+} = {}) => {
+  const { deploymentId: paramDeploymentId } = useParams();
+  const deploymentId = propDeploymentId ?? paramDeploymentId!;
   const { data: deploymentLogs } = useDeploymentLogsSuspense(
-    { deploymentId: deploymentId! },
+    { deploymentId },
     undefined,
     {
       staleTime: Infinity,
@@ -122,31 +137,41 @@ export const LogsTabContent = () => {
   const [searchInputFocused, setSearchInputFocused] = useState(false);
 
   const { searchParams, setSearchParams } = useDeploymentSearchParams();
+  const [localGrouping, setLocalGrouping] = useState(false);
 
-  const setGroupBySource = (value: boolean) => {
-    setSearchParams((prev) => {
-      if (prev.tab !== "logs") return prev;
-      const next = { ...prev };
-      if (value) next.grouping = "by_source";
-      else next.grouping = undefined;
-      return { ...prev };
-    });
-  };
+  const setGroupBySource = embeddedMode
+    ? (value: boolean) => setLocalGrouping(value)
+    : (value: boolean) => {
+        setSearchParams((prev) => {
+          if (prev.tab !== "logs") return prev;
+          const next = { ...prev };
+          if (value) next.grouping = "by_source";
+          else next.grouping = undefined;
+          return next;
+        });
+      };
 
   const groupBySource = React.useMemo(() => {
+    if (embeddedMode) return localGrouping;
     if (searchParams.tab !== "logs") return false;
     return searchParams.grouping === "by_source";
-  }, [searchParams]);
+  }, [embeddedMode, localGrouping, searchParams]);
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
+  const visibleEvents = useMemo(() => {
+    if (!attachmentType) return deploymentLogs.events;
+    return deploymentLogs.events.filter(
+      (event) =>
+        !event.attachmentType || event.attachmentType === attachmentType,
+    );
+  }, [deploymentLogs.events, attachmentType]);
+
   const parsedLogs = useMemo(
     () =>
-      deploymentLogs.events.map((event) =>
-        parseLogMessage(event.message, event.event),
-      ),
-    [deploymentLogs.events],
+      visibleEvents.map((event) => parseLogMessage(event.message, event.event)),
+    [visibleEvents],
   );
 
   const logStats = useMemo(() => {
@@ -660,7 +685,7 @@ export const LogsTabContent = () => {
                           if (el) logRefs.current.set(globalIndex, el);
                         }}
                         key={
-                          deploymentLogs.events[globalIndex]?.id ||
+                          visibleEvents[globalIndex]?.id ||
                           `fallback-${globalIndex}`
                         }
                         className={cn(
@@ -680,11 +705,9 @@ export const LogsTabContent = () => {
                               (isError || isWarn) && "text-inherit",
                             )}
                           >
-                            {log.timestamp ||
-                              `${String(globalIndex + 1).padStart(
-                                2,
-                                "0",
-                              )}:00:00.000`}
+                            {formatLogTimestamp(
+                              visibleEvents[globalIndex]!.createdAt,
+                            )}
                           </span>
                           <span
                             className={cn(
@@ -723,7 +746,7 @@ export const LogsTabContent = () => {
                   ref={(el) => {
                     if (el) logRefs.current.set(index, el);
                   }}
-                  key={deploymentLogs.events[index]?.id || `fallback-${index}`}
+                  key={visibleEvents[index]?.id || `fallback-${index}`}
                   className={cn(
                     "px-3 py-2 transition-colors relative",
                     "hover:bg-muted/20",
@@ -740,8 +763,7 @@ export const LogsTabContent = () => {
                         (isError || isWarn) && "text-inherit",
                       )}
                     >
-                      {log.timestamp ||
-                        `14:30:${String(index).padStart(2, "0")}.000`}
+                      {formatLogTimestamp(visibleEvents[index]!.createdAt)}
                     </span>
                     <span
                       className={cn(

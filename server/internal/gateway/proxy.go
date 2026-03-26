@@ -46,6 +46,11 @@ type ToolCallSource string
 const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
+
+	// gramUserEmailEnvVar is the environment variable injected into function
+	// payloads when authInput.gramEmail is enabled and Gram has authenticated
+	// the identity accessing the MCP server.
+	gramUserEmailEnvVar = "GRAM_USER_EMAIL"
 )
 
 var proxiedHeaders = []string{
@@ -226,6 +231,13 @@ func (tp *ToolProxy) doFunction(
 		if val := env.UserConfig.Get(plan.AuthInput.Variable); val != "" {
 			payloadEnv[plan.AuthInput.Variable] = val
 		}
+	}
+
+	// GRAM_USER_EMAIL is a platform-controlled variable — remove any
+	// user-supplied value and only set it from the authenticated context.
+	delete(payloadEnv, gramUserEmailEnvVar)
+	if plan.AuthInput != nil && plan.AuthInput.GramEmail && env.GramEmail != "" {
+		payloadEnv[gramUserEmailEnvVar] = env.GramEmail
 	}
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
@@ -440,7 +452,7 @@ func (tp *ToolProxy) doHTTP(
 		encoded := ""
 		if len(toolCallBody.Body) > 0 {
 			// Assume toolCallBody.Body is a JSON object (map[string]interface{})
-			var formMap map[string]interface{}
+			var formMap map[string]any
 			if err := json.Unmarshal(toolCallBody.Body, &formMap); err != nil {
 				return oops.E(oops.CodeBadRequest, err, "failed to parse form body").Log(ctx, logger)
 			}
@@ -956,13 +968,13 @@ func insertPathParams(urlStr string, params map[string]string) string {
 // encodeValue recursively encodes a value into URL form format, specifically handling deep objects
 func formEncodeValue(values url.Values, key string, value any) {
 	switch v := value.(type) {
-	case []interface{}:
+	case []any:
 		// Handle arrays: key[0]=val1&key[1]=val2
 		for i, item := range v {
 			indexKey := fmt.Sprintf("%s[%d]", key, i)
 			formEncodeValue(values, indexKey, item)
 		}
-	case map[string]interface{}:
+	case map[string]any:
 		// Handle objects: key[field]=value
 		for k, val := range v {
 			objKey := fmt.Sprintf("%s[%s]", key, k)

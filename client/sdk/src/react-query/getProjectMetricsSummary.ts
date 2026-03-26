@@ -3,15 +3,13 @@
  */
 
 import {
-  MutationKey,
-  useMutation,
-  UseMutationResult,
+  InvalidateQueryFilters,
+  QueryClient,
+  useQuery,
+  UseQueryResult,
+  useSuspenseQuery,
+  UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,20 +22,26 @@ import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
-import { MutationHookOptions } from "./_types.js";
-
-export type GetProjectMetricsSummaryMutationVariables = {
-  request: operations.GetProjectMetricsSummaryRequest;
-  security?: operations.GetProjectMetricsSummarySecurity | undefined;
-  options?: RequestOptions;
+import {
+  QueryHookOptions,
+  SuspenseQueryHookOptions,
+  TupleToPrefixes,
+} from "./_types.js";
+import {
+  buildGetProjectMetricsSummaryQuery,
+  GetProjectMetricsSummaryQueryData,
+  prefetchGetProjectMetricsSummary,
+  queryKeyGetProjectMetricsSummary,
+} from "./getProjectMetricsSummary.core.js";
+export {
+  buildGetProjectMetricsSummaryQuery,
+  type GetProjectMetricsSummaryQueryData,
+  prefetchGetProjectMetricsSummary,
+  queryKeyGetProjectMetricsSummary,
 };
 
-export type GetProjectMetricsSummaryMutationData =
-  components.GetMetricsSummaryResult;
-
-export type GetProjectMetricsSummaryMutationError =
+export type GetProjectMetricsSummaryQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -54,62 +58,102 @@ export type GetProjectMetricsSummaryMutationError =
  * @remarks
  * Get aggregated metrics summary for an entire project
  */
-export function useGetProjectMetricsSummaryMutation(
-  options?: MutationHookOptions<
-    GetProjectMetricsSummaryMutationData,
-    GetProjectMetricsSummaryMutationError,
-    GetProjectMetricsSummaryMutationVariables
+export function useGetProjectMetricsSummary(
+  request: operations.GetProjectMetricsSummaryRequest,
+  security?: operations.GetProjectMetricsSummarySecurity | undefined,
+  options?: QueryHookOptions<
+    GetProjectMetricsSummaryQueryData,
+    GetProjectMetricsSummaryQueryError
   >,
-): UseMutationResult<
-  GetProjectMetricsSummaryMutationData,
-  GetProjectMetricsSummaryMutationError,
-  GetProjectMetricsSummaryMutationVariables
+): UseQueryResult<
+  GetProjectMetricsSummaryQueryData,
+  GetProjectMetricsSummaryQueryError
 > {
   const client = useGramContext();
-  return useMutation({
-    ...buildGetProjectMetricsSummaryMutation(client, options),
+  return useQuery({
+    ...buildGetProjectMetricsSummaryQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
     ...options,
   });
 }
 
-export function mutationKeyGetProjectMetricsSummary(): MutationKey {
-  return ["@gram/client", "telemetry", "getProjectMetricsSummary"];
-}
-
-export function buildGetProjectMetricsSummaryMutation(
-  client$: GramCore,
-  hookOptions?: RequestOptions,
-): {
-  mutationKey: MutationKey;
-  mutationFn: (
-    variables: GetProjectMetricsSummaryMutationVariables,
-  ) => Promise<GetProjectMetricsSummaryMutationData>;
-} {
-  return {
-    mutationKey: mutationKeyGetProjectMetricsSummary(),
-    mutationFn: function getProjectMetricsSummaryMutationFn({
+/**
+ * getProjectMetricsSummary telemetry
+ *
+ * @remarks
+ * Get aggregated metrics summary for an entire project
+ */
+export function useGetProjectMetricsSummarySuspense(
+  request: operations.GetProjectMetricsSummaryRequest,
+  security?: operations.GetProjectMetricsSummarySecurity | undefined,
+  options?: SuspenseQueryHookOptions<
+    GetProjectMetricsSummaryQueryData,
+    GetProjectMetricsSummaryQueryError
+  >,
+): UseSuspenseQueryResult<
+  GetProjectMetricsSummaryQueryData,
+  GetProjectMetricsSummaryQueryError
+> {
+  const client = useGramContext();
+  return useSuspenseQuery({
+    ...buildGetProjectMetricsSummaryQuery(
+      client,
       request,
       security,
       options,
-    }): Promise<GetProjectMetricsSummaryMutationData> {
-      const mergedOptions = {
-        ...hookOptions,
-        ...options,
-        fetchOptions: {
-          ...hookOptions?.fetchOptions,
-          ...options?.fetchOptions,
-          signal: combineSignals(
-            hookOptions?.fetchOptions?.signal,
-            options?.fetchOptions?.signal,
-          ),
-        },
-      };
-      return unwrapAsync(telemetryGetProjectMetricsSummary(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
+    ),
+    ...options,
+  });
+}
+
+export function setGetProjectMetricsSummaryData(
+  client: QueryClient,
+  queryKeyBase: [
+    parameters: {
+      gramKey?: string | undefined;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
     },
-  };
+  ],
+  data: GetProjectMetricsSummaryQueryData,
+): GetProjectMetricsSummaryQueryData | undefined {
+  const key = queryKeyGetProjectMetricsSummary(...queryKeyBase);
+
+  return client.setQueryData<GetProjectMetricsSummaryQueryData>(key, data);
+}
+
+export function invalidateGetProjectMetricsSummary(
+  client: QueryClient,
+  queryKeyBase: TupleToPrefixes<
+    [parameters: {
+      gramKey?: string | undefined;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
+  >,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void> {
+  return client.invalidateQueries({
+    ...filters,
+    queryKey: [
+      "@gram/client",
+      "telemetry",
+      "getProjectMetricsSummary",
+      ...queryKeyBase,
+    ],
+  });
+}
+
+export function invalidateAllGetProjectMetricsSummary(
+  client: QueryClient,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void> {
+  return client.invalidateQueries({
+    ...filters,
+    queryKey: ["@gram/client", "telemetry", "getProjectMetricsSummary"],
+  });
 }

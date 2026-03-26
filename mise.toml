@@ -6,20 +6,26 @@
 # well as overriding environment variables.
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
-"github:speakeasy-api/speakeasy" = "1.700.2"
+"github:speakeasy-api/openapi" = "1.19.2"
+"github:speakeasy-api/speakeasy" = "1.730.1"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.1.3"
 flyctl = "0.4.6"
-go = "1.25.6"
-golangci-lint = "2.8.0"
+go = "1.26.1"
+golangci-lint = "2.11.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.1"
 melange = "0.40.4"
-nodejs = "24.10.0"
-pnpm = "10.28.2"
-watchexec = "2.3.3"
-mprocs = "0.8.3"
+nodejs = "24.13.1"
+pnpm = "10.30.2"
+watchexec = "2.5.0"
+uv = "0.10.9"
+yq = "4.52.4"
+hk = "1.38.0"
+pkl = "0.31.0"
+"github:speakeasy-api/madprocs" = "0.1.25"
+"github:temporalio/cli" = "1.6.1"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
@@ -46,6 +52,7 @@ GRAM_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOS
 CLICKHOUSE_USERNAME = "gram"
 CLICKHOUSE_PASSWORD = "gram"
 CLICKHOUSE_HOST = "127.0.0.1"
+CLICKHOUSE_HTTP_PORT = "8123"
 CLICKHOUSE_NATIVE_PORT = "9440"
 CLICKHOUSE_DATABASE = "default"
 CLICKHOUSE_INSECURE = true
@@ -56,11 +63,13 @@ GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLIC
 ############################
 ## Temporal configuration ##
 ############################
+TEMPORAL_HOST = "127.0.0.1"
 TEMPORAL_PORT = "7233"
 TEMPORAL_NAMESPACE = "default"
+TEMPORAL_TASK_QUEUE = "main"
 ## When using Temporal Cloud, the following variable should like something like:
 ##     "<namespace>.<account>.tmprl.cloud:7233".
-TEMPORAL_ADDRESS = ":{{env.TEMPORAL_PORT}}"
+TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 
 ###################################
 ## Gram server and worker config ##
@@ -70,24 +79,40 @@ TEMPORAL_ADDRESS = ":{{env.TEMPORAL_PORT}}"
 ## for simple production deployments although you are encouraged to run the gram
 ## server and worker as separate processes that can be scaled independently.
 GRAM_SINGLE_PROCESS = 0
-GRAM_SERVER_ADDRESS = ":8080"
-GRAM_CONTROL_ADDRESS = ":8081"
-GRAM_WORKER_CONTROL_ADDRESS = ":8082"
+GRAM_SERVER_PORT = "8080"
+GRAM_SERVER_ADDRESS = ":{{env.GRAM_SERVER_PORT}}"
+GRAM_CONTROL_PORT = "8081"
+GRAM_CONTROL_ADDRESS = ":{{env.GRAM_CONTROL_PORT}}"
+GRAM_WORKER_CONTROL_PORT = "8082"
+GRAM_WORKER_CONTROL_ADDRESS = ":{{env.GRAM_WORKER_CONTROL_PORT}}"
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
-GRAM_SERVER_URL = "https://localhost:8080"
-GRAM_SITE_URL = "https://localhost:5173"
+GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
+GRAM_SITE_PORT = "5173"
+GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
+GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
 GRAM_ENCRYPTION_KEY = "unset"
-GRAM_REDIS_CACHE_ADDR = "127.0.0.1:5445"
+GRAM_REDIS_CACHE_HOST = "127.0.0.1"
+GRAM_REDIS_CACHE_PORT = "5445"
+GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 OPENROUTER_DEV_KEY = "unset"
-## The following two variables are used by Speakeasy staff developing against
-## the Speakeasy app.
-SPEAKEASY_SERVER_ADDRESS = "http://localhost:35291"
-SPEAKEASY_SECRET_KEY = "unset"
+## The following variables configure the mock Speakeasy IDP for local dev.
+## MOCK_IDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
+MOCK_IDP_HOST = "localhost"
+MOCK_IDP_PORT = "35291"
+SPEAKEASY_SERVER_ADDRESS = "http://{{env.MOCK_IDP_HOST}}:{{env.MOCK_IDP_PORT}}"
+SPEAKEASY_SECRET_KEY = "test-secret"
+## The following variables enable OIDC mode for the mock IDP, which
+## authenticates against a real OIDC provider (e.g. WorkOS AuthKit dev env).
+## Run `mise run zero:workos` to configure these.
+OIDC_ISSUER = "unset"
+OIDC_CLIENT_ID = "unset"
+OIDC_CLIENT_SECRET = "unset"
+OIDC_EXTERNAL_URL = "http://{{env.MOCK_IDP_HOST}}:{{env.MOCK_IDP_PORT}}"
 ## The following variables are only needed if you want to do one of the following:
 ## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.
 ## - Local development with SSL enabled.
@@ -97,7 +122,9 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 ##########################
 ## Observability config ##
 ##########################
-OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"
+OTLP_GRPC_HOST = "localhost"
+OTLP_GRPC_PORT = "4317"
+OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
@@ -105,22 +132,21 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
+JAEGER_WEB_PORT = "16686"
 GRAM_LOG_PRETTY = 1
-## DO NOT SET THIS VARIABLE WHEN DEPLOYING TO PRODUCTION.
-GRAM_UNSAFE_LOCAL_ENV_PATH = "{{config_root}}/.local.env.json"
 ## This config is used by the Elements SDK and CLI to point to the correct Gram
 ## API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
 VITE_DEV_HOSTNAMES = "localhost,gram.local"
 TEMPORAL_WEB_PORT = "8233"
-## The following variables configure the local opentelemetry stack
-OTLP_GRPC_PORT = "4317"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
 ## flag settings. Check out flags.local.csv.example in the root of the repo for
 ## an example of the format.
 ## For a list of feature flags, check `server/internal/feature/flags.go`.
 # GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/flags.csv"
+## Set to 1 to disable air hot reload and run server/worker directly
+GRAM_DISABLE_AIR = 0
 
 ####################################
 ## Gram Functions runner settings ##
@@ -155,7 +181,18 @@ PULSE_REGISTRY_KEY = "unset"
 ##############
 ## Elements ##
 ## Used for local development only
-VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:6006"
+## Storybook runs internally on 6007, but the protocol sniffing proxy serves on 6006
+ELEMENTS_STORYBOOK_PORT = "6007"
+VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:{{env.ELEMENTS_STORYBOOK_PORT}}"
+
+#########################
+## Polar configuration ##
+#########################
+POLAR_PRODUCT_ID_FREE = "cc768f24-c85a-4779-8863-030f1abc3f40"
+POLAR_PRODUCT_ID_PRO = "1361707d-e9c2-4693-91bd-0789fbc09d68"
+POLAR_METER_ID_TOOL_CALLS = "7ec16f6d-6189-4262-9898-c64bed7b8a91"
+POLAR_METER_ID_SERVERS = "af37f394-69c8-4d46-8308-9b92407ee52e"
+POLAR_METER_ID_CREDITS = "b96fda22-2147-4089-bedb-72c3304b17eb"
 
 # Loops transactional email API key. Set to a real key to enable invite emails locally.
 LOOPS_API_KEY = "unset"

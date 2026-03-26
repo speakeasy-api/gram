@@ -429,7 +429,7 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 		case openapi.SecuritySchemeTypeAPIKey:
 			envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key))
 		case openapi.SecuritySchemeTypeHTTP:
-			switch sec.GetScheme() {
+			switch strings.ToLower(sec.GetScheme()) {
 			case "bearer":
 				envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key))
 			case "basic":
@@ -490,7 +490,7 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 			Type:                conv.ToPGText(sec.GetType().String()),
 			Name:                conv.ToPGTextEmpty(sec.GetName()),
 			InPlacement:         conv.ToPGTextEmpty(sec.GetIn().String()),
-			Scheme:              conv.ToPGTextEmpty(sec.GetScheme()),
+			Scheme:              conv.ToPGTextEmpty(strings.ToLower(sec.GetScheme())),
 			// No real reason to store this since it's purely for documentation
 			// purposes and we should eventually drop the DB column. Setting it
 			// to NULL.
@@ -516,7 +516,8 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 			}
 
 			if u.Scheme != "https" {
-				_ = oops.E(oops.CodeUnauthorized, err, "%s: %s: skipping non-https server url [%d:%d]", docInfo.Name, server.URL, line, col).Log(ctx, logger)
+				message := fmt.Sprintf("%s: %s: skipping non-https server url [%d:%d]", docInfo.Name, server.URL, line, col)
+				logger.WarnContext(ctx, message)
 				continue
 			}
 
@@ -691,6 +692,9 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		if err := jsonschema.IsValidJSONSchema(schemaBytes.Bytes()); err != nil {
 			return empty, deploymentEvents, fmt.Errorf("invalid tool input schema for operation %s: %w", opID, err)
 		}
+
+		// Hack: rewrite integer enums to anyOf/const for Anti-Gravity compat. See integer_enum.go.
+		schemaBytes = *bytes.NewBuffer(TransformIntegerEnums(schemaBytes.Bytes()))
 	}
 
 	security, err := serializeSecuritySpeakeasy(op.GetSecurity())
@@ -715,7 +719,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 
 	var confirm *string
 	if descriptor.confirm != nil {
-		confirm = conv.Ptr(string(*descriptor.confirm))
+		confirm = new(string(*descriptor.confirm))
 	}
 
 	tags := op.Tags
@@ -754,6 +758,10 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
 		ResponseFilter:      responseFilter,
+		ReadOnlyHint:        pgtype.Bool{Bool: inferReadOnlyHint(method), Valid: true},
+		DestructiveHint:     pgtype.Bool{Bool: inferDestructiveHint(method), Valid: true},
+		IdempotentHint:      pgtype.Bool{Bool: inferIdempotentHint(method), Valid: true},
+		OpenWorldHint:       pgtype.Bool{Bool: true, Valid: true},
 	}, deploymentEvents, nil
 }
 
@@ -894,7 +902,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 			s := param.Schema.GetResolvedSchema()
 
 			if s.IsLeft() && s.GetLeft().GetDescription() == "" && param.GetDescription() != "" {
-				s.GetLeft().Description = pointer.From(param.GetDescription())
+				s.GetLeft().Description = new(param.GetDescription())
 			}
 
 			es, d, err := extractJSONSchemaSpeakeasy(ctx, doc, schemaCache, param.Name, param.Schema)
@@ -908,7 +916,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 
 		required := param.Required
 		if param.GetIn() == openapi.ParameterInPath {
-			required = pointer.From(true)
+			required = new(true)
 		}
 
 		proxy := &OpenapiV3ParameterProxy{
@@ -976,6 +984,31 @@ func mergeDefs(ctx context.Context, logger *slog.Logger, a, b Defs) Defs {
 	}
 
 	return a
+}
+
+// inferReadOnlyHint returns true for read-only HTTP methods (GET, HEAD, OPTIONS).
+func inferReadOnlyHint(method string) bool {
+	switch strings.ToUpper(method) {
+	case "GET", "HEAD", "OPTIONS":
+		return true
+	default:
+		return false
+	}
+}
+
+// inferDestructiveHint returns true for destructive HTTP methods (DELETE).
+func inferDestructiveHint(method string) bool {
+	return strings.EqualFold(method, "DELETE")
+}
+
+// inferIdempotentHint returns true for idempotent HTTP methods (GET, HEAD, OPTIONS, PUT, DELETE).
+func inferIdempotentHint(method string) bool {
+	switch strings.ToUpper(method) {
+	case "GET", "HEAD", "OPTIONS", "PUT", "DELETE":
+		return true
+	default:
+		return false
+	}
 }
 
 func createEmptyObjectSchema() *oas3.Schema {

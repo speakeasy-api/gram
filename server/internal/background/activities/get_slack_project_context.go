@@ -33,12 +33,11 @@ type SlackToolsetSummary struct {
 }
 
 type SlackProjectContextResponse struct {
-	TeamName           string
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	ProjectSlug        string
-	DefaultToolsetSlug *string
-	Toolsets           []SlackToolsetSummary
+	TeamName       string
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ProjectSlug    string
+	Toolsets       []SlackToolsetSummary
 }
 
 func NewSlackProjectContextActivity(logger *slog.Logger, db *pgxpool.Pool, client *client.SlackClient) *GetSlackProjectContext {
@@ -51,7 +50,11 @@ func NewSlackProjectContextActivity(logger *slog.Logger, db *pgxpool.Pool, clien
 }
 
 func (s *GetSlackProjectContext) Do(ctx context.Context, event types.SlackEvent) (*SlackProjectContextResponse, error) {
-	authInfo, err := s.slackClient.GetAppAuthInfo(ctx, event.TeamID)
+	gramAppID, err := uuid.Parse(event.GramAppID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid gram app ID on event").Log(ctx, s.logger)
+	}
+	authInfo, err := s.slackClient.GetAppAuthInfoByID(ctx, gramAppID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting app auth info").Log(ctx, s.logger)
 	}
@@ -92,11 +95,10 @@ func (s *GetSlackProjectContext) Do(ctx context.Context, event types.SlackEvent)
 	}
 
 	return &SlackProjectContextResponse{
-		TeamName:           authInfo.TeamName,
-		OrganizationID:     authInfo.OrganizationID,
-		ProjectID:          authInfo.ProjectID,
-		ProjectSlug:        projectSlug,
-		DefaultToolsetSlug: authInfo.DefaultToolsetSlug,
-		Toolsets:           toolsetSummaries,
+		TeamName:       authInfo.TeamName,
+		OrganizationID: authInfo.OrganizationID,
+		ProjectID:      authInfo.ProjectID,
+		ProjectSlug:    projectSlug,
+		Toolsets:       toolsetSummaries,
 	}, nil
 }

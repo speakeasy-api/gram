@@ -19,23 +19,27 @@
  * ```
  */
 
-import { ROOT_SELECTOR } from '@/constants/tailwind'
-import { ElementsContext } from '@/contexts/contexts'
-import { ReplayContext } from '@/contexts/ReplayContext'
-import { ToolApprovalProvider } from '@/contexts/ToolApprovalContext'
+import { ROOT_SELECTOR } from "@/constants/tailwind";
+import { ChatIdContext } from "@/contexts/ChatIdContext";
+import { ElementsContext } from "@/contexts/contexts";
+import { ReplayContext } from "@/contexts/ReplayContext";
+import { ToolApprovalProvider } from "@/contexts/ToolApprovalContext";
 import {
   createReplayTransport,
   type Cassette,
   type ReplayOptions,
-} from '@/lib/cassette'
-import { MODELS } from '@/lib/models'
-import { cn } from '@/lib/utils'
-import { recommended } from '@/plugins'
-import type { ElementsConfig } from '@/types'
-import { AssistantRuntimeProvider, useThreadRuntime } from '@assistant-ui/react'
-import { useChatRuntime } from '@assistant-ui/react-ai-sdk'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactNode, useEffect, useMemo, useRef } from 'react'
+} from "@/lib/cassette";
+import { MODELS } from "@/lib/models";
+import { cn } from "@/lib/utils";
+import { recommended } from "@/plugins";
+import type { ElementsConfig } from "@/types";
+import {
+  AssistantRuntimeProvider,
+  useThreadRuntime,
+} from "@assistant-ui/react";
+import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactNode, useEffect, useMemo, useRef } from "react";
 
 // ---------------------------------------------------------------------------
 // Replay component
@@ -43,13 +47,13 @@ import { ReactNode, useEffect, useMemo, useRef } from 'react'
 
 export interface ReplayProps extends ReplayOptions {
   /** The recorded cassette to replay. */
-  cassette: Cassette
-  children: ReactNode
+  cassette: Cassette;
+  children: ReactNode;
   /** Optional ElementsConfig for visual customization (theme, variant, etc.) */
-  config?: Partial<ElementsConfig>
+  config?: Partial<ElementsConfig>;
 }
 
-const replayQueryClient = new QueryClient()
+const replayQueryClient = new QueryClient();
 
 export const Replay = ({
   cassette,
@@ -65,21 +69,21 @@ export const Replay = ({
     userMessageDelay,
     assistantStartDelay,
     onComplete,
-  }
+  };
 
   const transport = useMemo(
     () => createReplayTransport(cassette, replayOptions),
-    [cassette, typingSpeed, userMessageDelay, assistantStartDelay, onComplete]
-  )
+    [cassette, typingSpeed, userMessageDelay, assistantStartDelay, onComplete],
+  );
 
-  const runtime = useChatRuntime({ transport })
+  const runtime = useChatRuntime({ transport });
 
-  const plugins = partialConfig?.plugins ?? recommended
+  const plugins = partialConfig?.plugins ?? recommended;
 
   // Build a minimal ElementsConfig for child components
   const config: ElementsConfig = useMemo(
     () => ({
-      projectSlug: partialConfig?.projectSlug ?? 'replay',
+      projectSlug: partialConfig?.projectSlug ?? "replay",
       variant: partialConfig?.variant,
       theme: partialConfig?.theme,
       welcome: partialConfig?.welcome,
@@ -90,8 +94,8 @@ export const Replay = ({
       modal: partialConfig?.modal,
       sidecar: partialConfig?.sidecar,
     }),
-    [partialConfig, plugins]
-  )
+    [partialConfig, plugins],
+  );
 
   const contextValue = useMemo(
     () => ({
@@ -105,42 +109,46 @@ export const Replay = ({
       plugins,
       mcpTools: undefined,
     }),
-    [config, plugins]
-  )
+    [config, plugins],
+  );
 
-  const replayCtx = useMemo(() => ({ isReplay: true }), [])
+  const replayCtx = useMemo(() => ({ isReplay: true }), []);
+
+  const chatIdValue = useMemo(() => ({ chatId: "replay" }), []);
 
   return (
     <QueryClientProvider client={replayQueryClient}>
       <AssistantRuntimeProvider runtime={runtime}>
         <ReplayContext.Provider value={replayCtx}>
           <ElementsContext.Provider value={contextValue}>
-            <ToolApprovalProvider>
-              <div
-                className={cn(
-                  ROOT_SELECTOR,
-                  (config.variant === 'standalone' ||
-                    config.variant === 'sidecar') &&
-                    'h-full min-h-0 flex-1'
-                )}
-              >
-                {children}
-              </div>
-              <ReplayController cassette={cassette} options={replayOptions} />
-            </ToolApprovalProvider>
+            <ChatIdContext.Provider value={chatIdValue}>
+              <ToolApprovalProvider>
+                <div
+                  className={cn(
+                    ROOT_SELECTOR,
+                    (config.variant === "standalone" ||
+                      config.variant === "sidecar") &&
+                      "h-full min-h-0 flex-1",
+                  )}
+                >
+                  {children}
+                </div>
+                <ReplayController cassette={cassette} options={replayOptions} />
+              </ToolApprovalProvider>
+            </ChatIdContext.Provider>
           </ElementsContext.Provider>
         </ReplayContext.Provider>
       </AssistantRuntimeProvider>
     </QueryClientProvider>
-  )
-}
+  );
+};
 
 // ---------------------------------------------------------------------------
 // ReplayController - auto-submits user messages to drive the replay
 // ---------------------------------------------------------------------------
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -150,23 +158,23 @@ function sleep(ms: number): Promise<void> {
  * it to return to false — otherwise we resolve before the run begins.
  */
 async function waitForRunComplete(
-  runtime: NonNullable<ReturnType<typeof useThreadRuntime>>
+  runtime: NonNullable<ReturnType<typeof useThreadRuntime>>,
 ): Promise<void> {
   // Phase 1: wait for the runtime to start running
   if (!runtime.getState().isRunning) {
     await new Promise<void>((resolve) => {
       const unsub = runtime.subscribe(() => {
         if (runtime.getState().isRunning) {
-          unsub()
-          resolve()
+          unsub();
+          resolve();
         }
-      })
+      });
       // Re-check in case it started between getState and subscribe
       if (runtime.getState().isRunning) {
-        unsub()
-        resolve()
+        unsub();
+        resolve();
       }
-    })
+    });
   }
 
   // Phase 2: wait for the runtime to stop running
@@ -174,68 +182,68 @@ async function waitForRunComplete(
     await new Promise<void>((resolve) => {
       const unsub = runtime.subscribe(() => {
         if (!runtime.getState().isRunning) {
-          unsub()
-          resolve()
+          unsub();
+          resolve();
         }
-      })
+      });
       // Re-check in case it stopped between getState and subscribe
       if (!runtime.getState().isRunning) {
-        unsub()
-        resolve()
+        unsub();
+        resolve();
       }
-    })
+    });
   }
 }
 
 interface ReplayControllerProps {
-  cassette: Cassette
-  options: ReplayOptions
+  cassette: Cassette;
+  options: ReplayOptions;
 }
 
 const ReplayController = ({ cassette, options }: ReplayControllerProps) => {
-  const runtime = useThreadRuntime()
-  const hasStarted = useRef(false)
+  const runtime = useThreadRuntime();
+  const hasStarted = useRef(false);
 
   useEffect(() => {
-    if (hasStarted.current) return
-    hasStarted.current = true
+    if (hasStarted.current) return;
+    hasStarted.current = true;
 
-    const userMessageDelay = options.userMessageDelay ?? 800
-    let cancelled = false
+    const userMessageDelay = options.userMessageDelay ?? 800;
+    let cancelled = false;
 
     const runReplay = async () => {
       for (const msg of cassette.messages) {
-        if (cancelled) return
+        if (cancelled) return;
 
-        if (msg.role === 'user') {
-          await sleep(userMessageDelay)
-          if (cancelled) return
+        if (msg.role === "user") {
+          await sleep(userMessageDelay);
+          if (cancelled) return;
 
           // Extract text from user content parts
           const text = msg.content
-            .filter((p) => p.type === 'text')
+            .filter((p) => p.type === "text")
             .map((p) => p.text)
-            .join('\n')
+            .join("\n");
 
           // Append the user message — triggers transport.sendMessages
-          runtime.append(text)
+          runtime.append(text);
 
           // Wait for the assistant response to finish streaming
-          await waitForRunComplete(runtime)
+          await waitForRunComplete(runtime);
         }
         // Assistant messages are handled by the transport's sendMessages,
         // so we skip them here.
       }
 
-      options.onComplete?.()
-    }
+      options.onComplete?.();
+    };
 
-    runReplay()
+    runReplay();
 
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
-  return null
-}
+  return null;
+};

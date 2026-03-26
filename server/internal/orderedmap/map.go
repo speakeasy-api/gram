@@ -271,9 +271,9 @@ func (m *Map[K, V]) NavigateWithKey(key string) (any, error) {
 		return nil, fmt.Errorf("sequencedmap.Map is nil")
 	}
 
-	keyType := reflect.TypeOf((*K)(nil)).Elem()
+	keyType := reflect.TypeFor[K]()
 
-	if reflect.TypeOf((*K)(nil)).Elem().Kind() != reflect.String {
+	if reflect.TypeFor[K]().Kind() != reflect.String {
 		return nil, fmt.Errorf("sequencedmap.Map key type must be string")
 	}
 

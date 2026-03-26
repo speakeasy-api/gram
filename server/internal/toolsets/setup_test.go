@@ -13,10 +13,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
+	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -24,10 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -38,7 +41,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background())
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -63,7 +66,7 @@ type testInstance struct {
 	assets         *assets.Service
 	packages       *packages.Service
 	conn           *pgxpool.Pool
-	temporal       client.Client
+	temporalEnv    *temporal.Environment
 	sessionManager *sessions.Manager
 	assetStorage   assets.BlobStore
 }
@@ -89,12 +92,10 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	f := &feature.InMemory{}
 
-	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
+	temporalEnv, _ := infra.NewTemporalEnv(t)
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
-		temporal.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
@@ -105,15 +106,14 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	svc := toolsets.NewService(logger, conn, sessionManager, nil)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
@@ -124,7 +124,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 		assets:         assetsSvc,
 		packages:       packagesSvc,
 		conn:           conn,
-		temporal:       temporal,
+		temporalEnv:    temporalEnv,
 		sessionManager: sessionManager,
 		assetStorage:   assetStorage,
 	}
@@ -248,7 +248,7 @@ func createFunctionsDeployment(t *testing.T, ctx context.Context, ti *testInstan
 	t.Helper()
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	dep, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-functions-toolset",
@@ -258,7 +258,7 @@ func createFunctionsDeployment(t *testing.T, ctx context.Context, ti *testInstan
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},
@@ -281,7 +281,7 @@ func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, t
 	t.Helper()
 
 	// Upload functions file with resources in manifest
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 
 	dep, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-functions-with-resources",
@@ -291,7 +291,7 @@ func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, t
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions-with-resources",
 				Slug:    "test-functions-with-resources",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},
@@ -308,4 +308,64 @@ func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, t
 	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
 
 	return dep
+}
+
+func withProAccount(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	authCtx.AccountType = "pro"
+
+	return contextvalues.SetAuthContext(ctx, authCtx)
+}
+
+func createMinimalPrivateToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
+	t.Helper()
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Name:                   name,
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created)
+
+	return created
+}
+
+func createMinimalPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
+	t.Helper()
+
+	created := createMinimalPrivateToolset(t, ctx, ti, name)
+	public := true
+
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            &public,
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.NotNil(t, updated.McpIsPublic)
+	require.True(t, *updated.McpIsPublic)
+
+	return updated
 }

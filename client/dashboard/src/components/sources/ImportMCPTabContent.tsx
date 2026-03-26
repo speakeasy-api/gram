@@ -117,6 +117,7 @@ export default function ImportMCPTabContent({
         request: {
           evolveForm: {
             deploymentId: deployment?.id,
+            nonBlocking: true,
             upsertExternalMcps: [
               {
                 registryId: server.registryId,

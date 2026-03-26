@@ -1,12 +1,16 @@
-[**@gram-ai/elements v1.25.1**](README.md)
+[**@gram-ai/elements v1.27.5**](README.md)
 
 ***
 
-# @gram-ai/elements v1.25.1
+# @gram-ai/elements v1.27.5
 
 ## Interfaces
 
 - [ShareButtonProps](interfaces/ShareButtonProps.md)
+- [CalendarProps](interfaces/CalendarProps.md)
+- [TimeRange](interfaces/TimeRange.md)
+- [TimeRangePreset](interfaces/TimeRangePreset.md)
+- [TimeRangePickerProps](interfaces/TimeRangePickerProps.md)
 - [CassetteMessage](interfaces/CassetteMessage.md)
 - [Cassette](interfaces/Cassette.md)
 - [ReplayOptions](interfaces/ReplayOptions.md)
@@ -31,11 +35,14 @@
 
 ## Type Aliases
 
+- [DateRangePreset](type-aliases/DateRangePreset.md)
 - [CassettePart](type-aliases/CassettePart.md)
 - [FrontendTool](type-aliases/FrontendTool.md)
 - [GetSessionFn](type-aliases/GetSessionFn.md)
 - [VARIANTS](type-aliases/VARIANTS.md)
 - [Variant](type-aliases/Variant.md)
+- [DangerousApiKeyAuthConfig](type-aliases/DangerousApiKeyAuthConfig.md)
+- [UnifiedSessionAuthConfig](type-aliases/UnifiedSessionAuthConfig.md)
 - [Model](type-aliases/Model.md)
 - [DENSITIES](type-aliases/DENSITIES.md)
 - [Density](type-aliases/Density.md)
@@ -43,10 +50,12 @@
 - [ColorScheme](type-aliases/ColorScheme.md)
 - [RADII](type-aliases/RADII.md)
 - [Radius](type-aliases/Radius.md)
+- [ToolsFilter](type-aliases/ToolsFilter.md)
 - [ModalTriggerPosition](type-aliases/ModalTriggerPosition.md)
 
 ## Variables
 
+- [PRESETS](variables/PRESETS.md)
 - [MODELS](variables/MODELS.md)
 
 ## Functions
@@ -55,6 +64,10 @@
 - [ChatHistory](functions/ChatHistory.md)
 - [Replay](functions/Replay.md)
 - [ShareButton](functions/ShareButton.md)
+- [Calendar](functions/Calendar.md)
+- [getPresetRange](functions/getPresetRange.md)
+- [TimeRangePicker](functions/TimeRangePicker.md)
+- [useChatId](functions/useChatId.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
 - [useRecordCassette](functions/useRecordCassette.md)
 - [useThreadId](functions/useThreadId.md)

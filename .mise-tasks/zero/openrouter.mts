@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Setup OpenRouter API key as part of onboarding"
 //MISE hide=true
@@ -13,13 +13,13 @@ async function run() {
   }
 
   console.log(
-    "💬 OpenRouter API key is needed to perform LLM chat completion calls."
+    "💬 OpenRouter API key is needed to perform LLM chat completion calls.",
   );
   const env = process.env["OPENROUTER_API_KEY"];
   if (env) {
     const answer = await question(
       "💬 Your environment already has OPENROUTER_API_KEY. Do you want to use it? [y/N] ",
-      { choices: ["y", "N"] }
+      { choices: ["y", "N"] },
     );
 
     if (answer.toLowerCase() === "y") {
@@ -29,18 +29,18 @@ async function run() {
   }
 
   console.log(
-    "💬 If you don't already have an OpenRouter key, you will need to create one here:"
+    "💬 If you don't already have an OpenRouter key, you will need to create one here:",
   );
   console.log("\thttps://openrouter.ai/settings/keys");
   const answer = await question(
-    "💬 Paste your OpenRouter key or press enter to skip: "
+    "💬 Paste your OpenRouter key or press enter to skip: ",
   );
   if (!answer) {
     console.log(
-      "⚠️ An OpenRouter key is required to complete onboarding. LLM chat will not work until you set one up."
+      "⚠️ An OpenRouter key is required to complete onboarding. LLM chat will not work until you set one up.",
     );
     console.log(
-      "⚠️ Run `mise run zero:openrouter` when you have a key to use."
+      "⚠️ Run `mise run zero:openrouter` when you have a key to use.",
     );
     process.exit(0);
   }

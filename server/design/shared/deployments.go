@@ -5,7 +5,7 @@ import (
 )
 
 var Deployment = Type("Deployment", func() {
-	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status", "packages", "openapiv3_tool_count", "functions_tool_count")
+	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status", "packages", "openapiv3_tool_count", "functions_tool_count", "external_mcp_tool_count")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -63,7 +63,10 @@ var Deployment = Type("Deployment", func() {
 	})
 
 	Attribute("functions_tool_count", Int64, func() {
-		Description("The number of tools in the deployment generated from OpenAPI documents.")
+		Description("The number of tools in the deployment generated from Functions.")
+	})
+	Attribute("external_mcp_tool_count", Int64, func() {
+		Description("The number of tools in the deployment generated from external MCP servers.")
 	})
 	Attribute("functions_assets", ArrayOf(DeploymentFunctions), func() {
 		Description("The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.")

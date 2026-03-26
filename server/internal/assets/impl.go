@@ -30,16 +30,17 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/assets/server"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -166,7 +167,7 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 		ContentType:              row.ContentType,
 		ContentLength:            row.ContentLength,
 		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
-		AccessControlAllowOrigin: conv.Ptr("*"),
+		AccessControlAllowOrigin: new("*"),
 	}, body, nil
 }
 
@@ -191,6 +192,8 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return result.cleanup()
 	})
+
+	logger := s.logger
 
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
 		projectID: *authCtx.ProjectID,
@@ -229,7 +232,15 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return nil, err
 	}
 
-	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing image assets").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	ar := s.repo.WithTx(dbtx)
+
+	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
 		ProjectID:     *authCtx.ProjectID,
@@ -239,7 +250,25 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+	}
+
+	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		AssetURN:  urn.NewAsset(urn.AssetKindImage, asset.ID),
+		AssetName: asset.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save image asset creation audit log").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save image asset").Log(ctx, logger)
 	}
 
 	return &gen.UploadImageResult{
@@ -264,6 +293,8 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
+	logger := s.logger
 
 	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
 		maxLength:     MaxFileSizeFunctions,
@@ -303,7 +334,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	}
 
 	if err := validateFunctionsArchive(ctx, s.logger, result.file.Name()); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid functions archive: %s", err.Error()).Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid functions archive: %s", err.Error()).Log(ctx, logger)
 	}
 
 	filename := fmt.Sprintf("functions-%s%s", result.hash, ext)
@@ -318,7 +349,15 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 		return nil, err
 	}
 
-	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing function assets").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	ar := s.repo.WithTx(dbtx)
+
+	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
 		ProjectID:     *authCtx.ProjectID,
@@ -328,7 +367,25 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+	}
+
+	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		AssetURN:  urn.NewAsset(urn.AssetKindFunction, asset.ID),
+		AssetName: asset.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save function asset creation audit log").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save function asset").Log(ctx, logger)
 	}
 
 	return &gen.UploadFunctionsResult{
@@ -353,6 +410,8 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
+	logger := s.logger
 
 	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
 		maxLength:     MaxFileSizeOpenAPI,
@@ -403,7 +462,15 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		return nil, err
 	}
 
-	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OpenAPI assets").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	ar := s.repo.WithTx(dbtx)
+
+	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
 		ProjectID:     *authCtx.ProjectID,
@@ -413,7 +480,25 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+	}
+
+	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		AssetURN:  urn.NewAsset(urn.AssetKindOpenAPI, asset.ID),
+		AssetName: asset.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset creation audit log").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset").Log(ctx, logger)
 	}
 
 	return &gen.UploadOpenAPIv3Result{
@@ -591,7 +676,7 @@ func sniffMimeType(params sniffMimeTypeParams) (mtype string, ext string, err er
 	}
 
 	if !slices.Contains(params.allowedTypes, params.inputMimeType) {
-		return "", "", oops.E(oops.CodeUnsupportedMedia, nil, "unsupported content type: %s (allowed: %s)", params.inputMimeType, strings.Join(params.allowedTypes, ", "))
+		return "", "", oops.E(oops.CodeUnsupportedMedia, nil, "unsupported content type: %q with content_length=%d (allowed: %s)", params.inputMimeType, params.contentLength, strings.Join(params.allowedTypes, ", "))
 	}
 
 	var exts []string
@@ -698,6 +783,8 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
+	logger := s.logger
 
 	// Validate URL
 	parsedURL, err := url.Parse(payload.URL)
@@ -836,7 +923,15 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, err
 	}
 
-	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OpenAPI assets").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	ar := s.repo.WithTx(dbtx)
+
+	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
 		ProjectID:     *authCtx.ProjectID,
@@ -846,7 +941,25 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		ContentLength: actualContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+	}
+
+	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		AssetURN:  urn.NewAsset(urn.AssetKindOpenAPI, asset.ID),
+		AssetName: asset.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset creation audit log").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset").Log(ctx, logger)
 	}
 
 	return &gen.UploadOpenAPIv3Result{
@@ -1262,6 +1375,6 @@ func (s *Service) ServeChatAttachmentSigned(ctx context.Context, payload *gen.Se
 		ContentType:              row.ContentType,
 		ContentLength:            row.ContentLength,
 		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
-		AccessControlAllowOrigin: conv.Ptr("*"),
+		AccessControlAllowOrigin: new("*"),
 	}, body, nil
 }

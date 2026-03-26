@@ -50,6 +50,7 @@ fi
 # Loop through each selected worktree and remove it
 while IFS= read -r worktree; do
     echo "Cleaning up worktree: $worktree"
+    (cd "$worktree" && mise run nuke)
     git worktree remove "${flags[@]}" "$worktree"
 done <<< "$selected_worktrees"
 echo "Selected worktrees have been cleaned up successfully."

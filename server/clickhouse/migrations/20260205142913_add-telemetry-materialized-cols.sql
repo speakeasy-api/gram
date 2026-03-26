@@ -1,0 +1,13 @@
+ALTER TABLE `telemetry_logs` ADD COLUMN `project_id` String MATERIALIZED toString(attributes.gram.project.id) COMMENT 'Project ID (materialized from attributes.gram.project.id).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `deployment_id` String MATERIALIZED toString(resource_attributes.gram.deployment.id) COMMENT 'Deployment ID (materialized from resource_attributes.gram.deployment.id).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `function_id` String MATERIALIZED toString(attributes.gram.function.id) COMMENT 'Function ID (materialized from attributes.gram.function.id).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `urn` String MATERIALIZED toString(attributes.gram.tool.urn) COMMENT 'Tool URN (materialized from attributes.gram.tool.urn).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `chat_id` String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `user_id` String MATERIALIZED toString(attributes.user.id) COMMENT 'User ID (materialized from attributes.user.id).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `external_user_id` String MATERIALIZED toString(attributes.gram.external_user.id) COMMENT 'External user ID (materialized from attributes.gram.external_user.id).';
+ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_chat_id` ((chat_id)) TYPE bloom_filter(0.01) GRANULARITY 1;
+ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_deployment_id` ((deployment_id)) TYPE bloom_filter(0.01) GRANULARITY 1;
+ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_external_user_id` ((external_user_id)) TYPE bloom_filter(0.01) GRANULARITY 1;
+ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_function_id` ((function_id)) TYPE bloom_filter(0.01) GRANULARITY 1;
+ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_urn` ((urn)) TYPE bloom_filter(0.01) GRANULARITY 1;
+ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_user_id` ((user_id)) TYPE bloom_filter(0.01) GRANULARITY 1;

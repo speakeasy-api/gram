@@ -7,7 +7,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestTemplatesService_ListTemplates_Success(t *testing.T) {
@@ -22,7 +21,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 		ProjectSlugInput: nil,
 		Name:             types.Slug("list-template-1"),
 		Prompt:           "First template prompt",
-		Description:      conv.Ptr("First template description"),
+		Description:      new("First template description"),
 		Arguments:        nil,
 		Engine:           "mustache",
 		Kind:             "prompt",
@@ -54,7 +53,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 		Engine:           "",
 		Kind:             "higher_order_tool",
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
 	})
 	require.NoError(t, err, "create third template")
 
@@ -197,7 +196,7 @@ func TestTemplatesService_ListTemplates_DeletedTemplateNotIncluded(t *testing.T)
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(created.Template.ID),
+		ID:               new(created.Template.ID),
 		Name:             nil,
 	})
 	require.NoError(t, err, "delete template")

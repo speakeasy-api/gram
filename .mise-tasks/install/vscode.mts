@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Set up VS Code / Cursor editor settings"
 
@@ -58,17 +58,22 @@ function amendSettings(settingsJSON: string): string {
   edited["workbench.editorAssociations"]["*.md"] ??= "default";
 
   [
+    "[css]",
+    "[html]",
     "[javascript]",
     "[javascriptreact]",
-    "[typescript]",
-    "[typescriptreact]",
     "[json]",
     "[jsonc]",
-    "[css]",
+    "[markdown]",
     "[mdx]",
+    "[toml]",
+    "[typescript]",
+    "[typescriptreact]",
+    "[yaml]",
   ].forEach((lang) => {
     edited[lang] ??= {};
-    edited[lang]["editor.defaultFormatter"] ??= "esbenp.prettier-vscode";
+    edited[lang]["editor.defaultFormatter"] = "oxc.oxc-vscode";
+    edited[lang]["editor.formatOnSave"] = true;
   });
 
   return JSON.stringify(edited, null, 2);

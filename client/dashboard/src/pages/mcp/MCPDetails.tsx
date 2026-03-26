@@ -1,10 +1,15 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
+import { DetailHero } from "@/components/detail-hero";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
+import {
+  InstallPageConfigForm,
+  useMcpMetadataMetadataForm,
+  type UseMcpMetadataMetadataFormResult,
+} from "@/components/mcp_install_page/config_form";
+import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
-import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
 import { ToolList } from "@/components/tool-list";
 import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
@@ -12,7 +17,13 @@ import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -20,18 +31,21 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
+import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
+import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
 import { Confirm, ToolsetEntry } from "@gram/client/models/components";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
@@ -57,10 +71,12 @@ import {
   Trash2,
   XCircleIcon,
 } from "lucide-react";
-import React, { useCallback, useEffect, useState } from "react";
+import { generateText } from "ai";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
+import { useModel } from "../playground/Openrouter";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
@@ -141,30 +157,23 @@ export function MCPDetailPage() {
   // Tab state controlled by URL hash - initialize directly from hash
   const [activeTab, setActiveTab] = useState<string>(() => {
     const hash = window.location.hash.slice(1); // Remove the '#'
-    const validTabs = ["overview", "tools", "settings", "authentication"];
+    const validTabs = [
+      "overview",
+      "tools",
+      "resources",
+      "prompts",
+      "settings",
+      "authentication",
+    ];
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
 
-  // Update URL hash when tab changes
-  useEffect(() => {
-    if (activeTab) {
-      window.location.hash = activeTab;
-    }
-  }, [activeTab]);
-
-  // Listen for hash changes (e.g., browser back/forward)
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.slice(1);
-      const validTabs = ["overview", "tools", "settings", "authentication"];
-      if (hash && validTabs.includes(hash)) {
-        setActiveTab(hash);
-      }
-    };
-
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    const url = new URL(window.location.href);
+    url.hash = value;
+    window.history.replaceState(null, "", url.toString());
+  };
 
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
@@ -218,78 +227,15 @@ export function MCPDetailPage() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth noPadding>
-        {/* Hero Header with Animation - full width */}
-        <div className="relative w-full h-64 overflow-hidden">
-          <MCPHeroIllustration
-            toolsetSlug={toolset.slug}
-            className="saturate-[.3]"
-          />
-
-          {/* Overlay for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
-            <div className="flex items-end justify-between">
-              <Stack gap={2}>
-                <div className="flex items-center gap-3 ml-1">
-                  <Heading variant="h1" className="text-background">
-                    {toolset.name}
-                  </Heading>
-                  {statusBadge}
-                </div>
-                <div className="flex items-center gap-2 ml-1">
-                  <Type className="max-w-2xl truncate !text-background/70">
-                    {mcpUrl}
-                  </Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={() => {
-                      if (mcpUrl) {
-                        navigator.clipboard.writeText(mcpUrl);
-                        toast.success("URL copied to clipboard");
-                      }
-                    }}
-                    className="shrink-0 text-background/70 hover:text-background"
-                  >
-                    <Button.LeftIcon>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect
-                          width="14"
-                          height="14"
-                          x="8"
-                          y="8"
-                          rx="2"
-                          ry="2"
-                        />
-                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                      </svg>
-                    </Button.LeftIcon>
-                    <Button.Text className="sr-only">Copy URL</Button.Text>
-                  </Button>
-                </div>
-              </Stack>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
-            <Stack direction="horizontal" gap={2} className="justify-end">
+      <Page.Body fullWidth noPadding className="gap-0">
+        <DetailHero
+          actions={
+            <>
               <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
                 <Button
                   variant="secondary"
                   size="md"
-                  className="bg-background/10 hover:bg-background/20 text-background hover:text-background border-background/20"
+                  className="bg-background hover:bg-accent border-border"
                 >
                   <Button.LeftIcon>
                     <Play className="w-4 h-4" />
@@ -298,48 +244,75 @@ export function MCPDetailPage() {
                 </Button>
               </routes.playground.Link>
               <MCPEnableButton toolset={toolset} />
+            </>
+          }
+        >
+          <div className="flex items-end justify-between">
+            <Stack gap={2}>
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1">{toolset.name}</Heading>
+                {statusBadge}
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Type className="max-w-2xl truncate text-muted-foreground">
+                  {mcpUrl}
+                </Type>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => {
+                    if (mcpUrl) {
+                      navigator.clipboard.writeText(mcpUrl);
+                      toast.success("URL copied to clipboard");
+                    }
+                  }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <Button.LeftIcon>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                    </svg>
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Copy URL</Button.Text>
+                </Button>
+              </div>
             </Stack>
           </div>
-        </div>
+        </DetailHero>
 
         {/* Sub-navigation tabs */}
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={handleTabChange}
           className="w-full flex-1 flex flex-col"
         >
           <div className="border-b">
             <div className="max-w-[1270px] mx-auto px-8">
               <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
-                <TabsTrigger
-                  value="overview"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="tools"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Tools
-                </TabsTrigger>
-                <TabsTrigger
-                  value="authentication"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
+                <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
+                <PageTabsTrigger value="tools">Tools</PageTabsTrigger>
+                <PageTabsTrigger value="resources">Resources</PageTabsTrigger>
+                <PageTabsTrigger value="prompts">Prompts</PageTabsTrigger>
+                <PageTabsTrigger value="authentication">
                   <span className="flex items-center gap-1.5">
                     Authentication
                     {missingRequiredEnvVars > 0 && (
                       <AlertTriangle className="h-3.5 w-3.5 text-warning" />
                     )}
                   </span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="settings"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Settings
-                </TabsTrigger>
+                </PageTabsTrigger>
+                <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
           </div>
@@ -352,6 +325,14 @@ export function MCPDetailPage() {
 
             <TabsContent value="tools" className="mt-0 w-full">
               <MCPToolsTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="resources" className="mt-0 w-full">
+              <MCPResourcesTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="prompts" className="mt-0 w-full">
+              <MCPPromptsTab toolset={toolset} />
             </TabsContent>
 
             <TabsContent value="authentication" className="mt-0 w-full">
@@ -402,10 +383,10 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
   return (
     <>
       <Button
-        variant="secondary"
+        variant="primary"
         onClick={() => setIsServerEnableDialogOpen(true)}
       >
-        {toolset.mcpEnabled ? "ENABLED" : "ENABLE"}
+        {toolset.mcpEnabled ? "DISABLE" : "ENABLE"}
       </Button>
       <ServerEnableDialog
         isOpen={isServerEnableDialogOpen}
@@ -424,6 +405,19 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
+  const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
+    retry: (_, err) => {
+      if (err instanceof GramError && err.statusCode === 404) {
+        return false;
+      }
+      return true;
+    },
+    throwOnError: false,
+  });
+
+  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
+  const isLoading = result.isLoading || form.isLoading;
+
   return (
     <Stack className="mb-4">
       <PageSection
@@ -440,14 +434,155 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
             Your server is private. To share with external users, you must make
-            it public.
+            it public in the server settings.
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
-          <InstallPageConfigForm toolset={toolset} />
+          <InstallPageConfigForm
+            toolset={toolset}
+            form={form}
+            isLoading={isLoading}
+          />
         </Stack>
       </PageSection>
+
+      <PageSection
+        heading="Server Instructions"
+        description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
+      >
+        <ServerInstructionsSection
+          toolset={toolset}
+          form={form}
+          isLoading={isLoading}
+        />
+      </PageSection>
     </Stack>
+  );
+}
+
+/**
+ * Server Instructions Section - textarea + generate + save
+ */
+const INSTRUCTIONS_SOFT_LIMIT = 2000;
+
+function ServerInstructionsSection({
+  toolset,
+  form,
+  isLoading,
+}: {
+  toolset: Toolset;
+  form: UseMcpMetadataMetadataFormResult;
+  isLoading: boolean;
+}) {
+  const charCount = form.instructionsHandlers.value?.length ?? 0;
+  const overLimit = charCount > INSTRUCTIONS_SOFT_LIMIT;
+
+  return (
+    <Stack gap={3}>
+      <div className="relative">
+        <Textarea
+          placeholder={`Describe how your tools work together, required workflows,\nand any constraints (rate limits, auth requirements, etc.).\n\nKeep it concise — don't repeat individual tool descriptions.`}
+          className="w-full min-h-[150px]"
+          value={form.instructionsHandlers.value ?? ""}
+          onChange={form.instructionsHandlers.onChange}
+        />
+        {charCount > 0 && (
+          <span
+            className={cn(
+              "absolute bottom-2 right-3 text-xs",
+              overLimit ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {charCount.toLocaleString()} /{" "}
+            {INSTRUCTIONS_SOFT_LIMIT.toLocaleString()}
+          </span>
+        )}
+      </div>
+      <Stack direction="horizontal" gap={2} justify="end">
+        <GenerateInstructionsButton toolset={toolset} form={form} />
+        <Button
+          onClick={async () => {
+            try {
+              await form.saveAsync();
+              toast.success("Server instructions saved.");
+            } catch {
+              toast.error("Failed to save instructions.");
+            }
+          }}
+          disabled={isLoading || !form.instructionsDirty}
+          size="sm"
+        >
+          <Button.Text>Save</Button.Text>
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+function GenerateInstructionsButton({
+  toolset,
+  form,
+}: {
+  toolset: Toolset;
+  form: UseMcpMetadataMetadataFormResult;
+}) {
+  const [generating, setGenerating] = useState(false);
+  const { data: fullToolset } = useToolset(toolset.slug);
+  const model = useModel("anthropic/claude-sonnet-4.5");
+
+  const tools = fullToolset?.tools ?? [];
+
+  const handleGenerate = async () => {
+    if (tools.length === 0) {
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const res = await generateText({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        model: model as any,
+        prompt: `Write server instructions for the MCP server described below. Server instructions are returned to LLMs when they connect — they serve as a "user manual" independent of individual tool descriptions.
+
+Best practices:
+DO: Focus on cross-feature relationships (how tools work together, required sequences), document operational patterns and workflows, be explicit about constraints and limitations, keep it short like a quick-reference card.
+DO NOT: Duplicate individual tool descriptions, include marketing claims, try to change model personality, write lengthy prose.
+
+Keep the total output under ${INSTRUCTIONS_SOFT_LIMIT} characters.
+
+Server details:
+${JSON.stringify({ name: toolset.name, tools: tools.map((t) => ({ name: t.name, description: t.description })) }, null, 2)}
+
+Respond with ONLY the server instructions as plain text. Do not wrap in JSON or code fences.`,
+      });
+
+      // Populate the textarea via a synthetic change event
+      const syntheticEvent = {
+        target: { value: res.text.trim() },
+      } as React.ChangeEvent<HTMLTextAreaElement>;
+      form.instructionsHandlers.onChange(syntheticEvent);
+    } catch (err) {
+      console.error("Failed to generate instructions:", err);
+      toast.error("Failed to generate instructions. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={handleGenerate}
+      disabled={generating || tools.length === 0}
+    >
+      <Button.LeftIcon>
+        <Icon name="wand-sparkles" className="w-4 h-4" />
+      </Button.LeftIcon>
+      <Button.Text>
+        {generating ? "Generating..." : "Generate with AI"}
+      </Button.Text>
+    </Button>
   );
 }
 
@@ -537,7 +672,15 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
   const handleToolUpdate = async (
     tool: Tool,
-    updates: { name?: string; description?: string },
+    updates: {
+      name?: string;
+      description?: string;
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    },
   ) => {
     if (tool.type === "prompt") {
       await client.templates.update({
@@ -565,6 +708,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       overridden_fields: Object.keys(updates).join(", "),
     });
 
+    toast.success("Tool updated");
     refetch();
   };
 
@@ -687,6 +831,54 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 }
 
 /**
+ * Resources Tab - Wraps the existing ResourcesTabContent for MCP page
+ */
+function MCPResourcesTab({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+  const { data: fullToolset } = useToolset(toolset.slug);
+
+  const updateToolsetMutation = useUpdateToolsetMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "toolset_updated" });
+      invalidateAllToolset(queryClient);
+    },
+  });
+
+  if (!fullToolset) return null;
+
+  return (
+    <ResourcesTabContent
+      toolset={fullToolset}
+      updateToolsetMutation={updateToolsetMutation}
+    />
+  );
+}
+
+/**
+ * Prompts Tab - Wraps the existing PromptsTabContent for MCP page
+ */
+function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+  const { data: fullToolset } = useToolset(toolset.slug);
+
+  const updateToolsetMutation = useUpdateToolsetMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "toolset_updated" });
+      invalidateAllToolset(queryClient);
+    },
+  });
+
+  if (!fullToolset) return null;
+
+  return (
+    <PromptsTabContent
+      toolset={fullToolset}
+      updateToolsetMutation={updateToolsetMutation}
+    />
+  );
+}
 
 /**
  * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode, Actions, Danger Zone
@@ -694,7 +886,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
-  const session = useSession();
+  const productTier = useProductTier();
   const { orgSlug } = useParams();
   const { domain } = useCustomDomain();
   const routes = useRoutes();
@@ -787,6 +979,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           await client.deployments.evolveDeployment({
             evolveForm: {
               deploymentId: deployment.id,
+              nonBlocking: true,
               excludeExternalMcps: [externalMcpSlug],
             },
           });
@@ -881,15 +1074,18 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     </Tooltip>
   );
 
+  // Account for legacy Pro tier which can still access custom domains
+  const canAccessCustomDomain = !productTier.includes("base");
+
   const customDomain =
-    domain && session.gramAccountType !== "free" && !toolset.customDomainId ? (
+    domain && canAccessCustomDomain && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
       <Button
         variant="secondary"
         size="sm"
         onClick={() => {
-          if (session.gramAccountType == "free") {
+          if (!canAccessCustomDomain) {
             setIsCustomDomainModalOpen(true);
           } else {
             routes.settings.goTo();
@@ -962,7 +1158,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             icon: "lock",
             label: "Private",
             description:
-              "Only users with a Gram API Key can read the tools hosted by this server.",
+              "Only users with a Gram API Key from this project can read the tools hosted by this server.",
           },
         ]}
         selectedValue={isPublic ? "public" : "private"}
@@ -1201,8 +1397,8 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       <FeatureRequestModal
         isOpen={isMaxServersModalOpen}
         onClose={() => setIsMaxServersModalOpen(false)}
-        title="Public MCP Server Limit Reached"
-        description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+        title="MCP Server Limit Reached"
+        description={`You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
         actionType="max_public_mcp_servers"
         icon={Globe}
         telemetryData={{ slug: toolset.slug }}
@@ -1557,6 +1753,16 @@ function OAuthDetailsModal({
                       {toolset.oauthProxyServer.slug}
                     </CodeBlock>
                   </div>
+                  {toolset.oauthProxyServer.audience && (
+                    <div>
+                      <Type small className="font-medium text-muted-foreground">
+                        Audience:
+                      </Type>
+                      <CodeBlock className="mt-1">
+                        {toolset.oauthProxyServer.audience}
+                      </CodeBlock>
+                    </div>
+                  )}
                 </Stack>
               </>
             )}
@@ -1808,9 +2014,9 @@ function ConnectOAuthModal({
   toolsetSlug: string;
   toolset: Toolset;
 }) {
-  const session = useSession();
+  const productTier = useProductTier();
   const queryClient = useQueryClient();
-  const isAccountUpgrade = session.gramAccountType === "free";
+  const isAccountUpgrade = productTier.includes("base");
 
   // For free accounts, show the FeatureRequestModal
   if (isAccountUpgrade) {
@@ -1857,10 +2063,50 @@ function OAuthTabModal({
   toolset: Toolset;
   onSuccess: () => void;
 }) {
+  // Extract discovered OAuth metadata from external MCP tools.
+  // Uses rawTools because proxy-type tools are filtered out of toolset.tools.
+  // Builds metadata matching the format the old server-side fallback produced:
+  // issuer = Gram's MCP URL, upstream endpoints passed through, plus standard
+  // response_types_supported, grant_types_supported, code_challenge_methods_supported.
+  const discoveredOAuth = useMemo(() => {
+    const baseURL = getServerURL();
+    const mcpSlug = toolset.mcpSlug;
+    for (const tool of toolset.rawTools) {
+      const def = tool.externalMcpToolDefinition;
+      if (!def?.requiresOauth) continue;
+
+      if (!def.oauthAuthorizationEndpoint && !def.oauthTokenEndpoint) continue;
+
+      const metadata: Record<string, unknown> = {
+        issuer: `${baseURL}/mcp/${mcpSlug}`,
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code", "refresh_token"],
+        code_challenge_methods_supported: ["S256"],
+      };
+      if (def.oauthAuthorizationEndpoint)
+        metadata.authorization_endpoint = def.oauthAuthorizationEndpoint;
+      if (def.oauthTokenEndpoint)
+        metadata.token_endpoint = def.oauthTokenEndpoint;
+      if (def.oauthRegistrationEndpoint)
+        metadata.registration_endpoint = def.oauthRegistrationEndpoint;
+      if (def.oauthScopesSupported?.length)
+        metadata.scopes_supported = def.oauthScopesSupported;
+
+      return {
+        slug: def.slug,
+        name: def.registryServerName,
+        version: def.oauthVersion,
+        metadata,
+      };
+    }
+    return null;
+  }, [toolset.rawTools, toolset.mcpSlug]);
+
   const [activeTab, setActiveTab] = useState("external");
   const [externalSlug, setExternalSlug] = useState("");
   const [metadataJson, setMetadataJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState<Record<string, boolean>>({});
   const telemetry = useTelemetry();
 
   // OAuth Proxy form state
@@ -1874,7 +2120,30 @@ function OAuthTabModal({
   const [proxyEnvironmentSlug, setProxyEnvironmentSlug] = useState(
     toolset.defaultEnvironmentSlug ?? "",
   );
+  const [proxyAudience, setProxyAudience] = useState("");
   const [proxyError, setProxyError] = useState<string | null>(null);
+
+  const applyDiscoveredOAuth = useCallback(
+    (tab: "external" | "proxy") => {
+      if (!discoveredOAuth) return;
+      if (tab === "external") {
+        setExternalSlug(discoveredOAuth.slug);
+        setMetadataJson(JSON.stringify(discoveredOAuth.metadata, null, 2));
+        setJsonError(null);
+      } else {
+        setProxySlug(discoveredOAuth.slug);
+        const m = discoveredOAuth.metadata;
+        if (typeof m.authorization_endpoint === "string")
+          setProxyAuthorizationEndpoint(m.authorization_endpoint);
+        if (typeof m.token_endpoint === "string")
+          setProxyTokenEndpoint(m.token_endpoint);
+        if (Array.isArray(m.scopes_supported))
+          setProxyScopes(m.scopes_supported.join(", "));
+      }
+      setPrefilled((prev) => ({ ...prev, [tab]: true }));
+    },
+    [discoveredOAuth],
+  );
 
   const hasMultipleOAuth2AuthCode =
     toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
@@ -2006,6 +2275,7 @@ function OAuthTabModal({
           oauthProxyServer: {
             providerType: "custom",
             slug: proxySlug,
+            audience: proxyAudience || undefined,
             authorizationEndpoint: proxyAuthorizationEndpoint,
             tokenEndpoint: proxyTokenEndpoint,
             scopesSupported: scopesArray,
@@ -2046,6 +2316,27 @@ function OAuthTabModal({
                     {toolset.oauthEnablementMetadata?.oauth2SecurityCount}{" "}
                     OAuth2 security schemes detected.
                   </Type>
+                </div>
+              )}
+              {discoveredOAuth && !prefilled.external && (
+                <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <Type small className="font-medium">
+                      OAuth detected from {discoveredOAuth.name}
+                    </Type>
+                    <Type muted small className="mt-1">
+                      We discovered OAuth {discoveredOAuth.version} metadata
+                      from this server. You can use it to pre-fill the form
+                      below.
+                    </Type>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => applyDiscoveredOAuth("external")}
+                  >
+                    Apply
+                  </Button>
                 </div>
               )}
               <div>
@@ -2135,6 +2426,28 @@ function OAuthTabModal({
                   </Link>
                 </Type>
 
+                {discoveredOAuth && !prefilled.proxy && (
+                  <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
+                    <div>
+                      <Type small className="font-medium">
+                        OAuth detected from {discoveredOAuth.name}
+                      </Type>
+                      <Type muted small className="mt-1">
+                        We discovered OAuth {discoveredOAuth.version} metadata
+                        from this server. You can use it to pre-fill the
+                        endpoints below.
+                      </Type>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => applyDiscoveredOAuth("proxy")}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                )}
+
                 {proxyError && (
                   <Type className="!text-red-500 text-sm mb-4">
                     {proxyError}
@@ -2183,6 +2496,22 @@ function OAuthTabModal({
                       value={proxyScopes}
                       onChange={setProxyScopes}
                     />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      Audience (optional)
+                    </Type>
+                    <Input
+                      placeholder="https://api.example.com"
+                      value={proxyAudience}
+                      onChange={setProxyAudience}
+                    />
+                    <Type muted small className="mt-1">
+                      The audience parameter sent to the upstream OAuth
+                      provider. Required by some providers (e.g. Auth0) to
+                      return JWT access tokens.
+                    </Type>
                   </div>
 
                   <div>

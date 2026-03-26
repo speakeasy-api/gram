@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
-#MISE description="Start all development processes with mprocs"
+
+#MISE description="Start all development processes with madprocs"
+
+#USAGE flag "--tls-cert <file>" env="GRAM_SSL_CERT_FILE" help="Path to TLS certificate file for web ui"
+#USAGE flag "--tls-key <file>" env="GRAM_SSL_KEY_FILE" help="Path to TLS key file for web ui"
 
 set -e
-exec mprocs
+
+args=()
+if [[ -n "$usage_tls_cert" && -n "$usage_tls_key" ]]; then
+  args+=(-tls-cert "$usage_tls_cert" -tls-key "$usage_tls_key")
+fi
+
+exec madprocs "${args[@]}"

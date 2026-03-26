@@ -8,7 +8,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 )
 
 func TestTemplatesService_DeleteTemplate_ByID_Success(t *testing.T) {
@@ -36,7 +37,7 @@ func TestTemplatesService_DeleteTemplate_ByID_Success(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(created.Template.ID),
+		ID:               new(created.Template.ID),
 		Name:             nil,
 	})
 	require.NoError(t, err, "delete template by ID")
@@ -46,7 +47,7 @@ func TestTemplatesService_DeleteTemplate_ByID_Success(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(created.Template.ID),
+		ID:               new(created.Template.ID),
 		Name:             nil,
 	})
 	require.Error(t, err, "template should not be found after deletion")
@@ -79,7 +80,7 @@ func TestTemplatesService_DeleteTemplate_ByName_Success(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               nil,
-		Name:             conv.Ptr("delete-by-name-template"),
+		Name:             new("delete-by-name-template"),
 	})
 	require.NoError(t, err, "delete template by name")
 
@@ -89,7 +90,7 @@ func TestTemplatesService_DeleteTemplate_ByName_Success(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               nil,
-		Name:             conv.Ptr("delete-by-name-template"),
+		Name:             new("delete-by-name-template"),
 	})
 	require.Error(t, err, "template should not be found after deletion")
 	require.Contains(t, err.Error(), "not found")
@@ -105,7 +106,7 @@ func TestTemplatesService_DeleteTemplate_InvalidID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr("invalid-uuid"),
+		ID:               new("invalid-uuid"),
 		Name:             nil,
 	})
 	require.Error(t, err, "expected error for invalid UUID")
@@ -122,7 +123,7 @@ func TestTemplatesService_DeleteTemplate_NilID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(""),
+		ID:               new(""),
 		Name:             nil,
 	})
 	require.Error(t, err, "expected error for empty UUID")
@@ -139,7 +140,7 @@ func TestTemplatesService_DeleteTemplate_UUIDNil(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(uuid.Nil.String()),
+		ID:               new(uuid.Nil.String()),
 		Name:             nil,
 	})
 	require.Error(t, err, "expected error for nil UUID")
@@ -176,7 +177,7 @@ func TestTemplatesService_DeleteTemplate_NonExistentName(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               nil,
-		Name:             conv.Ptr("non-existent-template"),
+		Name:             new("non-existent-template"),
 	})
 	// Note: The implementation doesn't return an error for non-existent templates
 	// This is often a design choice - delete operations can be idempotent
@@ -194,7 +195,7 @@ func TestTemplatesService_DeleteTemplate_EmptyName(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               nil,
-		Name:             conv.Ptr(""),
+		Name:             new(""),
 	})
 	require.Error(t, err, "expected error for empty name")
 	require.Contains(t, err.Error(), "either id or name must be provided")
@@ -235,4 +236,109 @@ func TestTemplatesService_DeleteTemplate_Unauthorized(t *testing.T) {
 	})
 	require.Error(t, err, "expected error for unauthorized request")
 	require.Contains(t, err.Error(), "unauthorized")
+}
+
+func TestTemplatesService_DeleteTemplate_ByID_AuditLogCount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("audit-delete-by-id"),
+		Prompt:           "Template to be deleted",
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteTemplate(ctx, &gen.DeleteTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               new(created.Template.ID),
+		Name:             nil,
+	})
+	require.NoError(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestTemplatesService_DeleteTemplate_NonExistentID_DoesNotAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateDelete)
+	require.NoError(t, err)
+
+	nonExistentID := uuid.New().String()
+	err = ti.service.DeleteTemplate(ctx, &gen.DeleteTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               &nonExistentID,
+		Name:             nil,
+	})
+	require.NoError(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestTemplatesService_DeleteTemplate_AuditLogMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("audit-delete-metadata"),
+		Prompt:           "Template to be deleted",
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteTemplate(ctx, &gen.DeleteTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               new(created.Template.ID),
+		Name:             nil,
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionTemplateDelete)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionTemplateDelete), record.Action)
+	require.Equal(t, "template", record.SubjectType)
+	require.Equal(t, "audit-delete-metadata", record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "tools:prompt:prompt:audit-delete-metadata", metadata["template_urn"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }

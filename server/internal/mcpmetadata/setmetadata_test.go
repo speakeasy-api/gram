@@ -1,6 +1,7 @@
 package mcpmetadata_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -9,10 +10,35 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assets_repo "github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+func createTestToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Test MCP Server",
+		Slug:                   slug,
+		Description:            conv.ToPGText("A test MCP server"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+
+	return toolset
+}
 
 func TestService_SetMcpMetadata(t *testing.T) {
 	t.Parallel()
@@ -42,7 +68,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		payload := &gen.SetMcpMetadataPayload{
 			ToolsetSlug:              types.Slug(toolset.Slug),
 			LogoAssetID:              nil,
-			ExternalDocumentationURL: conv.Ptr("https://docs.example.com"),
+			ExternalDocumentationURL: new("https://docs.example.com"),
 			SessionToken:             nil,
 			ProjectSlugInput:         nil,
 		}
@@ -83,7 +109,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		firstPayload := &gen.SetMcpMetadataPayload{
 			ToolsetSlug:              types.Slug(toolset.Slug),
 			LogoAssetID:              nil,
-			ExternalDocumentationURL: conv.Ptr("https://docs.example.com/v1"),
+			ExternalDocumentationURL: new("https://docs.example.com/v1"),
 			SessionToken:             nil,
 			ProjectSlugInput:         nil,
 		}
@@ -95,7 +121,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		secondPayload := &gen.SetMcpMetadataPayload{
 			ToolsetSlug:              types.Slug(toolset.Slug),
 			LogoAssetID:              nil,
-			ExternalDocumentationURL: conv.Ptr("https://docs.example.com/v2"),
+			ExternalDocumentationURL: new("https://docs.example.com/v2"),
 			SessionToken:             nil,
 			ProjectSlugInput:         nil,
 		}
@@ -209,4 +235,125 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.Nil(t, result.LogoAssetID)
 		require.Nil(t, result.ExternalDocumentationURL)
 	})
+}
+
+func TestService_SetMcpMetadata_AuditLogCountOnCreate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "test-mcp-audit-create")
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              types.Slug(toolset.Slug),
+		ExternalDocumentationURL: new("https://docs.example.com/create"),
+		SessionToken:             nil,
+		ProjectSlugInput:         nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionMCPMetadataUpdate), record.Action)
+	require.Equal(t, "toolset", record.SubjectType)
+	require.Equal(t, toolset.Name, record.SubjectDisplay)
+	require.Equal(t, toolset.Slug, record.SubjectSlug)
+	require.Empty(t, string(record.BeforeSnapshot))
+	require.NotNil(t, record.AfterSnapshot)
+	require.Nil(t, record.Metadata)
+
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, result.ID, afterSnapshot["ID"])
+	require.Equal(t, toolset.ID.String(), afterSnapshot["ToolsetID"])
+	require.Equal(t, "https://docs.example.com/create", afterSnapshot["ExternalDocumentationURL"])
+}
+
+func TestService_SetMcpMetadata_AuditLogSnapshotsOnUpdate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "test-mcp-audit-update")
+
+	firstResult, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              types.Slug(toolset.Slug),
+		ExternalDocumentationURL: new("https://docs.example.com/before"),
+		SessionToken:             nil,
+		ProjectSlugInput:         nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstResult)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+
+	instructions := "Updated MCP installation instructions"
+	secondResult, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              types.Slug(toolset.Slug),
+		ExternalDocumentationURL: new("https://docs.example.com/after"),
+		Instructions:             &instructions,
+		SessionToken:             nil,
+		ProjectSlugInput:         nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, secondResult)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionMCPMetadataUpdate), record.Action)
+	require.Equal(t, "toolset", record.SubjectType)
+	require.Equal(t, toolset.Name, record.SubjectDisplay)
+	require.Equal(t, toolset.Slug, record.SubjectSlug)
+	require.NotNil(t, record.BeforeSnapshot)
+	require.NotNil(t, record.AfterSnapshot)
+
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, firstResult.ID, beforeSnapshot["ID"])
+	require.Equal(t, "https://docs.example.com/before", beforeSnapshot["ExternalDocumentationURL"])
+	require.Nil(t, beforeSnapshot["Instructions"])
+
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, secondResult.ID, afterSnapshot["ID"])
+	require.Equal(t, "https://docs.example.com/after", afterSnapshot["ExternalDocumentationURL"])
+	require.Equal(t, instructions, afterSnapshot["Instructions"])
+}
+
+func TestService_SetMcpMetadata_NoAuditLogOnFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "test-mcp-audit-failure")
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+
+	invalidLogoID := "not-a-uuid"
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:      types.Slug(toolset.Slug),
+		LogoAssetID:      &invalidLogoID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.Nil(t, result)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }

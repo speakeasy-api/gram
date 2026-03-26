@@ -1,4 +1,6 @@
+*.log
 mise.local.toml
+mise.*.local.toml
 flags.local.csv
 *.tsbuildinfo
 node_modules
@@ -7,9 +9,13 @@ junit-report.xml
 .mise-tasks/local
 .assets
 .vscode/*
+.zed/*
 !.vscode/extensions.json
 *.code-workspace
 .idea
+/posting
+/gram.posting.yaml
+/posting.env
 /client/sdk/docs
 /server/goa*
 /server/gram
@@ -22,6 +28,7 @@ scratch/
 /local/keys
 .speakeasy/temp
 mprocs.log
+.madprocs.port
 melange.log
 __debug_bin*
 go.work
@@ -37,6 +44,7 @@ gram.code-workspace
 /local/cmd
 dist/
 **/.claude/settings.local.json
+**/.claude/.gram-install-prompted
 .vercel
 cover.*
 *gram.deploy.json
@@ -44,3 +52,6 @@ cover.*
 poetry-installer-error-*.log
 package-lock.json
 /examples/*/pnpm-lock.yaml
+.worktrees
+.granary/
+.claude/hooks/*

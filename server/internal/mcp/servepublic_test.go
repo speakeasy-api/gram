@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,6 +25,371 @@ import (
 
 func TestService_ServePublic(t *testing.T) {
 	t.Parallel()
+
+	t.Run("allows cross-org access to public MCP", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		// Create toolset in the original org
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Public Cross-Org MCP",
+			Slug:                   "public-cross-org-mcp",
+			Description:            conv.ToPGText("A public MCP accessible from other orgs"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText("public-cross-org-mcp"),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		// Make the toolset public
+		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+			Name:                   toolset.Name,
+			Description:            toolset.Description,
+			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+			McpSlug:                toolset.McpSlug,
+			McpIsPublic:            true,
+			McpEnabled:             toolset.McpEnabled,
+			Slug:                   toolset.Slug,
+			ProjectID:              toolset.ProjectID,
+		})
+		require.NoError(t, err)
+
+		// Create a different organization
+		differentOrgID := uuid.New().String()
+
+		// Create a context with a different ActiveOrganizationID to simulate cross-org access
+		crossOrgAuthCtx := &contextvalues.AuthContext{
+			ActiveOrganizationID: differentOrgID,
+			UserID:               authCtx.UserID,
+			SessionID:            authCtx.SessionID,
+		}
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "initialize",
+				"params": map[string]any{
+					"protocolVersion": "2025-03-26",
+					"capabilities":    map[string]any{},
+					"clientInfo": map[string]any{
+						"name":    "test-client",
+						"version": "1.0.0",
+					},
+				},
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		mcpSlug := toolset.McpSlug.String
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		crossOrgCtx := context.WithValue(t.Context(), chi.RouteCtxKey, rctx)
+		crossOrgCtx = contextvalues.SetAuthContext(crossOrgCtx, crossOrgAuthCtx)
+		req = req.WithContext(crossOrgCtx)
+
+		w := httptest.NewRecorder()
+
+		// This should succeed - public MCPs should be accessible from other orgs
+		err = ti.service.ServePublic(w, req)
+		require.NoError(t, err, "public MCP should be accessible from a different org")
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.NotEmpty(t, w.Header().Get("Mcp-Session-Id"))
+
+		var response map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err, "response body: %s", w.Body.String())
+		require.Equal(t, "2.0", response["jsonrpc"])
+	})
+
+	t.Run("denies cross-org access to private MCP", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		// Create a PRIVATE toolset in the original org
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Private Cross-Org MCP",
+			Slug:                   "private-cross-org-mcp",
+			Description:            conv.ToPGText("A private MCP not accessible from other orgs"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText("private-cross-org-mcp"),
+			McpEnabled:             true,
+			// McpIsPublic defaults to false
+		})
+		require.NoError(t, err)
+
+		// Create a different organization
+		differentOrgID := uuid.New().String()
+
+		// Create a context with a different ActiveOrganizationID to simulate cross-org access
+		crossOrgAuthCtx := &contextvalues.AuthContext{
+			ActiveOrganizationID: differentOrgID,
+			UserID:               authCtx.UserID,
+			SessionID:            authCtx.SessionID,
+		}
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "initialize",
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		mcpSlug := toolset.McpSlug.String
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		crossOrgCtx := context.WithValue(t.Context(), chi.RouteCtxKey, rctx)
+		crossOrgCtx = contextvalues.SetAuthContext(crossOrgCtx, crossOrgAuthCtx)
+		req = req.WithContext(crossOrgCtx)
+
+		w := httptest.NewRecorder()
+
+		// This should fail - private MCPs require authentication and should NOT be accessible from other orgs
+		err = ti.service.ServePublic(w, req)
+		require.Error(t, err, "private MCP should NOT be accessible from a different org")
+		// Private MCPs without a valid token return "expired or invalid access token"
+		require.Contains(t, err.Error(), "expired or invalid access token")
+	})
+
+	t.Run("allows unauthenticated access to public MCP", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		// Create a public toolset
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Public Unauthenticated MCP",
+			Slug:                   "public-unauth-mcp",
+			Description:            conv.ToPGText("A public MCP accessible without auth"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText("public-unauth-mcp"),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		// Make the toolset public
+		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+			Name:                   toolset.Name,
+			Description:            toolset.Description,
+			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+			McpSlug:                toolset.McpSlug,
+			McpIsPublic:            true,
+			McpEnabled:             toolset.McpEnabled,
+			Slug:                   toolset.Slug,
+			ProjectID:              toolset.ProjectID,
+		})
+		require.NoError(t, err)
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "initialize",
+				"params": map[string]any{
+					"protocolVersion": "2025-03-26",
+					"capabilities":    map[string]any{},
+					"clientInfo": map[string]any{
+						"name":    "test-client",
+						"version": "1.0.0",
+					},
+				},
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		mcpSlug := toolset.McpSlug.String
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		// Use a context WITHOUT any auth - simulates unauthenticated request
+		unauthCtx := context.WithValue(t.Context(), chi.RouteCtxKey, rctx)
+		req = req.WithContext(unauthCtx)
+
+		w := httptest.NewRecorder()
+
+		// This should succeed - public MCPs should be accessible without authentication
+		err = ti.service.ServePublic(w, req)
+		require.NoError(t, err, "public MCP should be accessible without authentication")
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		require.Equal(t, "2.0", response["jsonrpc"])
+	})
+
+	t.Run("same-org authenticated user gets full access to public MCP", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		// Create a public toolset with a default environment
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Public Same-Org MCP",
+			Slug:                   "public-same-org-mcp",
+			Description:            conv.ToPGText("A public MCP for same-org test"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
+			McpSlug:                conv.ToPGText("public-same-org-mcp"),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		// Make the toolset public
+		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+			Name:                   toolset.Name,
+			Description:            toolset.Description,
+			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+			McpSlug:                toolset.McpSlug,
+			McpIsPublic:            true,
+			McpEnabled:             toolset.McpEnabled,
+			Slug:                   toolset.Slug,
+			ProjectID:              toolset.ProjectID,
+		})
+		require.NoError(t, err)
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "initialize",
+				"params": map[string]any{
+					"protocolVersion": "2025-03-26",
+					"capabilities":    map[string]any{},
+					"clientInfo": map[string]any{
+						"name":    "test-client",
+						"version": "1.0.0",
+					},
+				},
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		mcpSlug := toolset.McpSlug.String
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		// Use the original auth context - same org as the toolset
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		// This should succeed - same-org users should get authenticated access
+		err = ti.service.ServePublic(w, req)
+		require.NoError(t, err, "same-org user should have access to public MCP")
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		require.Equal(t, "2.0", response["jsonrpc"])
+	})
+
+	t.Run("denies unauthenticated access to private MCP", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		// Create a PRIVATE toolset
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Private Unauthenticated MCP",
+			Slug:                   "private-unauth-mcp",
+			Description:            conv.ToPGText("A private MCP not accessible without auth"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText("private-unauth-mcp"),
+			McpEnabled:             true,
+			// McpIsPublic defaults to false
+		})
+		require.NoError(t, err)
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "initialize",
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		mcpSlug := toolset.McpSlug.String
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		// Use a context WITHOUT any auth
+		unauthCtx := context.WithValue(t.Context(), chi.RouteCtxKey, rctx)
+		req = req.WithContext(unauthCtx)
+
+		w := httptest.NewRecorder()
+
+		// This should fail - private MCPs require authentication
+		err = ti.service.ServePublic(w, req)
+		require.Error(t, err, "private MCP should NOT be accessible without authentication")
+		require.Contains(t, err.Error(), "expired or invalid access token")
+	})
 
 	t.Run("handles initialize request successfully", func(t *testing.T) {
 		t.Parallel()
@@ -530,6 +896,237 @@ func TestService_ServePublic_PrivateMCP_WithOAuth(t *testing.T) {
 
 		// WWW-Authenticate should NOT be present when API key auth succeeds
 		require.Empty(t, w.Header().Get("WWW-Authenticate"), "WWW-Authenticate header should not be present when API key auth succeeds")
+	})
+}
+
+// TestService_ServePublic_CustomOAuthProxy tests the custom OAuth proxy flow
+// where Gram validates tokens and refreshes upstream credentials on expiry.
+func TestService_ServePublic_CustomOAuthProxy(t *testing.T) {
+	t.Parallel()
+
+	initializeBody := func() []byte {
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "initialize",
+				"params": map[string]any{
+					"protocolVersion": "2025-03-26",
+					"capabilities":    map[string]any{},
+					"clientInfo": map[string]any{
+						"name":    "test-client",
+						"version": "1.0.0",
+					},
+				},
+			},
+		}
+		bodyBytes, _ := json.Marshal(reqBody)
+		return bodyBytes
+	}
+
+	// setupCustomOAuthToolset creates a public toolset with a custom OAuth proxy provider.
+	setupCustomOAuthToolset := func(t *testing.T, ctx context.Context, ti *testInstance) string {
+		t.Helper()
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		oauthRepo := oauth_repo.New(ti.conn)
+		oauthServer, err := oauthRepo.UpsertOAuthProxyServer(ctx, oauth_repo.UpsertOAuthProxyServerParams{
+			ProjectID: *authCtx.ProjectID,
+			Slug:      "custom-oauth-server-" + uuid.New().String()[:8],
+		})
+		require.NoError(t, err)
+
+		_, err = oauthRepo.UpsertOAuthProxyProvider(ctx, oauth_repo.UpsertOAuthProxyProviderParams{
+			ProjectID:                         *authCtx.ProjectID,
+			OauthProxyServerID:                oauthServer.ID,
+			Slug:                              "custom-provider-" + uuid.New().String()[:8],
+			ProviderType:                      string(oauth.OAuthProxyProviderTypeCustom),
+			ScopesSupported:                   []string{},
+			ResponseTypesSupported:            []string{},
+			ResponseModesSupported:            []string{},
+			GrantTypesSupported:               []string{},
+			TokenEndpointAuthMethodsSupported: []string{"client_secret_post"},
+			SecurityKeyNames:                  []string{"api_key"},
+			Secrets:                           []byte(`{"client_id":"cid","client_secret":"csec"}`),
+			TokenEndpoint:                     pgtype.Text{String: "http://unused/token", Valid: true},
+		})
+		require.NoError(t, err)
+
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+		slug := "custom-oauth-mcp-" + uuid.New().String()[:8]
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Custom OAuth MCP",
+			Slug:                   slug,
+			Description:            conv.ToPGText("A public MCP with custom OAuth proxy"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText(slug),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		// Make public
+		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+			Name:                   toolset.Name,
+			Description:            toolset.Description,
+			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+			McpSlug:                toolset.McpSlug,
+			McpIsPublic:            true,
+			McpEnabled:             toolset.McpEnabled,
+			Slug:                   toolset.Slug,
+			ProjectID:              toolset.ProjectID,
+		})
+		require.NoError(t, err)
+
+		// Link to OAuth proxy server
+		_, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
+			Slug:               toolset.Slug,
+			ProjectID:          *authCtx.ProjectID,
+		})
+		require.NoError(t, err)
+
+		return toolset.McpSlug.String
+	}
+
+	t.Run("upstream refresh succeeds on expired external secrets", func(t *testing.T) {
+		t.Parallel()
+
+		refreshCalled := false
+		refreshedExpiry := time.Now().Add(1 * time.Hour)
+
+		mockOAuth := &mockOAuthService{
+			validateFunc: func(_ context.Context, toolsetID uuid.UUID, accessToken string) (*oauth.Token, error) {
+				return &oauth.Token{
+					ToolsetID:   toolsetID,
+					AccessToken: accessToken,
+					ExternalSecrets: []oauth.ExternalSecret{{
+						Token:        "expired-upstream-access",
+						RefreshToken: "upstream-refresh",
+						ExpiresAt:    &refreshedExpiry,
+						SecurityKeys: []string{"api_key"},
+					}},
+				}, oauth.ErrExpiredExternalSecrets
+			},
+			refreshFunc: func(_ context.Context, _ uuid.UUID, _ *oauth.Token, _ *oauth_repo.OauthProxyProvider, _ *toolsets_repo.Toolset) (*oauth.Token, error) {
+				refreshCalled = true
+				return &oauth.Token{
+					ExternalSecrets: []oauth.ExternalSecret{{
+						Token:        "refreshed-upstream-access",
+						ExpiresAt:    &refreshedExpiry,
+						SecurityKeys: []string{"api_key"},
+					}},
+				}, nil
+			},
+		}
+
+		ctx, ti := newTestMCPServiceWithOAuth(t, mockOAuth)
+		mcpSlug := setupCustomOAuthToolset(t, ctx, ti)
+
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(initializeBody()))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-oauth-token")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err := ti.service.ServePublic(w, req)
+		require.NoError(t, err, "request should succeed after upstream refresh")
+		require.True(t, refreshCalled, "RefreshProxyToken should have been called")
+		require.Empty(t, w.Header().Get("WWW-Authenticate"), "no WWW-Authenticate on success")
+	})
+
+	t.Run("upstream refresh failure returns 401", func(t *testing.T) {
+		t.Parallel()
+
+		pastExpiry := time.Now().Add(-1 * time.Hour)
+
+		mockOAuth := &mockOAuthService{
+			validateFunc: func(_ context.Context, toolsetID uuid.UUID, accessToken string) (*oauth.Token, error) {
+				return &oauth.Token{
+					ToolsetID:   toolsetID,
+					AccessToken: accessToken,
+					ExternalSecrets: []oauth.ExternalSecret{{
+						Token:        "expired-upstream-access",
+						RefreshToken: "upstream-refresh",
+						ExpiresAt:    &pastExpiry,
+						SecurityKeys: []string{"api_key"},
+					}},
+				}, oauth.ErrExpiredExternalSecrets
+			},
+			refreshFunc: func(_ context.Context, _ uuid.UUID, _ *oauth.Token, _ *oauth_repo.OauthProxyProvider, _ *toolsets_repo.Toolset) (*oauth.Token, error) {
+				return nil, fmt.Errorf("upstream token refresh failed: 401")
+			},
+		}
+
+		ctx, ti := newTestMCPServiceWithOAuth(t, mockOAuth)
+		mcpSlug := setupCustomOAuthToolset(t, ctx, ti)
+
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(initializeBody()))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-oauth-token")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err := ti.service.ServePublic(w, req)
+		require.Error(t, err)
+
+		wwwAuth := w.Header().Get("WWW-Authenticate")
+		require.NotEmpty(t, wwwAuth, "WWW-Authenticate should be present on refresh failure")
+		require.Contains(t, wwwAuth, "Bearer resource_metadata=")
+	})
+
+	t.Run("valid token does not trigger refresh", func(t *testing.T) {
+		t.Parallel()
+
+		futureExpiry := time.Now().Add(24 * time.Hour)
+		refreshCalled := false
+
+		mockOAuth := &mockOAuthService{
+			validateFunc: func(_ context.Context, toolsetID uuid.UUID, accessToken string) (*oauth.Token, error) {
+				return &oauth.Token{
+					ToolsetID:   toolsetID,
+					AccessToken: accessToken,
+					ExternalSecrets: []oauth.ExternalSecret{{
+						Token:        "valid-upstream-access",
+						ExpiresAt:    &futureExpiry,
+						SecurityKeys: []string{"api_key"},
+					}},
+				}, nil
+			},
+			refreshFunc: func(_ context.Context, _ uuid.UUID, _ *oauth.Token, _ *oauth_repo.OauthProxyProvider, _ *toolsets_repo.Toolset) (*oauth.Token, error) {
+				refreshCalled = true
+				return nil, fmt.Errorf("should not be called")
+			},
+		}
+
+		ctx, ti := newTestMCPServiceWithOAuth(t, mockOAuth)
+		mcpSlug := setupCustomOAuthToolset(t, ctx, ti)
+
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(initializeBody()))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-oauth-token")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err := ti.service.ServePublic(w, req)
+		require.NoError(t, err, "request should succeed with valid token")
+		require.False(t, refreshCalled, "RefreshProxyToken should NOT have been called")
 	})
 }
 

@@ -40,13 +40,13 @@ import (
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -172,6 +172,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			Summarizer:    template.Summarizer,
 			Canonical:     template.Canonical,
 			Variation:     template.Variation,
+			Annotations:   template.Annotations,
 		}
 	}
 
@@ -193,15 +194,15 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}
 
 	return &gen.GetInstanceResult{
-		Name:                          toolset.Name,
-		Description:                   toolset.Description,
-		SecurityVariables:             toolset.SecurityVariables,
-		ServerVariables:               toolset.ServerVariables,
-		FunctionEnvironmentVariables:  toolset.FunctionEnvironmentVariables,
-		ExternalMcpHeaderDefinitions:  toolset.ExternalMcpHeaderDefinitions,
-		Tools:                         toolset.Tools,
-		PromptTemplates:               promptTemplates,
-		McpServers:                    mcpServers,
+		Name:                         toolset.Name,
+		Description:                  toolset.Description,
+		SecurityVariables:            toolset.SecurityVariables,
+		ServerVariables:              toolset.ServerVariables,
+		FunctionEnvironmentVariables: toolset.FunctionEnvironmentVariables,
+		ExternalMcpHeaderDefinitions: toolset.ExternalMcpHeaderDefinitions,
+		Tools:                        toolset.Tools,
+		PromptTemplates:              promptTemplates,
+		McpServers:                   mcpServers,
 	}, nil
 }
 
@@ -331,6 +332,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 		OAuthToken: "", // Instances do not support OAuth tokens for external MCP
+		GramEmail:  "",
 	}, plan, attrRecorder)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
@@ -415,6 +417,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
+		attrRecorder[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		attrRecorder.RecordStatusCode(interceptor.statusCode)
 		attrRecorder.RecordRequestBody(requestNumBytes)
 		attrRecorder.RecordResponseBody(outputNumBytes)
@@ -429,8 +432,12 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			if authCtx.ExternalUserID != "" {
 				attrRecorder[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 			}
+			if authCtx.APIKeyID != "" {
+				attrRecorder[attr.APIKeyIDKey] = authCtx.APIKeyID
+			}
 		}
 
+		attrRecorder.RecordToolsetSlug(toolsetSlug)
 		logParams := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{
@@ -440,7 +447,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 				ProjectID:      descriptor.ProjectID,
 				DeploymentID:   descriptor.DeploymentID,
 				OrganizationID: descriptor.OrganizationID,
-				FunctionID: nil,
+				FunctionID:     nil,
 			},
 			Attributes: attrRecorder,
 		}

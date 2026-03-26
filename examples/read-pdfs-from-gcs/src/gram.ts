@@ -8,7 +8,7 @@ const gram = new Gram({
     GCS_BUCKET_NAME: z
       .string()
       .describe(
-        "The name of the Google Cloud Storage bucket to search for PDFs. Must be public."
+        "The name of the Google Cloud Storage bucket to search for PDFs. Must be public.",
       ),
   },
 })
@@ -20,7 +20,7 @@ const gram = new Gram({
       query: z
         .string()
         .describe(
-          "Search query to match against filenames (e.g., 'dog' will match 'my_dogs.pdf')"
+          "Search query to match against filenames (e.g., 'dog' will match 'my_dogs.pdf')",
         ),
     },
     async execute(ctx, input) {
@@ -58,7 +58,7 @@ const gram = new Gram({
       filePath: z
         .string()
         .describe(
-          "Full GCS path to the PDF file (e.g., 'gs://my-bucket/documents/report.pdf')"
+          "Full GCS path to the PDF file (e.g., 'gs://my-bucket/documents/report.pdf')",
         ),
     },
     async execute(ctx, input) {

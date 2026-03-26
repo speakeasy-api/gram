@@ -287,6 +287,29 @@ func (s *Workflow) LoadActiveDeployment(
 	return s
 }
 
+func (s *Workflow) RedeployDeployment(ctx context.Context) *Workflow {
+	if s.Failed() {
+		return s
+	}
+
+	if s.Deployment == nil {
+		return s.Fail(fmt.Errorf("redeploy failed: no deployment loaded"))
+	}
+
+	result, err := s.DeploymentsClient.Redeploy(
+		ctx,
+		s.Params.APIKey,
+		s.Params.ProjectSlug,
+		s.Deployment.ID,
+	)
+	if err != nil {
+		return s.Fail(fmt.Errorf("redeploy deployment '%s': %w", s.Deployment.ID, err))
+	}
+
+	s.Deployment = result
+	return s
+}
+
 func (s *Workflow) ListToolsets(ctx context.Context) *Workflow {
 	if s.Failed() {
 		return s

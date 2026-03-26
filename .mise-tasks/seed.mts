@@ -1,8 +1,11 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
+import { createServer } from "node:http";
+import crypto from "node:crypto";
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -13,21 +16,23 @@ import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
 import { keysCreate } from "@gram/client/funcs/keysCreate.js";
 import { keysList } from "@gram/client/funcs/keysList.js";
+import { keysRevokeById } from "@gram/client/funcs/keysRevokeById.js";
 import { keysValidate } from "@gram/client/funcs/keysValidate.js";
 import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "@gram/client/funcs/projectsRead.js";
 import { toolsList } from "@gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
+import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
+import { environmentsList } from "@gram/client/funcs/environmentsList.js";
 import { ServiceError } from "@gram/client/models/errors";
 import { $ } from "zx";
 
 type Asset = {
   type: "openapi";
   slug: string;
-  filename: string;
   storybookDefault?: boolean;
-};
+} & ({ filename: string } | { url: string });
 
 const SEED_PROJECTS: {
   name: string;
@@ -37,15 +42,15 @@ const SEED_PROJECTS: {
   assets: Asset[];
 }[] = [
   {
-    name: "Kitchen Sink",
-    slug: "kitchen-sink",
-    summary: "An toy API to allow working with Gram Elements",
+    name: "E-Commerce API",
+    slug: "ecommerce-api",
+    summary: "A mock e-commerce API to allow working with Gram Elements",
     mcpPublic: true,
     assets: [
       {
         type: "openapi",
-        slug: "kitchen-sink",
-        filename: path.join("local", "openapi", "kitchen-sink.json"),
+        slug: "ecommerce-api",
+        url: "https://gram-mcp-storybook.vercel.app/openapi",
         storybookDefault: true,
       },
       {
@@ -56,6 +61,121 @@ const SEED_PROJECTS: {
     ],
   },
 ];
+
+async function authenticateViaMockIDP(serverURL: string): Promise<string> {
+  const idpAddress = process.env["SPEAKEASY_SERVER_ADDRESS"];
+  if (!idpAddress) {
+    throw new Error("SPEAKEASY_SERVER_ADDRESS is not set");
+  }
+
+  const secretKey = process.env["SPEAKEASY_SECRET_KEY"];
+  if (!secretKey) {
+    throw new Error("SPEAKEASY_SECRET_KEY is not set");
+  }
+
+  // Step 1: Hit the mock IDP login endpoint to get an auth code.
+  // Use a dummy return_url — we only need the code from the redirect Location.
+  const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=http://localhost/callback`;
+  const loginRes = await fetch(loginURL, { redirect: "manual" });
+  const location = loginRes.headers.get("location");
+  if (!location) {
+    throw new Error("Mock IDP login did not return a redirect");
+  }
+
+  // Check if the redirect contains a code (mock mode) or points elsewhere (OIDC mode).
+  const redirectUrl = new URL(location);
+  const code = redirectUrl.searchParams.get("code");
+
+  if (code) {
+    // Mock mode: the IDP returned a code directly.
+    return exchangeCodeWithServer(serverURL, code);
+  }
+
+  // OIDC mode: the IDP redirected to an external provider (e.g. WorkOS).
+  // We need a browser-based flow to complete authentication.
+  log.info("OIDC mode detected — opening browser for authentication...");
+  return authenticateViaBrowser(serverURL, idpAddress);
+}
+
+/**
+ * Opens a browser for the user to complete OIDC authentication.
+ * Starts a temporary local HTTP server to capture the redirect code.
+ */
+async function authenticateViaBrowser(
+  serverURL: string,
+  idpAddress: string,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const url = new URL(req.url!, `http://localhost`);
+      const code = url.searchParams.get("code");
+
+      if (!code) {
+        res.writeHead(400, { "Content-Type": "text/html" });
+        res.end("<h1>Error</h1><p>No code received. Please try again.</p>");
+        return;
+      }
+
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(
+        "<h1>Authenticated!</h1><p>You can close this tab and return to the terminal.</p>",
+      );
+
+      server.close();
+
+      exchangeCodeWithServer(serverURL, code).then(resolve).catch(reject);
+    });
+
+    // Listen on a random available port
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") {
+        reject(new Error("Failed to start local callback server"));
+        return;
+      }
+      const callbackUrl = `http://127.0.0.1:${addr.port}/callback`;
+      const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=${encodeURIComponent(callbackUrl)}`;
+
+      // Open the browser
+      const openCmd =
+        process.platform === "darwin"
+          ? "open"
+          : process.platform === "win32"
+            ? "start"
+            : "xdg-open";
+      exec(`${openCmd} '${loginURL}'`, (err) => {
+        if (err) {
+          log.warn(
+            `Could not open browser automatically. Please visit:\n${loginURL}`,
+          );
+        }
+      });
+    });
+
+    // Timeout after 2 minutes (unref so it doesn't block exit)
+    const timeout = setTimeout(() => {
+      server.close();
+      reject(new Error("Authentication timed out after 2 minutes"));
+    }, 120_000);
+    timeout.unref();
+  });
+}
+
+/** Exchange an auth code with the Gram server's callback endpoint. */
+async function exchangeCodeWithServer(
+  serverURL: string,
+  code: string,
+): Promise<string> {
+  const callbackURL = `${serverURL}/rpc/auth.callback?code=${encodeURIComponent(code)}`;
+  const callbackRes = await fetch(callbackURL, { redirect: "manual" });
+  const sessionToken = callbackRes.headers.get("gram-session");
+  if (!sessionToken) {
+    throw new Error(
+      `Server callback did not return a session (status=${callbackRes.status})`,
+    );
+  }
+  return sessionToken;
+}
 
 async function seed() {
   let success = false;
@@ -72,22 +192,19 @@ async function seed() {
 
   const gram = new GramCore({ serverURL });
 
-  const res = await authInfo(gram);
+  // Authenticate via the mock IDP to get a session token.
+  log.info("Authenticating via mock IDP...");
+  const sessionId = await authenticateViaMockIDP(serverURL);
+  log.info("Authenticated successfully.");
+
+  const res = await authInfo(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
   if (!res.ok) {
     abort("Failed to query session info", res.error);
   }
   const sessionInfo = res.value;
   const sessionJSON = JSON.stringify(sessionInfo, null, 2);
-  const sessionHeaders = new Headers(
-    Object.entries(sessionInfo.headers).map(([k, vs]): [string, string] => [
-      k,
-      vs.join(","),
-    ]),
-  );
-  const sessionId = sessionHeaders.get("gram-session");
-  if (!sessionId) {
-    abort("Session ID not found in session headers", sessionInfo);
-  }
 
   const activeOrgID = sessionInfo.result.activeOrganizationId;
   if (!activeOrgID) {
@@ -115,6 +232,9 @@ async function seed() {
     sessionId,
   });
 
+  // Collect all tool URNs per project for seeding observability data
+  const projectToolUrns: Record<string, string[]> = {};
+
   for (const { name, slug, assets, mcpPublic } of SEED_PROJECTS) {
     const {
       created,
@@ -127,6 +247,7 @@ async function seed() {
       slug,
     });
     projects[projectSlug] = { id, slug: projectSlug };
+    projectToolUrns[projectSlug] = [];
     let verb = created ? "Created" : "Found existing";
     log.info(`${verb} project '${projectSlug}' (project_id = ${id})`);
 
@@ -152,8 +273,11 @@ async function seed() {
       });
       verb = toolset.created ? "Created" : "Updated";
       log.info(
-        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL})`,
+        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL}, tools: ${toolset.toolUrns.length})`,
       );
+
+      // Collect tool URNs for observability seeding
+      projectToolUrns[projectSlug].push(...toolset.toolUrns);
 
       if (asset.storybookDefault) {
         await $`mise set --file mise.local.toml \
@@ -161,6 +285,52 @@ async function seed() {
         VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL=${toolset.mcpURL}`;
       }
     }
+  }
+
+  // Create the MCP Logs toolset — a curated subset of Gram's own API tools
+  // exposed as a built-in MCP server on the project MCP page.
+  // In production this lives in speakeasy-team/kitchen-sink; locally we
+  // reuse ecommerce-api since the gram asset is already deployed there.
+  {
+    const projectSlug = SEED_PROJECTS[0].slug;
+    const mcpLogsToolset = await upsertMcpLogsToolset({
+      gram,
+      serverURL,
+      sessionId,
+      projectSlug,
+    });
+    const verb = mcpLogsToolset.created ? "Created" : "Updated";
+    log.info(
+      `${verb} MCP Logs toolset '${mcpLogsToolset.slug}' for project '${projectSlug}' (mcp_url = ${mcpLogsToolset.mcpURL})`,
+    );
+  }
+
+  // Seed a default environment for each project
+  for (const { slug: projectSlug } of SEED_PROJECTS) {
+    const env = await getOrCreateEnvironment({
+      gram,
+      sessionId,
+      projectSlug,
+      activeOrgID,
+      name: "Default",
+    });
+    log.info(
+      `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
+    );
+  }
+
+  // Seed observability data for the first seeded project
+  const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
+  const firstProject = firstSeededProjectSlug
+    ? projects[firstSeededProjectSlug]
+    : undefined;
+  if (firstProject) {
+    const toolUrns = projectToolUrns[firstProject.slug] ?? [];
+    await seedObservabilityData({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+      toolUrns,
+    });
   }
 
   success = true;
@@ -184,29 +354,33 @@ async function initAPIKey(init: {
     log.warn(`Existing GRAM_API_KEY is invalid. Creating a new API key...`);
   }
 
+  // Revoke any existing seed-key before creating a new one
+  const listRes = await keysList(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (listRes.ok) {
+    const existingKey = listRes.value.keys.find((k) => k.name === "seed-key");
+    if (existingKey) {
+      log.info(`Revoking existing seed-key...`);
+      await keysRevokeById(
+        gram,
+        { id: existingKey.id },
+        { sessionHeaderGramSession: sessionId },
+      );
+    }
+  }
+
   const keyRes = await keysCreate(
     gram,
     {
-      createKeyForm: { name: "seed-key", scopes: ["producer"] },
+      createKeyForm: { name: "seed-key", scopes: ["producer", "chat"] },
     },
     {
       sessionHeaderGramSession: sessionId,
     },
   );
   if (!keyRes.ok) {
-    const listRes = await keysList(gram, undefined, {
-      sessionHeaderGramSession: sessionId,
-    });
-    if (!listRes.ok) {
-      abort("Failed to create or list API keys", keyRes.error, listRes.error);
-    }
-    const existingKey = listRes.value.keys.find((k) => k.name === "seed-key");
-    if (!existingKey) {
-      abort(`Failed to create API key 'seed-key'`, keyRes.error);
-    }
-
-    log.info(`Found existing API key. Continuing...`);
-    return;
+    abort(`Failed to create API key 'seed-key'`, keyRes.error);
   }
 
   const apiKey = keyRes.value.key;
@@ -215,6 +389,49 @@ async function initAPIKey(init: {
   log.info(
     `Created new API key and set GRAM_API_KEY environment variable in mise.local.toml.`,
   );
+}
+
+async function getOrCreateEnvironment(init: {
+  gram: GramCore;
+  sessionId: string;
+  projectSlug: string;
+  activeOrgID: string;
+  name: string;
+}): Promise<{ created: boolean; slug: string }> {
+  const { gram, sessionId, projectSlug, activeOrgID, name } = init;
+
+  // Check if environment already exists
+  const listRes = await environmentsList(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+    projectSlugHeaderGramProject: projectSlug,
+  });
+  if (listRes.ok) {
+    const existing = listRes.value.environments.find((e) => e.name === name);
+    if (existing) {
+      return { created: false, slug: existing.slug };
+    }
+  }
+
+  // Create the environment
+  const res = await environmentsCreate(
+    gram,
+    {
+      createEnvironmentForm: {
+        organizationId: activeOrgID,
+        name,
+        entries: [],
+      },
+    },
+    {
+      sessionHeaderGramSession: sessionId,
+      projectSlugHeaderGramProject: projectSlug,
+    },
+  );
+  if (!res.ok) {
+    abort(`Failed to create environment '${name}'`, res.error);
+  }
+
+  return { created: true, slug: res.value.slug };
 }
 
 async function getOrCreateProject(init: {
@@ -276,17 +493,32 @@ async function deployAssets(init: {
   const oapi: Array<{ assetId: string; name: string; slug: string }> = [];
 
   for (const asset of assets) {
-    const spec = await fs.readFile(asset.filename, "utf-8");
-    let contentType = "application/json";
-    if (asset.filename.endsWith(".yaml")) {
-      contentType = "application/x-yaml";
+    let spec: string;
+    let contentType: string;
+
+    if ("url" in asset) {
+      const response = await fetch(asset.url);
+      if (!response.ok) {
+        abort(
+          `Failed to fetch OpenAPI spec from ${asset.url}`,
+          response.statusText,
+        );
+      }
+      spec = await response.text();
+      contentType = "application/json";
+    } else {
+      spec = await fs.readFile(asset.filename, "utf-8");
+      contentType = asset.filename.endsWith(".yaml")
+        ? "application/x-yaml"
+        : "application/json";
     }
 
+    const requestBody = new Blob([spec], { type: contentType });
     const res = await assetsUploadOpenAPIv3(
       init.gram,
       {
-        contentLength: spec.length,
-        requestBody: new Blob([spec], { type: contentType }),
+        contentLength: requestBody.size,
+        requestBody,
       },
       {
         option2: {
@@ -297,7 +529,8 @@ async function deployAssets(init: {
     );
 
     if (!res.ok) {
-      abort(`Failed to upload asset \`${asset.filename}\``, res.error);
+      const source = "url" in asset ? asset.url : asset.filename;
+      abort(`Failed to upload asset \`${source}\``, res.error);
     }
 
     const { id: assetId } = await res.value.asset;
@@ -331,7 +564,12 @@ async function deployAssets(init: {
   return deploymentId;
 }
 
-type Toolset = { created: boolean; slug: string; mcpURL: string };
+type Toolset = {
+  created: boolean;
+  slug: string;
+  mcpURL: string;
+  toolUrns: string[];
+};
 
 async function upsertToolset(init: {
   gram: GramCore;
@@ -418,6 +656,7 @@ async function upsertToolset(init: {
         created: false,
         slug: updateRes.value.slug,
         mcpURL: `${serverURL}/mcp/${updateRes.value.mcpSlug}`,
+        toolUrns,
       };
       break;
     case !createRes.ok:
@@ -430,6 +669,7 @@ async function upsertToolset(init: {
         created: true,
         slug: createRes.value.slug,
         mcpURL: `${serverURL}/mcp/${createRes.value.mcpSlug}`,
+        toolUrns,
       };
       break;
   }
@@ -466,6 +706,856 @@ async function upsertToolset(init: {
   log.info(`${toolset.mcpURL} visibility was changed to public`);
 
   return toolset;
+}
+
+// The 11 Gram API tools that compose the built-in MCP Logs server.
+// These match the production `speakeasy-team-mcp-logs` toolset.
+const MCP_LOGS_TOOL_URNS = new Set([
+  "tools:http:gram:gram_list_tools",
+  "tools:http:gram:gram_search_logs",
+  "tools:http:gram:gram_list_global_variations",
+  "tools:http:gram:gram_search_tool_calls",
+  "tools:http:gram:gram_get_toolset",
+  "tools:http:gram:gram_get_observability_overview",
+  "tools:http:gram:gram_list_toolsets",
+  "tools:http:gram:gram_get_mcp_metadata",
+  "tools:http:gram:gram_list_chats_with_resolutions",
+  "tools:http:gram:gram_get_deployment_logs",
+  "tools:http:gram:gram_list_chats",
+]);
+
+async function upsertMcpLogsToolset(init: {
+  gram: GramCore;
+  serverURL: string;
+  sessionId: string;
+  projectSlug: string;
+}): Promise<Toolset> {
+  const { gram, serverURL, sessionId, projectSlug } = init;
+
+  // List all tools from the `gram` asset, then filter to the MCP Logs subset
+  const toolRes = await toolsList(
+    gram,
+    { urnPrefix: "tools:http:gram" },
+    {
+      projectSlugHeaderGramProject: projectSlug,
+      sessionHeaderGramSession: sessionId,
+    },
+  );
+  if (!toolRes.ok) {
+    abort(
+      `Failed to list tools for MCP Logs toolset in project '${projectSlug}'`,
+      toolRes.error,
+    );
+  }
+
+  const toolUrns = toolRes.value.tools
+    .map((t) => {
+      switch (true) {
+        case !!t.httpToolDefinition:
+          return t.httpToolDefinition.toolUrn;
+        case !!t.functionToolDefinition:
+          return t.functionToolDefinition.toolUrn;
+        case !!t.externalMcpToolDefinition:
+          return t.externalMcpToolDefinition.toolUrn;
+        case !!t.promptTemplate:
+          return t.promptTemplate.toolUrn;
+        default:
+          assert(false, "Unknown tool type: " + JSON.stringify(t));
+      }
+    })
+    .filter((urn) => MCP_LOGS_TOOL_URNS.has(urn));
+
+  const name = "mcp-logs";
+
+  const createRes = await toolsetsCreate(
+    gram,
+    {
+      createToolsetRequestBody: {
+        name,
+        toolUrns,
+      },
+    },
+    {
+      option1: {
+        projectSlugHeaderGramProject: projectSlug,
+        sessionHeaderGramSession: sessionId,
+      },
+    },
+  );
+
+  let toolset: Toolset;
+  switch (true) {
+    case !createRes.ok &&
+      createRes.error instanceof ServiceError &&
+      createRes.error.data$.name === "conflict":
+      const updateRes = await toolsetsUpdateBySlug(
+        gram,
+        {
+          slug: name,
+          updateToolsetRequestBody: {
+            toolUrns,
+            mcpIsPublic: true,
+            mcpEnabled: true,
+          },
+        },
+        {
+          option1: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: sessionId,
+          },
+        },
+      );
+      if (!updateRes.ok) {
+        abort(
+          `Failed to update MCP Logs toolset for project '${projectSlug}'`,
+          updateRes.error,
+        );
+      }
+      toolset = {
+        created: false,
+        slug: updateRes.value.slug,
+        mcpURL: `${serverURL}/mcp/${updateRes.value.mcpSlug}`,
+        toolUrns: updateRes.value.toolUrns,
+      };
+      break;
+    case !createRes.ok:
+      abort(
+        `Failed to create MCP Logs toolset for project '${projectSlug}'`,
+        createRes.error,
+      );
+    default:
+      // Make it public + MCP enabled right after creation
+      const publicRes = await toolsetsUpdateBySlug(
+        gram,
+        {
+          slug: createRes.value.slug,
+          updateToolsetRequestBody: {
+            mcpIsPublic: true,
+            mcpEnabled: true,
+          },
+        },
+        {
+          option1: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: sessionId,
+          },
+        },
+      );
+      if (!publicRes.ok) {
+        abort(
+          `Failed to make MCP Logs toolset public for project '${projectSlug}'`,
+          publicRes.error,
+        );
+      }
+      toolset = {
+        created: true,
+        slug: publicRes.value.slug,
+        mcpURL: `${serverURL}/mcp/${publicRes.value.mcpSlug}`,
+        toolUrns: createRes.value.toolUrns,
+      };
+      break;
+  }
+
+  return toolset;
+}
+
+// Namespace UUID for generating deterministic chat IDs
+const CHAT_UUID_NAMESPACE = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"; // DNS namespace
+
+function generateChatUUID(chatNumber: number): string {
+  // Generate a deterministic UUID v5 from the chat number
+  const hash = crypto
+    .createHash("sha1")
+    .update(CHAT_UUID_NAMESPACE)
+    .update(`chat-${chatNumber}`)
+    .digest();
+
+  // Set version (5) and variant bits
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+
+  const hex = hash.toString("hex").slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+async function seedObservabilityData(init: {
+  projectId: string;
+  organizationId: string;
+  toolUrns: string[];
+}): Promise<void> {
+  const { projectId, organizationId, toolUrns } = init;
+
+  log.info(`Seeding observability data with ${toolUrns.length} tool URNs...`);
+
+  if (toolUrns.length === 0) {
+    log.warn(
+      "No tool URNs available for seeding observability data. Skipping.",
+    );
+    return;
+  }
+
+  const NUM_CHATS = 500; // Reduced for faster seeding
+  const DAYS_BACK = 30;
+  const NUM_HOOKS = 500; // Reduced for faster seeding
+
+  // Use actual tool URNs from the deployment
+  const TOOLS = toolUrns;
+
+  const RESOLUTIONS = ["success", "partial", "failure"] as const;
+  const RESOLUTION_WEIGHTS = [65, 15, 20]; // success: 65%, partial: 15%, failure: 20%
+
+  // Sample user messages for chat content
+  const USER_MESSAGES = [
+    "Can you help me list all my GitHub repositories?",
+    "Send a message to the #general channel on Slack",
+    "Query the database for recent orders",
+    "Generate a summary of this document",
+    "Create a new Jira ticket for this bug",
+    "Process a payment for this order",
+    "Create a new page in Notion with these notes",
+    "What's the status of my last deployment?",
+    "Help me debug this API integration",
+    "Summarize the customer feedback from last week",
+  ];
+
+  const ASSISTANT_RESPONSES = [
+    "I'll help you with that. Let me check...",
+    "Sure, I'm processing your request now.",
+    "I've completed the task. Here are the results:",
+    "I found the following information for you:",
+    "The operation was successful. Here's what happened:",
+  ];
+
+  const SYSTEM_PROMPTS = [
+    "You are a helpful AI assistant with access to various tools. You can help users manage their GitHub repositories, send Slack messages, query databases, and more. Always be concise and helpful.",
+    "You are an enterprise assistant for Acme Corp. You have access to internal tools and databases. Follow company policies and maintain confidentiality. Be professional and efficient.",
+    "You are a technical support agent. Help users troubleshoot issues with their integrations. Ask clarifying questions when needed. Provide step-by-step instructions.",
+    "You are a data analyst assistant. You can query databases, generate reports, and visualize data. Always explain your methodology and assumptions.",
+    "You are a project management assistant. Help users track tasks, manage deadlines, and coordinate with team members. Keep responses organized and actionable.",
+  ];
+
+  // Helper to generate large arrays for testing truncation
+  function generateLargeRepositoryList(count: number) {
+    const languages = [
+      "Go",
+      "TypeScript",
+      "Python",
+      "Rust",
+      "Java",
+      "Ruby",
+      "C++",
+      "JavaScript",
+    ];
+    const repos = [];
+    for (let i = 0; i < count; i++) {
+      repos.push({
+        id: `repo-${i + 1}`,
+        name: `project-${["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"][i % 8]}-${Math.floor(i / 8) + 1}`,
+        full_name: `acme-corp/project-${i + 1}`,
+        description: `This is a comprehensive ${languages[i % languages.length]} project for handling ${["data processing", "API management", "user authentication", "payment processing", "analytics", "monitoring", "notifications", "scheduling"][i % 8]}`,
+        language: languages[i % languages.length],
+        stars: Math.floor(Math.random() * 1000),
+        forks: Math.floor(Math.random() * 200),
+        open_issues: Math.floor(Math.random() * 50),
+        watchers: Math.floor(Math.random() * 500),
+        default_branch: "main",
+        visibility: i % 3 === 0 ? "public" : "private",
+        created_at: new Date(
+          Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        updated_at: new Date(
+          Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        pushed_at: new Date(
+          Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        topics: [
+          "backend",
+          "api",
+          languages[i % languages.length].toLowerCase(),
+        ],
+        license: { key: "mit", name: "MIT License" },
+        permissions: { admin: true, push: true, pull: true },
+      });
+    }
+    return repos;
+  }
+
+  function generateLargeLogEntries(count: number) {
+    const levels = ["DEBUG", "INFO", "WARN", "ERROR"];
+    const services = [
+      "api-gateway",
+      "auth-service",
+      "payment-processor",
+      "notification-worker",
+      "analytics-pipeline",
+    ];
+    const messages = [
+      "Request received from client",
+      "Processing authentication token",
+      "Database query executed successfully",
+      "Cache miss - fetching from primary store",
+      "Rate limit check passed",
+      "Request payload validated",
+      "Initiating downstream API call",
+      "Response serialization complete",
+      "Metric recorded for monitoring",
+      "Audit log entry created",
+      "Connection pool status: healthy",
+      "Memory usage within threshold",
+      "CPU utilization normal",
+      "Garbage collection completed",
+      "Health check endpoint accessed",
+    ];
+    const logs = [];
+    const baseTime = Date.now();
+    for (let i = 0; i < count; i++) {
+      logs.push({
+        timestamp: new Date(baseTime - (count - i) * 100).toISOString(),
+        level: levels[Math.floor(Math.random() * levels.length)],
+        service: services[Math.floor(Math.random() * services.length)],
+        message: messages[Math.floor(Math.random() * messages.length)],
+        trace_id: `trace-${Math.random().toString(36).substring(2, 15)}`,
+        span_id: `span-${Math.random().toString(36).substring(2, 10)}`,
+        request_id: `req-${Math.random().toString(36).substring(2, 12)}`,
+        user_id: `user-${Math.floor(Math.random() * 1000)}`,
+        duration_ms: Math.floor(Math.random() * 500),
+        metadata: {
+          host: `server-${Math.floor(Math.random() * 10) + 1}.prod.example.com`,
+          region: ["us-east-1", "us-west-2", "eu-west-1"][
+            Math.floor(Math.random() * 3)
+          ],
+          version: `v${Math.floor(Math.random() * 3) + 1}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 20)}`,
+        },
+      });
+    }
+    return logs;
+  }
+
+  function generateLargeOrderList(count: number) {
+    const statuses = [
+      "pending",
+      "processing",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ];
+    const customers = [
+      "Acme Corp",
+      "TechStart Inc",
+      "Global Services",
+      "DataFlow LLC",
+      "CloudNine Solutions",
+      "NextGen Systems",
+      "Pioneer Tech",
+      "Quantum Labs",
+    ];
+    const orders = [];
+    for (let i = 0; i < count; i++) {
+      const itemCount = Math.floor(Math.random() * 5) + 1;
+      const items = [];
+      for (let j = 0; j < itemCount; j++) {
+        items.push({
+          sku: `SKU-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+          name: `Product ${j + 1}`,
+          quantity: Math.floor(Math.random() * 10) + 1,
+          unit_price: Math.floor(Math.random() * 500) + 10,
+          discount: Math.random() > 0.7 ? Math.floor(Math.random() * 20) : 0,
+        });
+      }
+      orders.push({
+        id: `ORD-${String(i + 1).padStart(6, "0")}`,
+        customer: {
+          name: customers[Math.floor(Math.random() * customers.length)],
+          email: `contact@${customers[Math.floor(Math.random() * customers.length)].toLowerCase().replace(/\s+/g, "")}.com`,
+          phone: `+1-555-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`,
+        },
+        items,
+        subtotal: items.reduce(
+          (sum, item) => sum + item.quantity * item.unit_price,
+          0,
+        ),
+        tax: Math.floor(Math.random() * 100),
+        shipping: Math.floor(Math.random() * 50),
+        total: 0,
+        status: statuses[Math.floor(Math.random() * statuses.length)],
+        shipping_address: {
+          street: `${Math.floor(Math.random() * 9999) + 1} Main St`,
+          city: ["New York", "San Francisco", "Chicago", "Austin", "Seattle"][
+            Math.floor(Math.random() * 5)
+          ],
+          state: ["NY", "CA", "IL", "TX", "WA"][Math.floor(Math.random() * 5)],
+          zip: String(Math.floor(Math.random() * 90000) + 10000),
+          country: "US",
+        },
+        created_at: new Date(
+          Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        updated_at: new Date(
+          Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+      });
+    }
+    return orders;
+  }
+
+  // Sample tool call outputs with realistic JSON content
+  // Includes both short and very long outputs to test truncation
+  const TOOL_OUTPUTS = [
+    // SHORT OUTPUT - simple response
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            message_sent: true,
+            channel: "#general",
+            timestamp: "1705312200.000100",
+            message_id: "msg_abc123def456",
+          }),
+        },
+      ],
+    },
+    // LONG OUTPUT - 30 repositories (~600+ lines when formatted)
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            repositories: generateLargeRepositoryList(30),
+            total_count: 30,
+            pagination: { page: 1, per_page: 30, total_pages: 1 },
+          }),
+        },
+      ],
+    },
+    // LONG OUTPUT - 80 log entries (~1000+ lines when formatted)
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            logs: generateLargeLogEntries(80),
+            total_entries: 80,
+            query: {
+              start_time: "2024-01-15T00:00:00Z",
+              end_time: "2024-01-15T23:59:59Z",
+              level: "all",
+            },
+          }),
+        },
+      ],
+    },
+    // LONG OUTPUT - 20 orders with items (~600+ lines when formatted)
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            orders: generateLargeOrderList(20),
+            pagination: { page: 1, per_page: 20, total: 156 },
+            summary: { total_revenue: 125000, average_order_value: 2500 },
+          }),
+        },
+      ],
+    },
+    // MEDIUM OUTPUT - deployment with detailed logs
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            deployment: {
+              id: "deploy-789xyz",
+              status: "success",
+              environment: "production",
+              started_at: "2024-01-15T08:00:00Z",
+              completed_at: "2024-01-15T08:05:32Z",
+              commit_sha: "a1b2c3d4e5f6",
+              logs_url: "https://logs.example.com/deploy-789xyz",
+              stages: [
+                {
+                  name: "build",
+                  status: "success",
+                  duration_seconds: 45,
+                  logs: generateLargeLogEntries(10),
+                },
+                {
+                  name: "test",
+                  status: "success",
+                  duration_seconds: 120,
+                  logs: generateLargeLogEntries(15),
+                },
+                {
+                  name: "deploy",
+                  status: "success",
+                  duration_seconds: 30,
+                  logs: generateLargeLogEntries(8),
+                },
+              ],
+            },
+          }),
+        },
+      ],
+    },
+    // SHORT OUTPUT - ticket created
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ticket_created: true,
+            ticket_id: "JIRA-4521",
+            project: "BACKEND",
+            summary: "API returns 500 on large payloads",
+            priority: "High",
+            assignee: "john.doe@example.com",
+            url: "https://jira.example.com/browse/JIRA-4521",
+          }),
+        },
+      ],
+    },
+  ];
+
+  // Generate chat data
+  const now = Date.now();
+  const msPerDay = 24 * 60 * 60 * 1000;
+
+  // Build PostgreSQL insert statements
+  let chatsSQL = `
+    DELETE FROM chats WHERE project_id = '${projectId}';
+    INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at) VALUES
+  `;
+
+  let messagesSQL = `
+    INSERT INTO chat_messages (chat_id, project_id, role, content, model, created_at) VALUES
+  `;
+
+  let resolutionsSQL = `
+    INSERT INTO chat_resolutions (project_id, chat_id, user_goal, resolution, resolution_notes, score, created_at) VALUES
+  `;
+
+  const chatValues: string[] = [];
+  const messageValues: string[] = [];
+  const resolutionValues: string[] = [];
+
+  for (let i = 0; i < NUM_CHATS; i++) {
+    const chatId = generateChatUUID(i);
+    const extUserId = `ext-user-${i % 80}`;
+    const userId = `user-${i % 200}`;
+
+    // Random time within the past DAYS_BACK days
+    const daysAgo = Math.random() * DAYS_BACK;
+    const chatTime = new Date(now - daysAgo * msPerDay);
+    const updatedTime = new Date(
+      chatTime.getTime() + Math.random() * 10 * 60 * 1000,
+    ); // 0-10 minutes later
+
+    // Generate a title from the first user message
+    const userMsg =
+      USER_MESSAGES[Math.floor(Math.random() * USER_MESSAGES.length)];
+    const title = userMsg.slice(0, 50) + (userMsg.length > 50 ? "..." : "");
+
+    chatValues.push(
+      `('${chatId}', '${projectId}', '${organizationId}', '${userId}', '${extUserId}', '${title.replace(/'/g, "''")}', '${chatTime.toISOString()}', '${updatedTime.toISOString()}')`,
+    );
+
+    // Generate 2-6 messages per chat
+    const numMessages = 2 + Math.floor(Math.random() * 5);
+    let msgTime = chatTime;
+
+    // Add system message at the start (80% of chats have system prompts)
+    if (Math.random() < 0.8) {
+      const systemPrompt =
+        SYSTEM_PROMPTS[Math.floor(Math.random() * SYSTEM_PROMPTS.length)];
+      messageValues.push(
+        `('${chatId}', '${projectId}', 'system', '${systemPrompt.replace(/'/g, "''")}', 'gpt-4', '${msgTime.toISOString()}')`,
+      );
+      msgTime = new Date(msgTime.getTime() + 100); // Tiny increment for system message
+    }
+
+    for (let j = 0; j < numMessages; j++) {
+      const role = j % 2 === 0 ? "user" : "assistant";
+      const content =
+        role === "user"
+          ? USER_MESSAGES[Math.floor(Math.random() * USER_MESSAGES.length)]
+          : ASSISTANT_RESPONSES[
+              Math.floor(Math.random() * ASSISTANT_RESPONSES.length)
+            ];
+
+      msgTime = new Date(msgTime.getTime() + Math.random() * 30 * 1000); // 0-30 seconds later
+
+      messageValues.push(
+        `('${chatId}', '${projectId}', '${role}', '${content.replace(/'/g, "''")}', 'gpt-4', '${msgTime.toISOString()}')`,
+      );
+
+      // After assistant messages, 60% chance to add a tool call result
+      if (role === "assistant" && Math.random() < 0.6) {
+        const toolOutput =
+          TOOL_OUTPUTS[Math.floor(Math.random() * TOOL_OUTPUTS.length)];
+        const toolContent = JSON.stringify(toolOutput).replace(/'/g, "''");
+        msgTime = new Date(msgTime.getTime() + Math.random() * 5 * 1000); // 0-5 seconds later
+
+        messageValues.push(
+          `('${chatId}', '${projectId}', 'tool', '${toolContent}', 'gpt-4', '${msgTime.toISOString()}')`,
+        );
+      }
+    }
+
+    // Generate resolution (70% of chats have resolutions)
+    if (Math.random() < 0.7) {
+      const rand = Math.random() * 100;
+      let resolution: (typeof RESOLUTIONS)[number];
+      let score: number;
+
+      if (rand < RESOLUTION_WEIGHTS[0]) {
+        resolution = "success";
+        score = 80 + Math.floor(Math.random() * 21); // 80-100
+      } else if (rand < RESOLUTION_WEIGHTS[0] + RESOLUTION_WEIGHTS[1]) {
+        resolution = "partial";
+        score = 40 + Math.floor(Math.random() * 31); // 40-70
+      } else {
+        resolution = "failure";
+        score = Math.floor(Math.random() * 30); // 0-29
+      }
+
+      const resolutionNotes =
+        resolution === "success"
+          ? "User goal was fully achieved"
+          : resolution === "partial"
+            ? "User goal was partially achieved"
+            : "User goal could not be completed";
+
+      resolutionValues.push(
+        `('${projectId}', '${chatId}', '${userMsg.replace(/'/g, "''")}', '${resolution}', '${resolutionNotes}', ${score}, '${updatedTime.toISOString()}')`,
+      );
+    }
+  }
+
+  chatsSQL += chatValues.join(",\n") + ";";
+  messagesSQL += messageValues.join(",\n") + ";";
+
+  if (resolutionValues.length > 0) {
+    resolutionsSQL += resolutionValues.join(",\n") + ";";
+  }
+
+  // Execute PostgreSQL inserts
+  const pgSQL = `
+    BEGIN;
+    ${chatsSQL}
+    ${messagesSQL}
+    ${resolutionValues.length > 0 ? resolutionsSQL : ""}
+    COMMIT;
+  `;
+
+  try {
+    // Use individual env vars to avoid search_path issue with psql
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+
+    // Write SQL to temp file to avoid E2BIG (arg list too long) error
+    const tmpFile = path.join(process.cwd(), ".seed-observability.sql");
+    await fs.writeFile(tmpFile, pgSQL, "utf-8");
+
+    try {
+      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed.sql`.quiet();
+      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed.sql`.quiet();
+      log.info(`Inserted ${NUM_CHATS} chats with messages into PostgreSQL`);
+    } finally {
+      // Clean up temp file
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed PostgreSQL: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+
+  // Build ClickHouse insert for telemetry logs
+  // We'll create a simpler inline insert using clickhouse-client
+  const chInserts: string[] = [];
+
+  for (let i = 0; i < NUM_CHATS; i++) {
+    const chatId = generateChatUUID(i);
+    const extUserId = `ext-user-${i % 80}`;
+    const userId = `user-${i % 200}`;
+    const apiKeyId = `key-${i % 5}`;
+
+    const daysAgo = Math.random() * DAYS_BACK;
+    const eventTime = new Date(now - daysAgo * msPerDay);
+    const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
+
+    // Generate a unique trace ID for each tool call (32 hex chars)
+    const traceId = crypto.randomBytes(16).toString("hex");
+
+    // Tool call event - TOOLS now contains full URNs like "tools:http:gram:operation"
+    const toolUrn = TOOLS[Math.floor(Math.random() * TOOLS.length)];
+    const statusCode =
+      Math.random() < 0.92
+        ? 200
+        : [400, 500, 502][Math.floor(Math.random() * 3)];
+    const latency = (0.05 + Math.random() * 2).toFixed(3);
+
+    chInserts.push(
+      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
+    );
+
+    // Chat completion event - same trace ID links it to the tool call
+    const finishReason =
+      Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
+    const duration = 30 + Math.floor(Math.random() * 150);
+    const completionStatus = Math.random() < 0.92 ? 200 : 500;
+
+    chInserts.push(
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+    );
+
+    // Resolution event (70% of chats) - same trace ID
+    if (Math.random() < 0.7) {
+      const rand = Math.random() * 100;
+      let resolution: string;
+      let score: number;
+
+      if (rand < 65) {
+        resolution = "success";
+        score = 80 + Math.floor(Math.random() * 21);
+      } else if (rand < 80) {
+        resolution = "partial";
+        score = 40 + Math.floor(Math.random() * 31);
+      } else {
+        resolution = "failure";
+        score = Math.floor(Math.random() * 30);
+      }
+
+      chInserts.push(
+        `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '${traceId}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
+      );
+    }
+  }
+
+  // Hook-specific constants
+  const HOOK_SOURCES = ["claude", "vscode", "cli", "api"];
+  const MCP_SERVERS = ["", "github", "filesystem", "postgres", "slack", ""]; // Empty string = local tools
+  const HOOK_TOOL_NAMES = [
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Grep",
+    "Glob",
+    "mcp__github__list-repos",
+    "mcp__filesystem__read-file",
+    "mcp__postgres__query",
+  ];
+  const USER_EMAILS = [
+    "alice@example.com",
+    "bob@example.com",
+    "charlie@example.com",
+    "",
+  ]; // Empty string = no user email
+
+  for (let i = 0; i < NUM_HOOKS; i++) {
+    const sessionId = `session-${i % 50}`; // Group hooks into sessions
+    const toolUseId = `toolu_${crypto.randomBytes(12).toString("hex")}`;
+    const userEmail =
+      USER_EMAILS[Math.floor(Math.random() * USER_EMAILS.length)];
+    const hookSource =
+      HOOK_SOURCES[Math.floor(Math.random() * HOOK_SOURCES.length)];
+    const toolName =
+      HOOK_TOOL_NAMES[Math.floor(Math.random() * HOOK_TOOL_NAMES.length)];
+    const mcpServer =
+      MCP_SERVERS[Math.floor(Math.random() * MCP_SERVERS.length)];
+
+    const daysAgo = Math.random() * DAYS_BACK;
+    const eventTime = new Date(now - daysAgo * msPerDay);
+    const baseTimeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
+
+    // Generate a unique trace ID for this tool call (32 hex chars)
+    const traceId = crypto.randomBytes(16).toString("hex");
+
+    // Decide if this is a successful call or failure (90% success)
+    const isFailure = Math.random() > 0.9;
+
+    // 1. SessionStart event (10% of the time)
+    if (Math.random() < 0.1) {
+      const attrs: Record<string, any> = {
+        "gram.event.source": "hook",
+        "gram.hook.event": "SessionStart",
+        "gram.hook.source": hookSource,
+        "gram.project.id": projectId,
+        "gen_ai.conversation.id": sessionId,
+      };
+      if (userEmail) attrs["user.email"] = userEmail;
+
+      chInserts.push(
+        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Hook: SessionStart', '${traceId}', '${JSON.stringify(attrs).replace(/'/g, "\\'")}', '{}', '${projectId}', 'SessionStart', '${hookSource}', '${sessionId}')`,
+      );
+    } else {
+      // 2. PreToolUse event
+      const preToolAttrs: Record<string, any> = {
+        "gram.event.source": "hook",
+        "gram.tool.name": toolName,
+        "gram.hook.event": "PreToolUse",
+        "gram.hook.source": hookSource,
+        "gram.project.id": projectId,
+        "gen_ai.conversation.id": sessionId,
+        "gen_ai.tool_call.id": toolUseId,
+      };
+      if (userEmail) preToolAttrs["user.email"] = userEmail;
+      if (mcpServer) preToolAttrs["gram.tool_call.source"] = mcpServer;
+
+      chInserts.push(
+        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '${JSON.stringify(preToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
+      );
+
+      // 3. PostToolUse or PostToolUseFailure event
+      const postHookEvent = isFailure ? "PostToolUseFailure" : "PostToolUse";
+      const postTimeNano =
+        baseTimeNano + BigInt(Math.floor(Math.random() * 5000000)); // 0-5ms later
+
+      const postToolAttrs: Record<string, any> = {
+        "gram.event.source": "hook",
+        "gram.tool.name": toolName,
+        "gram.hook.event": postHookEvent,
+        "gram.hook.source": hookSource,
+        "gram.project.id": projectId,
+        "gen_ai.conversation.id": sessionId,
+        "gen_ai.tool_call.id": toolUseId,
+        "http.response.status_code": isFailure ? 500 : 200,
+      };
+      if (userEmail) postToolAttrs["user.email"] = userEmail;
+      if (mcpServer) postToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (isFailure) postToolAttrs["gram.hook.error"] = "Tool execution failed";
+
+      chInserts.push(
+        `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${JSON.stringify(postToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
+      );
+    }
+  }
+
+  const chSQL = `
+    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
+    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
+    ${chInserts.join(",\n")};
+  `;
+
+  try {
+    // Write to temp file and execute via docker
+    const tmpFile = `/tmp/seed_clickhouse_${Date.now()}.sql`;
+    await fs.writeFile(tmpFile, chSQL);
+
+    // Use docker exec to run clickhouse-client inside the container
+    // Copy the file into the container, then execute using --queries-file
+    await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed.sql`.quiet();
+    await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed.sql`.quiet();
+    await fs.unlink(tmpFile);
+    log.info(`Inserted ${chInserts.length} telemetry events into ClickHouse`);
+  } catch (e) {
+    log.warn(`Failed to seed ClickHouse: ${e}`);
+  }
+
+  log.info("Observability data seeding complete");
 }
 
 function abort(message: string, ...values: unknown[]): never {

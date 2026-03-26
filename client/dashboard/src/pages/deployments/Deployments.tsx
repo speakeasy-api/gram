@@ -46,6 +46,8 @@ type DeploymentSummary = {
   openapiv3ToolCount: number;
   functionsAssetCount: number;
   functionsToolCount: number;
+  externalMcpAssetCount: number;
+  externalMcpToolCount: number;
 };
 
 function DeploymentActionsDropdown({
@@ -115,7 +117,9 @@ function DeploymentActionsDropdown({
   );
 }
 
-function DeploymentsTable() {
+export function DeploymentsTable({
+  showHeader = true,
+}: { showHeader?: boolean } = {}) {
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
 
@@ -180,13 +184,19 @@ function DeploymentsTable() {
     {
       key: "assetCount",
       header: "Assets",
-      render: (row) => row.openapiv3AssetCount + row.functionsAssetCount,
+      render: (row) =>
+        row.openapiv3AssetCount +
+        row.functionsAssetCount +
+        row.externalMcpAssetCount,
       width: "150px",
     },
     {
       key: "toolCount",
       header: "Tools",
-      render: (row) => row.openapiv3ToolCount + row.functionsToolCount,
+      render: (row) =>
+        row.openapiv3ToolCount +
+        row.functionsToolCount +
+        row.externalMcpToolCount,
       width: "0.5fr",
     },
     {
@@ -206,24 +216,23 @@ function DeploymentsTable() {
 
   return (
     <>
-      <Heading variant="h2">Recent Deployments</Heading>
+      {showHeader && (
+        <>
+          <Heading variant="h2">Recent Deployments</Heading>
 
-      <div className="bg-secondary p-6 rounded-lg mb-6 space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Each time you upload a new Gram Function or OpenAPI document or update
-          a previously uploaded one, you create a new deployment in Gram. These
-          are collectively called assets.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          For each deployment, Gram analyzes all related assets to generate or
-          update the corresponding tool definitions.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Gram also generates logs for every deployment, showing what was
-          processed successfully and which functions or endpoints failed to
-          convert into tools.
-        </p>
-      </div>
+          <div className="bg-secondary p-6 rounded-lg mb-6 space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Each time you add a new source or update an existing source a new
+              deployment is created in Gram. These are collectively called
+              assets.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              For each deployment, Gram analyzes all sources in the project to
+              generate or update the corresponding tool definitions.
+            </p>
+          </div>
+        </>
+      )}
 
       <Table<DeploymentSummary>
         columns={columnsWithData}

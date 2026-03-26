@@ -8,13 +8,13 @@ const gram = new Gram({
   envSchema: {
     PLANETSCALE_HOST: z
       .string()
-      .describe("The PlanetScale PostgreSQL host (format: XXXX.pg.psdb.cloud)."),
+      .describe(
+        "The PlanetScale PostgreSQL host (format: XXXX.pg.psdb.cloud).",
+      ),
     PLANETSCALE_PORT: z
       .string()
       .describe("The PlanetScale PostgreSQL port (typically 6432)."),
-    PLANETSCALE_DATABASE: z
-      .string()
-      .describe("The PlanetScale database name."),
+    PLANETSCALE_DATABASE: z.string().describe("The PlanetScale database name."),
     PLANETSCALE_USERNAME: z
       .string()
       .describe("The PlanetScale PostgreSQL username."),

@@ -25,10 +25,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -45,6 +46,7 @@ type OAuthServerMetadata struct {
 	AuthorizationEndpoint         string   `json:"authorization_endpoint"`
 	TokenEndpoint                 string   `json:"token_endpoint"`
 	RegistrationEndpoint          string   `json:"registration_endpoint"`
+	ScopesSupported               []string `json:"scopes_supported,omitempty"`
 	ResponseTypesSupported        []string `json:"response_types_supported"`
 	GrantTypesSupported           []string `json:"grant_types_supported"`
 	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
@@ -67,6 +69,7 @@ type OAuthServerMetadataResult struct {
 
 type OAuthRepo interface {
 	GetExternalOAuthServerMetadata(ctx context.Context, arg repo.GetExternalOAuthServerMetadataParams) (repo.ExternalOauthServerMetadatum, error)
+	ListOAuthProxyProvidersByServer(ctx context.Context, arg repo.ListOAuthProxyProvidersByServerParams) ([]repo.OauthProxyProvider, error)
 }
 
 func ResolveOAuthServerMetadataFromToolset(
@@ -80,6 +83,34 @@ func ResolveOAuthServerMetadataFromToolset(
 	mcpSlug string,
 ) (*OAuthServerMetadataResult, error) {
 	if toolset.OauthProxyServerID.Valid {
+		providers, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
+			OauthProxyServerID: toolset.OauthProxyServerID.UUID,
+			ProjectID:          toolset.ProjectID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list OAuth proxy providers").Log(ctx, logger)
+		}
+		if len(providers) == 0 {
+			return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy providers configured for server").Log(ctx, logger)
+		}
+		if len(providers) > 1 {
+			logger.ErrorContext(ctx, "multiple OAuth proxy providers per server is not supported",
+				attr.SlogOAuthProxyServerID(toolset.OauthProxyServerID.UUID.String()),
+				attr.SlogOAuthProviderCount(len(providers)))
+			return nil, oops.E(oops.CodeUnexpected, nil, "multiple OAuth proxy providers per server is not supported").Log(ctx, logger)
+		}
+		provider := providers[0]
+
+		// Always include offline_access — Gram issues refresh tokens for all provider types.
+		// The provider's own scopes describe upstream capabilities; offline_access describes
+		// Gram's capability as the authorization server.
+		scopes := []string{"offline_access"}
+		for _, s := range provider.ScopesSupported {
+			if s != "offline_access" {
+				scopes = append(scopes, s)
+			}
+		}
+
 		return &OAuthServerMetadataResult{
 			Kind: OAuthServerMetadataResultKindStatic,
 			Static: &OAuthServerMetadata{
@@ -87,8 +118,9 @@ func ResolveOAuthServerMetadataFromToolset(
 				AuthorizationEndpoint:         baseURL + "/oauth/" + mcpSlug + "/authorize",
 				TokenEndpoint:                 baseURL + "/oauth/" + mcpSlug + "/token",
 				RegistrationEndpoint:          baseURL + "/oauth/" + mcpSlug + "/register",
+				ScopesSupported:               scopes,
 				ResponseTypesSupported:        []string{"code"},
-				GrantTypesSupported:           []string{"authorization_code"},
+				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
 				CodeChallengeMethodsSupported: []string{"plain", "S256"},
 			},
 			Raw:      nil,
@@ -113,30 +145,6 @@ func ResolveOAuthServerMetadataFromToolset(
 		}, nil
 	}
 
-	fullToolset, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), toolsetCache)
-	if err != nil {
-		return nil, err
-	}
-
-	if oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset); oauthConfig != nil {
-		// Return static metadata with upstream OAuth endpoints passed through directly.
-		// The issuer is Gram's URL, but auth/token/registration endpoints point to the upstream server.
-		return &OAuthServerMetadataResult{
-			Kind: OAuthServerMetadataResultKindStatic,
-			Static: &OAuthServerMetadata{
-				Issuer:                        baseURL + "/mcp/" + mcpSlug,
-				AuthorizationEndpoint:         oauthConfig.AuthorizationEndpoint,
-				TokenEndpoint:                 oauthConfig.TokenEndpoint,
-				RegistrationEndpoint:          oauthConfig.RegistrationEndpoint,
-				ResponseTypesSupported:        []string{"code"},
-				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
-				CodeChallengeMethodsSupported: []string{"S256"},
-			},
-			Raw:      nil,
-			ProxyURL: "",
-		}, nil
-	}
-
 	return nil, nil
 }
 
@@ -157,20 +165,6 @@ func ResolveOAuthProtectedResourceFromToolset(
 			Resource:             baseURL + "/mcp/" + mcpSlug,
 			AuthorizationServers: []string{baseURL + "/mcp/" + mcpSlug},
 			ScopesSupported:      nil,
-		}, nil
-	}
-
-	// Check for external MCP tools that require OAuth
-	fullToolset, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), toolsetCache)
-	if err != nil {
-		return nil, err
-	}
-
-	if oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset); oauthConfig != nil {
-		return &OAuthProtectedResourceMetadata{
-			Resource:             baseURL + "/mcp/" + mcpSlug,
-			AuthorizationServers: []string{baseURL + "/mcp/" + mcpSlug},
-			ScopesSupported:      oauthConfig.ScopesSupported,
 		}, nil
 	}
 

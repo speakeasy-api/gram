@@ -33,11 +33,11 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -49,6 +49,10 @@ var oauthFailurePageTmplData string
 
 //go:embed hosted_oauth_status_script.js
 var oauthSuccessScriptData []byte
+
+const (
+	requestMaxBodyBytes int64 = 10 * 1024 * 1024 // 10 MiB
+)
 
 type gramOAuthResultPageData struct {
 	RedirectURL template.URL
@@ -77,6 +81,7 @@ type Service struct {
 	sessions                  *sessions.Manager
 	gramProvider              *providers.GramProvider
 	customProvider            *providers.CustomProvider
+	upstreamPKCEStorage       cache.TypedCacheObject[UpstreamPKCEVerifier]
 	successPageTmpl           *template.Template
 	failurePageTmpl           *template.Template
 	oauthStatusPageScriptHash string
@@ -125,8 +130,9 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		sessions:           sessions,
 
 		// OAuth providers
-		gramProvider:   gramProvider,
-		customProvider: customProvider,
+		gramProvider:        gramProvider,
+		customProvider:      customProvider,
+		upstreamPKCEStorage: cache.NewTypedObjectCache[UpstreamPKCEVerifier](logger.With(attr.SlogCacheNamespace("upstream_pkce")), cacheImpl, cache.SuffixNone),
 
 		// HTML templates
 		successPageTmpl: successPageTmpl,
@@ -261,6 +267,15 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return nil
 	}
 
+	// Get OAuth proxy server for this toolset
+	proxyServer, err := s.oauthRepo.GetOAuthProxyServer(ctx, repo.GetOAuthProxyServerParams{
+		ProjectID: toolset.ProjectID,
+		ID:        toolset.OauthProxyServerID.UUID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "OAuth proxy server not found").Log(ctx, s.logger)
+	}
+
 	// Get OAuth proxy providers for this toolset
 	availableProviders, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
 		OauthProxyServerID: toolset.OauthProxyServerID.UUID,
@@ -347,17 +362,50 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
 		}
 
+		// Generate PKCE for the upstream provider
+		upstreamCodeVerifier, err := generateCodeVerifier()
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to generate PKCE verifier").Log(ctx, s.logger)
+		}
+		upstreamCodeChallenge := generateCodeChallenge(upstreamCodeVerifier)
+
+		// Store verifier server-side (Redis) so it never traverses the front-channel.
+		// Only a random nonce goes into the state parameter.
+		pkceNonce := uuid.New().String()
+		if err := s.upstreamPKCEStorage.Store(ctx, UpstreamPKCEVerifier{
+			Nonce:    pkceNonce,
+			Verifier: upstreamCodeVerifier,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to store upstream PKCE verifier").Log(ctx, s.logger)
+		}
+		oauthReqInfo["upstream_pkce_nonce"] = pkceNonce
+		oauthReqInfoJSON, err = json.Marshal(oauthReqInfo)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "failed to encode OAuth request info").Log(ctx, s.logger)
+		}
+
 		urlParams := url.Values{}
 		urlParams.Set("client_id", clientID)
 		urlParams.Set("redirect_uri", callbackURL)
 		urlParams.Set("response_type", "code")
 		urlParams.Add("state", string(oauthReqInfoJSON))
+		urlParams.Set("code_challenge", upstreamCodeChallenge)
+		urlParams.Set("code_challenge_method", "S256")
 
 		// We will recommend the provider configuration, fallback to request scope
 		if len(provider.ScopesSupported) > 0 {
 			urlParams.Set("scope", strings.Join(provider.ScopesSupported, " "))
 		} else {
 			urlParams.Set("scope", req.Scope)
+		}
+
+		// Per OIDC Core §11, prompt=consent is required when requesting offline_access
+		if strings.Contains(urlParams.Get("scope"), "offline_access") {
+			urlParams.Set("prompt", "consent")
+		}
+
+		if proxyServer.Audience.Valid {
+			urlParams.Set("audience", proxyServer.Audience.String)
 		}
 
 		authURL.RawQuery = urlParams.Encode()
@@ -380,6 +428,7 @@ func (s *Service) validateAuthorizationRequest(ctx context.Context, req *Authori
 // handleToken handles OAuth 2.1 token requests
 func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -408,6 +457,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		CodeVerifier: r.FormValue("code_verifier"),
+		RefreshToken: r.FormValue("refresh_token"),
 	}
 
 	var token *Token
@@ -415,6 +465,8 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	switch req.GrantType {
 	case "authorization_code":
 		token, err = s.tokenService.ExchangeAuthorizationCode(ctx, req, fullMCPURL, toolset.ID)
+	case "refresh_token":
+		token, err = s.tokenService.ExchangeRefreshToken(ctx, req, fullMCPURL, toolset.ID)
 	default:
 		return oops.E(oops.CodeBadRequest, nil, "unsupported grant type: %s", req.GrantType).Log(ctx, s.logger)
 	}
@@ -433,6 +485,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 // handleClientRegistration handles OAuth 2.1 dynamic client registration
 func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -523,6 +576,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	// Provider-specific token exchange
 	var accessToken string
+	var refreshToken string
 	var expiresAt *time.Time
 
 	var oauthProvider providers.Provider
@@ -533,7 +587,22 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		oauthProvider = s.customProvider
 	}
 
-	result, err := oauthProvider.ExchangeToken(ctx, externalCode, provider, toolset, s.serverURL)
+	// Retrieve upstream PKCE verifier from server-side storage (if present)
+	var upstreamCodeVerifier string
+	if pkceNonce := oauthReqInfo["upstream_pkce_nonce"]; pkceNonce != "" {
+		pkceKey := UpstreamPKCEVerifier{Nonce: pkceNonce, Verifier: ""}.CacheKey()
+		stored, err := s.upstreamPKCEStorage.Get(ctx, pkceKey)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to retrieve upstream PKCE verifier").Log(ctx, s.logger)
+		}
+		upstreamCodeVerifier = stored.Verifier
+		// Clean up after use
+		if delErr := s.upstreamPKCEStorage.DeleteByKey(ctx, pkceKey); delErr != nil {
+			s.logger.ErrorContext(ctx, "failed to delete upstream PKCE verifier", attr.SlogError(delErr))
+		}
+	}
+
+	result, err := oauthProvider.ExchangeToken(ctx, externalCode, provider, toolset, s.serverURL, upstreamCodeVerifier)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "provider token exchange failed",
 			attr.SlogOAuthProvider(provider.Slug),
@@ -584,6 +653,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	accessToken = result.AccessToken
+	refreshToken = result.RefreshToken
 	expiresAt = result.ExpiresAt
 
 	// Reconstruct the original authorization request from decoded state
@@ -598,7 +668,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		Nonce:               oauthReqInfo["nonce"],
 	}
 
-	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMCPURL, toolset.ID, accessToken, expiresAt, provider.SecurityKeyNames)
+	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMCPURL, toolset.ID, accessToken, refreshToken, expiresAt, provider.SecurityKeyNames)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create authorization grant", attr.SlogError(err))
 
@@ -609,9 +679,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	s.logger.InfoContext(ctx, "authorization grant created after external provider callback",
-		attr.SlogOAuthClientID(authReq.ClientID),
-		attr.SlogOAuthCode(grant.Code),
-		attr.SlogOAuthExternalCode(externalCode))
+		attr.SlogOAuthClientID(authReq.ClientID))
 
 	// Build authorization response and redirect back to client
 	responseURL, err := s.grantManager.BuildAuthorizationResponse(ctx, grant, authReq.RedirectURI)
@@ -709,4 +777,42 @@ func (s *Service) parseBasicAuth(authHeader string) (string, string, bool) {
 // ValidateAccessToken validates an OAuth access token
 func (s *Service) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
 	return s.tokenService.ValidateAccessToken(ctx, toolsetId, accessToken)
+}
+
+// RefreshProxyToken refreshes upstream credentials for an OAuth proxy token
+func (s *Service) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, token *Token, proxyProvider *repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*Token, error) {
+	var provider providers.Provider
+	switch proxyProvider.ProviderType {
+	case string(OAuthProxyProviderTypeCustom):
+		provider = s.customProvider
+	default:
+		return nil, fmt.Errorf("refresh not supported for provider type: %s", proxyProvider.ProviderType)
+	}
+
+	newSecrets := make([]ExternalSecret, len(token.ExternalSecrets))
+	for i, es := range token.ExternalSecrets {
+		if es.RefreshToken == "" {
+			return nil, ErrNoUpstreamRefreshToken
+		}
+		result, err := provider.RefreshToken(ctx, es.RefreshToken, *proxyProvider, toolset)
+		if err != nil {
+			return nil, fmt.Errorf("upstream token refresh failed: %w", err)
+		}
+		refreshToken := result.RefreshToken
+		if refreshToken == "" {
+			refreshToken = es.RefreshToken // preserve the original refresh token
+		}
+		newSecrets[i] = ExternalSecret{
+			SecurityKeys: es.SecurityKeys,
+			Token:        result.AccessToken,
+			RefreshToken: refreshToken,
+			ExpiresAt:    result.ExpiresAt,
+		}
+	}
+
+	if err := s.tokenService.RefreshExternalSecrets(ctx, token, newSecrets); err != nil {
+		return nil, fmt.Errorf("failed to update token after refresh: %w", err)
+	}
+
+	return token, nil
 }

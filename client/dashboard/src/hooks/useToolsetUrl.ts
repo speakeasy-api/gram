@@ -3,7 +3,7 @@ import { getServerURL } from "@/lib/utils";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useGetDomain } from "@gram/client/react-query";
 
-export function useCustomDomain() {
+export function useCustomDomain(enabled = true) {
   const {
     data: domain,
     isLoading,
@@ -12,6 +12,7 @@ export function useCustomDomain() {
     refetchOnWindowFocus: false,
     retry: false,
     throwOnError: false,
+    enabled,
   });
 
   return { domain: domain, refetch: refetch, isLoading };
@@ -33,7 +34,10 @@ export function useMcpUrl(
   customServerURL: string | undefined;
   installPageUrl: string;
 } {
-  const { domain } = useCustomDomain();
+  // Only fetch domain data when the toolset actually has a custom domain
+  // configured. This avoids a ~1s request on pages like Home where most
+  // toolsets don't use custom domains.
+  const { domain } = useCustomDomain(!!toolset?.customDomainId);
   const project = useProject();
 
   if (!toolset)

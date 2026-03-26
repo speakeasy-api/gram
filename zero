@@ -4,10 +4,15 @@ set -e
 
 # Parse command line arguments
 agent_mode=false
+auto_yes=false
 for arg in "$@"; do
     case $arg in
         --agent)
             agent_mode=true
+            shift
+            ;;
+        -y|--yes)
+            auto_yes=true
             shift
             ;;
     esac
@@ -38,6 +43,11 @@ if [ ! -f "mise.local.toml" ]; then
 # EXAMPLE_VAR = "value"
 EOF
     echo "✅ Created mise.local.toml file"
+fi
+
+if [ -f "mise.worktree.local.toml" ]; then
+    echo "ℹ️ Found mise.worktree.local.toml. Running zero with MISE_ENV=worktree."
+    export MISE_ENV=worktree
 fi
 
 check_command() {
@@ -90,6 +100,7 @@ mise run install
 echo -e "\n⏳ Setting up API keys and secrets"
 interactive_only mise run zero:github
 interactive_only mise run zero:openrouter
+interactive_only mise run zero:workos
 interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
@@ -100,6 +111,14 @@ mise run build:internal-sdk
 
 echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
+
+echo -e "\n⏳ Setting up hooks"
+interactive_only mise run zero:hk
+interactive_only mise run zero:claude
+
+echo -e "\n⏳ Cleaning up stale processes and Temporal state"
+interactive_only mise run zero:cleanup
+echo "✅ Cleaned up stale state"
 
 echo -e "\n⏳ Starting infra"
 interactive_only mise infra:start
@@ -113,7 +132,9 @@ interactive_only mise zero:summary
 
 echo -e "\n✅ All set up!"
 
-if ! $agent_mode; then
+if $auto_yes; then
+    exec mise run start
+elif ! $agent_mode; then
     echo "Want me to start the server and dashboard (\`mise run start\`)?"
     echo -n "[y/N] "
     read -r answer

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
@@ -14,34 +15,37 @@ import (
 const (
 	ChatResolutionInactivityDuration = 30 * time.Minute
 	SignalResetTimer                 = "reset-timer"
+	SignalResolveImmediately         = "resolve-immediately"
 )
 
 type DelayedChatResolutionAnalysisParams struct {
 	ChatID    uuid.UUID
 	ProjectID uuid.UUID
 	OrgID     string
+	APIKeyID  string
 }
 
 // TemporalDelayedChatResolutionAnalyzer schedules delayed chat resolution analysis with inactivity detection.
 type TemporalDelayedChatResolutionAnalyzer struct {
-	Temporal client.Client
+	TemporalEnv *tenv.Environment
 }
 
-func (t *TemporalDelayedChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID string) error {
+func (t *TemporalDelayedChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
 	workflowID := fmt.Sprintf("v1:delayed-chat-resolution-analysis:%s", chatID.String())
 
 	// First, try to signal an existing workflow to reset the timer
-	err := t.Temporal.SignalWorkflow(ctx, workflowID, "", SignalResetTimer, nil)
+	err := t.TemporalEnv.Client().SignalWorkflow(ctx, workflowID, "", SignalResetTimer, nil)
 	if err == nil {
 		// Successfully reset the timer on existing workflow
 		return nil
 	}
 
 	// Workflow doesn't exist yet, start a new one
-	_, err = ExecuteDelayedChatResolutionAnalysisWorkflow(ctx, t.Temporal, DelayedChatResolutionAnalysisParams{
+	_, err = ExecuteDelayedChatResolutionAnalysisWorkflow(ctx, t.TemporalEnv, DelayedChatResolutionAnalysisParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
 		OrgID:     orgID,
+		APIKeyID:  apiKeyID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start delayed analysis workflow: %w", err)
@@ -50,11 +54,23 @@ func (t *TemporalDelayedChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(c
 	return nil
 }
 
-func ExecuteDelayedChatResolutionAnalysisWorkflow(ctx context.Context, temporalClient client.Client, params DelayedChatResolutionAnalysisParams) (client.WorkflowRun, error) {
+func (t *TemporalDelayedChatResolutionAnalyzer) ResolveImmediately(ctx context.Context, chatID uuid.UUID) error {
+	workflowID := fmt.Sprintf("v1:delayed-chat-resolution-analysis:%s", chatID.String())
+
+	// Signal the workflow to resolve immediately
+	err := t.TemporalEnv.Client().SignalWorkflow(ctx, workflowID, "", SignalResolveImmediately, nil)
+	if err != nil {
+		return fmt.Errorf("failed to signal immediate resolution: %w", err)
+	}
+
+	return nil
+}
+
+func ExecuteDelayedChatResolutionAnalysisWorkflow(ctx context.Context, env *tenv.Environment, params DelayedChatResolutionAnalysisParams) (client.WorkflowRun, error) {
 	id := fmt.Sprintf("v1:delayed-chat-resolution-analysis:%s", params.ChatID.String())
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
-		TaskQueue:             string(TaskQueueMain),
+		TaskQueue:             string(env.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    24 * time.Hour, // Max time to wait for inactivity
 	}, DelayedChatResolutionAnalysisWorkflow, params)
@@ -63,13 +79,15 @@ func ExecuteDelayedChatResolutionAnalysisWorkflow(ctx context.Context, temporalC
 func DelayedChatResolutionAnalysisWorkflow(ctx workflow.Context, params DelayedChatResolutionAnalysisParams) error {
 	logger := workflow.GetLogger(ctx)
 
-	// Set up signal channel for timer resets
+	// Set up signal channels
 	resetTimerChan := workflow.GetSignalChannel(ctx, SignalResetTimer)
+	resolveImmediatelyChan := workflow.GetSignalChannel(ctx, SignalResolveImmediately)
 
-	// Loop: wait for inactivity or timer reset
+	// Loop: wait for inactivity, timer reset, or immediate resolution
 	for {
 		selector := workflow.NewSelector(ctx)
 		timerFired := false
+		resolveImmediately := false
 
 		// Create a timer for the inactivity duration
 		timer := workflow.NewTimer(ctx, ChatResolutionInactivityDuration)
@@ -81,7 +99,7 @@ func DelayedChatResolutionAnalysisWorkflow(ctx workflow.Context, params DelayedC
 
 		// Case 2: Signal received (new activity, reset timer)
 		selector.AddReceive(resetTimerChan, func(c workflow.ReceiveChannel, more bool) {
-			var signal interface{}
+			var signal any
 			c.Receive(ctx, &signal)
 			logger.Info("Inactivity timer reset due to new activity",
 				"chat_id", params.ChatID.String(),
@@ -89,10 +107,20 @@ func DelayedChatResolutionAnalysisWorkflow(ctx workflow.Context, params DelayedC
 			// Timer will be reset on next loop iteration
 		})
 
+		// Case 3: Signal received (resolve immediately)
+		selector.AddReceive(resolveImmediatelyChan, func(c workflow.ReceiveChannel, more bool) {
+			var signal any
+			c.Receive(ctx, &signal)
+			logger.Info("Immediate resolution requested, triggering analysis",
+				"chat_id", params.ChatID.String(),
+			)
+			resolveImmediately = true
+		})
+
 		// Wait for either event
 		selector.Select(ctx)
 
-		// If timer fired, break out and trigger analysis
+		// If timer fired or immediate resolution requested, break out and trigger analysis
 		if timerFired {
 			logger.Info("Inactivity period completed, triggering analysis",
 				"chat_id", params.ChatID.String(),
@@ -101,7 +129,11 @@ func DelayedChatResolutionAnalysisWorkflow(ctx workflow.Context, params DelayedC
 			break
 		}
 
-		// Otherwise, signal was received, continue loop to restart timer
+		if resolveImmediately {
+			break
+		}
+
+		// Otherwise, reset signal was received, continue loop to restart timer
 	}
 
 	// Trigger the actual analysis workflow

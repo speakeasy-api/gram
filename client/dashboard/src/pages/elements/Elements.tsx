@@ -840,7 +840,7 @@ function ElementsPreview({
     ...config,
     api: {
       url: apiUrl,
-      sessionFn: async () => sessionToken,
+      session: async () => sessionToken,
     },
   };
 
@@ -1132,8 +1132,8 @@ app.listen(3001, () => {
       );
     }
 
-    // Add the api.sessionFn config
-    configLines.push(`  api: {\n    sessionFn: getSession,\n  },`);
+    // Add the api.session config
+    configLines.push(`  api: {\n    session: getSession,\n  },`);
 
     return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 

@@ -172,12 +172,13 @@ var _ = Service("auth", func() {
 			Attribute("is_admin", Boolean)
 			Attribute("active_organization_id", String)
 			Attribute("gram_account_type", String)
+			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")
 			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 
 			Attribute("session_token", String, "The authentication session")
 			Attribute("session_cookie", String, "The authentication session")
 
-			Required("user_id", "user_email", "is_admin", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type")
+			Required("user_id", "user_email", "is_admin", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type", "has_active_subscription")
 		})
 
 		HTTP(func() {

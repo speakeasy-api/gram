@@ -18,7 +18,6 @@ import (
 	"github.com/aws/smithy-go"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -199,7 +198,7 @@ func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType s
 			Key:           aws.String(strings.TrimPrefix(uri.Path, "/")),
 			Body:          pr,
 			ContentType:   aws.String(contentType),
-			ContentLength: conv.Ptr(contentLength),
+			ContentLength: new(contentLength),
 		})
 		if err != nil {
 			sbs.logger.ErrorContext(ctx, "failed to put object to s3", attr.SlogError(err))

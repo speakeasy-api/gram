@@ -11,19 +11,24 @@ import (
 )
 
 type ToolVariation struct {
-	ID            uuid.UUID
-	GroupID       uuid.UUID
-	SrcToolUrn    urn.Tool
-	SrcToolName   string
-	Confirm       pgtype.Text
-	ConfirmPrompt pgtype.Text
-	Name          pgtype.Text
-	Summary       pgtype.Text
-	Description   pgtype.Text
-	Tags          []string
-	Summarizer    pgtype.Text
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID              uuid.UUID
+	GroupID         uuid.UUID
+	SrcToolUrn      urn.Tool
+	SrcToolName     string
+	Confirm         pgtype.Text
+	ConfirmPrompt   pgtype.Text
+	Name            pgtype.Text
+	Summary         pgtype.Text
+	Description     pgtype.Text
+	Tags            []string
+	Summarizer      pgtype.Text
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }

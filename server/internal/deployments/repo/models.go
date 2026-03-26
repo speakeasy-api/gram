@@ -67,22 +67,26 @@ type FunctionResourceDefinition struct {
 }
 
 type FunctionToolDefinition struct {
-	ID           uuid.UUID
-	ToolUrn      urn.Tool
-	ProjectID    uuid.UUID
-	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-	Runtime      string
-	Name         string
-	Description  string
-	InputSchema  []byte
-	Variables    []byte
-	AuthInput    []byte
-	Meta         []byte
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	ID              uuid.UUID
+	ToolUrn         urn.Tool
+	ProjectID       uuid.UUID
+	DeploymentID    uuid.UUID
+	FunctionID      uuid.UUID
+	Runtime         string
+	Name            string
+	Description     string
+	InputSchema     []byte
+	Variables       []byte
+	AuthInput       []byte
+	Meta            []byte
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type HttpSecurity struct {
@@ -136,6 +140,10 @@ type HttpToolDefinition struct {
 	PathSettings        []byte
 	RequestContentType  pgtype.Text
 	ResponseFilter      *models.ResponseFilter
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz

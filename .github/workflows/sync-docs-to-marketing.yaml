@@ -1,7 +1,7 @@
 name: Sync Gram Docs → Marketing Site (PR)
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - "docs/src/content/docs/**"
       - "docs/public/**"
@@ -16,7 +16,7 @@ env:
   BRANCH: main
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout Gram repo (source)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -134,7 +134,7 @@ jobs:
             echo "_No file changes detected after sync._" >> ../PR_BODY.md
           fi
       - name: Create pull request in Marketing
-        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0  # v8.1.0
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
         with:
           token: ${{ secrets.SERVICE_BOT_TOKEN }}
           path: marketing-repo

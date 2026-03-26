@@ -86,7 +86,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  ftd.id, ftd.tool_urn, ftd.project_id, ftd.deployment_id, ftd.function_id, ftd.runtime, ftd.name, ftd.description, ftd.input_schema, ftd.variables, ftd.auth_input, ftd.meta, ftd.created_at, ftd.updated_at, ftd.deleted_at, ftd.deleted,
+  ftd.id, ftd.tool_urn, ftd.project_id, ftd.deployment_id, ftd.function_id, ftd.runtime, ftd.name, ftd.description, ftd.input_schema, ftd.variables, ftd.auth_input, ftd.meta, ftd.read_only_hint, ftd.destructive_hint, ftd.idempotent_hint, ftd.open_world_hint, ftd.created_at, ftd.updated_at, ftd.deleted_at, ftd.deleted,
   (select id from deployment) as owning_deployment_id,
   df.asset_id
 FROM function_tool_definitions ftd
@@ -131,6 +131,10 @@ func (q *Queries) FindFunctionToolsByUrn(ctx context.Context, arg FindFunctionTo
 			&i.FunctionToolDefinition.Variables,
 			&i.FunctionToolDefinition.AuthInput,
 			&i.FunctionToolDefinition.Meta,
+			&i.FunctionToolDefinition.ReadOnlyHint,
+			&i.FunctionToolDefinition.DestructiveHint,
+			&i.FunctionToolDefinition.IdempotentHint,
+			&i.FunctionToolDefinition.OpenWorldHint,
 			&i.FunctionToolDefinition.CreatedAt,
 			&i.FunctionToolDefinition.UpdatedAt,
 			&i.FunctionToolDefinition.DeletedAt,
@@ -232,7 +236,7 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT 
-  http_tool_definitions.id, http_tool_definitions.tool_urn, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.confirm, http_tool_definitions.confirm_prompt, http_tool_definitions.summarizer, http_tool_definitions.name, http_tool_definitions.untruncated_name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.x_gram, http_tool_definitions.original_name, http_tool_definitions.original_summary, http_tool_definitions.original_description, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.response_filter, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
+  http_tool_definitions.id, http_tool_definitions.tool_urn, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.confirm, http_tool_definitions.confirm_prompt, http_tool_definitions.summarizer, http_tool_definitions.name, http_tool_definitions.untruncated_name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.x_gram, http_tool_definitions.original_name, http_tool_definitions.original_summary, http_tool_definitions.original_description, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.response_filter, http_tool_definitions.read_only_hint, http_tool_definitions.destructive_hint, http_tool_definitions.idempotent_hint, http_tool_definitions.open_world_hint, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
   (select id from deployment) as owning_deployment_id,
   doa.asset_id,
   (CASE
@@ -302,6 +306,10 @@ func (q *Queries) FindHttpToolsByUrn(ctx context.Context, arg FindHttpToolsByUrn
 			&i.HttpToolDefinition.PathSettings,
 			&i.HttpToolDefinition.RequestContentType,
 			&i.HttpToolDefinition.ResponseFilter,
+			&i.HttpToolDefinition.ReadOnlyHint,
+			&i.HttpToolDefinition.DestructiveHint,
+			&i.HttpToolDefinition.IdempotentHint,
+			&i.HttpToolDefinition.OpenWorldHint,
 			&i.HttpToolDefinition.CreatedAt,
 			&i.HttpToolDefinition.UpdatedAt,
 			&i.HttpToolDefinition.DeletedAt,
@@ -409,7 +417,7 @@ WITH deployment AS (
   AND ds.status = 'completed'
   ORDER BY d.seq DESC LIMIT 1
 )
-SELECT id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE http_tool_definitions.tool_urn = $1
   AND http_tool_definitions.project_id = $2
@@ -457,6 +465,10 @@ func (q *Queries) GetHTTPToolDefinitionByURN(ctx context.Context, arg GetHTTPToo
 		&i.PathSettings,
 		&i.RequestContentType,
 		&i.ResponseFilter,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -491,6 +503,10 @@ SELECT
   ftd.runtime,
   ftd.function_id,
   ftd.meta,
+  ftd.read_only_hint,
+  ftd.destructive_hint,
+  ftd.idempotent_hint,
+  ftd.open_world_hint,
   df.asset_id,
   ftd.created_at,
   ftd.updated_at
@@ -514,20 +530,24 @@ type ListFunctionToolsParams struct {
 }
 
 type ListFunctionToolsRow struct {
-	DeploymentID uuid.UUID
-	ID           uuid.UUID
-	ToolUrn      urn.Tool
-	Name         string
-	Description  string
-	InputSchema  []byte
-	Variables    []byte
-	AuthInput    []byte
-	Runtime      string
-	FunctionID   uuid.UUID
-	Meta         []byte
-	AssetID      uuid.NullUUID
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	DeploymentID    uuid.UUID
+	ID              uuid.UUID
+	ToolUrn         urn.Tool
+	Name            string
+	Description     string
+	InputSchema     []byte
+	Variables       []byte
+	AuthInput       []byte
+	Runtime         string
+	FunctionID      uuid.UUID
+	Meta            []byte
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	AssetID         uuid.NullUUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 // Two use cases:
@@ -560,6 +580,10 @@ func (q *Queries) ListFunctionTools(ctx context.Context, arg ListFunctionToolsPa
 			&i.Runtime,
 			&i.FunctionID,
 			&i.Meta,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
 			&i.AssetID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -619,6 +643,10 @@ SELECT
   htd.created_at,
   htd.updated_at,
   htd.tags,
+  htd.read_only_hint,
+  htd.destructive_hint,
+  htd.idempotent_hint,
+  htd.open_world_hint,
   (CASE
     WHEN htd.project_id = $2 THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
@@ -667,6 +695,10 @@ type ListHttpToolsRow struct {
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	Tags                []string
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
 	PackageName         string
 }
 
@@ -711,6 +743,10 @@ func (q *Queries) ListHttpTools(ctx context.Context, arg ListHttpToolsParams) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Tags,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
 			&i.PackageName,
 		); err != nil {
 			return nil, err

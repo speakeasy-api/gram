@@ -1,5 +1,127 @@
 # @gram/client
 
+## 0.33.0
+
+### Minor Changes
+
+- 658bef4: Adds new API endpoints for access and permissions management.
+
+## 0.28.5
+
+### Patch Changes
+
+- 7ef727b: Add ability to detach an environment from an MCP server
+
+## 0.28.0
+
+### Minor Changes
+
+- 8c72d8c: Renames attribute_filters to filters in searchLogs, and introduces "in" operator.
+
+### Patch Changes
+
+- d8133af: Suite of hooks improvements
+
+## 0.27.20
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- e616da7: Add admin-only cache purging functionality
+
+## 0.27.24
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+
+## 0.28.0
+
+### Minor Changes
+
+- be6dcae: Upgrade zod to v4 across the monorepo. Bump @modelcontextprotocol/sdk
+
+### Patch Changes
+
+- 1821e46: Adds an initial pass "POC" implementation of Gram hooks for tool capture
+- fb7439b: Improve settings page with tabs routing and logging API
+- 998102f: Update telemetry search logs API response to sent unix nano timestamps as strings instead of int.
+
+## 0.28.0
+
+### Minor Changes
+
+- f364cc0: Adds listAttributeKeys endpoint to retrieve distinct attribute keys for telemetry filtering.
+
+### Patch Changes
+
+- e2c00cb: Adds a new filtering option to the search logs endpoint to filter any attribute.
+
+## 0.28.1
+
+### Patch Changes
+
+- 3cae542: Improve logs page timestamp display (no wrapping, remove comma, hide duplicate child timestamps)
+  Fix tree line alignment with parent chevron in expanded log rows
+  Fix loading state layout shift in expanded logs
+  Filter out chat completion logs (urn:uuid:) from tool calls list
+  Fix breadcrumb scrolling issue on insights page
+  Add click-outside-to-close for AI Insights sidebar
+  Remove Beta labels from AI Insights
+
+## 0.28.0
+
+### Minor Changes
+
+- 0f4f5dd: Adds an opt-in toggle for recording tool call inputs/outputs in logs
+
+## 0.27.0
+
+### Minor Changes
+
+- 514fce6: Improve observability chat logs with server-side sorting (sort_by/sort_order params), sticky pagination with page count, N/A score indicator with tooltip for unscored sessions, Shiki syntax highlighting for code blocks, character-based truncation with "Show more" button, System Prompt tab in chat detail panel, and Tool Result labeling for tool messages.
+
+## 0.27.4
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+## 0.27.3
+
+### Patch Changes
+
+- b2347fc: Adds a new telemetry endpoint to fetch user usage data
+- a34d18a: Adds chat resolution stats in telemetry metrics
+
+## 0.27.1
+
+### Patch Changes
+
+- e08b45e: Adds support for forwarding and storing user feedback. Incorporates the stored user feedback into chat resolution analysis
+
+## 0.26.18
+
+### Patch Changes
+
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 6e29702: Adds a new endpoint to get metrics per user. Allows filtering logs per user.
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+
 ## 0.26.13
 
 ### Patch Changes
@@ -61,6 +183,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level

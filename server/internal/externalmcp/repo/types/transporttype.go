@@ -16,7 +16,7 @@ func (t TransportType) Value() (driver.Value, error) {
 	return string(t), nil
 }
 
-func (t *TransportType) Scan(value interface{}) error {
+func (t *TransportType) Scan(value any) error {
 	if value == nil {
 		*t = ""
 		return nil

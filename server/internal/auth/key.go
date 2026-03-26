@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -27,6 +28,7 @@ const (
 	APIKeyScopeConsumer APIKeyScope = iota
 	APIKeyScopeProducer APIKeyScope = iota
 	APIKeyScopeChat     APIKeyScope = iota
+	APIKeyScopeHooks    APIKeyScope = iota
 )
 
 var APIKeyScopes = map[string]APIKeyScope{
@@ -34,6 +36,7 @@ var APIKeyScopes = map[string]APIKeyScope{
 	"consumer": APIKeyScopeConsumer,
 	"producer": APIKeyScopeProducer,
 	"chat":     APIKeyScopeChat,
+	"hooks":    APIKeyScopeHooks,
 }
 
 func (scope APIKeyScope) String() string {
@@ -44,6 +47,8 @@ func (scope APIKeyScope) String() string {
 		return "producer"
 	case APIKeyScopeChat:
 		return "chat"
+	case APIKeyScopeHooks:
+		return "hooks"
 	default:
 		return "invalid"
 	}
@@ -125,17 +130,24 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "this organization is disabled, please reach out to support@speakeasy.com for more information")
 	}
 
+	var projectID *uuid.UUID
+	if apiKey.ProjectID.Valid {
+		projectID = &apiKey.ProjectID.UUID
+	}
+
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID: apiKey.OrganizationID,
-		UserID:               apiKey.CreatedByUserID,
-		ExternalUserID:       "",
-		SessionID:            nil,
-		ProjectID:            nil,
-		OrganizationSlug:     org.Slug,
-		Email:                nil,
-		AccountType:          org.GramAccountType,
-		ProjectSlug:          nil,
-		APIKeyScopes:         scopes,
+		ActiveOrganizationID:  apiKey.OrganizationID,
+		HasActiveSubscription: org.HasActiveSubscription,
+		UserID:                apiKey.CreatedByUserID,
+		Email:                 &apiKey.Email,
+		APIKeyID:              apiKey.ID.String(),
+		ProjectID:             projectID,
+		OrganizationSlug:      org.Slug,
+		AccountType:           org.GramAccountType,
+		APIKeyScopes:          scopes,
+		ExternalUserID:        "",
+		SessionID:             nil,
+		ProjectSlug:           nil,
 	})
 
 	return ctx, nil

@@ -109,6 +109,61 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	return nil
 }
 
+func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.GramProductFeatures, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	orgID := authCtx.ActiveOrganizationID
+
+	// Helper function to check if a feature is enabled (cache first, then DB)
+	isEnabled := func(feature Feature) bool {
+		cacheKey := FeatureCacheKey(orgID, feature)
+
+		// Try cache first
+		cached, err := s.featureCache.Get(ctx, cacheKey)
+		if err == nil {
+			return cached.Enabled
+		}
+
+		// Fall back to database
+		enabled, err := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+			OrganizationID: orgID,
+			FeatureName:    string(feature),
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to check feature flag",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogProductFeatureName(string(feature)),
+			)
+			return false
+		}
+
+		// Cache the result
+		cacheEntry := FeatureCache{
+			OrganizationID: orgID,
+			Feature:        feature,
+			Enabled:        enabled,
+		}
+		if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
+			s.logger.WarnContext(ctx, "failed to cache feature flag state",
+				attr.SlogError(cacheErr),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogProductFeatureName(string(feature)),
+			)
+		}
+
+		return enabled
+	}
+
+	return &gen.GramProductFeatures{
+		LogsEnabled:       isEnabled(FeatureLogs),
+		ToolIoLogsEnabled: isEnabled(FeatureToolIOLogs),
+	}, nil
+}
+
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }

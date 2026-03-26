@@ -8,7 +8,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 )
 
 func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
@@ -20,11 +21,11 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
 		Name:             types.Slug("update-test-template"),
 		Prompt:           "Original prompt",
-		Description:      conv.Ptr("Original description"),
+		Description:      new("Original description"),
 		Engine:           "mustache",
 		Kind:             "prompt",
 		ToolsHint:        []string{"system"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -34,12 +35,12 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	// Update the template
 	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               created.Template.ID,
-		Prompt:           conv.Ptr("Updated prompt {{name}}!"),
-		Description:      conv.Ptr("Updated description"),
-		Engine:           conv.Ptr("mustache"),
-		Kind:             conv.Ptr("prompt"),
+		Prompt:           new("Updated prompt {{name}}!"),
+		Description:      new("Updated description"),
+		Engine:           new("mustache"),
+		Kind:             new("prompt"),
 		ToolsHint:        []string{"user", "assistant"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -55,8 +56,8 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"user", "assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
 	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, result.Template.Schema, "template arguments mismatch")
-	require.Equal(t, created.Template.CreatedAt, result.Template.CreatedAt, "created at should not change")
-	// Note: UpdatedAt may or may not change depending on whether the update actually creates a new version
+	require.Equal(t, created.Template.HistoryID, result.Template.HistoryID, "history id should remain the same (same logical template)")
+	// Note: CreatedAt and UpdatedAt may change when updates create a new version (append-only versioning)
 
 	// Render the updated template to ensure the update version is used by the server
 	rendered, err := ti.service.RenderTemplateByID(ctx, &gen.RenderTemplateByIDPayload{
@@ -82,7 +83,7 @@ func TestTemplatesService_UpdateTemplate_PartialUpdate(t *testing.T) {
 	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
 		Name:             types.Slug("partial-update-template"),
 		Prompt:           "Original prompt",
-		Description:      conv.Ptr("Original description"),
+		Description:      new("Original description"),
 		Engine:           "mustache",
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -96,7 +97,7 @@ func TestTemplatesService_UpdateTemplate_PartialUpdate(t *testing.T) {
 	// Update only the prompt
 	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               created.Template.ID,
-		Prompt:           conv.Ptr("Only updated prompt"),
+		Prompt:           new("Only updated prompt"),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -177,7 +178,7 @@ func TestTemplatesService_UpdateTemplateName_Success(t *testing.T) {
 	// Update the template name
 	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:   created.Template.ID,
-		Name: conv.Ptr("New name"),
+		Name: new("New name"),
 	})
 	require.NoError(t, err, "update template name")
 
@@ -193,7 +194,7 @@ func TestTemplatesService_UpdateTemplate_InvalidID(t *testing.T) {
 	// Try to update with invalid UUID
 	_, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               "invalid-uuid",
-		Prompt:           conv.Ptr("Updated prompt"),
+		Prompt:           new("Updated prompt"),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -216,7 +217,7 @@ func TestTemplatesService_UpdateTemplate_NotFound(t *testing.T) {
 	nonExistentID := uuid.New().String()
 	_, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               nonExistentID,
-		Prompt:           conv.Ptr("Updated prompt"),
+		Prompt:           new("Updated prompt"),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -322,7 +323,7 @@ func TestTemplatesService_UpdateTemplate_ArgumentsWithoutEngine(t *testing.T) {
 		Engine:           nil, // Not setting engine
 		Kind:             nil,
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -360,7 +361,7 @@ func TestTemplatesService_UpdateTemplate_ArgumentsWithExistingEngine(t *testing.
 		Engine:           nil, // Not changing engine
 		Kind:             nil,
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -383,7 +384,7 @@ func TestTemplatesService_UpdateTemplate_Unauthorized(t *testing.T) {
 
 	_, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               templateID,
-		Prompt:           conv.Ptr("Updated prompt"),
+		Prompt:           new("Updated prompt"),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -395,4 +396,139 @@ func TestTemplatesService_UpdateTemplate_Unauthorized(t *testing.T) {
 	})
 	require.Error(t, err, "expected error for unauthorized request")
 	require.Contains(t, err.Error(), "unauthorized")
+}
+
+func TestTemplatesService_UpdateTemplate_AuditLogCount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		Name:             types.Slug("audit-update-template"),
+		Prompt:           "Original prompt",
+		Description:      nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+		Arguments:        nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+
+	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
+		ID:               created.Template.ID,
+		Prompt:           new("Updated prompt"),
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           nil,
+		Kind:             nil,
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestTemplatesService_UpdateTemplate_NoChanges_DoesNotAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		Name:             types.Slug("audit-update-no-changes"),
+		Prompt:           "Original prompt",
+		Description:      nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+		Arguments:        nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+
+	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
+		ID:               created.Template.ID,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Prompt:           nil,
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           nil,
+		Kind:             nil,
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestTemplatesService_UpdateTemplate_AuditLogMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		Name:             types.Slug("audit-update-metadata"),
+		Prompt:           "Original prompt",
+		Description:      nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+		Arguments:        nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
+		ID:               created.Template.ID,
+		Prompt:           new("Updated prompt"),
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           nil,
+		Kind:             nil,
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionTemplateUpdate), record.Action)
+	require.Equal(t, "template", record.SubjectType)
+	require.Equal(t, "audit-update-metadata", record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "tools:prompt:prompt:audit-update-metadata", metadata["template_urn"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }

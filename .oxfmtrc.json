@@ -1,0 +1,41 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "experimentalSortPackageJson": false,
+  "ignorePatterns": [
+    "**/CHANGELOG.md",
+    "/.speakeasy/**",
+    "/client/dashboard/index.html",
+    "/client/dashboard/public/external/**",
+    "/client/dashboard/src/App.css",
+    "/client/dashboard/src/components/tools-badge.tsx",
+    "/client/dashboard/src/lib/constants.ts",
+    "/client/dashboard/src/styles/globals.css",
+    "/client/sdk/**",
+    "/elements/docs/**",
+    "/server/**/fixtures/**",
+    "/server/gen/**"
+  ],
+  "overrides": [
+    {
+      "files": ["client/dashboard/**"],
+      "options": {
+        "sortTailwindcss": {
+          "stylesheet": "./client/dashboard/src/styles/globals.css",
+          "functions": ["clsx", "cn"],
+          "preserveWhitespace": true
+        }
+      }
+    },
+    {
+      "files": ["elements/**"],
+      "options": {
+        "sortTailwindcss": {
+          "stylesheet": "elements/src/global.css",
+          "functions": ["clsx", "cn"],
+          "preserveWhitespace": true
+        }
+      }
+    }
+  ]
+}

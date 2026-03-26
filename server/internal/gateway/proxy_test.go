@@ -6,18 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -32,7 +29,7 @@ func newTestToolDescriptor() *ToolDescriptor {
 	return &ToolDescriptor{
 		ID:               uuid.New().String(),
 		Name:             "test_tool",
-		Description:      conv.Ptr("test_tool_description"),
+		Description:      new("test_tool_description"),
 		DeploymentID:     uuid.New().String(),
 		ProjectID:        uuid.New().String(),
 		ProjectSlug:      "test-project",
@@ -41,30 +38,6 @@ func newTestToolDescriptor() *ToolDescriptor {
 		URN:              urn.NewTool(urn.ToolKindHTTP, "doc", "test_tool"),
 	}
 }
-
-var (
-	infra *testenv.Environment
-)
-
-func TestMain(m *testing.M) {
-	ctx := context.Background()
-
-	res, cleanup, err := testenv.Launch(ctx)
-	if err != nil {
-		log.Fatalf("Failed to launch test infrastructure: %v", err)
-	}
-
-	infra = res
-
-	code := m.Run()
-
-	if err = cleanup(); err != nil {
-		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
-	}
-
-	os.Exit(code)
-}
-
 func TestToolProxy_Do_PathParams(t *testing.T) {
 	t.Parallel()
 
@@ -241,7 +214,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				plan.PathParams[paramName] = &HTTPParameter{
 					Name:            paramName,
 					Style:           "simple",
-					Explode:         conv.Ptr(false),
+					Explode:         new(false),
 					AllowEmptyValue: false,
 				}
 			}
@@ -370,7 +343,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				plan.HeaderParams[paramName] = &HTTPParameter{
 					Name:            paramName,
 					Style:           "simple",
-					Explode:         conv.Ptr(false),
+					Explode:         new(false),
 					AllowEmptyValue: true,
 				}
 			}
@@ -450,7 +423,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"page": {
 					Name:            "page",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -467,7 +440,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"price": {
 					Name:            "price",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -486,19 +459,19 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"min": {
 					Name:            "min",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"max": {
 					Name:            "max",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"rate": {
 					Name:            "rate",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -517,7 +490,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"timestamp": {
 					Name:            "timestamp",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -534,7 +507,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"value": {
 					Name:            "value",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -551,7 +524,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"offset": {
 					Name:            "offset",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -568,7 +541,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"amount": {
 					Name:            "amount",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -587,19 +560,19 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"name": {
 					Name:            "name",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"category": {
 					Name:            "category",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"status": {
 					Name:            "status",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -619,13 +592,13 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"created_at": {
 					Name:            "created_at",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"expires": {
 					Name:            "expires",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -647,31 +620,31 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"id": {
 					Name:            "id",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"name": {
 					Name:            "name",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"created_at": {
 					Name:            "created_at",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"price": {
 					Name:            "price",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"active": {
 					Name:            "active",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -1962,6 +1935,89 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 
 	// Verify the system API key was sent
 	require.Equal(t, "system-secret-key", capturedRequest.Header.Get("X-System-Key"))
+}
+
+func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock server that captures the request
+	var capturedRequest *http.Request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedRequest = r
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success": true}`))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	tool := newTestToolDescriptor()
+	plan := &HTTPToolCallPlan{
+		ServerEnvVar:       "",
+		DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
+		Security:           []*HTTPToolSecurity{},
+		SecurityScopes:     map[string][]string{},
+		Method:             "GET",
+		Path:               "/test",
+		Schema:             []byte{},
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+		ResponseFilter:     nil,
+	}
+
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 nil,
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		funcs,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	// Set up system env with underscore-delimited keys
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
+	systemEnv.Set("X_API_KEY", "my-api-key")
+	systemEnv.Set("X_CUSTOM_HEADER", "custom-value")
+
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  systemEnv,
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedRequest)
+
+	// Verify underscore-delimited env keys were converted to hyphenated HTTP headers
+	require.Equal(t, "my-api-key", capturedRequest.Header.Get("X-Api-Key"))
+	require.Equal(t, "custom-value", capturedRequest.Header.Get("X-Custom-Header"))
 }
 
 func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {

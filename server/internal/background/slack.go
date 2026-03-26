@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
@@ -25,11 +26,11 @@ type ProcessSlackEventResult struct {
 	Status string
 }
 
-func ExecuteProcessSlackEventWorkflow(ctx context.Context, temporalClient client.Client, params ProcessSlackWorkflowParams) (client.WorkflowRun, error) {
+func ExecuteProcessSlackEventWorkflow(ctx context.Context, env *tenv.Environment, params ProcessSlackWorkflowParams) (client.WorkflowRun, error) {
 	id := params.Event.EventID
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       fmt.Sprintf("v1:slack-event:%s", id),
-		TaskQueue:                string(TaskQueueMain),
+		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		WorkflowRunTimeout:       time.Minute * 3,
@@ -76,7 +77,7 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 		// If we are in a thread only go to chat completions if 'gram' is in the first two words (case-insensitive)
 		maxCheck := min(2, len(words))
 		gramIdx := -1
-		for i := 0; i < maxCheck; i++ {
+		for i := range maxCheck {
 			if strings.ToLower(words[i]) == "gram" {
 				gramIdx = i
 				break
@@ -121,8 +122,8 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 	}
 
 	chosenToolsetSlug := ""
-	if toolsResponse.DefaultToolsetSlug != nil {
-		chosenToolsetSlug = *toolsResponse.DefaultToolsetSlug
+	if len(toolsResponse.Toolsets) > 0 {
+		chosenToolsetSlug = toolsResponse.Toolsets[0].Slug
 	}
 	if potentialSelectedToolset != "" {
 		for _, toolset := range toolsResponse.Toolsets {
@@ -149,6 +150,9 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 		return postSlackErrorMessage(ctx, a, params.Event, err)
 	}
 
+	if strings.TrimSpace(chatResponse) == "" {
+		return postSlackErrorMessage(ctx, a, params.Event, fmt.Errorf("chat completion returned empty response"))
+	}
 	if err := workflow.ExecuteActivity(
 		ctx,
 		a.PostSlackMessage,
@@ -172,19 +176,16 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 func formatListToolsSlackMessage(input activities.SlackProjectContextResponse) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("*Project:* `%s`\n", input.ProjectSlug))
-	if input.DefaultToolsetSlug != nil {
-		sb.WriteString(fmt.Sprintf("*Default Toolset:* `%s`\n", *input.DefaultToolsetSlug))
-	}
+	fmt.Fprintf(&sb, "*Project:* `%s`\n", input.ProjectSlug)
 	sb.WriteString("\n*Toolsets:*\n")
 
 	for _, ts := range input.Toolsets {
-		sb.WriteString(fmt.Sprintf("• *`%s`* (%d tools)\n", ts.Slug, ts.NumberOfTools))
+		fmt.Fprintf(&sb, "• *`%s`* (%d tools)\n", ts.Slug, ts.NumberOfTools)
 		if ts.Description != nil && *ts.Description != "" {
-			sb.WriteString(fmt.Sprintf("  _%s_\n", *ts.Description))
+			fmt.Fprintf(&sb, "  _%s_\n", *ts.Description)
 		}
-		sb.WriteString(fmt.Sprintf("  created at: `%s`\n", ts.CreatedAt))
-		sb.WriteString(fmt.Sprintf("  updated at: `%s`\n\n", ts.UpdatedAt))
+		fmt.Fprintf(&sb, "  created at: `%s`\n", ts.CreatedAt)
+		fmt.Fprintf(&sb, "  updated at: `%s`\n\n", ts.UpdatedAt)
 	}
 
 	return sb.String()

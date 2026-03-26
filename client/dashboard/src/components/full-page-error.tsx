@@ -36,11 +36,8 @@ export function FullPageError({ error }: FullPageErrorProps) {
             </Button.LeftIcon>
             <Button.Text>Reload page</Button.Text>
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => (window.location.href = "/")}
-          >
-            <Button.Text>Go to home</Button.Text>
+          <Button asChild variant="secondary">
+            <a href="/">Go to home</a>
           </Button>
         </Stack>
       </Stack>

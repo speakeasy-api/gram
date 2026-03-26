@@ -9,8 +9,8 @@ import (
 // CHTX is the interface for executing ClickHouse queries and commands.
 // It matches the subset of methods we use from clickhouse.Conn.
 type CHTX interface {
-	Exec(ctx context.Context, query string, args ...interface{}) error
-	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
+	Exec(ctx context.Context, query string, args ...any) error
+	Query(ctx context.Context, query string, args ...any) (driver.Rows, error)
 }
 
 // Queries contains methods for executing database operations.

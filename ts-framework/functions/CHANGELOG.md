@@ -1,5 +1,36 @@
 # @gram-ai/functions
 
+## 0.13.1
+
+### Patch Changes
+
+- 2cd2b1d: Set isError on MCP tool results based on HTTP response status
+
+## 0.13.0
+
+### Minor Changes
+
+- be6dcae: Upgrade zod to v4 across the monorepo. Bump @modelcontextprotocol/sdk
+
+### Patch Changes
+
+- 46e2d0a: Function authors can now receive the authenticated Gram user's email by setting `gramEmail: true` in the `authInput` config. When an authenticated user invokes a tool, the `GRAM_USER_EMAIL` environment variable will be populated with their email address.
+
+  ```ts
+  const gram = new Gram({
+    authInput: {
+      oauthVariable: "OAUTH_TOKEN",
+      gramEmail: true,
+    },
+  });
+  ```
+
+## 0.12.4
+
+### Patch Changes
+
+- 84736c7: Support tool annotations in functions framework. Adds `ToolAnnotations` type allowing function authors to specify annotations via `Gram.tool({ annotations: { ... } })`
+
 ## 0.12.3
 
 ### Patch Changes

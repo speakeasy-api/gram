@@ -124,9 +124,22 @@ export function ChatWindow({
   );
 }
 
+type ToolAnnotations = {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
+
 type AiSdkToolset = Record<
   string,
-  CoreTool & { id?: string; method?: string; path?: string }
+  CoreTool & {
+    id?: string;
+    method?: string;
+    path?: string;
+    annotations?: ToolAnnotations;
+  }
 >;
 
 function ChatInner({
@@ -254,6 +267,7 @@ function ChatInner({
             ),
             method: tool.httpMethod,
             path: tool.path,
+            annotations: tool.annotations,
           },
         ];
       }) ?? [],
@@ -274,6 +288,7 @@ function ChatInner({
 
           return res.prompt;
         },
+        annotations: pt.annotations,
       };
     });
 
@@ -287,6 +302,7 @@ function ChatInner({
           { toolUrn: ft.toolUrn },
           configRef.current.toolsetSlug || "",
         ),
+        annotations: ft.annotations,
       };
     });
 
@@ -616,9 +632,10 @@ function CustomMessageRenderer({
             return (
               <ToolElement key={index} defaultOpen>
                 <ToolHeader
-                  title={toolName}
+                  title={tool?.annotations?.title || toolName}
                   type={part.type as `tool-${string}`}
                   state={toolPart.state}
+                  annotations={tool?.annotations}
                 />
                 <ToolContent>
                   {tool?.method && tool?.path && (

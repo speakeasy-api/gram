@@ -32,14 +32,14 @@ import (
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
 type toolsCallParams struct {
@@ -66,9 +66,8 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	telemSvc *tm.Service,
-	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
@@ -90,7 +89,7 @@ func handleToolsCall(
 	if payload.mode != ToolModeStatic {
 		switch params.Name {
 		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporal)
+			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporalEnv)
 		case describeToolsToolName:
 			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
 		case executeToolToolName:
@@ -189,7 +188,7 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
-	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	// Extract general OAuth token (no security-key binding)
 	var oauthToken string
 	for _, t := range payload.oauthTokenInputs {
 		if len(t.securityKeys) == 0 && t.Token != "" {
@@ -198,10 +197,18 @@ func handleToolsCall(
 		}
 	}
 
+	var gramEmail string
+	if payload.authenticated {
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx.Email != nil {
+			gramEmail = *authCtx.Email
+		}
+	}
+
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
 		OAuthToken: oauthToken,
+		GramEmail:  gramEmail,
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
@@ -255,19 +262,33 @@ func handleToolsCall(
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
+		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordRequestBodyContent(requestBodyBytes)
+		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
+
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
 		}
 		if payload.userID != "" {
 			logAttrs[attr.UserIDKey] = payload.userID
 		}
-		if payload.externalUserID != "" {
+		switch {
+		case payload.externalUserID != "":
 			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
+		case oauthToken != "":
+			if sub := jwtclaims.UnsafeExtractSubject(oauthToken); sub != "" {
+				logAttrs[attr.ExternalUserIDKey] = sub
+			}
 		}
+		if payload.apiKeyID != "" {
+			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
+		}
+		logAttrs.RecordToolsetSlug(payload.toolset)
+		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{
@@ -286,7 +307,7 @@ func handleToolsCall(
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").Log(ctx, logger)
 	}
 
 	outputBytes = int64(rw.body.Len())
@@ -402,7 +423,7 @@ func resolveUserConfiguration(
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {
-	if accountType != string(billing.TierFree) {
+	if accountType != string(billing.TierBase) {
 		return nil
 	}
 
@@ -414,7 +435,12 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 		return nil
 	}
 
-	hardToolCallsLimit := 2 * periodUsage.MaxToolCalls
+	// If the org has an active subscription, we don't need to check the tool usage limits
+	if periodUsage.HasActiveSubscription {
+		return nil
+	}
+
+	hardToolCallsLimit := 2 * periodUsage.IncludedToolCalls
 	if hardToolCallsLimit == 0 {
 		hardToolCallsLimit = 2000 // Just in case
 	}

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createAPIKey = `-- name: CreateAPIKey :one
@@ -71,12 +72,13 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 	return i, err
 }
 
-const deleteAPIKey = `-- name: DeleteAPIKey :exec
+const deleteAPIKey = `-- name: DeleteAPIKey :one
 UPDATE api_keys
 SET deleted_at = NOW()
 WHERE id = $1
   AND organization_id = $2
   AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, scopes
 `
 
 type DeleteAPIKeyParams struct {
@@ -84,21 +86,55 @@ type DeleteAPIKeyParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) error {
-	_, err := q.db.Exec(ctx, deleteAPIKey, arg.ID, arg.OrganizationID)
-	return err
+type DeleteAPIKeyRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Scopes         []string
+}
+
+func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) (DeleteAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, deleteAPIKey, arg.ID, arg.OrganizationID)
+	var i DeleteAPIKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Scopes,
+	)
+	return i, err
 }
 
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
 FROM api_keys
+JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
   AND deleted IS FALSE
 `
 
-func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (ApiKey, error) {
+type GetAPIKeyByKeyHashRow struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.NullUUID
+	CreatedByUserID string
+	Name            string
+	KeyPrefix       string
+	KeyHash         string
+	Scopes          []string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+	LastAccessedAt  pgtype.Timestamptz
+	Email           string
+}
+
+func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAPIKeyByKeyHashRow, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByKeyHash, keyHash)
-	var i ApiKey
+	var i GetAPIKeyByKeyHashRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -113,6 +149,7 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (ApiKe
 		&i.DeletedAt,
 		&i.Deleted,
 		&i.LastAccessedAt,
+		&i.Email,
 	)
 	return i, err
 }

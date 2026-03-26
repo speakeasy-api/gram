@@ -18,206 +18,206 @@ import type {
   ThreadUserMessagePart,
   ThreadAssistantMessagePart,
   TextMessagePart,
-} from '@assistant-ui/react'
+} from "@assistant-ui/react";
 import type {
   Message,
   UserMessage,
   AssistantMessage,
   ToolResponseMessage,
-} from '@openrouter/sdk/models'
-import { UIMessage } from 'ai'
+} from "@openrouter/sdk/models";
+import { UIMessage } from "ai";
 
 /**
  * Represents a chat message from the Gram API.
  * This mirrors the ChatMessage type from @gram/sdk without requiring the SDK dependency.
  */
 export type GramChatMessage = Message & {
-  id: string
-  model: string
-  created_at: Date | string
-}
+  id: string;
+  model: string;
+  created_at: Date | string;
+};
 
 /**
  * Represents a chat from the Gram API.
  */
 export interface GramChat {
-  id: string
-  title: string
-  userId: string
-  numMessages: number
-  messages: GramChatMessage[]
-  createdAt: Date | string
-  updatedAt: Date | string
+  id: string;
+  title: string;
+  userId: string;
+  numMessages: number;
+  messages: GramChatMessage[];
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 /**
  * Represents a chat overview from the Gram API (without full messages).
  */
 export interface GramChatOverview {
-  id: string
-  title: string
-  userId: string
-  numMessages: number
-  createdAt: Date | string
-  updatedAt: Date | string
+  id: string;
+  title: string;
+  userId: string;
+  numMessages: number;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 /**
  * Parses a date that might be a string or Date object.
  */
 function parseDate(date: Date | string): Date {
-  return typeof date === 'string' ? new Date(date) : date
+  return typeof date === "string" ? new Date(date) : date;
 }
 
 /**
  * Builds content parts for a user message.
  */
 function buildUserContentParts(msg: GramChatMessage): ThreadUserMessagePart[] {
-  if (msg.role !== 'user') {
-    return []
+  if (msg.role !== "user") {
+    return [];
   }
 
-  if (typeof msg.content === 'string' || !msg.content) {
+  if (typeof msg.content === "string" || !msg.content) {
     return [
       {
-        type: 'text',
-        text: msg.content ?? '',
+        type: "text",
+        text: msg.content ?? "",
       },
-    ]
+    ];
   }
 
-  const parts: ThreadUserMessagePart[] = []
+  const parts: ThreadUserMessagePart[] = [];
 
   for (const item of msg.content) {
     switch (item.type) {
-      case 'text':
+      case "text":
         parts.push({
-          type: 'text',
+          type: "text",
           text: item.text,
-        })
-        break
-      case 'image_url':
+        });
+        break;
+      case "image_url":
         parts.push({
-          type: 'image',
+          type: "image",
           image: (item as any).image_url?.url as FIXME<
             string,
-            'Fixed by switching to Gram TS SDK.'
+            "Fixed by switching to Gram TS SDK."
           >,
-        })
-        break
-      case 'input_audio': {
+        });
+        break;
+      case "input_audio": {
         const format = (item as any).input_audio?.format as FIXME<
           string,
-          'Fixed by switching to Gram TS SDK.'
-        >
-        if (format === 'mp3' || format === 'wav') {
+          "Fixed by switching to Gram TS SDK."
+        >;
+        if (format === "mp3" || format === "wav") {
           parts.push({
-            type: 'audio',
+            type: "audio",
             audio: {
               data: (item as any).input_audio.data as FIXME<
                 string,
-                'Fixed by switching to Gram TS SDK.'
+                "Fixed by switching to Gram TS SDK."
               >,
               format: format,
             },
-          })
+          });
         }
-        break
+        break;
       }
       default:
         parts.push({
-          type: 'text',
-          text: '',
-        })
-        break
+          type: "text",
+          text: "",
+        });
+        break;
     }
   }
 
-  return parts
+  return parts;
 }
 
 /**
  * Builds content parts for an assistant message, including tool calls.
  */
 function buildAssistantContentParts(
-  msg: GramChatMessage
+  msg: GramChatMessage,
 ): ThreadAssistantMessagePart[] {
-  if (msg.role !== 'assistant') {
-    return []
+  if (msg.role !== "assistant") {
+    return [];
   }
 
-  const parts: ThreadAssistantMessagePart[] = []
+  const parts: ThreadAssistantMessagePart[] = [];
 
-  if (typeof msg.content === 'string' || !msg.content) {
+  if (typeof msg.content === "string" || !msg.content) {
     parts.push({
-      type: 'text',
-      text: msg.content ?? '',
-    })
+      type: "text",
+      text: msg.content ?? "",
+    });
   }
 
   const toolCallsJSON = (msg as any).tool_calls as FIXME<
     string | undefined,
-    'Fixed by switching to Gram TS SDK.'
-  >
+    "Fixed by switching to Gram TS SDK."
+  >;
 
-  let toolCalls = tryParseJSON(toolCallsJSON || '[]')
+  let toolCalls = tryParseJSON(toolCallsJSON || "[]");
   if (!Array.isArray(toolCalls)) {
-    console.warn('Invalid tool_calls format, expected an array.')
-    toolCalls = []
+    console.warn("Invalid tool_calls format, expected an array.");
+    toolCalls = [];
   }
 
   for (const tc of toolCalls) {
-    const args = tc.function?.arguments ?? tc.args ?? {}
-    const argsText = typeof args === 'string' ? args : JSON.stringify(args)
+    const args = tc.function?.arguments ?? tc.args ?? {};
+    const argsText = typeof args === "string" ? args : JSON.stringify(args);
     parts.push({
-      type: 'tool-call',
-      toolCallId: tc.id ?? tc.toolCallId ?? '',
-      toolName: tc.function?.name ?? tc.toolName ?? '',
-      args: typeof args === 'string' ? JSON.parse(args) : args,
+      type: "tool-call",
+      toolCallId: tc.id ?? tc.toolCallId ?? "",
+      toolName: tc.function?.name ?? tc.toolName ?? "",
+      args: typeof args === "string" ? JSON.parse(args) : args,
       argsText,
       result: undefined,
-    } as ThreadAssistantMessagePart)
+    } as ThreadAssistantMessagePart);
   }
 
   // Return at least an empty text part if no content
   if (parts.length === 0) {
     parts.push({
-      type: 'text',
-      text: '',
-    } as TextMessagePart)
+      type: "text",
+      text: "",
+    } as TextMessagePart);
   }
 
-  return parts
+  return parts;
 }
 
 function buildSystemContentParts(msg: GramChatMessage): [TextMessagePart] {
-  if (msg.role !== 'system') {
-    return [{ type: 'text', text: '' }]
+  if (msg.role !== "system") {
+    return [{ type: "text", text: "" }];
   }
 
-  if (typeof msg.content === 'string' || !msg.content) {
-    return [{ type: 'text', text: msg.content ?? '' }]
+  if (typeof msg.content === "string" || !msg.content) {
+    return [{ type: "text", text: msg.content ?? "" }];
   }
 
-  const text: string[] = []
+  const text: string[] = [];
 
   for (const item of msg.content) {
-    if (item.type !== 'text') {
-      continue
+    if (item.type !== "text") {
+      continue;
     }
-    text.push(item.text)
+    text.push(item.text);
   }
 
-  return [{ type: 'text', text: text.join('\n') }]
+  return [{ type: "text", text: text.join("\n") }];
 }
 
 /**
  * Converts a single Gram ChatMessage to a ThreadMessage.
  */
 function convertGramMessageToThreadMessage(
-  msg: GramChatMessage
+  msg: GramChatMessage,
 ): ThreadMessage {
-  const createdAt = parseDate(msg.created_at)
+  const createdAt = parseDate(msg.created_at);
 
   const baseMetadata = {
     unstable_state: undefined,
@@ -226,36 +226,36 @@ function convertGramMessageToThreadMessage(
     steps: undefined,
     submittedFeedback: undefined,
     custom: {},
-  }
+  };
 
-  if (msg.role === 'user') {
+  if (msg.role === "user") {
     return {
       id: msg.id,
-      role: 'user',
+      role: "user",
       createdAt,
       content: buildUserContentParts(msg),
       attachments: [],
       metadata: baseMetadata,
-    }
+    };
   }
 
-  if (msg.role === 'system') {
+  if (msg.role === "system") {
     return {
       id: msg.id,
-      role: 'system',
+      role: "system",
       createdAt,
       content: buildSystemContentParts(msg),
       metadata: baseMetadata,
-    }
+    };
   }
 
   // Assistant message
   return {
     id: msg.id,
-    role: 'assistant',
+    role: "assistant",
     createdAt,
     content: buildAssistantContentParts(msg),
-    status: { type: 'complete', reason: 'stop' },
+    status: { type: "complete", reason: "stop" },
     metadata: {
       unstable_state: null,
       unstable_annotations: [],
@@ -264,7 +264,7 @@ function convertGramMessageToThreadMessage(
       submittedFeedback: undefined,
       custom: {},
     },
-  }
+  };
 }
 
 /**
@@ -275,252 +275,252 @@ function convertGramMessageToThreadMessage(
  * `fromThreadMessageLike` doesn't support them in the exported format.
  */
 export function convertGramMessagesToExported(
-  messages: GramChatMessage[]
+  messages: GramChatMessage[],
 ): ExportedMessageRepository {
   if (messages.length === 0) {
-    return { messages: [], headId: null }
+    return { messages: [], headId: null };
   }
 
-  const exportedMessages: ExportedMessageRepository['messages'] = []
-  let prevId: string | null = null
+  const exportedMessages: ExportedMessageRepository["messages"] = [];
+  let prevId: string | null = null;
 
   for (const msg of messages) {
     // Skip system messages - they're not supported in the exported message format
-    if (msg.role === 'system') {
-      continue
+    if (msg.role === "system") {
+      continue;
     }
 
-    const threadMessage = convertGramMessageToThreadMessage(msg)
+    const threadMessage = convertGramMessageToThreadMessage(msg);
     exportedMessages.push({
       message: threadMessage,
       parentId: prevId,
       runConfig: undefined,
-    })
-    prevId = msg.id
+    });
+    prevId = msg.id;
   }
 
   return {
     messages: exportedMessages,
     headId: prevId,
-  }
+  };
 }
 
 export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
-  headId: string | null
-  messages: { parentId: string | null; message: UIMessage }[]
+  headId: string | null;
+  messages: { parentId: string | null; message: UIMessage }[];
 } {
   if (messages.length === 0) {
-    return { messages: [], headId: null }
+    return { messages: [], headId: null };
   }
 
-  const toolCallResults = new Map<string, ToolResponseMessage>()
+  const toolCallResults = new Map<string, ToolResponseMessage>();
   for (const msg of messages) {
-    if (msg.role !== 'tool') {
-      continue
+    if (msg.role !== "tool") {
+      continue;
     }
-    const id = (msg as any).tool_call_id
-    if (typeof id !== 'string') {
-      continue
+    const id = (msg as any).tool_call_id;
+    if (typeof id !== "string") {
+      continue;
     }
 
-    toolCallResults.set(id, msg as ToolResponseMessage)
+    toolCallResults.set(id, msg as ToolResponseMessage);
   }
 
-  const uiMessages: { parentId: string | null; message: UIMessage }[] = []
-  let prevId: string | null = null
+  const uiMessages: { parentId: string | null; message: UIMessage }[] = [];
+  let prevId: string | null = null;
 
   // Track tool call IDs across messages to deduplicate. The server accumulates
   // all tool calls from a turn into each message, so without this, every
   // assistant message in a multi-step tool use flow would show the full count.
-  const seenToolCallIds = new Set<string>()
+  const seenToolCallIds = new Set<string>();
 
   for (const msg of messages) {
     switch (msg.role) {
-      case 'developer':
-      case 'tool':
-        continue
-      case 'system': {
+      case "developer":
+      case "tool":
+        continue;
+      case "system": {
         uiMessages.push({
           parentId: prevId,
           message: {
             id: msg.id,
-            role: 'system',
+            role: "system",
             parts: [
               {
-                type: 'text',
+                type: "text",
                 text:
-                  typeof msg.content === 'string'
+                  typeof msg.content === "string"
                     ? msg.content
                     : Array.isArray(msg.content)
                       ? msg.content
-                          .filter((item) => item.type === 'text')
+                          .filter((item) => item.type === "text")
                           .map((item) => item.text)
-                          .join('\n')
-                      : '',
+                          .join("\n")
+                      : "",
               },
             ],
           },
-        })
-        break
+        });
+        break;
       }
-      case 'user': {
-        seenToolCallIds.clear()
+      case "user": {
+        seenToolCallIds.clear();
         uiMessages.push({
           parentId: prevId,
           message: {
             id: msg.id,
-            role: 'user',
+            role: "user",
             parts: convertGramMessagePartsToUIMessageParts(
               msg,
-              toolCallResults
+              toolCallResults,
             ),
           },
-        })
-        break
+        });
+        break;
       }
-      case 'assistant': {
+      case "assistant": {
         const uiMessage = {
           parentId: prevId,
           message: {
             id: msg.id,
-            role: 'assistant',
+            role: "assistant",
             parts: convertGramMessagePartsToUIMessageParts(
               msg,
               toolCallResults,
-              seenToolCallIds
+              seenToolCallIds,
             ),
           } satisfies UIMessage,
-        }
-        uiMessages.push(uiMessage)
+        };
+        uiMessages.push(uiMessage);
 
-        break
+        break;
       }
     }
 
-    prevId = msg.id
+    prevId = msg.id;
   }
 
   return {
     messages: uiMessages,
     headId: prevId,
-  }
+  };
 }
 
 export function convertGramMessagePartsToUIMessageParts(
   msg: UserMessage | AssistantMessage,
   toolResults: Map<string, ToolResponseMessage>,
-  seenToolCallIds?: Set<string>
-): UIMessage['parts'] {
-  const uiparts: UIMessage['parts'] = []
+  seenToolCallIds?: Set<string>,
+): UIMessage["parts"] {
+  const uiparts: UIMessage["parts"] = [];
 
-  if (typeof msg.content === 'string' && msg.content) {
+  if (typeof msg.content === "string" && msg.content) {
     uiparts.push({
-      type: 'text',
+      type: "text",
       text: msg.content,
-    })
+    });
   }
 
-  const content = Array.isArray(msg.content) ? msg.content : []
+  const content = Array.isArray(msg.content) ? msg.content : [];
   for (const p of content) {
     switch (p.type) {
-      case 'text': {
+      case "text": {
         uiparts.push({
-          type: 'text',
+          type: "text",
           text: p.text,
-        })
-        break
+        });
+        break;
       }
-      case 'image_url': {
+      case "image_url": {
         const url = (p as any).image_url?.url as FIXME<
           string | undefined,
-          'Fixed by switching to Gram TS SDK.'
-        >
+          "Fixed by switching to Gram TS SDK."
+        >;
         if (!url) {
-          break
+          break;
         }
 
         uiparts.push({
-          type: 'file',
+          type: "file",
           url,
           mediaType: mediaTypeFromURL(url),
-        })
-        break
+        });
+        break;
       }
-      case 'input_audio': {
+      case "input_audio": {
         const url = (p as any).input_audio?.data as FIXME<
           string | undefined,
-          'Fixed by switching to Gram TS SDK.'
-        >
+          "Fixed by switching to Gram TS SDK."
+        >;
         if (!url) {
-          break
+          break;
         }
 
         uiparts.push({
-          type: 'file',
+          type: "file",
           url,
           mediaType: mediaTypeFromURL(url),
-        })
-        break
+        });
+        break;
       }
     }
   }
 
-  if (msg.role === 'assistant' && msg.reasoning) {
+  if (msg.role === "assistant" && msg.reasoning) {
     uiparts.push({
-      type: 'reasoning',
+      type: "reasoning",
       text: msg.reasoning,
-    })
+    });
   }
 
-  if (msg.role === 'assistant' && (msg as any).tool_calls) {
+  if (msg.role === "assistant" && (msg as any).tool_calls) {
     const toolCallsJSON = (msg as any).tool_calls as FIXME<
       string,
-      'Fixed by switching to Gram TS SDK.'
-    >
-    let toolCalls = tryParseJSON<AssistantMessage['toolCalls']>(
-      toolCallsJSON || '[]'
-    )
+      "Fixed by switching to Gram TS SDK."
+    >;
+    let toolCalls = tryParseJSON<AssistantMessage["toolCalls"]>(
+      toolCallsJSON || "[]",
+    );
     if (!Array.isArray(toolCalls)) {
-      console.warn('Invalid tool_calls format, expected an array.')
-      toolCalls = []
+      console.warn("Invalid tool_calls format, expected an array.");
+      toolCalls = [];
     }
 
     for (const tc of toolCalls) {
       // The server accumulates all tool calls from a turn into each message's
       // tool_calls field. Deduplicate across messages so each tool call only
       // appears in the first message that references it.
-      if (seenToolCallIds?.has(tc.id)) continue
-      seenToolCallIds?.add(tc.id)
+      if (seenToolCallIds?.has(tc.id)) continue;
+      seenToolCallIds?.add(tc.id);
 
-      const content = toolResults.get(tc.id)?.content
+      const content = toolResults.get(tc.id)?.content;
       uiparts.push({
-        type: 'dynamic-tool',
+        type: "dynamic-tool",
         toolCallId: tc.id,
-        toolName: tc.function?.name ?? '',
-        state: 'output-available',
+        toolName: tc.function?.name ?? "",
+        state: "output-available",
         input: tc.function?.arguments ?? {},
-        output: typeof content === 'string' ? tryParseJSON(content) : '',
-      })
+        output: typeof content === "string" ? tryParseJSON(content) : "",
+      });
     }
   }
 
-  return uiparts
+  return uiparts;
 }
 
 function mediaTypeFromURL(url: string): string {
-  const unspecified = 'unknown/unknown'
-  if (!url.startsWith('data:')) {
-    return unspecified
+  const unspecified = "unknown/unknown";
+  if (!url.startsWith("data:")) {
+    return unspecified;
   }
 
-  const match = url.match(/^data:([^;]+);/)
-  return match?.[1] || unspecified
+  const match = url.match(/^data:([^;]+);/);
+  return match?.[1] || unspecified;
 }
 
 function tryParseJSON<T = any>(str: string): T | null {
   try {
-    return JSON.parse(str) as T
+    return JSON.parse(str) as T;
   } catch {
-    return null
+    return null;
   }
 }

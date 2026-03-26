@@ -17,7 +17,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -125,7 +126,7 @@ func TestDeploymentsService_CreateDeployment_NonBlocking(t *testing.T) {
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey: "test-non-blocking-deployment",
-		NonBlocking:    conv.Ptr(true),
+		NonBlocking:    new(true),
 		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 			{
 				AssetID: ares.Asset.ID,
@@ -374,6 +375,100 @@ func TestDeploymentsService_CreateDeployment_MultipleDocuments(t *testing.T) {
 	})
 }
 
+func TestDeploymentsService_CreateDeployment_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsCreate)
+	require.NoError(t, err)
+
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-audit-create-deployment",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "audit-doc",
+				Slug:    "audit-doc",
+			},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, dep)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDeploymentsCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionDeploymentsCreate), record.Action)
+	require.Equal(t, "deployment", record.SubjectType)
+	require.Empty(t, record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.Metadata)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestDeploymentsService_CreateDeployment_AuditLog_NotWrittenOnFailure(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsCreate)
+	require.NoError(t, err)
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-audit-create-deployment-failure",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: "invalid-uuid",
+				Name:    "audit-doc",
+				Slug:    "audit-doc",
+			},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.Error(t, err)
+	require.Nil(t, dep)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
 func TestDeploymentsService_CreateDeployment_InvalidDocument(t *testing.T) {
 	t.Parallel()
 
@@ -431,7 +526,7 @@ func TestDeploymentsService_CreateDeployment_InvalidDocument(t *testing.T) {
 	require.NoError(t, err, "create deployment")
 
 	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
-	require.Equal(t, "failed", dep.Deployment.Status, "deployment status is not failed")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment should still complete even if it contains invalid documents")
 
 	repo := testrepo.New(ti.conn)
 	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
@@ -505,7 +600,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 			Packages: []*gen.AddDeploymentPackageForm{
 				{
 					Name:    "test-package",
-					Version: conv.Ptr("invalid-version"),
+					Version: new("invalid-version"),
 				},
 			},
 			ApikeyToken:      nil,
@@ -592,7 +687,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 			Packages: []*gen.AddDeploymentPackageForm{
 				{
 					Name:    "test-package",
-					Version: conv.Ptr(ver.Version.Semver),
+					Version: new(ver.Version.Semver),
 				},
 			},
 			ApikeyToken:      nil,

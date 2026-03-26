@@ -224,6 +224,7 @@ export function IntegrationCard({
   const handleEnable = async () => {
     await client.deployments.evolveDeployment({
       evolveForm: {
+        nonBlocking: true,
         upsertPackages: [
           {
             name: integration.packageName,
@@ -242,6 +243,7 @@ export function IntegrationCard({
   const handleDisable = async () => {
     await client.deployments.evolveDeployment({
       evolveForm: {
+        nonBlocking: true,
         excludePackages: [integration.packageId],
       },
     });

@@ -2,22 +2,22 @@
  * =============================================================================
  * GRAM MCP APPROVAL FLOW DEMONSTRATION
  * =============================================================================
- * 
+ *
  * This is an educational example demonstrating how to implement approval flows
  * for MCP (Model Context Protocol) server tool calls using Gram Functions.
- * 
+ *
  * APPROVAL FLOW PATTERN:
  * 1. Intercept tool calls that require approval
  * 2. Validate approval status (via environment variable, API, database, etc.)
  * 3. Block unauthorized calls with clear error messages
  * 4. Authorize approved calls and provide execution instructions
- * 
+ *
  * ADAPTATION GUIDE:
  * - Replace "protected_tool_" prefix with your tool naming pattern
  * - Customize approval validation logic (env vars, API calls, etc.)
  * - Modify tool filtering logic to match your MCP server's tools
  * - Add additional approval mechanisms (multi-factor, time-based, etc.)
- * 
+ *
  * =============================================================================
  */
 
@@ -35,11 +35,11 @@ import * as z from "zod/mini";
 const CONFIG = {
   // Environment variable name that stores approval status
   APPROVAL_ENV_VAR: "MCP_TOOL_APPROVAL",
-  
+
   // Prefix pattern for tools that require approval
   // Example: "protected_tool_" means all tools starting with this prefix
   PROTECTED_TOOL_PREFIX: "protected_tool_",
-  
+
   // Optional: Minimum approval token length for security
   MIN_APPROVAL_TOKEN_LENGTH: 1,
 } as const;
@@ -50,14 +50,14 @@ const CONFIG = {
 
 /**
  * Check if a tool name requires approval protection.
- * 
+ *
  * This function implements pattern matching to identify which tools
  * should be intercepted. Common patterns:
  * - Prefix matching: tool.startsWith("protected_")
  * - Suffix matching: tool.endsWith("_admin")
  * - Regex matching: /^admin_/.test(tool)
  * - List-based: allowedTools.includes(tool)
- * 
+ *
  * @param toolName - The name of the tool to check
  * @returns true if the tool requires approval, false otherwise
  */
@@ -66,66 +66,66 @@ function requiresApproval(toolName: string): boolean {
   if (toolName.startsWith(CONFIG.PROTECTED_TOOL_PREFIX)) {
     return true;
   }
-  
+
   // Pattern 2: Example of suffix-based matching (commented out)
   // if (toolName.endsWith("_admin")) {
   //   return true;
   // }
-  
+
   // Pattern 3: Example of exact match list (commented out)
   // const adminTools = ["delete_user", "modify_permissions", "reset_system"];
   // if (adminTools.includes(toolName)) {
   //   return true;
   // }
-  
+
   return false;
 }
 
 /**
  * Validate admin approval by checking environment variable.
- * 
+ *
  * APPROVAL VALIDATION STRATEGIES:
- * 
+ *
  * 1. Environment Variable (current implementation)
  *    - Simple and secure for single-server deployments
  *    - Easy to set via CI/CD pipelines
  *    - Good for development and testing
- * 
+ *
  * 2. API-based Validation (example commented below)
  *    - Call external approval service
  *    - Supports complex approval workflows
  *    - Enables audit logging
- * 
+ *
  * 3. Database-backed Validation
  *    - Check approval status in database
  *    - Supports time-based approvals
  *    - Enables approval history tracking
- * 
+ *
  * 4. Multi-factor Validation
  *    - Combine multiple approval sources
  *    - Require multiple approvals for sensitive operations
  *    - Implement approval chains
- * 
+ *
  * @returns true if approval is granted, false otherwise
  */
 function hasAdminApproval(): boolean {
   // Strategy 1: Environment Variable Validation
   const approval = process.env[CONFIG.APPROVAL_ENV_VAR];
-  
+
   // Check if approval is set and non-empty
   if (!approval || approval.trim().length < CONFIG.MIN_APPROVAL_TOKEN_LENGTH) {
     return false;
   }
-  
+
   // Optional: Validate approval token format
   // Example: Require specific format like "approved_<timestamp>"
   // const approvalPattern = /^approved_\d+$/;
   // if (!approvalPattern.test(approval)) {
   //   return false;
   // }
-  
+
   return true;
-  
+
   // Strategy 2: API-based Validation (example)
   // try {
   //   const response = await fetch("https://approval-service.example.com/check", {
@@ -139,7 +139,7 @@ function hasAdminApproval(): boolean {
   //   console.error("Approval API error:", error);
   //   return false; // Fail closed - deny on error
   // }
-  
+
   // Strategy 3: Database Validation (example)
   // const db = getDatabaseConnection();
   // const approval = await db.query(
@@ -151,22 +151,22 @@ function hasAdminApproval(): boolean {
 
 /**
  * Get approval status with user-friendly messaging.
- * 
+ *
  * This function provides structured feedback about approval status,
  * which is essential for debugging and user experience.
- * 
+ *
  * @returns Object containing approval status and message
  */
 function getApprovalStatus(): { approved: boolean; message: string } {
   const approved = hasAdminApproval();
-  
+
   if (approved) {
     return {
       approved: true,
       message: `Admin approval verified via ${CONFIG.APPROVAL_ENV_VAR} environment variable`,
     };
   }
-  
+
   return {
     approved: false,
     message: `Admin approval required. Set ${CONFIG.APPROVAL_ENV_VAR} environment variable to proceed.`,
@@ -175,10 +175,10 @@ function getApprovalStatus(): { approved: boolean; message: string } {
 
 /**
  * Mask sensitive values for logging/display purposes.
- * 
+ *
  * Security best practice: Never expose full approval tokens or secrets
  * in logs or API responses.
- * 
+ *
  * @param value - The value to mask
  * @param visibleChars - Number of characters to show at the start
  * @returns Masked value string
@@ -196,7 +196,7 @@ function maskSensitiveValue(value: string, visibleChars: number = 4): string {
 
 /**
  * Create Gram instance with environment schema.
- * 
+ *
  * The envSchema defines which environment variables are expected.
  * When deployed, users will be prompted to provide these values.
  */
@@ -207,15 +207,15 @@ const gram = new Gram({
 })
   /**
    * TOOL 1: Tool Call Proxy/Interceptor
-   * 
+   *
    * This is the core tool that intercepts protected tool calls and validates approval.
-   * 
+   *
    * WORKFLOW:
    * 1. Receive tool name and arguments
    * 2. Check if tool requires approval
    * 3. Validate approval status
    * 4. Return authorization result or block with error
-   * 
+   *
    * INTEGRATION PATTERN:
    * When an AI agent wants to call a protected tool:
    * - First call this proxy tool with the tool name and arguments
@@ -241,8 +241,9 @@ const gram = new Gram({
         if (!requiresApproval(toolName)) {
           return ctx.json({
             success: false,
-            error: `Tool '${toolName}' does not require approval. ` +
-                   `Only tools matching pattern '${CONFIG.PROTECTED_TOOL_PREFIX}*' are intercepted.`,
+            error:
+              `Tool '${toolName}' does not require approval. ` +
+              `Only tools matching pattern '${CONFIG.PROTECTED_TOOL_PREFIX}*' are intercepted.`,
             intercepted: false,
             tool_name: toolName,
           });
@@ -250,7 +251,7 @@ const gram = new Gram({
 
         // STEP 2: Check admin approval
         const approvalStatus = getApprovalStatus();
-        
+
         if (!approvalStatus.approved) {
           // APPROVAL DENIED: Return error with clear instructions
           return ctx.json({
@@ -308,10 +309,10 @@ const gram = new Gram({
       }
     },
   })
-  
+
   /**
    * TOOL 2: Approval Status Checker
-   * 
+   *
    * This tool allows users to check their current approval status without
    * attempting a tool call. Useful for debugging and setup verification.
    */
@@ -334,7 +335,9 @@ const gram = new Gram({
             name: CONFIG.APPROVAL_ENV_VAR,
             set: approvalValue !== undefined,
             // Security: Mask the actual value in responses
-            value: approvalValue ? maskSensitiveValue(approvalValue) : undefined,
+            value: approvalValue
+              ? maskSensitiveValue(approvalValue)
+              : undefined,
             length: approvalValue?.length || 0,
           },
           configuration: {
@@ -362,10 +365,10 @@ const gram = new Gram({
       }
     },
   })
-  
+
   /**
    * TOOL 3: List Protected Tools
-   * 
+   *
    * This tool helps users discover which tools are protected and require approval.
    * In production, you might query the MCP server dynamically for available tools.
    */
@@ -397,7 +400,7 @@ const gram = new Gram({
         // Filter tools if filter is provided
         const filteredTools = filter
           ? exampleProtectedTools.filter((tool) =>
-              tool.toLowerCase().includes(filter)
+              tool.toLowerCase().includes(filter),
             )
           : exampleProtectedTools;
 
@@ -407,8 +410,9 @@ const gram = new Gram({
           tools: filteredTools,
           filter_applied: filter || null,
           protection_pattern: CONFIG.PROTECTED_TOOL_PREFIX + "*",
-          note: "This is an example list. In production, query your MCP server " +
-                "for the complete list of available tools and filter by protection pattern.",
+          note:
+            "This is an example list. In production, query your MCP server " +
+            "for the complete list of available tools and filter by protection pattern.",
           usage: {
             example: `protected_tool_proxy(tool_name='protected_tool_create_resource', tool_arguments={...})`,
             approval_required: true,
@@ -423,10 +427,10 @@ const gram = new Gram({
       }
     },
   })
-  
+
   /**
    * TOOL 4: Help and Documentation
-   * 
+   *
    * This tool provides comprehensive documentation about the approval system.
    * Essential for onboarding and troubleshooting.
    */
@@ -450,8 +454,7 @@ const gram = new Gram({
           security_model: {
             environment_variable: CONFIG.APPROVAL_ENV_VAR,
             required: true,
-            description:
-              `Must be set to a non-empty value to authorize protected tool calls`,
+            description: `Must be set to a non-empty value to authorize protected tool calls`,
             examples: [
               `export ${CONFIG.APPROVAL_ENV_VAR}='approved'`,
               `export ${CONFIG.APPROVAL_ENV_VAR}='true'`,
@@ -474,8 +477,7 @@ const gram = new Gram({
           ],
           protected_tools: {
             pattern: CONFIG.PROTECTED_TOOL_PREFIX + "*",
-            description:
-              `All tools starting with '${CONFIG.PROTECTED_TOOL_PREFIX}' are intercepted`,
+            description: `All tools starting with '${CONFIG.PROTECTED_TOOL_PREFIX}' are intercepted`,
             examples: [
               "protected_tool_create_resource",
               "protected_tool_delete_resource",
@@ -523,7 +525,8 @@ const gram = new Gram({
         ],
         adaptation_guide: {
           step_1: "Modify CONFIG constants to match your tool naming",
-          step_2: "Update requiresApproval() function with your protection logic",
+          step_2:
+            "Update requiresApproval() function with your protection logic",
           step_3: "Customize hasAdminApproval() with your approval mechanism",
           step_4: "Update tool descriptions and messages for your use case",
           step_5: "Add additional approval mechanisms as needed",
@@ -560,7 +563,8 @@ const gram = new Gram({
           execute_protected: {
             description: "Execute a protected tool (with approval)",
             step_1: `Set ${CONFIG.APPROVAL_ENV_VAR}='approved'`,
-            step_2: "protected_tool_proxy(tool_name='protected_tool_create_resource', tool_arguments={name: 'test'})",
+            step_2:
+              "protected_tool_proxy(tool_name='protected_tool_create_resource', tool_arguments={name: 'test'})",
             step_3: "Execute the actual tool call if approved",
           },
         },

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
+	temporalSDK "go.temporal.io/sdk/temporal"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -36,9 +38,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	packagesRepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	"github.com/speakeasy-api/gram/server/internal/packages/semver"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -52,7 +54,7 @@ type Service struct {
 	assets         *assetsRepo.Queries
 	packages       *packagesRepo.Queries
 	assetStorage   assets.BlobStore
-	temporal       client.Client
+	temporalEnv    *temporal.Environment
 	posthog        *posthog.Posthog
 	siteURL        *url.URL
 }
@@ -63,7 +65,7 @@ func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
-	temporal client.Client,
+	temporalEnv *temporal.Environment,
 	sessions *sessions.Manager,
 	assetStorage assets.BlobStore,
 	posthog *posthog.Posthog,
@@ -83,7 +85,7 @@ func NewService(
 		assets:         assetsRepo.New(db),
 		packages:       packagesRepo.New(db),
 		assetStorage:   assetStorage,
-		temporal:       temporal,
+		temporalEnv:    temporalEnv,
 		posthog:        posthog,
 		siteURL:        siteURL,
 		registryClient: mcpRegistryClient,
@@ -125,25 +127,26 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	}
 
 	return &gen.GetDeploymentResult{
-		ID:                 dep.ID,
-		CreatedAt:          dep.CreatedAt,
-		OrganizationID:     dep.OrganizationID,
-		ProjectID:          dep.ProjectID,
-		UserID:             dep.UserID,
-		IdempotencyKey:     dep.IdempotencyKey,
-		Status:             dep.Status,
-		ExternalID:         dep.ExternalID,
-		ExternalURL:        dep.ExternalURL,
-		GithubRepo:         dep.GithubRepo,
-		GithubPr:           dep.GithubPr,
-		GithubSha:          dep.GithubSha,
-		ClonedFrom:         dep.ClonedFrom,
-		Packages:           dep.Packages,
-		Openapiv3Assets:    dep.Openapiv3Assets,
-		Openapiv3ToolCount: dep.Openapiv3ToolCount,
-		FunctionsToolCount: dep.FunctionsToolCount,
-		FunctionsAssets:    dep.FunctionsAssets,
-		ExternalMcps:       dep.ExternalMcps,
+		ID:                   dep.ID,
+		CreatedAt:            dep.CreatedAt,
+		OrganizationID:       dep.OrganizationID,
+		ProjectID:            dep.ProjectID,
+		UserID:               dep.UserID,
+		IdempotencyKey:       dep.IdempotencyKey,
+		Status:               dep.Status,
+		ExternalID:           dep.ExternalID,
+		ExternalURL:          dep.ExternalURL,
+		GithubRepo:           dep.GithubRepo,
+		GithubPr:             dep.GithubPr,
+		GithubSha:            dep.GithubSha,
+		ClonedFrom:           dep.ClonedFrom,
+		Packages:             dep.Packages,
+		Openapiv3Assets:      dep.Openapiv3Assets,
+		Openapiv3ToolCount:   dep.Openapiv3ToolCount,
+		FunctionsToolCount:   dep.FunctionsToolCount,
+		ExternalMcpToolCount: dep.ExternalMcpToolCount,
+		FunctionsAssets:      dep.FunctionsAssets,
+		ExternalMcps:         dep.ExternalMcps,
 	}, nil
 }
 
@@ -185,7 +188,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 	for _, r := range rows {
 		var attachmentID *string
 		if r.AttachmentID.Valid {
-			attachmentID = conv.Ptr(r.AttachmentID.UUID.String())
+			attachmentID = new(r.AttachmentID.UUID.String())
 		}
 		items = append(items, &gen.DeploymentLogEvent{
 			ID:             r.ID.String(),
@@ -200,7 +203,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 	var nextCursor *string
 	limit := 50
 	if len(rows) >= limit+1 {
-		nextCursor = conv.Ptr(encodeCursor(rows[limit].Seq, rows[limit].ID))
+		nextCursor = new(encodeCursor(rows[limit].Seq, rows[limit].ID))
 		items = items[:limit]
 	}
 
@@ -322,21 +325,23 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	items := make([]*gen.DeploymentSummary, 0, len(rows))
 	for _, r := range rows {
 		items = append(items, &gen.DeploymentSummary{
-			ID:                  r.ID.String(),
-			UserID:              r.UserID,
-			Status:              r.Status,
-			CreatedAt:           r.CreatedAt.Time.Format(time.RFC3339),
-			Openapiv3AssetCount: r.Openapiv3AssetCount,
-			Openapiv3ToolCount:  r.Openapiv3ToolCount,
-			FunctionsAssetCount: r.FunctionsAssetCount,
-			FunctionsToolCount:  r.FunctionsToolCount,
+			ID:                    r.ID.String(),
+			UserID:                r.UserID,
+			Status:                r.Status,
+			CreatedAt:             r.CreatedAt.Time.Format(time.RFC3339),
+			Openapiv3AssetCount:   r.Openapiv3AssetCount,
+			Openapiv3ToolCount:    r.Openapiv3ToolCount,
+			FunctionsAssetCount:   r.FunctionsAssetCount,
+			FunctionsToolCount:    r.FunctionsToolCount,
+			ExternalMcpAssetCount: r.ExternalMcpAssetCount,
+			ExternalMcpToolCount:  r.ExternalMcpToolCount,
 		})
 	}
 
 	var nextCursor *string
 	limit := 50
 	if len(items) >= limit+1 {
-		nextCursor = conv.Ptr(items[limit].ID)
+		nextCursor = new(items[limit].ID)
 		items = items[:limit]
 	}
 
@@ -437,6 +442,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 			name:                    add.Name,
 			slug:                    string(add.Slug),
 			registryServerSpecifier: add.RegistryServerSpecifier,
+			selectedRemotes:         add.SelectedRemotes,
 		})
 	}
 
@@ -472,6 +478,17 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
 	if err != nil {
 		return nil, err
+	}
+
+	if err := audit.LogDeploymentCreate(ctx, dbtx, audit.LogDeploymentCreateEvent{
+		OrganizationID:   organizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		DeploymentURN:    urn.NewDeployment(newID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment creation audit log").Log(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -620,10 +637,9 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			name:                    add.Name,
 			slug:                    string(add.Slug),
 			registryServerSpecifier: add.RegistryServerSpecifier,
+			selectedRemotes:         add.SelectedRemotes,
 		})
 	}
-
-	println("\n\n\nto upsert: ", len(externalMCPsToUpsert), "\n\n\n")
 
 	externalMCPsToExclude := make([]string, 0, len(form.ExcludeExternalMcps))
 	externalMCPsToExclude = append(externalMCPsToExclude, form.ExcludeExternalMcps...)
@@ -717,6 +733,22 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, err
 	}
 
+	if err := audit.LogDeploymentEvolve(ctx, dbtx, audit.LogDeploymentEvolveEvent{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		DeploymentURN: urn.NewDeployment(cloneID),
+
+		Ancestor: previousDeployment,
+		Current:  dep,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment evolve audit log").Log(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").Log(ctx, logger)
 	}
@@ -806,6 +838,21 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
 	if err != nil {
 		return nil, err
+	}
+
+	if err := audit.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		DeploymentURN: urn.NewDeployment(newID),
+
+		SourceDeploymentID: urn.NewDeployment(deploymentID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").Log(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -907,8 +954,8 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool) (string, error) {
 	defer func() {
 		logger.InfoContext(ctx, "starting project-scoped functions reaper")
-		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporal, projectID)
-		if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
+		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporalEnv, projectID)
+		if err != nil && !temporalSDK.IsWorkflowExecutionAlreadyStartedError(err) {
 			logger.ErrorContext(
 				ctx, "failed to start project-scoped functions reaper workflow",
 				attr.SlogError(err),
@@ -916,7 +963,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 		}
 	}()
 
-	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporal, background.ProcessDeploymentWorkflowParams{
+	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporalEnv, background.ProcessDeploymentWorkflowParams{
 		ProjectID:      projectID,
 		DeploymentID:   deploymentID,
 		IdempotencyKey: conv.PtrValOr(dep.IdempotencyKey, ""),

@@ -1,25 +1,27 @@
 import { Page } from "@/components/page-layout";
+import { DotTable } from "@/components/ui/dot-table";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
+import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { CommandBar } from "@/pages/catalog/CommandBar";
+import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { DeploymentExternalMCP } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
-import { useMutation } from "@tanstack/react-query";
-import {
-  Loader2,
-  Minus,
-  Plus,
-  Search,
-  SearchXIcon,
-  Server as ServerIcon,
-} from "lucide-react";
+import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Loader2, Search, SearchXIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, Outlet } from "react-router";
+import { Outlet } from "react-router";
+import { FilterChips } from "./FilterChips";
+import { defaultFilterValues, FilterSidebar } from "./FilterSidebar";
+import { filterAndSortServers } from "./hooks/serverMetadata";
+import { useFilterState } from "./hooks/useFilterState";
+import { useSelectionState } from "./hooks/useSelectionState";
+import { ServerCard } from "./ServerCard";
+import { ServerTableRow } from "./ServerTableRow";
+import { SortDropdown } from "./SortDropdown";
 
 export function CatalogRoot() {
   return <Outlet />;
@@ -27,50 +29,91 @@ export function CatalogRoot() {
 
 export default function Catalog() {
   const routes = useRoutes();
-  const client = useSdkClient();
+  const project = useProject();
   const [searchQuery, setSearchQuery] = useState("");
-  const [serverToAdd, setServerToAdd] = useState<Server | null>(null);
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useInfiniteListMCPCatalog(searchQuery);
+
+  // Filter state from URL
+  const filterState = useFilterState();
+
+  // Selection state from URL (persists across navigation)
+  const { selectedServers, toggleServerSelection, clearSelection } =
+    useSelectionState();
+
+  const [viewMode, setViewMode] = useViewMode();
+  const [addingServers, setAddingServers] = useState<Server[]>([]);
+  const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
+
+  // Track if we've loaded all data (for client-side search)
+  const [allDataLoaded, setAllDataLoaded] = useState(false);
+
+  // Only use server-side search if we haven't loaded all data yet
+  // Normalize empty string to undefined for consistent query keys
+  const serverSideSearch = allDataLoaded ? undefined : searchQuery || undefined;
+
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    debouncedSearch,
+  } = useInfiniteListMCPCatalog(serverSideSearch);
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
   const externalMcps = deployment?.externalMcps ?? [];
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const removeServerMutation = useMutation({
-    mutationFn: async (slug: string) => {
-      const toolUrn = `tools:externalmcp:${slug}:proxy`;
-
-      // Find and delete any toolsets that use this external MCP
-      const toolsets = await client.toolsets.list();
-      const matchingToolsets =
-        toolsets.toolsets?.filter((ts) => ts.toolUrns?.includes(toolUrn)) ?? [];
-
-      // Delete matching toolsets
-      await Promise.all(
-        matchingToolsets.map((ts) =>
-          client.toolsets.deleteBySlug({ slug: ts.slug }),
-        ),
-      );
-
-      // Remove the external MCP from the deployment
-      await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.id,
-          excludeExternalMcps: [slug],
-        },
-      });
-    },
-    onSuccess: async () => {
-      await refetchDeployment();
-    },
-  });
+  // Track when all data has been loaded (for the unfiltered query only)
+  // Once we've loaded all data without a search, we can switch to client-side filtering
+  useEffect(() => {
+    // Only set allDataLoaded based on the unfiltered (no search) query state
+    // Use debouncedSearch (not searchQuery) to ensure we're checking against the actual
+    // query state, avoiding timing mismatches during debounce transitions
+    if (
+      !debouncedSearch &&
+      !hasNextPage &&
+      !isLoading &&
+      data?.pages &&
+      data.pages.length > 0
+    ) {
+      setAllDataLoaded(true);
+    }
+    // Never reset allDataLoaded to false - once we have all data, we keep it
+  }, [hasNextPage, isLoading, data?.pages, debouncedSearch]);
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
     return data?.pages.flatMap((page) => page.servers as Server[]) ?? [];
   }, [data]);
+
+  // Apply client-side filtering based on filter state
+  // Use client-side search when all data is loaded
+  const clientSideSearch = allDataLoaded ? searchQuery : undefined;
+  const filteredServers = useMemo(() => {
+    return filterAndSortServers(allServers, filterState, clientSideSearch);
+  }, [allServers, filterState, clientSideSearch]);
+
+  // Check if any granular filters are active
+  const hasActiveFilters = useMemo(() => {
+    const f = filterState.filters;
+    return (
+      f.authTypes.length > 0 ||
+      f.toolBehaviors.length > 0 ||
+      f.minUsers > 0 ||
+      f.updatedRange !== "any" ||
+      f.minTools > 0
+    );
+  }, [filterState.filters]);
+
+  const getSelectedServerObjects = () =>
+    filteredServers.filter((s) =>
+      selectedServers.has(`${s.registryId}-${s.registrySpecifier}`),
+    );
+
+  const handleAdd = () => {
+    setAddingServers(getSelectedServerObjects());
+  };
 
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
@@ -99,41 +142,132 @@ export default function Catalog() {
         <Page.Section>
           <Page.Section.Title>MCP Catalog</Page.Section.Title>
           <Page.Section.Description>
-            Import official MCP servers to your project. Powered by the official
-            MCP registry.
+            Discover and import MCP servers to your project. Powered by the
+            official MCP registry.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="vertical" gap={6}>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search MCP servers..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {isLoading &&
-                  [...Array(6)].map((_, i) => (
-                    <Skeleton key={i} className="h-[200px]" />
-                  ))}
-                {!isLoading &&
-                  allServers?.map((server) => (
-                    <MCPServerCard
-                      key={`${server.registryId}-${server.registrySpecifier}`}
-                      server={server}
-                      detailHref={routes.catalog.detail.href(
-                        encodeURIComponent(server.registrySpecifier),
-                      )}
-                      externalMcps={externalMcps}
-                      onAdd={() => setServerToAdd(server)}
-                      onRemove={(slug) => removeServerMutation.mutate(slug)}
-                      isRemoving={removeServerMutation.isPending}
+              {/* Search and filters row */}
+              <Stack
+                direction="horizontal"
+                gap={3}
+                align="center"
+                justify="space-between"
+              >
+                <Stack direction="horizontal" gap={3} align="center">
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search MCP servers..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10 pr-9 h-10"
                     />
-                  ))}
-              </div>
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <FilterSidebar
+                    values={filterState.filters}
+                    onChange={filterState.setFilters}
+                    onClear={() => filterState.setFilters(defaultFilterValues)}
+                  />
+                  <SortDropdown
+                    value={filterState.sort}
+                    onChange={filterState.setSort}
+                  />
+                </Stack>
+
+                {/* Results count and view toggle */}
+                <Stack direction="horizontal" gap={3} align="center">
+                  {!isLoading && (
+                    <Type small muted>
+                      {filteredServers.length === allServers.length
+                        ? `${allServers.length} servers`
+                        : `${filteredServers.length} of ${allServers.length} servers`}
+                    </Type>
+                  )}
+                  <ViewToggle value={viewMode} onChange={setViewMode} />
+                </Stack>
+              </Stack>
+
+              {/* Active filter chips */}
+              {hasActiveFilters && (
+                <FilterChips
+                  values={filterState.filters}
+                  onChange={filterState.setFilters}
+                  onClearAll={() => filterState.setFilters(defaultFilterValues)}
+                />
+              )}
+
+              {/* Server grid / table */}
+              {isLoading ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
+                    (id) => (
+                      <Skeleton key={id} className="h-[200px]" />
+                    ),
+                  )}
+                </div>
+              ) : viewMode === "grid" ? (
+                <div
+                  ref={setGridElement}
+                  className="grid grid-cols-1 xl:grid-cols-2 gap-6"
+                >
+                  {filteredServers.map((server) => {
+                    const serverKey = `${server.registryId}-${server.registrySpecifier}`;
+                    return (
+                      <ServerCard
+                        key={serverKey}
+                        server={server}
+                        detailHref={routes.catalog.detail.href(
+                          encodeURIComponent(server.registrySpecifier),
+                        )}
+                        externalMcps={externalMcps}
+                        isSelected={selectedServers.has(serverKey)}
+                        onToggleSelect={() => toggleServerSelection(serverKey)}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div ref={setGridElement}>
+                  <DotTable
+                    headers={[
+                      { label: "", className: "w-10" },
+                      { label: "Name" },
+                      { label: "Version" },
+                      { label: "Description" },
+                      { label: "Tools" },
+                      { label: "" },
+                    ]}
+                  >
+                    {filteredServers.map((server) => {
+                      const serverKey = `${server.registryId}-${server.registrySpecifier}`;
+                      return (
+                        <ServerTableRow
+                          key={serverKey}
+                          server={server}
+                          detailHref={routes.catalog.detail.href(
+                            encodeURIComponent(server.registrySpecifier),
+                          )}
+                          externalMcps={externalMcps}
+                          isSelected={selectedServers.has(serverKey)}
+                          onToggleSelect={() =>
+                            toggleServerSelection(serverKey)
+                          }
+                        />
+                      );
+                    })}
+                  </DotTable>
+                </div>
+              )}
 
               {/* Load more trigger */}
               {!isLoading && hasNextPage && !searchQuery && (
@@ -152,26 +286,56 @@ export default function Catalog() {
                 </div>
               )}
 
-              {!isLoading && allServers?.length === 0 && (
-                <EmptySearchResult onClear={() => setSearchQuery("")} />
+              {/* Empty state */}
+              {!isLoading && filteredServers.length === 0 && (
+                <EmptySearchResult
+                  hasFilters={
+                    hasActiveFilters ||
+                    filterState.category !== "all" ||
+                    searchQuery !== ""
+                  }
+                  onClear={() => {
+                    setSearchQuery("");
+                    filterState.clearFilters();
+                  }}
+                />
               )}
             </Stack>
           </Page.Section.Body>
         </Page.Section>
       </Page.Body>
+
       <AddServerDialog
-        server={serverToAdd}
-        open={!!serverToAdd}
-        onOpenChange={(open) => !open && setServerToAdd(null)}
-        onServerAdded={() => refetchDeployment()}
+        servers={addingServers}
+        projectSlug={project.slug}
+        open={addingServers.length > 0}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddingServers([]);
+            clearSelection();
+          }
+        }}
+        onServersAdded={() => refetchDeployment()}
+      />
+      <CommandBar
+        selectedCount={selectedServers.size}
+        onAdd={handleAdd}
+        onClear={clearSelection}
+        containerElement={gridElement}
       />
     </Page>
   );
 }
 
-function EmptySearchResult({ onClear }: { onClear: () => void }) {
+function EmptySearchResult({
+  hasFilters,
+  onClear,
+}: {
+  hasFilters: boolean;
+  onClear: () => void;
+}) {
   return (
-    <div className="w-full  flex items-center justify-center bg-background rounded-xl border-1 py-8">
+    <div className="w-full flex items-center justify-center bg-background rounded-xl border py-8">
       <Stack
         gap={1}
         className="w-full max-w-sm m-8"
@@ -182,132 +346,19 @@ function EmptySearchResult({ onClear }: { onClear: () => void }) {
           <SearchXIcon className="size-16 text-foreground" />
         </div>
         <Heading variant="h5" className="font-medium">
-          No matching entries
+          No matching servers
         </Heading>
         <Type small muted className="mb-4 text-center">
-          No MCP servers match your query. Try adjusting or clearing your
-          search.
+          {hasFilters
+            ? "No MCP servers match your current filters. Try adjusting or clearing your filters."
+            : "No MCP servers found. Check back later for new additions."}
         </Type>
-        <Button onClick={onClear} size="sm">
-          Clear Search
-        </Button>
+        {hasFilters && (
+          <Button onClick={onClear} size="sm">
+            <Button.Text>Clear Filters</Button.Text>
+          </Button>
+        )}
       </Stack>
     </div>
-  );
-}
-
-interface MCPServerCardProps {
-  server: Server;
-  detailHref: string;
-  externalMcps: DeploymentExternalMCP[];
-  onAdd: () => void;
-  onRemove: (slug: string) => void;
-  isRemoving: boolean;
-}
-
-function MCPServerCard({
-  server,
-  detailHref,
-  externalMcps,
-  onAdd,
-  onRemove,
-  isRemoving,
-}: MCPServerCardProps) {
-  const meta = server.meta["com.pulsemcp/server"];
-  const isOfficial = meta?.isOfficial;
-  const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
-  const displayName = server.title ?? server.registrySpecifier;
-
-  const existingMcp = externalMcps.find(
-    (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-  );
-  const isAdded = !!existingMcp;
-
-  return (
-    <Link to={detailHref}>
-      <div className="group flex flex-col gap-4 rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all h-full">
-        <Stack direction="horizontal" gap={3}>
-          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-            {server.iconUrl ? (
-              <img
-                src={server.iconUrl}
-                alt={displayName}
-                className="w-8 h-8 rounded"
-              />
-            ) : (
-              <ServerIcon className="w-6 h-6 text-muted-foreground" />
-            )}
-          </div>
-          <Stack gap={1} className="min-w-0">
-            <Stack direction="horizontal" gap={2} align="center">
-              <Type
-                variant="subheading"
-                className="group-hover:text-primary transition-colors"
-              >
-                {displayName}
-              </Type>
-              {isOfficial && <Badge>Official</Badge>}
-            </Stack>
-            <Type small muted>
-              {server.registrySpecifier} • v{server.version}
-            </Type>
-          </Stack>
-        </Stack>
-        <Type small muted className="line-clamp-2">
-          {server.description}
-        </Type>
-        <div className="mt-auto pt-2">
-          <Stack direction="horizontal" justify="space-between" align="center">
-            {visitorsTotal && visitorsTotal > 0 ? (
-              <Type small muted>
-                {visitorsTotal.toLocaleString()} monthly users
-              </Type>
-            ) : (
-              <div />
-            )}
-            {isAdded ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={isRemoving}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (existingMcp) {
-                    onRemove(existingMcp.slug);
-                  }
-                }}
-              >
-                <Button.LeftIcon>
-                  {isRemoving ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Minus className="w-3.5 h-3.5" />
-                  )}
-                </Button.LeftIcon>
-                <Button.Text>
-                  {isRemoving ? "Removing..." : "Remove"}
-                </Button.Text>
-              </Button>
-            ) : (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onAdd();
-                }}
-              >
-                <Button.LeftIcon>
-                  <Plus className="w-3.5 h-3.5" />
-                </Button.LeftIcon>
-                <Button.Text>Add</Button.Text>
-              </Button>
-            )}
-          </Stack>
-        </div>
-      </div>
-    </Link>
   );
 }

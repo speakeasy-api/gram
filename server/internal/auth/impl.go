@@ -63,7 +63,12 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cfg AuthConfigurations) *Service {
+func NewService(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	cfg AuthConfigurations,
+) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
@@ -93,14 +98,14 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.Authenticate(ctx, key, true)
+	return s.sessions.Authenticate(ctx, key)
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
 		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
-			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, url.QueryEscape(err.Error())),
+			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
 			SessionToken:  "",
 			SessionCookie: "",
 		}, nil
@@ -254,7 +259,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}
 	authCtx.ActiveOrganizationID = selectedOrg
 
-	if err := s.sessions.UpdateSession(ctx, sessions.Session{
+	if err := s.sessions.StoreSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
@@ -367,17 +372,18 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}
 
 	return &gen.InfoResult{
-		SessionToken:         *authCtx.SessionID,
-		SessionCookie:        *authCtx.SessionID,
-		ActiveOrganizationID: authCtx.ActiveOrganizationID,
-		GramAccountType:      authCtx.AccountType,
-		UserID:               userInfo.UserID,
-		UserEmail:            userInfo.Email,
-		UserSignature:        userInfo.UserPylonSignature,
-		UserDisplayName:      userInfo.DisplayName,
-		UserPhotoURL:         userInfo.PhotoURL,
-		IsAdmin:              userInfo.Admin,
-		Organizations:        organizations,
+		SessionToken:          *authCtx.SessionID,
+		SessionCookie:         *authCtx.SessionID,
+		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
+		GramAccountType:       authCtx.AccountType,
+		HasActiveSubscription: authCtx.HasActiveSubscription,
+		UserID:                userInfo.UserID,
+		UserEmail:             userInfo.Email,
+		UserSignature:         userInfo.UserPylonSignature,
+		UserDisplayName:       userInfo.DisplayName,
+		UserPhotoURL:          userInfo.PhotoURL,
+		IsAdmin:               userInfo.Admin,
+		Organizations:         organizations,
 	}, nil
 }
 

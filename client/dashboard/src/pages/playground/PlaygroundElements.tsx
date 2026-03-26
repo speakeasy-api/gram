@@ -7,7 +7,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -21,13 +21,17 @@ import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSess
 import {
   useGetMcpMetadata,
   useListEnvironments,
-  useListToolsets,
 } from "@gram/client/react-query/index.js";
+import { useToolset } from "@gram/client/react-query/toolset.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { AlertCircle, HistoryIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import {
+  getToolsetOAuthMode,
+  useExternalMcpOAuthStatus,
+} from "./PlaygroundAuth";
 import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
 
 interface PlaygroundElementsProps {
@@ -58,11 +62,14 @@ export function PlaygroundElements({
   const initialThreadId = searchParams.get("threadId") ?? undefined;
 
   // Get toolset data to construct MCP URL
-  const { data: toolsetsData } = useListToolsets();
-  const toolset = toolsetsData?.toolsets?.find((ts) => ts.slug === toolsetSlug);
+  const { data: toolset } = useToolset(
+    { slug: toolsetSlug ?? "" },
+    {},
+    { enabled: !!toolsetSlug },
+  );
 
-  // Get MCP URL from toolset (always uses Gram domain, not custom domains)
-  const mcpUrl = useInternalMcpUrl(toolset);
+  // Get MCP URL from toolset (uses custom domain if configured)
+  const { url: mcpUrl } = useMcpUrl(toolset);
 
   // Get environments and MCP metadata for auth status check
   const { data: environmentsData } = useListEnvironments();
@@ -85,6 +92,18 @@ export function PlaygroundElements({
     environmentSlug ?? defaultEnvironmentSlug,
     mcpMetadata,
   );
+
+  // Check if this toolset requires OAuth at the toolset level
+  const oauthMode = useMemo(
+    () => (toolset ? getToolsetOAuthMode(toolset) : "none"),
+    [toolset],
+  );
+  const hasOAuth = oauthMode !== "none";
+
+  const { data: oauthStatus, isLoading: oauthStatusLoading } =
+    useExternalMcpOAuthStatus(toolset?.id, {
+      enabled: hasOAuth,
+    });
 
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {
@@ -127,13 +146,27 @@ export function PlaygroundElements({
     );
   }
 
+  // Block rendering if OAuth is required but user is not authenticated
+  if (
+    hasOAuth &&
+    !oauthStatusLoading &&
+    oauthStatus?.status !== "authenticated"
+  ) {
+    const providerName =
+      toolset?.oauthProxyServer?.oauthProxyProviders?.[0]?.slug ??
+      toolset?.externalOauthServer?.slug ??
+      toolset?.name ??
+      "provider";
+    return <OAuthRequiredNotice providerName={providerName} />;
+  }
+
   return (
     <GramElementsProvider
       config={{
         projectSlug: project.slug,
         api: {
           url: getServerURL(),
-          sessionFn: getSession,
+          session: getSession,
           headers: {
             "X-Gram-Source": "playground",
             ...userProvidedHeaders,
@@ -146,6 +179,9 @@ export function PlaygroundElements({
         },
         mcp: mcpUrl,
         gramEnvironment: environmentSlug ?? undefined,
+        environment: {
+          ...userProvidedHeaders,
+        },
         variant: "standalone",
         model: {
           defaultModel: model as Model,
@@ -169,7 +205,6 @@ export function PlaygroundElements({
         components: {
           ThreadWelcome: GramThreadWelcome,
         },
-        environment: userProvidedHeaders,
       }}
     >
       <div className="h-full flex flex-col min-h-0">
@@ -183,9 +218,9 @@ export function PlaygroundElements({
             </PopoverTrigger>
             <PopoverContent
               align="start"
-              className="w-72 p-0 max-h-96 overflow-y-scroll"
+              className="w-72 p-0 min-h-fit max-h-96 overflow-y-scroll"
             >
-              <ChatHistory className="h-full max-h-96 overflow-y-auto" />
+              <ChatHistory className="h-full min-h-fit max-h-96 overflow-y-auto" />
             </PopoverContent>
           </Popover>
           <div className="flex items-center gap-2">{additionalActions}</div>
@@ -227,6 +262,26 @@ function AuthWarningBanner({
           Configure now
         </routes.mcp.details.Link>
       </span>
+    </div>
+  );
+}
+
+function OAuthRequiredNotice({ providerName }: { providerName: string }) {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3 text-center max-w-md px-4">
+        <div className="rounded-full bg-warning/15 p-3">
+          <ShieldAlert className="size-6 text-warning" />
+        </div>
+        <Type className="font-medium">OAuth Connection Required</Type>
+        <Type muted className="text-sm">
+          This MCP server requires authentication with{" "}
+          <span className="font-medium text-foreground">{providerName}</span>.
+          Use the <span className="font-medium text-foreground">Connect</span>{" "}
+          button in the Authentication section of the sidebar to authorize
+          access.
+        </Type>
+      </div>
     </div>
   );
 }

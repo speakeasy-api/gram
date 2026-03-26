@@ -35,10 +35,12 @@ var ErrGenerationNotFound = errors.New("generation not found")
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-opus-4.6":     true,
 	"anthropic/claude-sonnet-4.5":   true,
 	"anthropic/claude-haiku-4.5":    true,
 	"anthropic/claude-sonnet-4":     true,
 	"anthropic/claude-opus-4.5":     true,
+	"openai/gpt-5.4":                true,
 	"openai/gpt-4o":                 true,
 	"openai/gpt-4o-mini":            true,
 	"openai/gpt-5.1-codex":          true,
@@ -78,7 +80,7 @@ type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)
 	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
-	TriggerModelUsageTracking(ctx context.Context, generationID string, orgID string, projectID string, source billing.ModelUsageSource, chatID string) error
+	GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error)
 }
 
 type KeyRefresher interface {
@@ -94,7 +96,6 @@ type OpenRouter struct {
 	orClient        *http.Client
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
-	tracking        billing.Tracker
 }
 
 func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
@@ -107,7 +108,6 @@ func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey stri
 		orClient:        retryablehttp.NewClient().StandardClient(),
 		refresher:       refresher,
 		featureClient:   featureClient,
-		tracking:        tracking,
 	}
 }
 
@@ -435,23 +435,26 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	return &genResp, resp.StatusCode, nil
 }
 
+type ModelUsage struct {
+	TotalCost             *float64 `json:"total_cost"`
+	CacheDiscount         float64  `json:"cache_discount"`
+	UpstreamInferenceCost float64  `json:"upstream_inference_cost"`
+	Model                 string   `json:"model"`
+	TokensPrompt          int      `json:"tokens_prompt"`
+	TokensCompletion      int      `json:"tokens_completion"`
+	NativeTokensCached    int      `json:"native_tokens_cached"`
+	NativeTokensReasoning int      `json:"native_tokens_reasoning"`
+}
+
 // TriggerModelUsageTracking fetches generation details from OpenRouter and tracks model usage.
-func (o *OpenRouter) TriggerModelUsageTracking(
+func (o *OpenRouter) GetModelUsage(
 	ctx context.Context,
 	generationID string,
 	orgID string,
-	projectID string,
-	source billing.ModelUsageSource,
-	chatID string,
-) error {
+) (*ModelUsage, error) {
 	var genResp *generationResponse
 	var statusCode int
 	var err error
-
-	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
-	}
 
 	// The generation is typically not available synchronously with the chat completion but becomes available quickly.
 	// Temporal could handle reliability here, but given we don't want to move this action to temporal right now,
@@ -467,23 +470,23 @@ func (o *OpenRouter) TriggerModelUsageTracking(
 		if statusCode == http.StatusNotFound && attempt < len(backoffs)-1 {
 			select {
 			case <-ctx.Done():
-				return fmt.Errorf("context cancelled while fetching generation details: %w", ctx.Err())
+				return nil, fmt.Errorf("context cancelled while fetching generation details: %w", ctx.Err())
 			case <-time.After(backoffs[attempt]):
 				continue
 			}
 		}
 
 		if statusCode == http.StatusNotFound {
-			return fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
+			return nil, fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
 		}
-		return err
+		return nil, err
 	}
 
 	if err != nil {
 		if statusCode == http.StatusNotFound {
-			return fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
+			return nil, fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
 		}
-		return err
+		return nil, err
 	}
 
 	var cost *float64
@@ -496,24 +499,14 @@ func (o *OpenRouter) TriggerModelUsageTracking(
 		)
 	}
 
-	event := billing.ModelUsageEvent{
-		OrganizationSlug:      org.Slug,
-		OrganizationID:        orgID,
-		ProjectID:             projectID,
-		Source:                source,
-		ChatID:                chatID,
-		Model:                 genResp.Data.Model,
-		InputTokens:           int64(genResp.Data.TokensPrompt),
-		OutputTokens:          int64(genResp.Data.TokensCompletion),
-		TotalTokens:           int64(genResp.Data.TokensPrompt + genResp.Data.TokensCompletion),
-		Cost:                  cost,
-		NativeTokensCached:    int64(genResp.Data.NativeTokensCached),
-		NativeTokensReasoning: int64(genResp.Data.NativeTokensReasoning),
+	return &ModelUsage{
+		TotalCost:             cost,
 		CacheDiscount:         genResp.Data.CacheDiscount,
 		UpstreamInferenceCost: genResp.Data.UpstreamInferenceCost,
-	}
-
-	o.tracking.TrackModelUsage(ctx, event)
-
-	return nil
+		Model:                 genResp.Data.Model,
+		TokensPrompt:          genResp.Data.TokensPrompt,
+		TokensCompletion:      genResp.Data.TokensCompletion,
+		NativeTokensCached:    genResp.Data.NativeTokensCached,
+		NativeTokensReasoning: genResp.Data.NativeTokensReasoning,
+	}, nil
 }

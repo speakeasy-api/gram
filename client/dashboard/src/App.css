@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "tw-shimmer";
 @reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -83,4 +84,20 @@
   transition-property: all;
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dotted background scroll animation for catalog cards */
+@keyframes scroll-dots {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 64px 64px;
+  }
+}
+
+.server-card:hover .scroll-dots-target,
+.dot-card:hover .scroll-dots-target {
+  animation: scroll-dots 3s linear infinite;
+  color: oklch(0.553 0.013 58.071 / 0.4);
 }

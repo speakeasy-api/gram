@@ -58,7 +58,7 @@ func (v *ValidateDeployment) Do(ctx context.Context, projectID uuid.UUID, deploy
 	var validationError *oops.ShareableError
 
 	switch billing.Tier(org.GramAccountType) {
-	case billing.TierFree:
+	case billing.TierBase:
 		if len(deployment.FunctionsAssets) > 5 {
 			validationError = oops.E(oops.CodeForbidden, nil, "Free tier only allows up to 5 function sources. Please contact Speakeasy support for assistance.").Log(ctx, v.logger)
 		}

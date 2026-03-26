@@ -1,6 +1,7 @@
 package testenv
 
 import (
+	"flag"
 	"log/slog"
 	"net/url"
 	"os"
@@ -49,7 +50,7 @@ func NewEncryptionClient(t *testing.T) *encryption.Client {
 }
 
 func NewLogger(*testing.T) *slog.Logger {
-	if testing.Verbose() {
+	if isTestingVerbose() {
 		return slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
 			RawLevel:    os.Getenv("LOG_LEVEL"),
 			Pretty:      true,
@@ -58,6 +59,14 @@ func NewLogger(*testing.T) *slog.Logger {
 	} else {
 		return slog.New(slog.DiscardHandler)
 	}
+}
+
+func isTestingVerbose() bool {
+	if flag.CommandLine == nil || !flag.CommandLine.Parsed() {
+		return false
+	}
+
+	return testing.Verbose()
 }
 
 func NewTracerProvider(t *testing.T) trace.TracerProvider {
@@ -82,6 +91,7 @@ func NewMCPRegistryClient(t *testing.T, logger *slog.Logger, tracerProvider trac
 		NewLogger(t),
 		tracerProvider,
 		externalmcp.NewPulseBackend(pulseURL, "test-tenant-id", conv.NewSecret([]byte("test-api-key"))),
+		nil,
 	)
 	require.NoError(t, err, "expected mcp registry client to initialize without error")
 

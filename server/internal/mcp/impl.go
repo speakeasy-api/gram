@@ -23,11 +23,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -58,7 +60,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
 type Service struct {
@@ -83,24 +84,18 @@ type Service struct {
 	features            *productfeatures.Client
 	telemetryService    *tm.Service
 	vectorToolStore     *rag.ToolsetVectorStore
-	temporal            temporal_client.Client
+	temporal            *temporal.Environment
 	sessions            *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
+	enc                 *encryption.Client
 }
 
 type oauthTokenInputs struct {
 	securityKeys []string // can be empty if a single token applies to the whole server
 	Token        string
 }
-
-type ToolMode string
-
-const (
-	ToolModeStatic  ToolMode = "static"
-	ToolModeDynamic ToolMode = "dynamic"
-)
 
 type mcpInputs struct {
 	projectID        uuid.UUID
@@ -114,6 +109,7 @@ type mcpInputs struct {
 	mode             ToolMode
 	userID           string
 	externalUserID   string
+	apiKeyID         string
 }
 
 func NewService(
@@ -136,7 +132,7 @@ func NewService(
 	telemSvc *tm.Service,
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporal *temporal.Environment,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -178,6 +174,7 @@ func NewService(
 		temporal:            temporal,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
+		enc:                 enc,
 	}
 }
 
@@ -187,6 +184,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 		return service.HandleGetServer(w, r, metadataService)
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP)
 
 	// OAuth 2.1 Authorization Server Metadata
@@ -385,19 +383,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
-	fullToolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, s.logger)
-	}
-	hasExternalMCPOAuth := externalmcp.ResolveOAuthConfig(fullToolset) != nil
-
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
 	authToken := r.Header.Get("Authorization")
 	authToken = strings.TrimPrefix(authToken, "Bearer ")
 	authToken = strings.TrimPrefix(authToken, "bearer ")
-	sessionToken := r.Header.Get(constants.ChatSessionsTokenHeader)
+	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
 
 	var tokenInputs []oauthTokenInputs
 
@@ -421,12 +413,20 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		oAuthProxyProvider = &providers[0]
 	}
 
+	// Switch handling auth based on both MCP configuration and request context.
+	//
+	// Possible MCP configurations, for reference:
+	// - "External OAuth" - User-provided OAuth server separate from Gram
+	// - "External MCP OAuth" - OAuth provided by a 3rd party MCP server
+	//   (usually via catalog)
+	// - "OAuth Proxy" - Gram acts as the OAuth2.1 DCR server between MCP client
+	//   & non-DCR OAuth Server
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 		// External OAuth server flow - only accept Authorization header
 		if authToken == "" {
 			s.logger.WarnContext(ctx, "No authorization token provided")
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 		}
 
@@ -437,11 +437,18 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
 		// Custom OAuth provider flow - only accept Authorization header
 		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
+		if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
+			s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+			oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+			if err != nil {
+				s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+			}
+		}
 		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
+		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
 
 		for _, externalSecret := range oauthToken.ExternalSecrets {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
@@ -449,26 +456,12 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				Token:        externalSecret.Token,
 			})
 		}
-	case toolset.McpIsPublic && hasExternalMCPOAuth:
-		// External MCP OAuth flow - only accept Authorization header
-		if authToken == "" {
-			w.Header().Set(
-				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
-			)
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-		}
-		// Token provided - pass it through as OAuth token for external MCP
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        authToken,
-		})
 	case !toolset.McpIsPublic:
-		// Private MCP - always allow sessionToken fallback since private servers require user authentication
+		// Private MCP - always allow chatSessionJwt fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 		token := authToken
 		if token == "" {
-			token = sessionToken
+			token = chatSessionJwt
 		}
 
 		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
@@ -479,16 +472,16 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		if isOAuthCapable {
 			w.Header().Set(
 				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
 			)
 		}
 
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
-		// Public MCP without OAuth - allow sessionToken fallback
+		// Public MCP without OAuth - allow chatSessionJwt fallback
 		token := authToken
 		if token == "" {
-			token = sessionToken
+			token = chatSessionJwt
 		}
 		if token != "" {
 			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
@@ -522,11 +515,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if !projectInOrg {
+		if projectInOrg {
+			authenticated = true
+		} else if !toolset.McpIsPublic {
+			// Only return 401 for non-public MCPs when the user is not in the owning org
 			return oops.C(oops.CodeUnauthorized)
 		}
-
-		authenticated = true
+		// For public MCPs accessed from outside the owning org, authenticated stays false
+		// so they get public access without environment/secrets
 	}
 
 	if !toolset.McpIsPublic && !authenticated {
@@ -561,11 +557,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
 
 	// Extract user IDs for telemetry
-	var userID, externalUserID string
+	var userID, externalUserID, apiKeyID string
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
 		userID = authCtx.UserID
 		externalUserID = authCtx.ExternalUserID
+		apiKeyID = authCtx.APIKeyID
 	}
+
 	mcpInputs := &mcpInputs{
 		projectID:        toolset.ProjectID,
 		toolset:          toolset.Slug,
@@ -578,6 +576,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		mode:             resolveToolMode(r, *toolset),
 		userID:           userID,
 		externalUserID:   externalUserID,
+		apiKeyID:         apiKeyID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -638,7 +637,6 @@ func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUI
 
 	return result
 }
-
 
 func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -732,6 +730,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		mode:             resolveToolMode(r, toolset),
 		userID:           authCtx.UserID,
 		externalUserID:   authCtx.ExternalUserID,
+		apiKeyID:         authCtx.APIKeyID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -858,7 +857,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.features, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -866,7 +865,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "resources/read":
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemetryService, s.features)
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemetryService)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,
@@ -901,7 +900,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 			return ctx, oops.E(oops.CodeUnauthorized, nil, "no session token found")
 		}
 
-		ctx, err = s.sessions.Authenticate(ctx, oAuthToken.ExternalSecrets[0].Token, false)
+		ctx, err = s.sessions.Authenticate(ctx, oAuthToken.ExternalSecrets[0].Token)
 		if err != nil {
 			return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authenticate session")
 		}
@@ -950,4 +949,197 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	// All strategies failed
 	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize").Log(ctx, s.logger)
+}
+
+//nolint:unused // kept for follow-up: restore stored-credential resolution for session-authenticated users
+func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *types.Toolset) (string, error) {
+	sessionCtx, err := s.sessions.AuthenticateWithCookie(ctx)
+	if err != nil {
+		return "", oops.E(oops.CodeUnauthorized, err, "failed to authenticate session for OAuth token lookup")
+	}
+
+	authCtx, ok := contextvalues.GetAuthContext(sessionCtx)
+	if !ok || authCtx == nil {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	oauthConfig := externalmcp.ResolveOAuthConfig(toolset)
+	if oauthConfig == nil {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "invalid toolset ID")
+	}
+
+	token, err := s.oauthRepo.GetUserOAuthToken(ctx, oauth_repo.GetUserOAuthTokenParams{
+		UserID:         authCtx.UserID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ToolsetID:      toolsetID,
+	})
+
+	if err != nil {
+		return "", oops.E(oops.CodeUnauthorized, err, "failed to get user OAuth token")
+	}
+
+	if token.ExpiresAt.Valid && token.ExpiresAt.Time.Before(time.Now()) {
+		return "", oops.E(oops.CodeUnauthorized, err, "OAuth token has expired")
+	}
+
+	accessToken, err := s.enc.Decrypt(token.AccessTokenEncrypted)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "unable to access oauth token")
+	}
+
+	return accessToken, nil
+}
+
+// HandleToolsList executes tools/list RPC for internal clients (e.g., agent workflows).
+// This method provides direct access to tool listing without HTTP overhead.
+func (s *Service) HandleToolsList(
+	ctx context.Context,
+	inputs *McpInputs,
+) (*ToolListResult, error) {
+	// Convert exported inputs to internal format
+	payload := inputs.toInternal()
+
+	// Create a dummy rawRequest for the internal handler
+	req := &rawRequest{
+		JSONRPC: "2.0",
+		ID:      msgID{format: 1, Number: 1, String: ""},
+		Method:  "tools/list",
+		Params:  json.RawMessage("{}"),
+	}
+
+	// Call existing handleToolsList with all dependencies
+	result, err := handleToolsList(
+		ctx,
+		s.logger,
+		s.db,
+		s.env,
+		payload,
+		req,
+		s.posthog,
+		&s.toolsetCache,
+		s.vectorToolStore,
+		s.temporal,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("handle tools list: %w", err)
+	}
+
+	// Parse the JSON result
+	var internalResult toolsListResult
+	if err := json.Unmarshal(result, &internalResult); err != nil {
+		return nil, fmt.Errorf("unmarshal tools list result: %w", err)
+	}
+
+	// Convert internal result to exported format
+	tools := make([]ToolListEntry, len(internalResult.Result.Tools))
+	for i, t := range internalResult.Result.Tools {
+		tools[i] = ToolListEntry{
+			Name:        t.Name,
+			Description: t.Description,
+			InputSchema: t.InputSchema,
+			Annotations: t.Annotations,
+			Meta:        t.Meta,
+		}
+	}
+
+	return &ToolListResult{
+		Tools: tools,
+	}, nil
+}
+
+// HandleToolsCall executes tools/call RPC for internal clients (e.g., agent workflows).
+// This method provides direct access to tool execution without HTTP overhead.
+func (s *Service) HandleToolsCall(
+	ctx context.Context,
+	inputs *McpInputs,
+	toolName string,
+	arguments json.RawMessage,
+) (*ToolCallResult, error) {
+	// Convert exported inputs to internal format
+	payload := inputs.toInternal()
+
+	// Construct rawRequest with tools/call parameters
+	params, err := json.Marshal(map[string]any{
+		"name":      toolName,
+		"arguments": arguments,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal tool call params: %w", err)
+	}
+
+	req := &rawRequest{
+		JSONRPC: "2.0",
+		ID:      msgID{format: 1, Number: 1, String: ""},
+		Method:  "tools/call",
+		Params:  params,
+	}
+
+	// Call existing handleToolsCall
+	result, err := handleToolsCall(
+		ctx,
+		s.logger,
+		s.metrics,
+		s.db,
+		s.env,
+		payload,
+		req,
+		s.toolProxy,
+		s.billingTracker,
+		s.billingRepository,
+		&s.toolsetCache,
+		s.telemetryService,
+		s.vectorToolStore,
+		s.temporal,
+		s.mcpMetadataRepo,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("handle tool call: %w", err)
+	}
+
+	// Parse the JSON result wrapper
+	var wrapper struct {
+		Result struct {
+			Content []json.RawMessage `json:"content"`
+			IsError bool              `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(result, &wrapper); err != nil {
+		return nil, fmt.Errorf("unmarshal tool call result: %w", err)
+	}
+
+	// Convert content chunks from json.RawMessage to ContentChunk
+	content := make([]ContentChunk, len(wrapper.Result.Content))
+	for i, rawChunk := range wrapper.Result.Content {
+		var chunk struct {
+			Type     string  `json:"type"`
+			Text     string  `json:"text,omitempty"`
+			Data     string  `json:"data,omitempty"`
+			MimeType *string `json:"mimeType,omitempty"`
+		}
+		if err := json.Unmarshal(rawChunk, &chunk); err != nil {
+			return nil, fmt.Errorf("unmarshal content chunk %d: %w", i, err)
+		}
+
+		mimeType := ""
+		if chunk.MimeType != nil {
+			mimeType = *chunk.MimeType
+		}
+
+		content[i] = ContentChunk{
+			Type:     chunk.Type,
+			Text:     chunk.Text,
+			Data:     chunk.Data,
+			MimeType: mimeType,
+		}
+	}
+
+	return &ToolCallResult{
+		Content: content,
+		IsError: wrapper.Result.IsError,
+	}, nil
 }

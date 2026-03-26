@@ -26,7 +26,7 @@ func TestCreateDeployment_OnlyFunctions(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-only-functions",
@@ -36,7 +36,7 @@ func TestCreateDeployment_OnlyFunctions(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "only-functions",
 				Slug:    "only-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{}, // No packages
@@ -86,7 +86,7 @@ func TestCreateDeployment_FunctionsWithManifestValidation(t *testing.T) {
 	// For this test, we'll use existing valid functions and verify tools are created
 
 	// Upload functions file that should create tools based on its internal manifest
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-functions-manifest-validation",
@@ -96,7 +96,7 @@ func TestCreateDeployment_FunctionsWithManifestValidation(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "manifest-functions",
 				Slug:    "manifest-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -125,7 +125,7 @@ func TestCreateDeployment_FunctionsWithManifestValidation(t *testing.T) {
 	for _, tool := range functionTools {
 		require.NotEmpty(t, tool.Name, "tool should have a name")
 		require.NotEmpty(t, tool.Description, "tool should have a description")
-		require.Equal(t, "nodejs:22", tool.Runtime, "tool should have correct runtime")
+		require.Equal(t, "nodejs:24", tool.Runtime, "tool should have correct runtime")
 	}
 
 	// Verify meta tags on tools
@@ -163,7 +163,7 @@ func TestCreateDeployment_WithFunctions_ValidJS(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload JS functions file with todo manifest
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-js-functions",
@@ -173,7 +173,7 @@ func TestCreateDeployment_WithFunctions_ValidJS(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -192,7 +192,7 @@ func TestCreateDeployment_WithFunctions_ValidJS(t *testing.T) {
 	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
 	require.Len(t, dep.Deployment.FunctionsAssets, 1, "expected 1 functions file")
 	require.Equal(t, "js-functions", dep.Deployment.FunctionsAssets[0].Name, "unexpected functions name")
-	require.Equal(t, "nodejs:22", dep.Deployment.FunctionsAssets[0].Runtime, "unexpected runtime")
+	require.Equal(t, "nodejs:24", dep.Deployment.FunctionsAssets[0].Runtime, "unexpected runtime")
 
 	// Verify function tools were created in database
 	repo := testrepo.New(ti.conn)
@@ -202,7 +202,7 @@ func TestCreateDeployment_WithFunctions_ValidJS(t *testing.T) {
 
 	// Verify all tools have correct runtime
 	for _, tool := range functionTools {
-		require.Equal(t, "nodejs:22", tool.Runtime, "tool runtime should match deployment runtime")
+		require.Equal(t, "nodejs:24", tool.Runtime, "tool runtime should match deployment runtime")
 	}
 
 	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
@@ -277,7 +277,7 @@ func TestCreateDeployment_WithFunctions_ValidTypeScript(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload TypeScript functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-typescript-functions",
@@ -287,7 +287,7 @@ func TestCreateDeployment_WithFunctions_ValidTypeScript(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "typescript-functions",
 				Slug:    "typescript-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -306,7 +306,7 @@ func TestCreateDeployment_WithFunctions_ValidTypeScript(t *testing.T) {
 	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
 	require.Len(t, dep.Deployment.FunctionsAssets, 1, "expected 1 functions file")
 	require.Equal(t, "typescript-functions", dep.Deployment.FunctionsAssets[0].Name, "unexpected functions name")
-	require.Equal(t, "nodejs:22", dep.Deployment.FunctionsAssets[0].Runtime, "unexpected runtime")
+	require.Equal(t, "nodejs:24", dep.Deployment.FunctionsAssets[0].Runtime, "unexpected runtime")
 
 	// Verify function tools were created in database
 	repo := testrepo.New(ti.conn)
@@ -329,7 +329,7 @@ func TestCreateDeployment_WithFunctions_MultipleFiles(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload multiple function files
-	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 	pyRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-petstore.json", "python:3.12")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
@@ -340,7 +340,7 @@ func TestCreateDeployment_WithFunctions_MultipleFiles(t *testing.T) {
 				AssetID: jsRes.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 			{
 				AssetID: pyRes.Asset.ID,
@@ -381,7 +381,7 @@ func TestCreateDeployment_WithFunctions_MultipleFiles(t *testing.T) {
 	runtimes := lo.Map(functionTools, func(tool testrepo.FunctionToolDefinition, _ int) string {
 		return tool.Runtime
 	})
-	require.Contains(t, runtimes, "nodejs:22", "expected nodejs:22 runtime tools")
+	require.Contains(t, runtimes, "nodejs:24", "expected nodejs:24 runtime tools")
 	require.Contains(t, runtimes, "python:3.12", "expected python:3.12 runtime tools")
 
 	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
@@ -410,7 +410,7 @@ func TestCreateDeployment_WithFunctions_AndOpenAPI(t *testing.T) {
 	require.NoError(t, err, "upload openapi v3 asset")
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey: "test-functions-and-openapi",
@@ -426,7 +426,7 @@ func TestCreateDeployment_WithFunctions_AndOpenAPI(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "todo-functions",
 				Slug:    "todo-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -464,11 +464,11 @@ func TestCreateDeployment_WithFunctions_Idempotency(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create same deployment multiple times with same idempotency key
 	var deploymentIDs []string
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 			IdempotencyKey:  "test-functions-idempotency",
 			Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
@@ -477,7 +477,7 @@ func TestCreateDeployment_WithFunctions_Idempotency(t *testing.T) {
 					AssetID: fres.Asset.ID,
 					Name:    "idempotent-functions",
 					Slug:    "idempotent-functions",
-					Runtime: "nodejs:22",
+					Runtime: "nodejs:24",
 				},
 			},
 			Packages:         []*gen.AddDeploymentPackageForm{},
@@ -610,7 +610,7 @@ func TestCreateDeployment_WithFunctions_InvalidAssetID(t *testing.T) {
 				AssetID: "invalid-uuid",
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -634,7 +634,7 @@ func TestCreateDeployment_WithFunctions_InvalidRuntime(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-invalid-runtime",
@@ -676,7 +676,7 @@ func TestCreateDeployment_WithFunctions_NonExistentAsset(t *testing.T) {
 				AssetID: uuid.New().String(), // Valid UUID but non-existent asset
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -700,7 +700,7 @@ func TestCreateDeployment_WithFunctions_EmptyName(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	_, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-empty-name",
@@ -710,7 +710,7 @@ func TestCreateDeployment_WithFunctions_EmptyName(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "", // Empty name
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -734,7 +734,7 @@ func TestCreateDeployment_WithFunctions_EmptySlug(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	_, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-empty-slug",
@@ -744,7 +744,7 @@ func TestCreateDeployment_WithFunctions_EmptySlug(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions",
 				Slug:    "", // Empty slug
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -769,7 +769,7 @@ func TestCreateDeployment_WithFunctions_BadToolsManifest(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file with bad tools manifest that contains malformed tools
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-bad-tools.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-bad-tools.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-bad-tools-manifest",
@@ -779,7 +779,7 @@ func TestCreateDeployment_WithFunctions_BadToolsManifest(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "bad-tools-functions",
 				Slug:    "bad-tools-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -812,7 +812,7 @@ func TestCreateDeployment_WithFunctions_InvalidManifest(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file with invalid JSON manifest
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-invalid.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-invalid.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-invalid-manifest",
@@ -822,7 +822,7 @@ func TestCreateDeployment_WithFunctions_InvalidManifest(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "invalid-manifest-functions",
 				Slug:    "invalid-manifest-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -855,7 +855,7 @@ func TestCreateDeployment_WithFunctions_ManifestValidation(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Test todo manifest (should create 4 tools)
-	todoRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	todoRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	todoDep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-todo-manifest-validation",
@@ -865,7 +865,7 @@ func TestCreateDeployment_WithFunctions_ManifestValidation(t *testing.T) {
 				AssetID: todoRes.Asset.ID,
 				Name:    "todo-functions",
 				Slug:    "todo-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -946,7 +946,7 @@ func TestCreateDeployment_WithFunctions_ManifestValidation(t *testing.T) {
 
 	// Verify all tools have correct runtimes
 	for _, tool := range todoTools {
-		require.Equal(t, "nodejs:22", tool.Runtime, "todo tools should have nodejs:22 runtime")
+		require.Equal(t, "nodejs:24", tool.Runtime, "todo tools should have nodejs:24 runtime")
 	}
 	for _, tool := range petstoreTools {
 		require.Equal(t, "python:3.12", tool.Runtime, "petstore tools should have python:3.12 runtime")
@@ -961,7 +961,7 @@ func TestDeploymentsService_CreateDeployment_WithResources(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file with resources
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-functions-with-resources",
@@ -971,7 +971,7 @@ func TestDeploymentsService_CreateDeployment_WithResources(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "functions-with-resources",
 				Slug:    "functions-with-resources",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -1093,7 +1093,7 @@ func TestDeploymentsService_CreateDeployment_ResourcesMultipleFiles(t *testing.T
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload multiple function files with resources
-	res1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	res1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 	res2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "python:3.12")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
@@ -1104,7 +1104,7 @@ func TestDeploymentsService_CreateDeployment_ResourcesMultipleFiles(t *testing.T
 				AssetID: res1.Asset.ID,
 				Name:    "functions-with-resources",
 				Slug:    "functions-with-resources",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 			{
 				AssetID: res2.Asset.ID,
@@ -1142,7 +1142,7 @@ func TestDeploymentsService_CreateDeployment_ResourcesMultipleFiles(t *testing.T
 
 	// Verify all resources are from the nodejs runtime function
 	for _, resource := range resources {
-		require.Equal(t, "nodejs:22", resource.Runtime, "all resources should be from nodejs function")
+		require.Equal(t, "nodejs:24", resource.Runtime, "all resources should be from nodejs function")
 	}
 }
 
@@ -1165,7 +1165,7 @@ func TestDeploymentsService_CreateDeployment_ResourcesWithOpenAPI(t *testing.T) 
 	require.NoError(t, err, "upload openapi v3 asset")
 
 	// Upload functions file with resources
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey: "test-resources-with-openapi",
@@ -1181,7 +1181,7 @@ func TestDeploymentsService_CreateDeployment_ResourcesWithOpenAPI(t *testing.T) 
 				AssetID: fres.Asset.ID,
 				Name:    "functions-with-resources",
 				Slug:    "functions-with-resources",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -1224,7 +1224,7 @@ func TestCreateDeployment_WithFunctions_AuthInputSaved(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file with authInput in manifest
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:24")
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-functions-authinput",
@@ -1234,7 +1234,7 @@ func TestCreateDeployment_WithFunctions_AuthInputSaved(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "authinput-functions",
 				Slug:    "authinput-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},

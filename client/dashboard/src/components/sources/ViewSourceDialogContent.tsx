@@ -24,6 +24,13 @@ export function useFetchSourceContent(
 ) {
   return useQuery<{ content: string; language: string }>({
     queryKey: ["sourceContent", source?.assetId, isOpenAPI],
+    enabled: !!source?.assetId,
+    throwOnError: false,
+    retry: (failureCount, error) => {
+      // Don't retry on 404s — the asset simply doesn't exist
+      if (error instanceof Error && error.message.includes("404")) return false;
+      return failureCount < 2;
+    },
     queryFn: async () => {
       if (!source) throw new Error("No source provided");
 
@@ -94,7 +101,6 @@ export function useFetchSourceContent(
         }
       }
     },
-    enabled: !!source,
   });
 }
 

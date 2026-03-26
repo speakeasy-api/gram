@@ -67,18 +67,19 @@ func (q *Queries) CloneDeployment(ctx context.Context, arg CloneDeploymentParams
 }
 
 const cloneDeploymentExternalMCPs = `-- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
 SELECT
   $1
   , current.registry_id
   , current.name
   , current.slug
   , current.registry_server_specifier
+  , current.selected_remotes
 FROM external_mcp_attachments as current
 WHERE current.deployment_id = $2
   AND current.deleted IS FALSE
   AND current.slug <> ALL ($3::text[])
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes
 `
 
 type CloneDeploymentExternalMCPsParams struct {
@@ -94,6 +95,7 @@ type CloneDeploymentExternalMCPsRow struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	SelectedRemotes         []string
 }
 
 func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDeploymentExternalMCPsParams) ([]CloneDeploymentExternalMCPsRow, error) {
@@ -112,6 +114,7 @@ func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDepl
 			&i.Name,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
+			&i.SelectedRemotes,
 		); err != nil {
 			return nil, err
 		}
@@ -273,8 +276,12 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 )
-SELECT 
+SELECT
   $1
   , current.function_id
   , current.tool_urn
@@ -285,6 +292,10 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
+  , current.read_only_hint
+  , current.destructive_hint
+  , current.idempotent_hint
+  , current.open_world_hint
 FROM function_tool_definitions as current
 WHERE current.deployment_id = $2
   AND current.name <> ALL ($3::text[])
@@ -503,6 +514,10 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , meta
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 ) VALUES (
     $1
   , $2
@@ -515,22 +530,30 @@ INSERT INTO function_tool_definitions (
   , $9
   , $10
   , $11
+  , $12
+  , $13
+  , $14
+  , $15
 )
-RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateFunctionsToolParams struct {
-	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-	ToolUrn      urn.Tool
-	ProjectID    uuid.UUID
-	Runtime      string
-	Name         string
-	Description  string
-	InputSchema  []byte
-	Variables    []byte
-	AuthInput    []byte
-	Meta         []byte
+	DeploymentID    uuid.UUID
+	FunctionID      uuid.UUID
+	ToolUrn         urn.Tool
+	ProjectID       uuid.UUID
+	Runtime         string
+	Name            string
+	Description     string
+	InputSchema     []byte
+	Variables       []byte
+	AuthInput       []byte
+	Meta            []byte
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
 }
 
 func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsToolParams) (FunctionToolDefinition, error) {
@@ -546,6 +569,10 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		arg.Variables,
 		arg.AuthInput,
 		arg.Meta,
+		arg.ReadOnlyHint,
+		arg.DestructiveHint,
+		arg.IdempotentHint,
+		arg.OpenWorldHint,
 	)
 	var i FunctionToolDefinition
 	err := row.Scan(
@@ -561,6 +588,10 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		&i.Variables,
 		&i.AuthInput,
 		&i.Meta,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -683,6 +714,10 @@ INSERT INTO http_tool_definitions (
   , default_server_url
   , request_content_type
   , response_filter
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 ) VALUES (
     $1
   , $2
@@ -712,8 +747,12 @@ INSERT INTO http_tool_definitions (
   , $26
   , $27
   , $28
+  , $29
+  , $30
+  , $31
+  , $32
 )
-RETURNING id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
@@ -745,6 +784,10 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	DefaultServerUrl    pgtype.Text
 	RequestContentType  pgtype.Text
 	ResponseFilter      *models.ResponseFilter
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
 }
 
 func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateOpenAPIv3ToolDefinitionParams) (HttpToolDefinition, error) {
@@ -777,6 +820,10 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		arg.DefaultServerUrl,
 		arg.RequestContentType,
 		arg.ResponseFilter,
+		arg.ReadOnlyHint,
+		arg.DestructiveHint,
+		arg.IdempotentHint,
+		arg.OpenWorldHint,
 	)
 	var i HttpToolDefinition
 	err := row.Scan(
@@ -810,6 +857,10 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.PathSettings,
 		&i.RequestContentType,
 		&i.ResponseFilter,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1241,6 +1292,15 @@ functions_tool_counts as (
     FROM function_tool_definitions
     WHERE deployment_id = $1 AND deleted IS FALSE
     GROUP BY deployment_id
+),
+external_mcp_tool_counts as (
+    SELECT
+        ema.deployment_id,
+        COUNT(DISTINCT emtd.id) as tool_count
+    FROM external_mcp_tool_definitions emtd
+    JOIN external_mcp_attachments ema ON emtd.external_mcp_attachment_id = ema.id
+    WHERE ema.deployment_id = $1 AND emtd.deleted IS FALSE AND ema.deleted IS FALSE
+    GROUP BY ema.deployment_id
 )
 SELECT
   deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at,
@@ -1263,6 +1323,7 @@ SELECT
   package_versions.build as package_version_build,
   COALESCE(openapiv3_tool_counts.tool_count, 0) as openapiv3_tool_count,
   COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count,
+  COALESCE(external_mcp_tool_counts.tool_count, 0) as external_mcp_tool_count,
   external_mcp_attachments.id as external_mcp_id,
   external_mcp_attachments.registry_id as external_mcp_registry_id,
   external_mcp_attachments.name as external_mcp_name,
@@ -1277,6 +1338,7 @@ LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
 LEFT JOIN openapiv3_tool_counts ON deployments.id = openapiv3_tool_counts.deployment_id
 LEFT JOIN functions_tool_counts ON deployments.id = functions_tool_counts.deployment_id
+LEFT JOIN external_mcp_tool_counts ON deployments.id = external_mcp_tool_counts.deployment_id
 LEFT JOIN external_mcp_attachments ON deployments.id = external_mcp_attachments.deployment_id AND external_mcp_attachments.deleted IS FALSE
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
@@ -1307,6 +1369,7 @@ type GetDeploymentWithAssetsRow struct {
 	PackageVersionBuild                pgtype.Text
 	Openapiv3ToolCount                 int64
 	FunctionsToolCount                 int64
+	ExternalMcpToolCount               int64
 	ExternalMcpID                      uuid.NullUUID
 	ExternalMcpRegistryID              uuid.NullUUID
 	ExternalMcpName                    pgtype.Text
@@ -1357,6 +1420,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.PackageVersionBuild,
 			&i.Openapiv3ToolCount,
 			&i.FunctionsToolCount,
+			&i.ExternalMcpToolCount,
 			&i.ExternalMcpID,
 			&i.ExternalMcpRegistryID,
 			&i.ExternalMcpName,
@@ -1441,7 +1505,7 @@ func (q *Queries) GetLatestDeploymentID(ctx context.Context, projectID uuid.UUID
 }
 
 const listDeploymentExternalMCPs = `-- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = $1 AND deleted IS FALSE
 ORDER BY created_at ASC
@@ -1454,6 +1518,7 @@ type ListDeploymentExternalMCPsRow struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	SelectedRemotes         []string
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 }
@@ -1474,6 +1539,7 @@ func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID u
 			&i.Name,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
+			&i.SelectedRemotes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1504,12 +1570,16 @@ SELECT
   COUNT(DISTINCT doa.id) as openapiv3_asset_count,
   COUNT(DISTINCT htd.id) as openapiv3_tool_count,
   COUNT(DISTINCT tf.function_id) as functions_asset_count,
-  COUNT(DISTINCT tf.id) as functions_tool_count
+  COUNT(DISTINCT tf.id) as functions_tool_count,
+  COUNT(DISTINCT ema.id) as external_mcp_asset_count,
+  COUNT(DISTINCT emtd.id) as external_mcp_tool_count
 FROM deployments d
 LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
 LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
 LEFT JOIN function_tool_definitions tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
+LEFT JOIN external_mcp_attachments ema ON d.id = ema.deployment_id AND ema.deleted IS FALSE
+LEFT JOIN external_mcp_tool_definitions emtd ON ema.id = emtd.external_mcp_attachment_id AND emtd.deleted IS FALSE
 WHERE
   d.project_id = $1
   AND d.id <= CASE 
@@ -1527,14 +1597,16 @@ type ListDeploymentsParams struct {
 }
 
 type ListDeploymentsRow struct {
-	ID                  uuid.UUID
-	UserID              string
-	CreatedAt           pgtype.Timestamptz
-	Status              string
-	Openapiv3AssetCount int64
-	Openapiv3ToolCount  int64
-	FunctionsAssetCount int64
-	FunctionsToolCount  int64
+	ID                    uuid.UUID
+	UserID                string
+	CreatedAt             pgtype.Timestamptz
+	Status                string
+	Openapiv3AssetCount   int64
+	Openapiv3ToolCount    int64
+	FunctionsAssetCount   int64
+	FunctionsToolCount    int64
+	ExternalMcpAssetCount int64
+	ExternalMcpToolCount  int64
 }
 
 func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams) ([]ListDeploymentsRow, error) {
@@ -1555,6 +1627,8 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 			&i.Openapiv3ToolCount,
 			&i.FunctionsAssetCount,
 			&i.FunctionsToolCount,
+			&i.ExternalMcpAssetCount,
+			&i.ExternalMcpToolCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1666,15 +1740,16 @@ func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploy
 }
 
 const upsertDeploymentExternalMCP = `-- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET
   registry_id = EXCLUDED.registry_id,
   name = EXCLUDED.name,
   registry_server_specifier = EXCLUDED.registry_server_specifier,
+  selected_remotes = EXCLUDED.selected_remotes,
   updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
 `
 
 type UpsertDeploymentExternalMCPParams struct {
@@ -1683,6 +1758,7 @@ type UpsertDeploymentExternalMCPParams struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	SelectedRemotes         []string
 }
 
 type UpsertDeploymentExternalMCPRow struct {
@@ -1692,6 +1768,7 @@ type UpsertDeploymentExternalMCPRow struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	SelectedRemotes         []string
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 }
@@ -1703,6 +1780,7 @@ func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDep
 		arg.Name,
 		arg.Slug,
 		arg.RegistryServerSpecifier,
+		arg.SelectedRemotes,
 	)
 	var i UpsertDeploymentExternalMCPRow
 	err := row.Scan(
@@ -1712,6 +1790,7 @@ func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDep
 		&i.Name,
 		&i.Slug,
 		&i.RegistryServerSpecifier,
+		&i.SelectedRemotes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

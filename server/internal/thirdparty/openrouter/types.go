@@ -182,7 +182,7 @@ type ToolCall struct {
 	Index    int              `json:"index,omitempty"`
 	ID       string           `json:"id,omitempty"`
 	Type     string           `json:"type,omitempty"` // always "function"
-	Function ToolCallFunction `json:"function,omitempty"`
+	Function ToolCallFunction `json:"function"`
 }
 
 // Tool defines a function tool available to the model

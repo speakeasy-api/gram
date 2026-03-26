@@ -23,12 +23,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -59,8 +58,7 @@ func handleResourcesRead(
 	env toolconfig.EnvironmentLoader,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
-	telemSvc *tm.Service,
-	featuresClient *productfeatures.Client) (json.RawMessage, error) {
+	telemSvc *tm.Service) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get resource request").Log(ctx, logger)
@@ -100,7 +98,7 @@ func handleResourcesRead(
 	}
 
 	descriptor := plan.Descriptor
-	
+
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
@@ -162,6 +160,7 @@ func handleResourcesRead(
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
+		logAttrs[attr.EventSourceKey] = string(tm.EventSourceResourceRead)
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
@@ -172,7 +171,12 @@ func handleResourcesRead(
 		if payload.externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
 		}
+		if payload.apiKeyID != "" {
+			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
+		}
 
+		logAttrs.RecordToolsetSlug(payload.toolset)
+		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{
@@ -193,6 +197,7 @@ func handleResourcesRead(
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
 		OAuthToken: "", // Resources do not support OAuth tokens for external MCP
+		GramEmail:  "",
 	}, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)

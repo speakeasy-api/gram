@@ -9,6 +9,8 @@ import { useLatestDeployment } from "@/hooks/toolTypes";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import {
   ChevronDown,
@@ -18,6 +20,7 @@ import {
   SquareFunction,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { AnnotationBadges } from "./AnnotationBadges";
 import { ToolVariationBadge } from "../tool-variation-badge";
 import { McpIcon } from "../ui/mcp-icon";
 import { SimpleTooltip } from "../ui/tooltip";
@@ -25,13 +28,20 @@ import { Type } from "../ui/type";
 import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
+export type ToolListUpdateFields = {
+  name?: string;
+  description?: string;
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
+
 interface ToolListProps {
   tools: Tool[]; // Accepts all tool types, filters to Tool internally
   toolset?: Toolset; // Optionally specificy the toolset to provide rows with additional context
-  onToolUpdate?: (
-    tool: Tool,
-    updates: { name?: string; description?: string },
-  ) => void;
+  onToolUpdate?: (tool: Tool, updates: ToolListUpdateFields) => void;
   onToolsRemove?: (toolUrns: string[]) => void;
   onAddToToolset?: (toolUrns: string[]) => void;
   onCreateToolset?: (toolUrns: string[]) => void;
@@ -260,7 +270,7 @@ function ToolRow({
   tool: Tool;
   availableToolUrns?: string[];
   groupName: string;
-  onUpdate?: (updates: { name?: string; description?: string }) => void;
+  onUpdate?: (updates: ToolListUpdateFields) => void;
   isSelected: boolean;
   isFocused: boolean;
   onCheckboxChange: (checked: boolean) => void;
@@ -270,13 +280,46 @@ function ToolRow({
 }) {
   const isDisabled = false;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editType, setEditType] = useState<"name" | "description">("name");
+  const [editType, setEditType] = useState<
+    "name" | "description" | "annotations"
+  >("name");
   const [editValue, setEditValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const openEditDialog = (type: "name" | "description") => {
+  // Annotation editing state
+  const [annotTitle, setAnnotTitle] = useState("");
+  const [annotReadOnly, setAnnotReadOnly] = useState(false);
+  const [annotDestructive, setAnnotDestructive] = useState(false);
+  const [annotIdempotent, setAnnotIdempotent] = useState(false);
+  const [annotOpenWorld, setAnnotOpenWorld] = useState(false);
+
+  const hasAnnotations = tool.type === "http" || tool.type === "function";
+
+  const openEditDialog = (type: "name" | "description" | "annotations") => {
     setEditType(type);
-    setEditValue(type === "name" ? tool.name : tool.description);
+    if (type === "annotations") {
+      setAnnotTitle(tool.variation?.title ?? tool.annotations?.title ?? "");
+      setAnnotReadOnly(
+        tool.variation?.readOnlyHint ?? tool.annotations?.readOnlyHint ?? false,
+      );
+      setAnnotDestructive(
+        tool.variation?.destructiveHint ??
+          tool.annotations?.destructiveHint ??
+          false,
+      );
+      setAnnotIdempotent(
+        tool.variation?.idempotentHint ??
+          tool.annotations?.idempotentHint ??
+          false,
+      );
+      setAnnotOpenWorld(
+        tool.variation?.openWorldHint ??
+          tool.annotations?.openWorldHint ??
+          false,
+      );
+    } else {
+      setEditValue(type === "name" ? tool.name : tool.description);
+    }
     setError(null);
     setEditDialogOpen(true);
   };
@@ -287,7 +330,17 @@ function ToolRow({
       return;
     }
 
-    onUpdate?.({ [editType]: editValue });
+    if (editType === "annotations") {
+      onUpdate?.({
+        title: annotTitle || undefined,
+        readOnlyHint: annotReadOnly,
+        destructiveHint: annotDestructive,
+        idempotentHint: annotIdempotent,
+        openWorldHint: annotOpenWorld,
+      });
+    } else {
+      onUpdate?.({ [editType]: editValue });
+    }
     setEditDialogOpen(false);
   };
 
@@ -307,6 +360,15 @@ function ToolRow({
       onClick: () => openEditDialog("description"),
       icon: "pencil" as const,
     },
+    ...(hasAnnotations
+      ? [
+          {
+            label: "Edit annotations",
+            onClick: () => openEditDialog("annotations"),
+            icon: "pencil" as const,
+          },
+        ]
+      : []),
     {
       label: "Copy name",
       onClick: handleCopyName,
@@ -369,6 +431,7 @@ function ToolRow({
                 {toolNameNoPrefix}
               </p>
               <ToolVariationBadge tool={tool} />
+              <AnnotationBadges tool={tool} />
             </Stack>
             <p className="text-sm leading-6 text-muted-foreground truncate">
               {tool.description || "No description"}
@@ -393,16 +456,91 @@ function ToolRow({
         <Dialog.Content>
           <Dialog.Header>
             <Dialog.Title>
-              Edit {editType === "name" ? "tool name" : "description"}
+              {editType === "annotations"
+                ? "Edit annotations"
+                : editType === "name"
+                  ? "Edit tool name"
+                  : "Edit description"}
             </Dialog.Title>
             <Dialog.Description>
-              {editType === "name"
-                ? `Update the name of tool '${tool.name}'`
-                : `Update the description of tool '${tool.name}'`}
+              {editType === "annotations"
+                ? `Override behavior hints for '${tool.name}'`
+                : editType === "name"
+                  ? `Update the name of tool '${tool.name}'`
+                  : `Update the description of tool '${tool.name}'`}
             </Dialog.Description>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            {editType === "name" ? (
+            {editType === "annotations" ? (
+              <Stack gap={4}>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Title</Label>
+                  <Input
+                    value={annotTitle}
+                    onChange={setAnnotTitle}
+                    placeholder="Display name override"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Behavior Hints</Label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Read-only</p>
+                        <p className="text-xs text-muted-foreground">
+                          Tool does not modify its environment
+                        </p>
+                      </div>
+                      <Switch
+                        checked={annotReadOnly}
+                        onCheckedChange={setAnnotReadOnly}
+                        aria-label="Read-only hint"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Destructive</p>
+                        <p className="text-xs text-muted-foreground">
+                          Tool may perform destructive updates
+                        </p>
+                      </div>
+                      <Switch
+                        checked={annotDestructive}
+                        onCheckedChange={setAnnotDestructive}
+                        aria-label="Destructive hint"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Idempotent</p>
+                        <p className="text-xs text-muted-foreground">
+                          Repeated calls with same arguments have no additional
+                          effect
+                        </p>
+                      </div>
+                      <Switch
+                        checked={annotIdempotent}
+                        onCheckedChange={setAnnotIdempotent}
+                        aria-label="Idempotent hint"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Open-world</p>
+                        <p className="text-xs text-muted-foreground">
+                          Tool interacts with external entities
+                        </p>
+                      </div>
+                      <Switch
+                        checked={annotOpenWorld}
+                        onCheckedChange={setAnnotOpenWorld}
+                        aria-label="Open-world hint"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </Stack>
+            ) : editType === "name" ? (
               <Stack gap={2}>
                 <Input
                   value={editValue}

@@ -28,12 +28,16 @@ SELECT
   COUNT(DISTINCT doa.id) as openapiv3_asset_count,
   COUNT(DISTINCT htd.id) as openapiv3_tool_count,
   COUNT(DISTINCT tf.function_id) as functions_asset_count,
-  COUNT(DISTINCT tf.id) as functions_tool_count
+  COUNT(DISTINCT tf.id) as functions_tool_count,
+  COUNT(DISTINCT ema.id) as external_mcp_asset_count,
+  COUNT(DISTINCT emtd.id) as external_mcp_tool_count
 FROM deployments d
 LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
 LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
 LEFT JOIN function_tool_definitions tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
+LEFT JOIN external_mcp_attachments ema ON d.id = ema.deployment_id AND ema.deleted IS FALSE
+LEFT JOIN external_mcp_tool_definitions emtd ON ema.id = emtd.external_mcp_attachment_id AND emtd.deleted IS FALSE
 WHERE
   d.project_id = @project_id
   AND d.id <= CASE 
@@ -99,6 +103,15 @@ functions_tool_counts as (
     FROM function_tool_definitions
     WHERE deployment_id = @id AND deleted IS FALSE
     GROUP BY deployment_id
+),
+external_mcp_tool_counts as (
+    SELECT
+        ema.deployment_id,
+        COUNT(DISTINCT emtd.id) as tool_count
+    FROM external_mcp_tool_definitions emtd
+    JOIN external_mcp_attachments ema ON emtd.external_mcp_attachment_id = ema.id
+    WHERE ema.deployment_id = @id AND emtd.deleted IS FALSE AND ema.deleted IS FALSE
+    GROUP BY ema.deployment_id
 )
 SELECT
   sqlc.embed(deployments),
@@ -121,6 +134,7 @@ SELECT
   package_versions.build as package_version_build,
   COALESCE(openapiv3_tool_counts.tool_count, 0) as openapiv3_tool_count,
   COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count,
+  COALESCE(external_mcp_tool_counts.tool_count, 0) as external_mcp_tool_count,
   external_mcp_attachments.id as external_mcp_id,
   external_mcp_attachments.registry_id as external_mcp_registry_id,
   external_mcp_attachments.name as external_mcp_name,
@@ -135,6 +149,7 @@ LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
 LEFT JOIN openapiv3_tool_counts ON deployments.id = openapiv3_tool_counts.deployment_id
 LEFT JOIN functions_tool_counts ON deployments.id = functions_tool_counts.deployment_id
+LEFT JOIN external_mcp_tool_counts ON deployments.id = external_mcp_tool_counts.deployment_id
 LEFT JOIN external_mcp_attachments ON deployments.id = external_mcp_attachments.deployment_id AND external_mcp_attachments.deleted IS FALSE
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
@@ -290,8 +305,12 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 )
-SELECT 
+SELECT
   @clone_deployment_id
   , current.function_id
   , current.tool_urn
@@ -302,6 +321,10 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
+  , current.read_only_hint
+  , current.destructive_hint
+  , current.idempotent_hint
+  , current.open_world_hint
 FROM function_tool_definitions as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.name <> ALL (@excluded_names::text[])
@@ -444,6 +467,10 @@ INSERT INTO http_tool_definitions (
   , default_server_url
   , request_content_type
   , response_filter
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 ) VALUES (
     @project_id
   , @deployment_id
@@ -473,6 +500,10 @@ INSERT INTO http_tool_definitions (
   , @default_server_url
   , @request_content_type
   , @response_filter
+  , @read_only_hint
+  , @destructive_hint
+  , @idempotent_hint
+  , @open_world_hint
 )
 RETURNING *;
 
@@ -519,6 +550,10 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , meta
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 ) VALUES (
     @deployment_id
   , @function_id
@@ -531,6 +566,10 @@ INSERT INTO function_tool_definitions (
   , @variables
   , @auth_input
   , @meta
+  , @read_only_hint
+  , @destructive_hint
+  , @idempotent_hint
+  , @open_world_hint
 )
 RETURNING *;
 
@@ -636,32 +675,34 @@ INSERT INTO functions_access (
 RETURNING id;
 
 -- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
-VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
+VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier, @selected_remotes)
 ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET
   registry_id = EXCLUDED.registry_id,
   name = EXCLUDED.name,
   registry_server_specifier = EXCLUDED.registry_server_specifier,
+  selected_remotes = EXCLUDED.selected_remotes,
   updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at;
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at;
 
 -- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = @deployment_id AND deleted IS FALSE
 ORDER BY created_at ASC;
 
 -- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
 SELECT
   @clone_deployment_id
   , current.registry_id
   , current.name
   , current.slug
   , current.registry_server_specifier
+  , current.selected_remotes
 FROM external_mcp_attachments as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.deleted IS FALSE
   AND current.slug <> ALL (@excluded_slugs::text[])
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier;
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes;

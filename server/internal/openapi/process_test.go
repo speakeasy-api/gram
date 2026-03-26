@@ -177,7 +177,7 @@ func TestTruncateWithHashConsistency(t *testing.T) {
 	maxLength := 50
 
 	results := make([]string, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		results[i] = truncateWithHash(input, maxLength)
 	}
 

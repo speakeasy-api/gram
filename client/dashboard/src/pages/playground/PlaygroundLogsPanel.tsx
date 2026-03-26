@@ -47,8 +47,10 @@ function getSeverityVariant(
   }
 }
 
-function formatTimestamp(timeUnixNano: number): string {
-  return new Date(timeUnixNano / 1_000_000).toLocaleTimeString();
+function formatTimestamp(timeUnixNano: string): string {
+  return new Date(
+    Number(BigInt(timeUnixNano) / 1_000_000n),
+  ).toLocaleTimeString();
 }
 
 function isSuccessLog(log: TelemetryLogRecord): boolean {
@@ -122,10 +124,8 @@ export function PlaygroundLogsPanel({
 
   const logs = data?.logs || [];
   // Logs are disabled if we get a 404 error (endpoint returns 404 when disabled)
-  // or if the response explicitly says enabled: false
   const logsDisabled =
-    (error instanceof ServiceError && error.statusCode === 404) ||
-    data?.enabled === false;
+    error instanceof ServiceError && error.statusCode === 404;
 
   return (
     <div className="h-full flex flex-col border-l">
@@ -270,7 +270,7 @@ export function PlaygroundLogsPanel({
                     </span>
                     <span className="font-mono text-right">
                       {new Date(
-                        selectedLog.timeUnixNano / 1_000_000,
+                        Number(BigInt(selectedLog.timeUnixNano) / 1_000_000n),
                       ).toISOString()}
                     </span>
                   </div>

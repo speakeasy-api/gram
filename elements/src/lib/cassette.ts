@@ -10,35 +10,35 @@
  * 3. Pass it to `<Replay cassette={...}>` to play it back
  */
 
-import { createUIMessageStream, type ChatTransport, type UIMessage } from 'ai'
-import type { ThreadMessage } from '@assistant-ui/react'
+import { createUIMessageStream, type ChatTransport, type UIMessage } from "ai";
+import type { ThreadMessage } from "@assistant-ui/react";
 
 // ---------------------------------------------------------------------------
 // Cassette types
 // ---------------------------------------------------------------------------
 
-export type CassetteTextPart = { type: 'text'; text: string }
-export type CassetteReasoningPart = { type: 'reasoning'; text: string }
+export type CassetteTextPart = { type: "text"; text: string };
+export type CassetteReasoningPart = { type: "reasoning"; text: string };
 export type CassetteToolCallPart = {
-  type: 'tool-call'
-  toolCallId: string
-  toolName: string
-  args: unknown
-  result?: unknown
-}
+  type: "tool-call";
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  result?: unknown;
+};
 
 export type CassettePart =
   | CassetteTextPart
   | CassetteReasoningPart
-  | CassetteToolCallPart
+  | CassetteToolCallPart;
 
 export interface CassetteMessage {
-  role: 'user' | 'assistant'
-  content: CassettePart[]
+  role: "user" | "assistant";
+  content: CassettePart[];
 }
 
 export interface Cassette {
-  messages: CassetteMessage[]
+  messages: CassetteMessage[];
 }
 
 // ---------------------------------------------------------------------------
@@ -47,13 +47,13 @@ export interface Cassette {
 
 export interface ReplayOptions {
   /** Milliseconds per character when streaming text. @default 15 */
-  typingSpeed?: number
+  typingSpeed?: number;
   /** Milliseconds to wait before showing each user message. @default 800 */
-  userMessageDelay?: number
+  userMessageDelay?: number;
   /** Milliseconds to wait before the assistant starts "typing". @default 400 */
-  assistantStartDelay?: number
+  assistantStartDelay?: number;
   /** Called when the full replay sequence finishes. */
-  onComplete?: () => void
+  onComplete?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,47 +65,47 @@ export interface ReplayOptions {
  * System messages are filtered out since they aren't displayed.
  */
 export function recordCassette(messages: readonly ThreadMessage[]): Cassette {
-  const cassetteMessages: CassetteMessage[] = []
+  const cassetteMessages: CassetteMessage[] = [];
 
   for (const msg of messages) {
-    if (msg.role === 'system') continue
+    if (msg.role === "system") continue;
 
-    const parts: CassettePart[] = []
+    const parts: CassettePart[] = [];
 
     for (const part of msg.content) {
       switch (part.type) {
-        case 'text':
+        case "text":
           if (part.text) {
-            parts.push({ type: 'text', text: part.text })
+            parts.push({ type: "text", text: part.text });
           }
-          break
-        case 'reasoning':
+          break;
+        case "reasoning":
           if (part.text) {
-            parts.push({ type: 'reasoning', text: part.text })
+            parts.push({ type: "reasoning", text: part.text });
           }
-          break
-        case 'tool-call':
+          break;
+        case "tool-call":
           parts.push({
-            type: 'tool-call',
+            type: "tool-call",
             toolCallId: part.toolCallId,
             toolName: part.toolName,
             args: part.args,
             result: part.result,
-          })
-          break
+          });
+          break;
         // Skip image, file, audio, source, data parts for now
       }
     }
 
     if (parts.length > 0) {
       cassetteMessages.push({
-        role: msg.role as 'user' | 'assistant',
+        role: msg.role as "user" | "assistant",
         content: parts,
-      })
+      });
     }
   }
 
-  return { messages: cassetteMessages }
+  return { messages: cassetteMessages };
 }
 
 // ---------------------------------------------------------------------------
@@ -116,19 +116,19 @@ export function recordCassette(messages: readonly ThreadMessage[]): Cassette {
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
-      reject(new DOMException('Aborted', 'AbortError'))
-      return
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
     }
-    const timeout = setTimeout(resolve, ms)
+    const timeout = setTimeout(resolve, ms);
     signal?.addEventListener(
-      'abort',
+      "abort",
       () => {
-        clearTimeout(timeout)
-        reject(new DOMException('Aborted', 'AbortError'))
+        clearTimeout(timeout);
+        reject(new DOMException("Aborted", "AbortError"));
       },
-      { once: true }
-    )
-  })
+      { once: true },
+    );
+  });
 }
 
 /**
@@ -138,14 +138,14 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  */
 export function createReplayTransport(
   cassette: Cassette,
-  options?: ReplayOptions
+  options?: ReplayOptions,
 ): ChatTransport<UIMessage> {
-  const typingSpeed = options?.typingSpeed ?? 15
-  const assistantStartDelay = options?.assistantStartDelay ?? 400
+  const typingSpeed = options?.typingSpeed ?? 15;
+  const assistantStartDelay = options?.assistantStartDelay ?? 400;
 
   // Cursor tracking which message index to serve next.
   // Starts at 0 and advances past user+assistant pairs.
-  let cursor = 0
+  let cursor = 0;
 
   return {
     sendMessages: async ({ abortSignal }) => {
@@ -153,51 +153,51 @@ export function createReplayTransport(
       // Advance cursor past it (it should be pointing at a user message).
       if (
         cursor < cassette.messages.length &&
-        cassette.messages[cursor].role === 'user'
+        cassette.messages[cursor].role === "user"
       ) {
-        cursor++
+        cursor++;
       }
 
       // Collect the next assistant message(s).
       // Multiple consecutive assistant messages are possible (e.g. multi-step tool calls).
-      const assistantMessages: CassetteMessage[] = []
+      const assistantMessages: CassetteMessage[] = [];
       while (
         cursor < cassette.messages.length &&
-        cassette.messages[cursor].role === 'assistant'
+        cassette.messages[cursor].role === "assistant"
       ) {
-        assistantMessages.push(cassette.messages[cursor])
-        cursor++
+        assistantMessages.push(cassette.messages[cursor]);
+        cursor++;
       }
 
       // Return a stream that emits the pre-recorded content
       return createUIMessageStream({
         execute: async ({ writer }) => {
           if (assistantMessages.length === 0) {
-            return
+            return;
           }
 
           try {
-            await sleep(assistantStartDelay, abortSignal)
+            await sleep(assistantStartDelay, abortSignal);
           } catch {
-            return // aborted
+            return; // aborted
           }
 
           for (const message of assistantMessages) {
             for (const part of message.content) {
               try {
-                await writeReplayPart(writer, part, typingSpeed, abortSignal)
+                await writeReplayPart(writer, part, typingSpeed, abortSignal);
               } catch {
-                return // aborted
+                return; // aborted
               }
             }
           }
         },
-      })
+      });
     },
     reconnectToStream: async () => {
-      return null
+      return null;
     },
-  }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -206,55 +206,55 @@ export function createReplayTransport(
 
 interface StreamWriter {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  write(part: any): void
+  write(part: any): void;
 }
 
 async function writeReplayPart(
   writer: StreamWriter,
   part: CassettePart,
   typingSpeed: number,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
 ): Promise<void> {
   switch (part.type) {
-    case 'text': {
-      const partId = crypto.randomUUID()
-      writer.write({ type: 'text-start', id: partId })
+    case "text": {
+      const partId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: partId });
       for (const char of part.text) {
-        writer.write({ type: 'text-delta', id: partId, delta: char })
-        await sleep(typingSpeed, abortSignal)
+        writer.write({ type: "text-delta", id: partId, delta: char });
+        await sleep(typingSpeed, abortSignal);
       }
-      writer.write({ type: 'text-end', id: partId })
-      break
+      writer.write({ type: "text-end", id: partId });
+      break;
     }
 
-    case 'reasoning': {
-      const partId = crypto.randomUUID()
-      writer.write({ type: 'reasoning-start', id: partId })
+    case "reasoning": {
+      const partId = crypto.randomUUID();
+      writer.write({ type: "reasoning-start", id: partId });
       for (const char of part.text) {
-        writer.write({ type: 'reasoning-delta', id: partId, delta: char })
-        await sleep(typingSpeed, abortSignal)
+        writer.write({ type: "reasoning-delta", id: partId, delta: char });
+        await sleep(typingSpeed, abortSignal);
       }
-      writer.write({ type: 'reasoning-end', id: partId })
-      break
+      writer.write({ type: "reasoning-end", id: partId });
+      break;
     }
 
-    case 'tool-call': {
+    case "tool-call": {
       writer.write({
-        type: 'tool-input-available',
+        type: "tool-input-available",
         toolCallId: part.toolCallId,
         toolName: part.toolName,
         input: part.args,
-      })
+      });
       if (part.result !== undefined) {
         // Brief pause to simulate tool execution
-        await sleep(300, abortSignal)
+        await sleep(300, abortSignal);
         writer.write({
-          type: 'tool-output-available',
+          type: "tool-output-available",
           toolCallId: part.toolCallId,
           output: part.result,
-        })
+        });
       }
-      break
+      break;
     }
   }
 }

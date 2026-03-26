@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Summarize development environment"
 //MISE hide=true
@@ -63,9 +63,7 @@ async function pokePostgreSQL() {
       throw new Error("Unexpected container info");
     }
   } catch (e: unknown) {
-    return console.log(
-      `⚪︎ Gram database: unable to get info from docker: ${e}`,
-    );
+    return console.log(`⚪︎ Gram database: unable to get info from docker: ${e}`);
   }
 
   const portspec = parsed.Publishers.find((p) => {

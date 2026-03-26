@@ -11,8 +11,56 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id
+) VALUES (
+    $1,
+    $2,
+    $3
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = COALESCE(organization_user_relationships.workos_membership_id, EXCLUDED.workos_membership_id),
+    updated_at = clock_timestamp()
+WHERE organization_user_relationships.deleted_at IS NULL
+`
+
+type AttachWorkOSUserToOrgParams struct {
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+}
+
+// Attach a WorkOS membership ID to an existing organization-user relationship. This is
+// used to link a WorkOS user to an organization in our system. If the relationship
+// doesn't exist, it will be created. If it does exist, the WorkOS membership ID will be
+// updated if it's not already set.
+func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUserToOrgParams) error {
+	_, err := q.db.Exec(ctx, attachWorkOSUserToOrg, arg.OrganizationID, arg.UserID, arg.WorkosMembershipID)
+	return err
+}
+
+const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND user_id = $2
+`
+
+type DeleteOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg DeleteOrganizationUserRelationshipParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -26,6 +74,9 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.Slug,
 		&i.GramAccountType,
 		&i.SsoConnectionID,
+		&i.WorkosID,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -56,7 +107,7 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 }
 
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
-SELECT id, organization_id, user_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, user_id, workos_membership_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
 WHERE organization_id = $1
   AND deleted_at IS NULL
@@ -75,6 +126,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.ID,
 			&i.OrganizationID,
 			&i.UserID,
+			&i.WorkosMembershipID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -124,7 +176,7 @@ ON CONFLICT (id) DO UPDATE SET
     slug = EXCLUDED.slug,
     sso_connection_id = EXCLUDED.sso_connection_id,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, sso_connection_id, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
@@ -148,6 +200,9 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.Slug,
 		&i.GramAccountType,
 		&i.SsoConnectionID,
+		&i.WorkosID,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -165,7 +220,7 @@ INSERT INTO organization_user_relationships (
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
-RETURNING id, organization_id, user_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, user_id, workos_membership_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertOrganizationUserRelationshipParams struct {
@@ -180,6 +235,7 @@ func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg Up
 		&i.ID,
 		&i.OrganizationID,
 		&i.UserID,
+		&i.WorkosMembershipID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

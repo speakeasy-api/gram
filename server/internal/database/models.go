@@ -56,6 +56,26 @@ type Asset struct {
 	Deleted       bool
 }
 
+type AuditLog struct {
+	ID                 uuid.UUID
+	Seq                int64
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ActorID            string
+	ActorType          string
+	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
+	Action             string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName pgtype.Text
+	SubjectSlug        pgtype.Text
+	BeforeSnapshot     []byte
+	AfterSnapshot      []byte
+	Metadata           []byte
+	CreatedAt          pgtype.Timestamptz
+}
+
 type Chat struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
@@ -115,6 +135,17 @@ type ChatResolutionMessage struct {
 	MessageID        uuid.UUID
 }
 
+type ChatUserFeedback struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	ChatID              uuid.UUID
+	MessageID           uuid.UUID
+	UserResolution      string
+	UserResolutionNotes pgtype.Text
+	ChatResolutionID    uuid.NullUUID
+	CreatedAt           pgtype.Timestamptz
+}
+
 type CustomDomain struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -166,6 +197,24 @@ type DeploymentStatus struct {
 	Status       string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
+}
+
+type DeploymentTag struct {
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	Name         string
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+}
+
+type DeploymentTagHistory struct {
+	ChangedAt            pgtype.Timestamptz
+	ChangedBy            pgtype.Text
+	ID                   uuid.UUID
+	TagID                uuid.UUID
+	PreviousDeploymentID uuid.NullUUID
+	NewDeploymentID      uuid.NullUUID
 }
 
 type DeploymentsFunction struct {
@@ -221,6 +270,7 @@ type ExternalMcpAttachment struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	SelectedRemotes         []string
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz
@@ -244,6 +294,11 @@ type ExternalMcpToolDefinition struct {
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
 	HeaderDefinitions          []byte
+	Title                      pgtype.Text
+	ReadOnlyHint               pgtype.Bool
+	DestructiveHint            pgtype.Bool
+	IdempotentHint             pgtype.Bool
+	OpenWorldHint              pgtype.Bool
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeletedAt                  pgtype.Timestamptz
@@ -317,22 +372,26 @@ type FunctionResourceDefinition struct {
 }
 
 type FunctionToolDefinition struct {
-	ID           uuid.UUID
-	ToolUrn      urn.Tool
-	ProjectID    uuid.UUID
-	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-	Runtime      string
-	Name         string
-	Description  string
-	InputSchema  []byte
-	Variables    []byte
-	AuthInput    []byte
-	Meta         []byte
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	ID              uuid.UUID
+	ToolUrn         urn.Tool
+	ProjectID       uuid.UUID
+	DeploymentID    uuid.UUID
+	FunctionID      uuid.UUID
+	Runtime         string
+	Name            string
+	Description     string
+	InputSchema     []byte
+	Variables       []byte
+	AuthInput       []byte
+	Meta            []byte
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type FunctionsAccess struct {
@@ -347,6 +406,15 @@ type FunctionsAccess struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type HooksServerNameOverride struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	RawServerName string
+	DisplayName   string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type HttpSecurity struct {
@@ -400,6 +468,10 @@ type HttpToolDefinition struct {
 	PathSettings        []byte
 	RequestContentType  pgtype.Text
 	ResponseFilter      *models.ResponseFilter
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -484,6 +556,7 @@ type OauthProxyServer struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 	Slug      string
+	Audience  pgtype.Text
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
@@ -513,24 +586,28 @@ type OrganizationFeature struct {
 }
 
 type OrganizationMetadatum struct {
-	ID              string
-	Name            string
-	Slug            string
-	GramAccountType string
-	SsoConnectionID pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DisabledAt      pgtype.Timestamptz
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	SsoConnectionID    pgtype.Text
+	WorkosID           pgtype.Text
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
-	ID             int64
-	OrganizationID string
-	UserID         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                 int64
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
 }
 
 type Package struct {
@@ -565,6 +642,23 @@ type PackageVersion struct {
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
 	Deleted      bool
+}
+
+// RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted.
+type PrincipalGrant struct {
+	ID uuid.UUID
+	// The organization this grant belongs to. Grants are always org-scoped.
+	OrganizationID string
+	// URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.
+	PrincipalUrn urn.Principal
+	// Derived from principal_urn. The type prefix, e.g. "user", "role".
+	PrincipalType string
+	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
+	Scope string
+	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
+	Resource  string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
 type Project struct {
@@ -617,15 +711,41 @@ type PromptTemplate struct {
 	Deleted       bool
 }
 
-type SlackAppConnection struct {
-	SlackTeamID        string
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	AccessToken        string
-	SlackTeamName      string
-	DefaultToolsetSlug pgtype.Text
+type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+	SlackTeamName      pgtype.Text
+	SlackBotUserID     pgtype.Text
+	SlackClientSecret  pgtype.Text
+	SlackSigningSecret pgtype.Text
+	SlackTeamID        pgtype.Text
+	OrganizationID     string
+	SlackBotToken      pgtype.Text
+	SlackClientID      pgtype.Text
+	SystemPrompt       pgtype.Text
+	Name               string
+	Status             string
+	IconAssetID        uuid.NullUUID
+	ProjectID          uuid.UUID
+	ID                 uuid.UUID
+	Deleted            bool
+}
+
+type SlackAppToolset struct {
+	ID         uuid.UUID
+	SlackAppID uuid.UUID
+	ToolsetID  uuid.UUID
+	CreatedAt  pgtype.Timestamptz
+}
+
+type SlackRegistration struct {
+	ID             uuid.UUID
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+	UserID         uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type SourceEnvironment struct {
@@ -638,36 +758,27 @@ type SourceEnvironment struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
-type TeamInvite struct {
-	ExpiresAt       pgtype.Timestamptz
+type ToolVariation struct {
+	ID              uuid.UUID
+	GroupID         uuid.UUID
+	SrcToolUrn      urn.Tool
+	SrcToolName     string
+	Confirm         pgtype.Text
+	ConfirmPrompt   pgtype.Text
+	Name            pgtype.Text
+	Summary         pgtype.Text
+	Description     pgtype.Text
+	Tags            []string
+	Summarizer      pgtype.Text
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
-	OrganizationID  string
-	Email           string
-	InvitedByUserID pgtype.Text
-	Status          string
-	Token           string
-	ID              uuid.UUID
 	Deleted         bool
-}
-
-type ToolVariation struct {
-	ID            uuid.UUID
-	GroupID       uuid.UUID
-	SrcToolUrn    urn.Tool
-	SrcToolName   string
-	Confirm       pgtype.Text
-	ConfirmPrompt pgtype.Text
-	Name          pgtype.Text
-	Summary       pgtype.Text
-	Description   pgtype.Text
-	Tags          []string
-	Summarizer    pgtype.Text
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
 }
 
 type ToolVariationsGroup struct {
@@ -756,6 +867,7 @@ type User struct {
 	PhotoUrl    pgtype.Text
 	Admin       bool
 	LastLogin   pgtype.Timestamptz
+	WorkosID    pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }

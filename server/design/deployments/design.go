@@ -222,7 +222,7 @@ var _ = Service("deployments", func() {
 })
 
 var DeploymentSummary = Type("DeploymentSummary", func() {
-	Required("id", "created_at", "user_id", "status", "openapiv3_asset_count", "openapiv3_tool_count", "functions_asset_count", "functions_tool_count")
+	Required("id", "created_at", "user_id", "status", "openapiv3_asset_count", "openapiv3_tool_count", "functions_asset_count", "functions_tool_count", "external_mcp_asset_count", "external_mcp_tool_count")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -249,6 +249,12 @@ var DeploymentSummary = Type("DeploymentSummary", func() {
 	})
 	Attribute("functions_tool_count", Int64, func() {
 		Description("The number of tools in the deployment generated from Functions.")
+	})
+	Attribute("external_mcp_asset_count", Int64, func() {
+		Description("The number of external MCP server assets.")
+	})
+	Attribute("external_mcp_tool_count", Int64, func() {
+		Description("The number of tools in the deployment generated from external MCP servers.")
 	})
 })
 
@@ -316,7 +322,7 @@ var AddFunctionsForm = Type("AddFunctionsForm", func() {
 		Description("A URL-friendly string that identifies the functions file. Usually derived from the name.")
 	})
 	Attribute("runtime", String, func() {
-		Description("The runtime to use when executing functions. Allowed values are: nodejs:22, python:3.12.")
+		Description("The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.")
 	})
 })
 
@@ -360,6 +366,10 @@ var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
 	Attribute("registry_server_specifier", String, func() {
 		Description("The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').")
 		Example("slack")
+	})
+	Attribute("selected_remotes", ArrayOf(String), func() {
+		Description("URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.")
+		Example([]string{"https://mcp.example.com/sse"})
 	})
 })
 

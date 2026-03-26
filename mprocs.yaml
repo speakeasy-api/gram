@@ -1,4 +1,8 @@
 procs:
+  mock-idp:
+    cmd: ["mise", "run", "start:mock-idp"]
+    stop:
+      send-keys: ["<C-c>"]
   server:
     cmd: ["mise", "run", "start:server"]
     stop: SIGTERM
@@ -14,6 +18,6 @@ procs:
     stop:
       send-keys: ["<C-c>"]
   otel:
-    cmd: ["docker", "compose", "attach", "oteltui"]
+    cmd: ["mise", "run", "start:oteltui"]
     stop:
-      send-keys: ["<C-p>", "<C-q>"]
+      send-keys: ["<C-c>"]

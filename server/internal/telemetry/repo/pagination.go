@@ -24,6 +24,12 @@ func withPagination(sb squirrel.SelectBuilder, cursor, sortOrder string) squirre
 	)
 }
 
+type TableName string
+
+const (
+	TableNameTraceSummaries TableName = "trace_summaries"
+)
+
 // withHavingPagination adds cursor-based HAVING conditions for aggregation queries.
 // Used when the query has GROUP BY and cursor pagination must use HAVING instead of WHERE.
 // Parameters:
@@ -31,18 +37,20 @@ func withPagination(sb squirrel.SelectBuilder, cursor, sortOrder string) squirre
 //   - sortOrder: "asc" or "desc"
 //   - projectID: required for scoping the subquery to the correct project
 //   - groupColumn: the column used in GROUP BY (e.g., "trace_id", "gram_chat_id")
-//   - timeExpr: the time expression to compare (e.g., "min(time_unix_nano)")
-func withHavingPagination(sb squirrel.SelectBuilder, cursor, sortOrder, projectID, groupColumn, timeExpr string) squirrel.SelectBuilder {
+//   - havingTimeExpr: the time expression for the outer HAVING clause (e.g., "start_time_unix_nano" alias)
+//   - subqueryTimeExpr: the time expression for the subquery SELECT (e.g., "min(start_time_unix_nano)")
+//   - tableName: the table to query in the subquery (e.g., "telemetry_logs" or "trace_summaries")
+func withHavingPagination(sb squirrel.SelectBuilder, cursor, sortOrder, projectID, groupColumn, havingTimeExpr, subqueryTimeExpr string, tableName TableName) squirrel.SelectBuilder {
 	if cursor == "" {
 		return sb
 	}
 
-	subquery := "(SELECT " + timeExpr + " FROM telemetry_logs WHERE gram_project_id = ? AND " + groupColumn + " = ? GROUP BY " + groupColumn + " LIMIT 1)"
+	subquery := "(SELECT " + subqueryTimeExpr + " FROM " + string(tableName) + " WHERE gram_project_id = ? AND " + groupColumn + " = ? GROUP BY " + groupColumn + " LIMIT 1)"
 
 	if sortOrder == "asc" {
-		return sb.Having(timeExpr+" > "+subquery, projectID, cursor)
+		return sb.Having(havingTimeExpr+" > "+subquery, projectID, cursor)
 	}
-	return sb.Having(timeExpr+" < "+subquery, projectID, cursor)
+	return sb.Having(havingTimeExpr+" < "+subquery, projectID, cursor)
 }
 
 // withHavingTuplePagination adds cursor-based HAVING conditions with tuple comparison for tie-breaking.

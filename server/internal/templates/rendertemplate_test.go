@@ -8,7 +8,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestTemplatesService_RenderTemplateByID_NoEngine_Success(t *testing.T) {
@@ -89,7 +88,7 @@ func TestTemplatesService_RenderTemplateByID_Mustache_Success(t *testing.T) {
 		Name:             types.Slug("mustache-template"),
 		Prompt:           "Hello {{name}}! You are {{age}} years old and live in {{city}}.",
 		Engine:           "mustache",
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "number"}, "city": {"type": "string"}}, "required": ["name", "age", "city"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "number"}, "city": {"type": "string"}}, "required": ["name", "age", "city"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -336,8 +335,8 @@ func TestTemplatesService_RenderTemplateByID_HigherOrderTool_JSON_Success(t *tes
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		Description:      conv.Ptr("A test higher order tool"),
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"document": {"type": "string"}}, "required": ["document"]}`),
+		Description:      new("A test higher order tool"),
+		Arguments:        new(`{"type": "object", "properties": {"document": {"type": "string"}}, "required": ["document"]}`),
 		ToolsHint:        []string{"read_file"},
 	})
 	require.NoError(t, err, "create template")
@@ -386,7 +385,7 @@ func TestTemplatesService_RenderTemplateByID_HigherOrderTool_JSON_InvalidJSON(t 
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		Description:      conv.Ptr("A test higher order tool with invalid JSON"),
+		Description:      new("A test higher order tool with invalid JSON"),
 		Arguments:        nil,
 		ToolsHint:        []string{},
 	})
@@ -425,8 +424,8 @@ func TestTemplatesService_RenderTemplateByID_HigherOrderTool_JSON_EmptySteps(t *
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		Description:      conv.Ptr("A test higher order tool with no steps"),
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {}, "required": []}`),
+		Description:      new("A test higher order tool with no steps"),
+		Arguments:        new(`{"type": "object", "properties": {}, "required": []}`),
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -460,8 +459,8 @@ func TestTemplatesService_RenderTemplateByID_RegularPrompt_NotHigherOrderTool(t 
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		Description:      conv.Ptr("A regular prompt template"),
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Description:      new("A regular prompt template"),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")

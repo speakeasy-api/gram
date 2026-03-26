@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 type IndexToolsetParams struct {
@@ -27,7 +28,7 @@ type IndexToolsetClient struct {
 
 func ExecuteIndexToolset(
 	ctx context.Context,
-	temporalClient client.Client,
+	env *tenv.Environment,
 	params IndexToolsetParams,
 ) (client.WorkflowRun, error) {
 	id := fmt.Sprintf(
@@ -35,9 +36,9 @@ func ExecuteIndexToolset(
 		params.ProjectID,
 		params.ToolsetSlug,
 	)
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       id,
-		TaskQueue:                string(TaskQueueMain),
+		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:       2 * time.Minute,

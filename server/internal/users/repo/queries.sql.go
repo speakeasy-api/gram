@@ -12,7 +12,7 @@ import (
 )
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, display_name, photo_url, admin, last_login, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
 WHERE id = $1
 `
 
@@ -26,6 +26,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 		&i.PhotoUrl,
 		&i.Admin,
 		&i.LastLogin,
+		&i.WorkosID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -33,7 +34,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, photo_url, admin, last_login, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
 WHERE email = $1
 `
 
@@ -47,10 +48,29 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.PhotoUrl,
 		&i.Admin,
 		&i.LastLogin,
+		&i.WorkosID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const setUserWorkosID = `-- name: SetUserWorkosID :exec
+UPDATE users 
+SET workos_id = $1, 
+  updated_at = clock_timestamp()
+WHERE id = $2 AND 
+  workos_id IS NULL
+`
+
+type SetUserWorkosIDParams struct {
+	WorkosID pgtype.Text
+	ID       string
+}
+
+func (q *Queries) SetUserWorkosID(ctx context.Context, arg SetUserWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, setUserWorkosID, arg.WorkosID, arg.ID)
+	return err
 }
 
 const upsertUser = `-- name: UpsertUser :one
@@ -63,7 +83,7 @@ ON CONFLICT (id) DO UPDATE SET
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
   updated_at = clock_timestamp()
-RETURNING id, email, display_name, photo_url, admin, last_login, created_at, updated_at, (xmax = 0) AS was_created
+RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at, (xmax = 0) AS was_created
 `
 
 type UpsertUserParams struct {
@@ -81,6 +101,7 @@ type UpsertUserRow struct {
 	PhotoUrl    pgtype.Text
 	Admin       bool
 	LastLogin   pgtype.Timestamptz
+	WorkosID    pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	WasCreated  bool
@@ -102,6 +123,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertU
 		&i.PhotoUrl,
 		&i.Admin,
 		&i.LastLogin,
+		&i.WorkosID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.WasCreated,

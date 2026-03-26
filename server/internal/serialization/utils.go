@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func valToString(val interface{}) string {
+func valToString(val any) string {
 	switch v := val.(type) {
 	case time.Time:
 		return v.Format(time.RFC3339Nano)
@@ -30,7 +30,7 @@ func isNil(typ reflect.Type, val reflect.Value) bool {
 		return true
 	}
 
-	if typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Map || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Interface {
+	if typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Map || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Interface {
 		return val.IsNil()
 	}
 

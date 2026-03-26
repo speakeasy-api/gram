@@ -27,7 +27,7 @@ func NewPylon(logger *slog.Logger, secret string) (*Pylon, error) {
 	}
 
 	return &Pylon{logger: logger, enabled: true, hashPool: &sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return hmac.New(sha256.New, secretBytes)
 		},
 	}}, nil

@@ -308,7 +308,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 	toolDesc := toolDescriptor{
 		xGramFound:          false,
 		xSpeakeasyMCPFound:  false,
-		confirm:             conv.Ptr(mv.ConfirmAlways),
+		confirm:             new(mv.ConfirmAlways),
 		confirmPrompt:       nil,
 		name:                name,
 		untruncatedName:     untruncatedName,
@@ -391,7 +391,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		originalName:        conv.PtrEmpty(name),
 		originalSummary:     conv.PtrEmpty(summary),
 		originalDescription: conv.PtrEmpty(description),
-		confirm:             conv.Ptr(confirm),
+		confirm:             new(confirm),
 		confirmPrompt:       customConfirmPrompt,
 		responseFilterType:  responseFilterType,
 	}

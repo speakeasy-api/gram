@@ -9,8 +9,8 @@
  * - VITE_DATADOG_SITE (optional, defaults to datadoghq.com)
  */
 export const DATADOG_CONFIG = {
-  applicationId: import.meta.env.VITE_DATADOG_APPLICATION_ID ?? '',
-  clientToken: import.meta.env.VITE_DATADOG_CLIENT_TOKEN ?? '',
-  site: import.meta.env.VITE_DATADOG_SITE ?? 'datadoghq.com',
-  service: 'gram-elements',
-} as const
+  applicationId: import.meta.env.VITE_DATADOG_APPLICATION_ID ?? "",
+  clientToken: import.meta.env.VITE_DATADOG_CLIENT_TOKEN ?? "",
+  site: import.meta.env.VITE_DATADOG_SITE ?? "datadoghq.com",
+  service: "gram-elements",
+} as const;

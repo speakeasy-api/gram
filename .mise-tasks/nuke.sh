@@ -3,7 +3,7 @@
 
 set -e
 
-docker compose --profile "*" down --volumes --rmi local --remove-orphans
+docker compose --profile "*" down --volumes --remove-orphans
 
 echo ""
 echo "💥 All infra resources destroyed"

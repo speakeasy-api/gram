@@ -1,0 +1,75 @@
+amends "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Builtins.pkl"
+
+local linters = new Mapping<String, Step> {
+  ["pkleval"] = Builtins.pkl
+  ["pklfmt"] = Builtins.pkl_format
+  ["gomodtidy"] {
+    glob = List("**/go.mod", "**/go.sum", "**/*.go")
+    fix = "go mod tidy"
+  }
+  ["gofmt"] {
+    glob = "**/*.go"
+    check_list_files =
+      """
+      FILES=$(gofmt -s -l {{files}})
+      if [ -n "$FILES" ]; then
+        echo "$FILES"
+        exit 1
+      fi
+      """
+    fix = "gofmt -s -w {{files}}"
+  }
+  ["gofix"] {
+    glob = "**/*.go"
+    fix = "mise run -q go:fix {{files}}"
+  }
+  ["speakeasy"] {
+    glob = List("overlays/**/*.yaml", "server/gen/http/openapi3.yaml")
+    check = "mise run -q gen:sdk --check"
+    fix = "mise run -q gen:sdk"
+  }
+  ["oxfmt"] {
+    glob =
+      List(
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts",
+        "**/*.css",
+        "**/*.scss",
+        "**/*.less",
+        "**/*.html",
+        "**/*.json",
+        "**/*.json5",
+        "**/*.jsonc",
+        "**/*.yaml",
+        "**/*.yml",
+        "**/*.markdown",
+        "**/*.markdown.mdx",
+        "**/*.md",
+      )
+    exclude = List(".speakeasy/**", "server/gen/**", "client/sdk/**", "pnpm-lock.yaml")
+    check = "pnpm oxfmt --check {{files}}"
+    fix = "pnpm oxfmt --write {{files}}"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = linters
+  }
+  ["fix"] {
+    fix = true
+    steps = linters
+  }
+  ["check"] {
+    steps = linters
+  }
+}

@@ -17,22 +17,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
-type toolsListResult struct {
+type toolsListResult = result[toolsListResultTools]
+
+type toolsListResultTools struct {
 	Tools []*toolListEntry `json:"tools"`
 }
 
 type toolListEntry struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema,omitempty,omitzero"`
-	Meta        map[string]any  `json:"_meta,omitempty"`
+	Name        string                       `json:"name"`
+	Description string                       `json:"description"`
+	InputSchema json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
+	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
+	Meta        map[string]any               `json:"_meta,omitempty"`
 }
 
 func handleToolsList(
@@ -45,7 +48,7 @@ func handleToolsList(
 	productMetrics *posthog.Posthog,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporalEnv *temporal.Environment,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -55,7 +58,7 @@ func handleToolsList(
 	}
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]interface{}{
+		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]any{
 			"project_id":           payload.projectID.String(),
 			"organization_id":      toolset.OrganizationID,
 			"authenticated":        payload.authenticated,
@@ -75,7 +78,7 @@ func handleToolsList(
 	var tools []*toolListEntry
 	switch payload.mode {
 	case ToolModeDynamic:
-		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporal)
+		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporalEnv)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").Log(ctx, logger)
 		}
@@ -88,9 +91,9 @@ func handleToolsList(
 		}
 	}
 
-	result := &result[toolsListResult]{
+	result := &toolsListResult{
 		ID: req.ID,
-		Result: toolsListResult{
+		Result: toolsListResultTools{
 			Tools: tools,
 		},
 	}
@@ -120,7 +123,7 @@ func buildToolListEntries(
 
 	userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
 
-	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	// Extract general OAuth token (no security-key binding)
 	var oauthToken string
 	for _, t := range payload.oauthTokenInputs {
 		if len(t.securityKeys) == 0 && t.Token != "" {
@@ -158,6 +161,7 @@ func buildToolListEntries(
 				Name:        extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
+				Annotations: extTool.Annotations,
 				Meta:        nil,
 			})
 		}
@@ -191,6 +195,21 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		Name:        toolEntry.Name,
 		Description: toolEntry.Description,
 		InputSchema: toolEntry.InputSchema,
+		Annotations: convertConvAnnotations(toolEntry.Annotations),
 		Meta:        toolEntry.Meta,
+	}
+}
+
+// convertConvAnnotations converts conv.ToolAnnotations to externalmcp.ToolAnnotations.
+func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotations {
+	if c == nil {
+		return nil
+	}
+	return &externalmcp.ToolAnnotations{
+		Title:           c.Title,
+		ReadOnlyHint:    c.ReadOnlyHint,
+		DestructiveHint: c.DestructiveHint,
+		IdempotentHint:  c.IdempotentHint,
+		OpenWorldHint:   c.OpenWorldHint,
 	}
 }

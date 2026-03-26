@@ -13,7 +13,7 @@
     {
       "id": "midnight-marinara",
       "name": "Midnight Marinara",
-      "coords": [-122.4093, 37.7990],
+      "coords": [-122.4093, 37.799],
       "description": "Focaccia‑style squares, late‑night favorite.",
       "city": "North Beach",
       "rating": 4.6,
@@ -43,7 +43,7 @@
     {
       "id": "luna-pie-collective",
       "name": "Luna Pie Collective",
-      "coords": [-122.4077, 37.7990],
+      "coords": [-122.4077, 37.799],
       "description": "Wood‑fired pies and burrata in North Beach.",
       "city": "North Beach",
       "rating": 4.6,
@@ -63,7 +63,7 @@
     {
       "id": "garden-ember-pies",
       "name": "Garden Ember Pies",
-      "coords": [-122.4380, 37.7722],
+      "coords": [-122.438, 37.7722],
       "description": "Neighborhood spot with seasonal toppings.",
       "city": "Lower Haight",
       "rating": 4.4,

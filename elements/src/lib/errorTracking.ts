@@ -1,19 +1,19 @@
-import { datadogRum } from '@datadog/browser-rum'
-import { DATADOG_CONFIG } from './errorTracking.config'
+import { datadogRum } from "@datadog/browser-rum";
+import { DATADOG_CONFIG } from "./errorTracking.config";
 
-let initialized = false
-let enabled = true
+let initialized = false;
+let enabled = true;
 
 export interface ErrorTrackingConfig {
-  enabled?: boolean
-  projectSlug?: string
-  variant?: string
+  enabled?: boolean;
+  projectSlug?: string;
+  variant?: string;
 }
 
 export interface ErrorContext {
-  source: 'error-boundary' | 'streaming' | 'stream-creation' | 'custom'
-  componentStack?: string
-  [key: string]: unknown
+  source: "error-boundary" | "streaming" | "stream-creation" | "custom";
+  componentStack?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -23,19 +23,19 @@ export interface ErrorContext {
 export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
   // Check if explicitly disabled
   if (config.enabled === false) {
-    enabled = false
-    return
+    enabled = false;
+    return;
   }
 
   // Prevent double initialization
   if (initialized) {
-    return
+    return;
   }
 
   // Skip if credentials not configured (e.g., local dev without env vars)
   if (!DATADOG_CONFIG.applicationId || !DATADOG_CONFIG.clientToken) {
-    enabled = false
-    return
+    enabled = false;
+    return;
   }
 
   try {
@@ -44,7 +44,7 @@ export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
       clientToken: DATADOG_CONFIG.clientToken,
       site: DATADOG_CONFIG.site,
       service: DATADOG_CONFIG.service,
-      env: process.env.NODE_ENV || 'production',
+      env: process.env.NODE_ENV || "production",
       sessionSampleRate: 100,
       sessionReplaySampleRate: 100,
       trackUserInteractions: true,
@@ -53,21 +53,21 @@ export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
 
       // Note: we need to mask everything, not just user input, as sensitive data may be echo-ed
       // back in the LLM messages or the user messages in the chat window
-      defaultPrivacyLevel: 'mask',
-    })
+      defaultPrivacyLevel: "mask",
+    });
 
     // Set global context
     if (config.projectSlug) {
-      datadogRum.setGlobalContextProperty('projectSlug', config.projectSlug)
+      datadogRum.setGlobalContextProperty("projectSlug", config.projectSlug);
     }
     if (config.variant) {
-      datadogRum.setGlobalContextProperty('variant', config.variant)
+      datadogRum.setGlobalContextProperty("variant", config.variant);
     }
 
-    initialized = true
+    initialized = true;
   } catch (error) {
-    console.warn('[Elements] Failed to initialize Datadog RUM:', error)
-    enabled = false
+    console.warn("[Elements] Failed to initialize Datadog RUM:", error);
+    enabled = false;
   }
 }
 
@@ -77,22 +77,22 @@ export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
  */
 export function trackError(
   error: Error | unknown,
-  context: ErrorContext
+  context: ErrorContext,
 ): void {
   if (!enabled || !initialized) {
-    return
+    return;
   }
 
-  const errorObj = error instanceof Error ? error : new Error(String(error))
+  const errorObj = error instanceof Error ? error : new Error(String(error));
 
   try {
     datadogRum.addError(errorObj, {
       ...context,
       timestamp: new Date().toISOString(),
-    })
+    });
   } catch (e) {
     // Silently fail - we don't want error tracking to cause more errors
-    console.warn('[Elements] Failed to track error:', e)
+    console.warn("[Elements] Failed to track error:", e);
   }
 }
 
@@ -100,5 +100,5 @@ export function trackError(
  * Check if error tracking is currently enabled.
  */
 export function isErrorTrackingEnabled(): boolean {
-  return enabled && initialized
+  return enabled && initialized;
 }

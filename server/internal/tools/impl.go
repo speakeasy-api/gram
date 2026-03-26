@@ -174,24 +174,30 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				CanonicalName:       name,
 				Summary:             summary,
 				Description:         description,
-				Confirm:             conv.Ptr(string(confirm)),
+				Confirm:             new(string(confirm)),
 				ConfirmPrompt:       confirmPrompt,
 				Summarizer:          conv.FromPGText[string](tool.Summarizer),
 				ResponseFilter:      responseFilter,
 				HTTPMethod:          tool.HttpMethod,
 				Path:                tool.Path,
 				Tags:                tags,
-				Openapiv3DocumentID: conv.Ptr(tool.Openapiv3DocumentID.UUID.String()),
-				Openapiv3Operation:  conv.Ptr(tool.Openapiv3Operation.String),
-				SchemaVersion:       conv.Ptr(tool.SchemaVersion),
+				Openapiv3DocumentID: new(tool.Openapiv3DocumentID.UUID.String()),
+				Openapiv3Operation:  new(tool.Openapiv3Operation.String),
+				SchemaVersion:       new(tool.SchemaVersion),
 				Schema:              string(tool.Schema),
-				Security:            conv.Ptr(string(tool.Security)),
+				Security:            new(string(tool.Security)),
 				DefaultServerURL:    conv.FromPGText[string](tool.DefaultServerUrl),
 				PackageName:         pkg,
 				CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 				Variation:           nil, // Applied later
 				Canonical:           nil,
+				Annotations: conv.AnnotationsFromColumns(
+					tool.ReadOnlyHint,
+					tool.DestructiveHint,
+					tool.IdempotentHint,
+					tool.OpenWorldHint,
+				),
 			},
 		})
 	}
@@ -227,6 +233,12 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				UpdatedAt:     tool.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:     nil,
 				Variation:     nil,
+				Annotations: conv.AnnotationsFromColumns(
+					tool.ReadOnlyHint,
+					tool.DestructiveHint,
+					tool.IdempotentHint,
+					tool.OpenWorldHint,
+				),
 			},
 		})
 	}
@@ -257,6 +269,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				Summarizer:    nil,
 				Canonical:     nil,
 				Variation:     nil,
+				Annotations:   nil,
 			},
 		})
 	}

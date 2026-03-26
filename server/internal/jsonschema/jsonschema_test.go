@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -863,7 +864,7 @@ func TestIsValidJSONSchema_FromOpenAPIFixture(t *testing.T) {
 			// Parse the YAML to extract schemas from components/schemas
 			var doc struct {
 				Components struct {
-					Schemas map[string]interface{} `yaml:"schemas"`
+					Schemas map[string]any `yaml:"schemas"`
 				} `yaml:"components"`
 			}
 
@@ -885,13 +886,7 @@ func TestIsValidJSONSchema_FromOpenAPIFixture(t *testing.T) {
 					err = IsValidJSONSchema(schemaBytes)
 
 					// Check if this schema is expected to be invalid
-					shouldBeInvalid := false
-					for _, invalid := range tt.invalidSchemas {
-						if invalid == schemaName {
-							shouldBeInvalid = true
-							break
-						}
-					}
+					shouldBeInvalid := slices.Contains(tt.invalidSchemas, schemaName)
 
 					if shouldBeInvalid {
 						require.Error(t, err, "schema %s should be invalid", schemaName)

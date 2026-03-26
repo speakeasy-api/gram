@@ -10,7 +10,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
@@ -24,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -33,7 +33,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background())
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -56,7 +56,7 @@ type testInstance struct {
 	deployments    *deployments.Service
 	assets         *assets.Service
 	conn           *pgxpool.Pool
-	temporal       client.Client
+	temporalEnv    *temporal.Environment
 	tigrisStore    *assets.TigrisStore
 	assetStorage   assets.BlobStore
 	sessionManager *sessions.Manager
@@ -83,12 +83,10 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	tigrisStore := assets.NewTigrisStore(assetStorage)
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
-	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
+	temporalEnv, _ := infra.NewTemporalEnv(t)
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
-		temporal.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
@@ -97,8 +95,7 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
@@ -107,7 +104,7 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	ph := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	svc := functions.NewService(logger, tracerProvider, conn, enc, tigrisStore)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), mcpRegistryClient)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), mcpRegistryClient)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
 
 	return ctx, &testInstance{
@@ -115,7 +112,7 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 		deployments:    deploymentsSvc,
 		assets:         assetsSvc,
 		conn:           conn,
-		temporal:       temporal,
+		temporalEnv:    temporalEnv,
 		tigrisStore:    tigrisStore,
 		assetStorage:   assetStorage,
 		sessionManager: sessionManager,
@@ -150,7 +147,7 @@ func createFunctionsDeploymentWithKey(t *testing.T, ctx context.Context, ti *tes
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},

@@ -1,6 +1,6 @@
 import { GramLogo } from "@/components/gram-logo";
 import { cn } from "@/lib/utils";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 
 // Brand gradient colors
 const BRAND_COLORS = {
@@ -65,136 +65,206 @@ const JiraLogo = () => (
   </svg>
 );
 
-// AI Client logos
-const _CursorLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-    <path d="M5 3l14 9-14 9V3z" />
-  </svg>
-);
+// AI Client logos — official brand marks from HookSourceIcon
+function ClaudeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 512 509.64"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="#D77655"
+        d="M115.612 0h280.775C459.974 0 512 52.026 512 115.612v278.415c0 63.587-52.026 115.612-115.613 115.612H115.612C52.026 509.639 0 457.614 0 394.027V115.612C0 52.026 52.026 0 115.612 0z"
+      />
+      <path
+        fill="#FCF2EE"
+        fillRule="nonzero"
+        d="M142.27 316.619l73.655-41.326 1.238-3.589-1.238-1.996-3.589-.001-12.31-.759-42.084-1.138-36.498-1.516-35.361-1.896-8.897-1.895-8.34-10.995.859-5.484 7.482-5.03 10.717.935 23.683 1.617 35.537 2.452 25.782 1.517 38.193 3.968h6.064l.86-2.451-2.073-1.517-1.618-1.517-36.776-24.922-39.81-26.338-20.852-15.166-11.273-7.683-5.687-7.204-2.451-15.721 10.237-11.273 13.75.935 3.513.936 13.928 10.716 29.749 23.027 38.848 28.612 5.687 4.727 2.275-1.617.278-1.138-2.553-4.271-21.13-38.193-22.546-38.848-10.035-16.101-2.654-9.655c-.935-3.968-1.617-7.304-1.617-11.374l11.652-15.823 6.445-2.073 15.545 2.073 6.547 5.687 9.655 22.092 15.646 34.78 24.265 47.291 7.103 14.028 3.791 12.992 1.416 3.968 2.449-.001v-2.275l1.997-26.641 3.69-32.707 3.589-42.084 1.239-11.854 5.863-14.206 11.652-7.683 9.099 4.348 7.482 10.716-1.036 6.926-4.449 28.915-8.72 45.294-5.687 30.331h3.313l3.792-3.791 15.342-20.372 25.782-32.227 11.374-12.789 13.27-14.129 8.517-6.724 16.1-.001 11.854 17.617-5.307 18.199-16.581 21.029-13.75 17.819-19.716 26.54-12.309 21.231 1.138 1.694 2.932-.278 44.536-9.479 24.062-4.347 28.714-4.928 12.992 6.066 1.416 6.167-5.106 12.613-30.71 7.583-36.018 7.204-53.636 12.689-.657.48.758.935 24.164 2.275 10.337.556h25.301l47.114 3.514 12.309 8.139 7.381 9.959-1.238 7.583-18.957 9.655-25.579-6.066-59.702-14.205-20.474-5.106-2.83-.001v1.694l17.061 16.682 31.266 28.233 39.152 36.397 1.997 8.999-5.03 7.102-5.307-.758-34.401-25.883-13.27-11.651-30.053-25.302-1.996-.001v2.654l6.926 10.136 36.574 54.975 1.895 16.859-2.653 5.485-9.479 3.311-10.414-1.895-21.408-30.054-22.092-33.844-17.819-30.331-2.173 1.238-10.515 113.261-4.929 5.788-11.374 4.348-9.478-7.204-5.03-11.652 5.03-23.027 6.066-30.052 4.928-23.886 4.449-29.674 2.654-9.858-.177-.657-2.173.278-22.37 30.71-34.021 45.977-26.919 28.815-6.445 2.553-11.173-5.789 1.037-10.337 6.243-9.2 37.257-47.392 22.47-29.371 14.508-16.961-.101-2.451h-.859l-98.954 64.251-17.618 2.275-7.583-7.103.936-11.652 3.589-3.791 29.749-20.474-.101.102.024.101z"
+      />
+    </svg>
+  );
+}
 
-const _ClaudeCodeLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4">
-    <circle cx="12" cy="12" r="10" fill="#D97706" />
-    <path
-      d="M8 12h8M12 8v8"
-      stroke="#fff"
-      strokeWidth="2"
-      strokeLinecap="round"
-    />
-  </svg>
-);
+function CursorIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 466.73 532.09"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="currentColor"
+        d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"
+      />
+    </svg>
+  );
+}
 
-const _WindsurfLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-    <path d="M12 2L2 22h20L12 2zm0 6l6 12H6l6-12z" />
-  </svg>
-);
+function CodexIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="#10A37F"
+        d="M22.282 9.821a5.985 5.985 0 00-.516-4.91 6.046 6.046 0 00-6.51-2.9A6.065 6.065 0 0012 .067a6.045 6.045 0 00-5.764 4.152 5.985 5.985 0 00-3.996 2.9 6.045 6.045 0 00.749 7.102 5.985 5.985 0 00.516 4.911 6.045 6.045 0 006.51 2.9A6.065 6.065 0 0012 23.933a6.045 6.045 0 005.764-4.152 5.985 5.985 0 003.996-2.9 6.045 6.045 0 00-.749-7.102"
+      />
+    </svg>
+  );
+}
 
-// Agent logos
-const _OpenAILogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-    <path d="M22.282 9.821a5.985 5.985 0 00-.516-4.91 6.046 6.046 0 00-6.51-2.9A6.065 6.065 0 0012 .067a6.045 6.045 0 00-5.764 4.152 5.985 5.985 0 00-3.996 2.9 6.045 6.045 0 00.749 7.102 5.985 5.985 0 00.516 4.911 6.045 6.045 0 006.51 2.9A6.065 6.065 0 0012 23.933a6.045 6.045 0 005.764-4.152 5.985 5.985 0 003.996-2.9 6.045 6.045 0 00-.749-7.102" />
-  </svg>
-);
+function CopilotIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="#0078D4"
+        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2a7.2 7.2 0 01-6-3.22c.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08a7.2 7.2 0 01-6 3.22z"
+      />
+    </svg>
+  );
+}
 
-const _LangChainLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4">
-    <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" fill="#1C3C3C" />
-    <path
-      d="M8 12h8M12 8v8"
-      stroke="#fff"
-      strokeWidth="2"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-
-// Product mockup with embedded chat
-function ProductWithChat({ delay }: { delay: number }) {
+// Stacked card cluster — multiple overlapping cards to show many instances
+function ClientCluster({
+  icon: Icon,
+  name,
+  count,
+  delay,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  name: string;
+  count: number;
+  delay: number;
+}) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
-      className="w-full bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden"
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3, delay }}
+      className="relative"
+      style={{ paddingTop: (count - 1) * 5, paddingLeft: (count - 1) * 5 }}
     >
-      {/* Browser chrome */}
-      <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 border-b border-slate-200">
-        <div className="flex gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
-          <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-          <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
+      {/* Shadow cards behind — stacked offset */}
+      {Array.from({ length: count - 1 }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute bg-white border border-slate-200 rounded-lg shadow-sm"
+          style={{
+            top: i * 5,
+            left: i * 5,
+            right: (count - 1 - i) * 5,
+            bottom: (count - 1 - i) * 5,
+          }}
+        />
+      ))}
+      {/* Front card */}
+      <div className="relative flex items-center gap-2 px-3 py-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
+        <Icon className="w-5 h-5" />
+        <span className="text-xs font-medium text-slate-600">{name}</span>
+      </div>
+    </motion.div>
+  );
+}
+
+// Mini chat app card — represents one deployed chat instance
+function MiniChatApp({ label, delay }: { label: string; delay: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.25, delay }}
+      className="bg-white border border-slate-200 rounded shadow-sm overflow-hidden"
+    >
+      <div className="flex items-center gap-1 px-2 py-1 bg-slate-100 border-b border-slate-200">
+        <div className="flex gap-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+          <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+          <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
         </div>
-        <div className="flex-1 mx-4">
-          <div className="bg-white rounded px-3 py-1 text-[10px] text-slate-400 font-mono">
-            your-app.com
-          </div>
+        <span className="text-[7px] text-slate-400 font-mono ml-1">
+          {label}
+        </span>
+      </div>
+      <div className="p-1.5 flex gap-1">
+        <div className="flex-1 flex flex-col gap-0.5">
+          <div className="h-1 w-full bg-slate-100 rounded" />
+          <div className="h-1 w-3/4 bg-slate-100 rounded" />
+          <div className="h-1 w-1/2 bg-slate-100 rounded" />
+        </div>
+        <div className="w-8 bg-slate-50 rounded border border-slate-100 flex items-center justify-center">
+          <svg
+            className="w-2.5 h-2.5 text-slate-300"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+          >
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// Distributed view — clustered AI clients and chat apps side by side
+function DistributedClients({ delay }: { delay: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay }}
+      className="flex w-full gap-4"
+    >
+      {/* Left: AI Client clusters */}
+      <div className="flex-1">
+        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-3">
+          AI Agents
+        </div>
+        <div className="flex flex-wrap gap-4">
+          <ClientCluster
+            icon={ClaudeIcon}
+            name="Claude"
+            count={3}
+            delay={delay + 0.1}
+          />
+          <ClientCluster
+            icon={CursorIcon}
+            name="Cursor"
+            count={2}
+            delay={delay + 0.2}
+          />
+          <ClientCluster
+            icon={CodexIcon}
+            name="Codex"
+            count={2}
+            delay={delay + 0.3}
+          />
+          <ClientCluster
+            icon={CopilotIcon}
+            name="Copilot"
+            count={2}
+            delay={delay + 0.4}
+          />
         </div>
       </div>
 
-      {/* App content */}
-      <div className="flex h-32">
-        {/* Main content area */}
-        <div className="flex-1 p-3 border-r border-slate-100">
-          <div className="h-2 w-20 bg-slate-200 rounded mb-2" />
-          <div className="h-2 w-32 bg-slate-100 rounded mb-1.5" />
-          <div className="h-2 w-28 bg-slate-100 rounded mb-1.5" />
-          <div className="h-2 w-24 bg-slate-100 rounded mb-3" />
-          <div className="flex gap-2">
-            <div className="h-6 w-16 bg-slate-100 rounded" />
-            <div className="h-6 w-16 bg-slate-100 rounded" />
-          </div>
+      {/* Right: Chat apps */}
+      <div className="flex-1">
+        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-3">
+          Product Agents
         </div>
-
-        {/* Embedded chat widget */}
-        <div className="w-36 bg-slate-50 flex flex-col">
-          <div className="px-2 py-1.5 border-b border-slate-200 flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center">
-              <svg
-                className="w-2.5 h-2.5 text-white"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3"
-              >
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-              </svg>
-            </div>
-            <span className="text-[9px] font-medium text-slate-600">
-              AI Assistant
-            </span>
-          </div>
-          <div className="flex-1 p-2 flex flex-col gap-1.5 overflow-hidden">
-            <div className="bg-slate-200 rounded-lg px-2 py-1 text-[8px] text-slate-600 self-start max-w-[90%]">
-              How can I help?
-            </div>
-            <div className="bg-blue-500 rounded-lg px-2 py-1 text-[8px] text-white self-end max-w-[90%]">
-              Create a report
-            </div>
-            <motion.div
-              className="bg-slate-200 rounded-lg px-2 py-1 text-[8px] text-slate-600 self-start"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: delay + 0.8, duration: 0.3 }}
-            >
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0, 1, 0] }}
-                transition={{
-                  delay: delay + 0.8,
-                  duration: 1.2,
-                  repeat: Infinity,
-                }}
-              >
-                ●●●
-              </motion.span>
-            </motion.div>
-          </div>
-          <div className="px-2 pb-2">
-            <div className="bg-white border border-slate-200 rounded px-2 py-1 text-[8px] text-slate-400">
-              Type a message...
-            </div>
-          </div>
+        <div className="flex flex-col gap-1.5">
+          <MiniChatApp label="support.co" delay={delay + 0.4} />
+          <MiniChatApp label="sales-app" delay={delay + 0.45} />
+          <MiniChatApp label="internal" delay={delay + 0.5} />
         </div>
       </div>
     </motion.div>
@@ -224,11 +294,49 @@ function FeatureBar({
   );
 }
 
+const PULSE_COLORS = [
+  BRAND_COLORS.green, // #5A8250
+  BRAND_COLORS.blue, // #2873D7
+  BRAND_COLORS.orange, // #FB873F
+];
+
+function PulseConnector({
+  delay = 0,
+  disabled = false,
+}: {
+  delay?: number;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return <div className="h-6 w-px bg-slate-300" />;
+  }
+  return (
+    <div className="relative flex h-6 w-2 items-center justify-center overflow-hidden">
+      {PULSE_COLORS.map((color, i) => (
+        <motion.div
+          key={color}
+          className="absolute h-1 w-1 rounded-full"
+          style={{ backgroundColor: color }}
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: -12, opacity: [0, 1, 1, 0] }}
+          transition={{
+            duration: 2.5,
+            delay: delay + i * 0.6,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 interface PlatformDiagramProps {
   className?: string;
 }
 
 export function PlatformDiagram({ className }: PlatformDiagramProps) {
+  const prefersReducedMotion = useReducedMotion();
   return (
     <div
       className={cn(
@@ -237,18 +345,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
       )}
     >
       <div className="flex flex-col items-center gap-4 max-w-md mx-auto py-6">
-        {/* Top - Product with embedded chat */}
-        <div className="w-full">
-          <ProductWithChat delay={0.2} />
-        </div>
+        {/* Top - Distributed AI clients and chat apps across the org */}
+        <DistributedClients delay={0.1} />
 
-        {/* Connection line */}
-        <motion.div
-          initial={{ scaleY: 0 }}
-          animate={{ scaleY: 1 }}
-          transition={{ duration: 0.3, delay: 0.5 }}
-          className="w-px h-6 bg-slate-300 origin-top"
-        />
+        {/* Connection: Chat → Backend */}
+        <PulseConnector delay={1.4} disabled={prefersReducedMotion ?? false} />
 
         {/* Chat Backend Section */}
         <motion.div
@@ -258,9 +359,9 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           className="w-full bg-white border border-slate-200 rounded-lg p-3"
         >
           <div className="flex items-center mb-3">
-            <GramLogo variant="horizontal" className="w-16" />
-            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-2">
-              Chat Backend
+            <GramLogo variant="horizontal" className="w-20" />
+            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-1">
+              Control Plane
             </span>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -274,10 +375,10 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  <path d="M12 20V10M18 20V4M6 20v-4" />
                 </svg>
               }
-              label="Chat logs and resolution"
+              label="Usage insights"
             />
             <FeatureBar
               delay={0.75}
@@ -289,11 +390,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4" />
+                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
                 </svg>
               }
-              label="Agent orchestration"
+              label="Session hooks"
             />
             <FeatureBar
               delay={0.8}
@@ -305,23 +406,17 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-                  <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0110 0v4" />
                 </svg>
               }
-              label="Session management"
+              label="Permissions & authorization"
             />
           </div>
         </motion.div>
 
         {/* Connection line */}
-        <motion.div
-          initial={{ scaleY: 0 }}
-          animate={{ scaleY: 1 }}
-          transition={{ duration: 0.3, delay: 0.85 }}
-          className="w-px h-6 bg-slate-300 origin-top"
-        />
+        <PulseConnector delay={1.1} disabled={prefersReducedMotion ?? false} />
 
         {/* Gram Platform - Center */}
         <motion.div
@@ -331,17 +426,25 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           className="relative w-full"
         >
           {/* Gradient border */}
-          <div
+          <motion.div
             className="absolute -inset-[1.5px] rounded-lg"
             style={{
               background: `linear-gradient(135deg, ${BRAND_COLORS.green}, ${BRAND_COLORS.blue}, ${BRAND_COLORS.orange})`,
             }}
+            animate={
+              prefersReducedMotion ? undefined : { opacity: [0.7, 1, 0.7] }
+            }
+            transition={
+              prefersReducedMotion
+                ? undefined
+                : { duration: 3, repeat: Infinity, ease: "easeInOut" }
+            }
           />
           <div className="relative bg-white rounded-lg p-3">
             <div className="flex items-center mb-3">
-              <GramLogo variant="horizontal" className="w-16" />
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-2">
-                Tool Management
+              <GramLogo variant="horizontal" className="w-20" />
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-1">
+                Tools Platform
               </span>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -370,11 +473,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                     stroke="currentColor"
                     strokeWidth="2"
                   >
-                    <rect x="3" y="11" width="18" height="11" rx="2" />
-                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                    <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
                   </svg>
                 }
-                label="Authentication & authorization"
+                label="Skills, plugins & CLIs"
               />
               <FeatureBar
                 delay={1.1}
@@ -397,12 +500,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
         </motion.div>
 
         {/* Connection line */}
-        <motion.div
-          initial={{ scaleY: 0 }}
-          animate={{ scaleY: 1 }}
-          transition={{ duration: 0.3, delay: 1.15 }}
-          className="w-px h-6 bg-slate-300 origin-top"
-        />
+        <PulseConnector delay={0.8} disabled={prefersReducedMotion ?? false} />
 
         {/* Bottom - Data Sources */}
         <div className="grid grid-cols-2 gap-3 w-full">

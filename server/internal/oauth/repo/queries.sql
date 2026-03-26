@@ -15,22 +15,26 @@ INSERT INTO external_oauth_server_metadata (
 SELECT * FROM external_oauth_server_metadata
 WHERE project_id = @project_id AND id = @id AND deleted IS FALSE;
 
--- name: DeleteExternalOAuthServerMetadata :exec
+-- name: DeleteExternalOAuthServerMetadata :one
 UPDATE external_oauth_server_metadata SET
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE project_id = @project_id AND id = @id;
+WHERE project_id = @project_id AND id = @id
+RETURNING id, slug;
 
 -- OAuth Proxy Servers Queries
 
 -- name: UpsertOAuthProxyServer :one
 INSERT INTO oauth_proxy_servers (
     project_id,
-    slug
+    slug,
+    audience
 ) VALUES (
     @project_id,
-    @slug
+    @slug,
+    @audience
 ) ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO UPDATE SET
+    audience = @audience,
     updated_at = clock_timestamp()
 RETURNING *;
 

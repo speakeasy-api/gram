@@ -125,7 +125,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				correctAuthCtx := &contextvalues.AuthContext{
 					ActiveOrganizationID: toolsetOrgID,
 					UserID:               "test-user-123",
-					SessionID:            stringPtr("test-session-123"),
+					SessionID:            new("test-session-123"),
 					ProjectID:            nil,
 					OrganizationSlug:     "",
 					Email:                nil,
@@ -164,7 +164,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				wrongAuthCtx := &contextvalues.AuthContext{
 					ActiveOrganizationID: "different-org-id",
 					UserID:               "test-user-456",
-					SessionID:            stringPtr("test-session-456"),
+					SessionID:            new("test-session-456"),
 					ProjectID:            nil,
 					OrganizationSlug:     "",
 					Email:                nil,
@@ -233,11 +233,6 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function to create string pointers
-func stringPtr(s string) *string {
-	return &s
 }
 
 func TestServeInstallPage_Instructions(t *testing.T) {

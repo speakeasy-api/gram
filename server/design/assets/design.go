@@ -145,6 +145,7 @@ var _ = Service("assets", func() {
 			Param("project_id")
 
 			Response(StatusOK, func() {
+				ContentType("*/*")
 				Header("content_type:Content-Type")
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")

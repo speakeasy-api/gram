@@ -9,6 +9,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -33,12 +34,14 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
-		Description:            conv.Ptr("A test toolset"),
+		Description:            new("A test toolset"),
 		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 
 	// Get the toolset
@@ -66,6 +69,9 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 
 	require.NotNil(t, result.CreatedAt)
 	require.NotNil(t, result.UpdatedAt)
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_WithEnvironment(t *testing.T) {
@@ -92,12 +98,14 @@ func TestToolsetsService_GetToolset_WithEnvironment(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Toolset with Env",
-		Description:            conv.Ptr("A toolset with environment"),
+		Description:            new("A toolset with environment"),
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
-		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("get-test-env")),
+		DefaultEnvironmentSlug: (*types.Slug)(new("get-test-env")),
 		ProjectSlugInput:       nil,
 	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 
 	// Get the toolset
@@ -109,44 +117,59 @@ func TestToolsetsService_GetToolset_WithEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "get-test-env", string(*result.DefaultEnvironmentSlug))
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// Try to get a non-existent toolset
-	_, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
+	_, err = ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
 		Slug:             "non-existent-slug",
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not found")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCount(t.Context(), ti.conn)
+	require.NoError(t, err)
 
 	// Test with context that has no auth context
 	ctx := t.Context()
 
-	_, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
+	_, err = ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
 		Slug:             "some-slug",
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_NoProjectID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	// Create auth context without project ID
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -154,13 +177,16 @@ func TestToolsetsService_GetToolset_NoProjectID(t *testing.T) {
 	authCtx.ProjectID = nil
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
+	_, err = ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
 		Slug:             "some-slug",
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
@@ -172,12 +198,14 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Complete Toolset",
-		Description:            conv.Ptr("A complete toolset with all fields"),
+		Description:            new("A complete toolset with all fields"),
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 
 	// Get the toolset and verify all fields
@@ -207,6 +235,9 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 	// Verify organization and project IDs
 	require.Equal(t, created.OrganizationID, result.OrganizationID)
 	require.Equal(t, created.ProjectID, result.ProjectID)
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_WithFunctionTools(t *testing.T) {
@@ -227,12 +258,14 @@ func TestToolsetsService_GetToolset_WithFunctionTools(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Function Toolset",
-		Description:            conv.Ptr("A toolset with function tools"),
+		Description:            new("A toolset with function tools"),
 		ToolUrns:               []string{functionTools[0].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 
 	// Get the toolset
@@ -254,6 +287,9 @@ func TestToolsetsService_GetToolset_WithFunctionTools(t *testing.T) {
 	require.NotEmpty(t, tool.FunctionToolDefinition.Name)
 	require.NotEmpty(t, tool.FunctionToolDefinition.DeploymentID)
 	require.NotNil(t, tool.FunctionToolDefinition.Schema)
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_WithResources(t *testing.T) {
@@ -279,12 +315,14 @@ func TestToolsetsService_GetToolset_WithResources(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Toolset With Resources",
-		Description:            conv.Ptr("A toolset that includes resources"),
+		Description:            new("A toolset that includes resources"),
 		ToolUrns:               []string{},
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 
 	// Get the toolset and verify resources are populated
@@ -308,6 +346,9 @@ func TestToolsetsService_GetToolset_WithResources(t *testing.T) {
 	require.True(t, resourceNames["user_guide"], "user_guide resource should be present")
 	require.True(t, resourceNames["api_reference"], "api_reference resource should be present")
 	require.True(t, resourceNames["data_source"], "data_source resource should be present")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_MixedToolsAndResources(t *testing.T) {
@@ -342,12 +383,14 @@ func TestToolsetsService_GetToolset_MixedToolsAndResources(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Mixed Toolset",
-		Description:            conv.Ptr("A toolset with both tools and resources"),
+		Description:            new("A toolset with both tools and resources"),
 		ToolUrns:               toolUrns,
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 
 	// Get the toolset and verify both tools and resources are populated
@@ -376,6 +419,9 @@ func TestToolsetsService_GetToolset_MixedToolsAndResources(t *testing.T) {
 		require.NotEmpty(t, r.FunctionResourceDefinition.CreatedAt, "resource createdAt should not be empty")
 		require.NotEmpty(t, r.FunctionResourceDefinition.UpdatedAt, "resource updatedAt should not be empty")
 	}
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_VerifyResourceDetails(t *testing.T) {
@@ -406,12 +452,14 @@ func TestToolsetsService_GetToolset_VerifyResourceDetails(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Resource Details Toolset",
-		Description:            conv.Ptr("Toolset to verify resource details"),
+		Description:            new("Toolset to verify resource details"),
 		ToolUrns:               []string{},
 		ResourceUrns:           []string{apiRefUrn},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 
 	// Get the toolset
@@ -436,6 +484,9 @@ func TestToolsetsService_GetToolset_VerifyResourceDetails(t *testing.T) {
 
 	// Verify variables are present
 	require.NotNil(t, def.Variables, "variables should not be nil")
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_GetToolset_WithMultipleFunctionToolsAndResources(t *testing.T) {
@@ -467,12 +518,14 @@ func TestToolsetsService_GetToolset_WithMultipleFunctionToolsAndResources(t *tes
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Function Tools and Resources",
-		Description:            conv.Ptr("A toolset with function tools and resources"),
+		Description:            new("A toolset with function tools and resources"),
 		ToolUrns:               toolUrns,
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 
 	// Get the toolset
@@ -506,4 +559,7 @@ func TestToolsetsService_GetToolset_WithMultipleFunctionToolsAndResources(t *tes
 	require.True(t, resourceNames["user_guide"])
 	require.True(t, resourceNames["api_reference"])
 	require.True(t, resourceNames["data_source"])
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }

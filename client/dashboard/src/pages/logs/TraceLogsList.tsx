@@ -11,6 +11,7 @@ interface TraceLogsListProps {
   toolName: string;
   isExpanded: boolean;
   onLogClick: (log: TelemetryLogRecord) => void;
+  parentTimestamp: string;
 }
 
 export function TraceLogsList({
@@ -18,6 +19,7 @@ export function TraceLogsList({
   toolName: _toolName,
   isExpanded,
   onLogClick,
+  parentTimestamp,
 }: TraceLogsListProps) {
   const client = useGramContext();
 
@@ -44,8 +46,11 @@ export function TraceLogsList({
 
   if (isPending) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 pl-12 text-muted-foreground bg-surface-secondary-default">
-        <Icon name="loader-circle" className="size-4 animate-spin" />
+      <div className="flex items-center gap-3 px-5 py-2 text-muted-foreground bg-muted/30">
+        <div className="shrink-0 w-[150px]" />
+        <div className="shrink-0 w-5 flex justify-center">
+          <Icon name="loader-circle" className="size-4 animate-spin" />
+        </div>
         <span className="text-sm">Loading spans...</span>
       </div>
     );
@@ -53,8 +58,10 @@ export function TraceLogsList({
 
   if (error) {
     return (
-      <div className="px-4 py-3 pl-12 bg-surface-secondary-default">
-        <span className="text-sm text-destructive-default">
+      <div className="flex items-center gap-3 px-5 py-2 bg-muted/30">
+        <div className="shrink-0 w-[150px]" />
+        <div className="shrink-0 w-5" />
+        <span className="text-sm text-destructive">
           Failed to load spans: {error.message}
         </span>
       </div>
@@ -65,20 +72,23 @@ export function TraceLogsList({
 
   if (logs.length === 0) {
     return (
-      <div className="px-4 py-3 pl-12 text-sm text-muted-foreground bg-surface-secondary-default">
-        No spans found for this trace
+      <div className="flex items-center gap-3 px-5 py-2 text-muted-foreground bg-muted/30">
+        <div className="shrink-0 w-[150px]" />
+        <div className="shrink-0 w-5" />
+        <span className="text-sm">No spans found for this trace</span>
       </div>
     );
   }
 
   return (
-    <div className="bg-surface-secondary-default">
+    <div className="bg-muted/30">
       {logs.map((log, index) => (
         <ChildLogRow
           key={log.id}
           log={log}
           isLast={index === logs.length - 1}
           onClick={() => onLogClick(log)}
+          parentTimestamp={parentTimestamp}
         />
       ))}
     </div>
@@ -89,17 +99,27 @@ interface ChildLogRowProps {
   log: TelemetryLogRecord;
   isLast: boolean;
   onClick: () => void;
+  parentTimestamp: string;
 }
 
-function ChildLogRow({ log, isLast, onClick }: ChildLogRowProps) {
+function ChildLogRow({
+  log,
+  isLast,
+  onClick,
+  parentTimestamp,
+}: ChildLogRowProps) {
+  const formattedTimestamp = formatNanoTimestamp(log.timeUnixNano);
+  const formattedParentTimestamp = formatNanoTimestamp(parentTimestamp);
+  const showTimestamp = formattedTimestamp !== formattedParentTimestamp;
+
   return (
     <div
-      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-surface-default transition-colors group"
+      className="flex items-center gap-3 px-5 py-2 cursor-pointer hover:bg-background transition-colors group"
       onClick={onClick}
     >
-      {/* Timestamp - same width as parent for alignment */}
-      <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono">
-        {formatNanoTimestamp(log.timeUnixNano)}
+      {/* Timestamp - same width as parent for alignment, hidden if same as parent */}
+      <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono whitespace-nowrap">
+        {showTimestamp ? formattedTimestamp : null}
       </div>
 
       {/* Tree line area - aligns with parent's chevron */}
@@ -133,14 +153,14 @@ function getSeverityBadgeClass(severity?: string): string {
   switch (severity?.toUpperCase()) {
     case "ERROR":
     case "FATAL":
-      return "bg-destructive-softest text-destructive-default";
+      return "bg-rose-500/15 text-rose-600 dark:text-rose-400";
     case "WARN":
     case "WARNING":
-      return "bg-warning-softest text-warning-default";
+      return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
     case "DEBUG":
-      return "bg-surface-secondary-default text-muted-foreground";
+      return "bg-muted text-muted-foreground";
     case "INFO":
     default:
-      return "bg-primary-softest text-primary-default";
+      return "bg-blue-500/15 text-blue-600 dark:text-blue-400";
   }
 }

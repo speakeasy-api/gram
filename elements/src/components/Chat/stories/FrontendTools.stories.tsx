@@ -1,54 +1,54 @@
-import { ToolCallMessagePartProps } from '@assistant-ui/react'
-import type { Meta, StoryFn } from '@storybook/react-vite'
-import React from 'react'
-import z from 'zod'
-import { Chat } from '..'
-import { defineFrontendTool } from '../../../lib/tools'
+import { ToolCallMessagePartProps } from "@assistant-ui/react";
+import type { Meta, StoryFn } from "@storybook/react-vite";
+import React from "react";
+import z from "zod";
+import { Chat } from "..";
+import { defineFrontendTool } from "../../../lib/tools";
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/Frontend Tools',
+  title: "Chat/Frontend Tools",
   component: Chat,
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
-} satisfies Meta<typeof Chat>
+} satisfies Meta<typeof Chat>;
 
-export default meta
+export default meta;
 
-type Story = StoryFn<typeof Chat>
+type Story = StoryFn<typeof Chat>;
 
 const FetchTool = defineFrontendTool<{ url: string }, string>(
   {
-    description: 'Fetch a URL (supports CORS-enabled URLs like httpbin.org)',
+    description: "Fetch a URL (supports CORS-enabled URLs like httpbin.org)",
     parameters: z.object({
-      url: z.string().describe('URL to fetch (must support CORS)'),
+      url: z.string().describe("URL to fetch (must support CORS)"),
     }),
     execute: async ({ url }) => {
       try {
-        const response = await fetch(url as string)
-        const text = await response.text()
-        return text
+        const response = await fetch(url as string);
+        const text = await response.text();
+        return text;
       } catch (error) {
-        return `Error fetching ${url}: ${error instanceof Error ? error.message : 'Unknown error'}. Note: URL must support CORS for browser requests.`
+        return `Error fetching ${url}: ${error instanceof Error ? error.message : "Unknown error"}. Note: URL must support CORS for browser requests.`;
       }
     },
   },
-  'fetchUrl'
-)
+  "fetchUrl",
+);
 
 const frontendTools = {
   fetchUrl: FetchTool,
-}
+};
 
 // Render OS X style browser window with the fetched URL html rendered
 const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
-  const url = (args as { url?: string })?.url || 'about:blank'
-  const [isLoading, setIsLoading] = React.useState(true)
+  const url = (args as { url?: string })?.url || "about:blank";
+  const [isLoading, setIsLoading] = React.useState(true);
 
   return (
     <div className="my-5 flex w-full flex-col overflow-hidden rounded-lg border shadow-lg">
       {/* macOS Window Controls Bar */}
-      <div className="bg-muted flex flex-col border-b">
+      <div className="flex flex-col border-b bg-muted">
         <div className="flex items-center gap-2 px-3 py-2">
           {/* Traffic lights */}
           <div className="flex gap-2">
@@ -58,9 +58,9 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
           </div>
 
           {/* Address bar */}
-          <div className="bg-background mx-4 flex flex-1 items-center rounded-md px-3 py-1">
+          <div className="mx-4 flex flex-1 items-center rounded-md bg-background px-3 py-1">
             <svg
-              className="text-muted-foreground mr-2 h-4 w-4"
+              className="mr-2 h-4 w-4 text-muted-foreground"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -72,7 +72,7 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
               />
             </svg>
-            <span className="text-muted-foreground truncate text-sm">
+            <span className="truncate text-sm text-muted-foreground">
               {url}
             </span>
           </div>
@@ -84,7 +84,7 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
             <div
               className="h-full w-1/3 animate-pulse bg-blue-500"
               style={{
-                animation: 'slide 1.5s ease-in-out infinite',
+                animation: "slide 1.5s ease-in-out infinite",
               }}
             />
           </div>
@@ -92,7 +92,7 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
       </div>
 
       {/* Content */}
-      <div className="bg-background h-96">
+      <div className="h-96 bg-background">
         <iframe
           srcDoc={result as string}
           className="h-full w-full"
@@ -107,23 +107,23 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
         }
       `}</style>
     </div>
-  )
-}
+  );
+};
 
-export const FetchUrl: Story = () => <Chat />
-FetchUrl.storyName = 'Fetch URL Tool'
+export const FetchUrl: Story = () => <Chat />;
+FetchUrl.storyName = "Fetch URL Tool";
 FetchUrl.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
+      variant: "standalone",
       welcome: {
-        title: '',
-        subtitle: '',
+        title: "",
+        subtitle: "",
         suggestions: [
           {
-            title: 'Fetch a URL',
-            label: 'Fetch a URL',
-            prompt: 'Fetch https://httpbin.org/html',
+            title: "Fetch a URL",
+            label: "Fetch a URL",
+            prompt: "Fetch https://httpbin.org/html",
           },
         ],
       },
@@ -135,4 +135,4 @@ FetchUrl.parameters = {
       },
     },
   },
-}
+};

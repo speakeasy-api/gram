@@ -1,6 +1,6 @@
 {
   "name": "@gram/client",
-  "version": "0.26.15",
+  "version": "0.32.7",
   "author": "Speakeasy",
   "private": true,
   "type": "module",
@@ -65,16 +65,16 @@
     "react-dom": {"optional":true}
   },
   "devDependencies": {
-    "@eslint/js": "^9.19.0",
+    "@eslint/js": "^9.26.0",
     "@tanstack/react-query": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "eslint": "^9.19.0",
+    "eslint": "^9.26.0",
     "globals": "^15.14.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.26.0"
   },
   "dependencies": {
-    "zod": "^3.25.0 || ^4.0.0"
+    "zod": "^3.25.65 || ^4.0.0"
   }
 }

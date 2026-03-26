@@ -11,17 +11,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"path"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -54,38 +50,24 @@ import (
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-// FallbackModelUsageTracker schedules fallback model usage tracking when the inline call fails.
-type FallbackModelUsageTracker interface {
-	ScheduleFallbackModelUsageTracking(ctx context.Context, generationID, orgID, projectID string, source billing.ModelUsageSource, chatID string) error
-}
-
-// ChatTitleGenerator schedules async chat title generation.
-type ChatTitleGenerator interface {
-	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error
-}
-
 // ChatResolutionAnalyzer schedules async chat resolution analysis.
 type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID string) error
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
 type Service struct {
-	auth                 *auth.Auth
-	db                   *pgxpool.Pool
-	repo                 *repo.Queries
-	tracer               trace.Tracer
-	openRouter           openrouter.Provisioner
-	chatClient           *openrouter.ChatClient
-	logger               *slog.Logger
-	sessions             *sessions.Manager
-	chatSessions         *chatsessions.Manager
-	assetStorage            assets.BlobStore
-	proxyTransport          http.RoundTripper
-	fallbackUsageTracker    FallbackModelUsageTracker
-	chatTitleGenerator      ChatTitleGenerator
-	chatResolutionAnalyzer  ChatResolutionAnalyzer
-	posthog                 *posthog.Posthog
-	telemetryService        *telemetry.Service
+	auth             *auth.Auth
+	db               *pgxpool.Pool
+	repo             *repo.Queries
+	tracer           trace.Tracer
+	openRouter       openrouter.Provisioner
+	completionClient openrouter.CompletionClient
+	logger           *slog.Logger
+	sessions         *sessions.Manager
+	chatSessions     *chatsessions.Manager
+	assetStorage     assets.BlobStore
+	posthog          *posthog.Posthog
+	telemetryService *telemetry.Service
 }
 
 func NewService(
@@ -94,10 +76,7 @@ func NewService(
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	openRouter openrouter.Provisioner,
-	chatClient *openrouter.ChatClient,
-	fallbackUsageTracker FallbackModelUsageTracker,
-	chatTitleGenerator ChatTitleGenerator,
-	chatResolutionAnalyzer ChatResolutionAnalyzer,
+	completionClient openrouter.CompletionClient,
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
@@ -105,22 +84,18 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:                   auth.New(logger, db, sessions),
-		db:                     db,
-		sessions:               sessions,
-		chatSessions:           chatSessions,
-		logger:                 logger,
-		repo:                   repo.New(db),
-		tracer:                 otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:             openRouter,
-		chatClient:             chatClient,
-		assetStorage:           assetStorage,
-		proxyTransport:         cleanhttp.DefaultPooledTransport(),
-		fallbackUsageTracker:   fallbackUsageTracker,
-		chatTitleGenerator:     chatTitleGenerator,
-		chatResolutionAnalyzer: chatResolutionAnalyzer,
-		posthog:                posthog,
-		telemetryService:       telemetryService,
+		auth:             auth.New(logger, db, sessions),
+		db:               db,
+		sessions:         sessions,
+		chatSessions:     chatSessions,
+		logger:           logger,
+		repo:             repo.New(db),
+		tracer:           otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:       openRouter,
+		completionClient: completionClient,
+		assetStorage:     assetStorage,
+		posthog:          posthog,
+		telemetryService: telemetryService,
 	}
 }
 
@@ -289,6 +264,149 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	return &gen.ListChatsResult{Chats: result}, nil
 }
 
+func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.ListChatsWithResolutionsPayload) (*gen.ListChatsWithResolutionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Check if logs are enabled for this organization
+	if err := s.telemetryService.CheckLogsEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, fmt.Errorf("checking logs enabled: %w", err)
+	}
+
+	// If an external user ID is set, restrict to only their chats
+	// This prevents chat-session users from viewing other users' chats
+	if authCtx.ExternalUserID != "" {
+		if payload.ExternalUserID == nil || *payload.ExternalUserID != authCtx.ExternalUserID {
+			// Force filter to their own external user ID
+			payload.ExternalUserID = &authCtx.ExternalUserID
+		}
+	}
+
+	// Set up pagination with safe int32 conversion
+	limit := payload.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset := payload.Offset
+
+	// Convert optional filter parameters (use empty string for SQL NULL check)
+	search := conv.PtrValOr(payload.Search, "")
+	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
+
+	// Parse time filters
+	var fromTime, toTime pgtype.Timestamptz
+	if payload.From != nil {
+		t, err := time.Parse(time.RFC3339, *payload.From)
+		if err == nil {
+			fromTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+		}
+	}
+	if payload.To != nil {
+		t, err := time.Parse(time.RFC3339, *payload.To)
+		if err == nil {
+			toTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+		}
+	}
+
+	// Get total count (before pagination)
+	totalCount, err := s.repo.CountChatsWithResolutions(ctx, repo.CountChatsWithResolutionsParams{
+		ProjectID:        *authCtx.ProjectID,
+		Search:           search,
+		ExternalUserID:   externalUserID,
+		FromTime:         fromTime,
+		ToTime:           toTime,
+		ResolutionStatus: resolutionStatus,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to count chats").Log(ctx, s.logger)
+	}
+
+	// Query database - returns denormalized rows (one row per chat+resolution combination)
+	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
+		ProjectID:        *authCtx.ProjectID,
+		Search:           search,
+		ExternalUserID:   externalUserID,
+		FromTime:         fromTime,
+		ToTime:           toTime,
+		ResolutionStatus: resolutionStatus,
+		SortBy:           payload.SortBy,
+		SortOrder:        payload.SortOrder,
+		PageLimit:        int32(limit),
+		PageOffset:       int32(offset), //nolint:gosec // offset is controlled by client pagination
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats with resolutions").Log(ctx, s.logger)
+	}
+
+	// Group denormalized rows by chat_id
+	chatMap := make(map[string]*gen.ChatOverviewWithResolutions)
+	chatOrder := make([]string, 0) // Preserve order
+
+	for _, row := range rows {
+		chatID := row.ChatID.String()
+
+		// If this is the first row for this chat, create the chat entry
+		if _, exists := chatMap[chatID]; !exists {
+			chatMap[chatID] = &gen.ChatOverviewWithResolutions{
+				ID:             chatID,
+				Title:          row.Title.String,
+				UserID:         conv.FromPGText[string](row.UserID),
+				ExternalUserID: conv.FromPGText[string](row.ExternalUserID),
+				NumMessages:    int(row.NumMessages),
+				CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
+				Resolutions:    make([]*gen.ChatResolution, 0),
+			}
+			chatOrder = append(chatOrder, chatID)
+		}
+
+		// Add resolution to this chat (if one exists - ResolutionID can be NULL from LEFT JOIN)
+		if row.ResolutionID.Valid {
+			// Convert message_ids from interface{} to []string
+			var messageIDs []string
+			if row.MessageIds != nil {
+				// PostgreSQL array comes back as []interface{} containing uuid.UUID values
+				if msgIDsSlice, ok := row.MessageIds.([]any); ok {
+					messageIDs = make([]string, len(msgIDsSlice))
+					for i, msgID := range msgIDsSlice {
+						if uid, ok := msgID.(uuid.UUID); ok {
+							messageIDs[i] = uid.String()
+						}
+					}
+				}
+			}
+
+			resolution := &gen.ChatResolution{
+				ID:              row.ResolutionID.UUID.String(),
+				UserGoal:        row.UserGoal.String,
+				Resolution:      row.Resolution.String,
+				ResolutionNotes: row.ResolutionNotes.String,
+				Score:           int(row.Score.Int32),
+				CreatedAt:       row.ResolutionCreatedAt.Time.Format(time.RFC3339),
+				MessageIds:      messageIDs,
+			}
+			chatMap[chatID].Resolutions = append(chatMap[chatID].Resolutions, resolution)
+		}
+	}
+
+	// Convert map to ordered slice
+	chats := make([]*gen.ChatOverviewWithResolutions, len(chatOrder))
+	for i, chatID := range chatOrder {
+		chats[i] = chatMap[chatID]
+	}
+
+	return &gen.ListChatsWithResolutionsResult{
+		Chats: chats,
+		Total: int(totalCount),
+	}, nil
+}
+
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -313,8 +431,11 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-		return nil, oops.C(oops.CodeUnauthorized)
+	// If this isn't coming from the dashboard, make sure the external user ID matches
+	if authCtx.SessionID == nil {
+		if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
 	}
 
 	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
@@ -335,7 +456,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			Model:          msg.Model.String,
 			UserID:         &msg.UserID.String,
 			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        content,
+			Content:        &content,
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
@@ -413,9 +534,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"origin":            metadata.Origin,
 	}
 
-	source := billing.ModelUsageSourcePlayground
-	if metadata.Source == "elements" {
-		source = billing.ModelUsageSourceElements
+	source := billing.ModelUsageSource(metadata.Source)
+	if source == "" {
+		source = billing.ModelUsageSourcePlayground
 	}
 
 	defer func() {
@@ -453,167 +574,134 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
 	}
 
-	// Validate that the model is in the allowlist
-	if !openrouter.IsModelAllowed(chatRequest.Model) {
-		return oops.E(oops.CodeBadRequest, nil, "model %s is not allowed", chatRequest.Model).Log(ctx, s.logger)
-	}
-
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
 	eventProperties["model"] = chatRequest.Model
 	eventProperties["chat_id"] = chatIDHeader
 
-	respCaptor := w
-
+	chatID := uuid.Nil
 	if chatIDHeader != "" {
-		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
+		chatID, err = uuid.Parse(chatIDHeader)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
-		}
-
-		// Check if this is a streaming request
-		isStreaming := chatRequest.Stream
-
-		// Create a custom response writer to capture the response
-		respCaptor = &responseCaptor{
-			ResponseWriter:       w,
-			logger:               s.logger,
-			ctx:                  ctx,
-			isStreaming:          isStreaming,
-			orgID:                orgID,
-			chatID:               chatResult.ChatID,
-			projectID:            *authCtx.ProjectID,
-			repo:                 s.repo,
-			messageContent:       &strings.Builder{},
-			lineBuf:              &strings.Builder{},
-			accumulatedToolCalls: make(map[int]openrouter.ToolCall),
-			messageID:            "",
-			model:                "",
-			isDone:               false,
-			messageWritten:       false,
-			finishReason:         nil,
-			toolCallID:           "",
-			usage: openrouter.Usage{
-				PromptTokens:     0,
-				CompletionTokens: 0,
-				TotalTokens:      0,
-			},
-			usageSet:           false,
-			isFirstMessage:         chatResult.IsFirstMessage,
-			chatTitleGenerator:     s.chatTitleGenerator,
-			chatResolutionAnalyzer: s.chatResolutionAnalyzer,
-			// GenAI telemetry fields
-			telemetryService: s.telemetryService,
-			userID:           userID,
-			externalUserID:   authCtx.ExternalUserID,
-			startTime:        time.Now(),
-			httpMetadata:     metadata,
+			return oops.E(oops.CodeInvalid, err, "invalid chat ID").Log(ctx, s.logger)
 		}
 	}
 
-	target, err := url.Parse(openrouter.OpenRouterBaseURL)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error parsing openrouter url").Log(ctx, s.logger)
+	// Non-streaming: Use UnifiedClient
+	temp := float64(chatRequest.Temperature)
+
+	// Extract JSON schema from response_format if present
+	// This enables structured output mode (e.g., for generateObject in AI SDK)
+	var jsonSchema *or.JSONSchemaConfig
+	if chatRequest.ResponseFormat != nil && chatRequest.ResponseFormat.ResponseFormatJSONSchema != nil {
+		schema := chatRequest.ResponseFormat.ResponseFormatJSONSchema.GetJSONSchema()
+		jsonSchema = &schema
 	}
 
-	apiKey, err := s.openRouter.ProvisionAPIKey(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return oops.E(oops.CodeGatewayError, err, "error provisioning openrouter api key").Log(ctx, s.logger)
+	completionReq := openrouter.CompletionRequest{
+		OrgID:          orgID,
+		ProjectID:      authCtx.ProjectID.String(),
+		Messages:       chatRequest.Messages,
+		Tools:          chatRequest.Tools,
+		Temperature:    &temp,
+		Model:          chatRequest.Model,
+		Stream:         false,
+		UsageSource:    source,
+		ChatID:         chatID,
+		UserID:         userID,
+		ExternalUserID: authCtx.ExternalUserID,
+		HTTPMetadata: &openrouter.HTTPMetadata{
+			Origin:    metadata.Origin,
+			UserAgent: metadata.UserAgent,
+			IPAddress: metadata.IPAddress,
+		},
+		APIKeyID:   authCtx.APIKeyID,
+		JSONSchema: jsonSchema,
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = s.proxyTransport
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		req.Host = target.Host
-		req.URL.Host = target.Host
-		req.URL.Scheme = target.Scheme
-		// Safely join /api (openrouter base path) + /v1/chat/completions
-		req.URL.Path = path.Join("/", target.Path, "v1/chat/completions")
+	isStreaming := chatRequest.Stream
+	if isStreaming {
+		// The streamingResponseReader automatically parses SSE and triggers capture/tracking on close
+		streamBody, err := s.completionClient.GetCompletionStream(ctx, completionReq)
+		if err != nil {
+			return oops.E(oops.CodeGatewayError, err, "get completion stream").Log(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return streamBody.Close() })
 
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
+		// Set response headers for SSE
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
 
-	// Handle CORS headers
-	proxy.ModifyResponse = func(resp *http.Response) error {
-		// Remove any existing CORS headers
-		resp.Header.Del("Access-Control-Allow-Origin")
-		resp.Header.Del("Access-Control-Allow-Methods")
-		resp.Header.Del("Access-Control-Allow-Headers")
+		// Copy stream directly to response writer
+		// UnifiedClient's streamingResponseReader handles SSE parsing and message capture
+		flusher, canFlush := w.(http.Flusher)
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := streamBody.Read(buf)
+			if n > 0 {
+				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+					s.logger.ErrorContext(ctx, "stream write error", attr.SlogError(writeErr))
+					return oops.E(oops.CodeGatewayError, writeErr, "stream write failed").Log(ctx, s.logger)
+				}
+				if canFlush {
+					flusher.Flush()
+				}
+			}
+			if readErr != nil {
+				if !errors.Is(readErr, io.EOF) {
+					s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(readErr))
+				}
+				break
+			}
+		}
 
-		// TODO: Store chat history for non-streaming requests
-
+		eventProperties["success"] = true
 		return nil
 	}
 
-	// Defer executes when HandleCompletion returns, which happens after proxy.ServeHTTP completes
-	// (whether normally or due to client disconnection)
-	defer func() {
-		if respCaptorWithTracking, ok := respCaptor.(*responseCaptor); ok && respCaptorWithTracking.messageID != "" {
-			go func() {
-				if err := s.openRouter.TriggerModelUsageTracking(
-					context.WithoutCancel(ctx),
-					respCaptorWithTracking.messageID,
-					orgID,
-					authCtx.ProjectID.String(),
-					source,
-					respCaptorWithTracking.chatID.String(),
-				); err != nil {
-					// Only schedule fallback for 404 errors (generation not found yet)
-					if errors.Is(err, openrouter.ErrGenerationNotFound) {
-						s.logger.WarnContext(ctx, "generation not found, scheduling fallback tracking",
-							attr.SlogError(err),
-							attr.SlogOrganizationID(orgID),
-						)
-						if s.fallbackUsageTracker != nil {
-							if scheduleErr := s.fallbackUsageTracker.ScheduleFallbackModelUsageTracking(
-								context.WithoutCancel(ctx),
-								respCaptorWithTracking.messageID,
-								orgID,
-								authCtx.ProjectID.String(),
-								source,
-								respCaptorWithTracking.chatID.String(),
-							); scheduleErr != nil {
-								s.logger.ErrorContext(ctx, "failed to schedule fallback model usage tracking",
-									attr.SlogError(scheduleErr),
-									attr.SlogOrganizationID(orgID),
-								)
-							}
-						}
-					} else {
-						s.logger.ErrorContext(ctx, "failed to track model usage",
-							attr.SlogError(err),
-							attr.SlogOrganizationID(orgID),
-						)
-					}
-				}
-			}()
-		} else {
-			msg := "no message ID"
-			if respCaptorWithTracking != nil {
-				msg += "; model: " + respCaptorWithTracking.model
-				msg += "; org ID: " + respCaptorWithTracking.orgID
-				msg += "; project ID: " + respCaptorWithTracking.projectID.String()
-				msg += "; chat ID: " + respCaptorWithTracking.chatID.String()
-				msg += fmt.Sprintf("; isStreaming: %t", respCaptorWithTracking.isStreaming)
-			}
-			s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New(msg)))
-		}
-	}()
+	/**
+	 * Non-Streaming
+	 */
+	response, err := s.completionClient.GetCompletion(ctx, completionReq)
+	if err != nil {
+		return oops.E(oops.CodeGatewayError, err, "completion failed").Log(ctx, s.logger)
+	}
 
-	proxy.ServeHTTP(respCaptor, r)
+	// Build OpenAI-compatible response
+	openAIResp := openrouter.OpenAIChatResponse{
+		ID:      response.MessageID,
+		Object:  "chat.completion",
+		Created: time.Now().Unix(),
+		Model:   response.Model,
+		Choices: []struct {
+			Message      or.Message `json:"message"`
+			FinishReason string     `json:"finish_reason"`
+		}{
+			{
+				Message:      *response.Message,
+				FinishReason: conv.PtrValOr(response.FinishReason, "stop"),
+			},
+		},
+		Usage: &response.Usage,
+	}
+
+	// Write response
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(openAIResp); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "encode response").Log(ctx, s.logger)
+	}
 
 	eventProperties["success"] = true
-
 	return nil
 }
 
 func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePayload) (*gen.CreditUsageResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").Log(ctx, s.logger)
@@ -658,387 +746,71 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
 
-// startOrResumeChatResult contains the result of starting or resuming a chat.
-type startOrResumeChatResult struct {
-	ChatID         uuid.UUID
-	IsFirstMessage bool // True if this is the first assistant response for this chat
-}
-
-func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest, metadata httpMetadata) (*startOrResumeChatResult, error) {
-	chatID, err := uuid.Parse(chatIDHeader)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
+func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbackPayload) (*gen.SubmitFeedbackResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Create chat with placeholder title - title generation happens via the generateTitle RPC
-	_, err = s.repo.UpsertChat(ctx, repo.UpsertChatParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		UserID:         conv.ToPGText(userID),
-		ExternalUserID: conv.ToPGText(externalUserID),
-		Title:          conv.ToPGText("New Chat"),
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	// Load the chat to verify access
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Validate feedback value
+	if payload.Feedback != "success" && payload.Feedback != "failure" {
+		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
+	}
+
+	// Get the most recent message ID to track where user gave feedback
+	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create chat")
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").Log(ctx, s.logger)
 	}
 
-	// Get the number of already-stored messages so we can insert any new ones
-	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get chat history", attr.SlogError(err))
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get chat history")
+	var lastMessageID uuid.NullUUID
+	if len(messages) > 0 {
+		lastMessageID = uuid.NullUUID{UUID: messages[len(messages)-1].ID, Valid: true}
+	} else {
+		return nil, oops.E(oops.CodeInvalid, nil, "no messages found for chat")
 	}
 
-	// This shouldn't happen, and also it doesn't really matter if it does, but we error anyway so we can fix it
-	if int(chatCount) > len(request.Messages) {
-		return nil, oops.E(oops.CodeInvalid, nil, "chat history mismatch")
-	}
-
-	// If the stored chat history is shorter than the request, insert the missing messages
-	// Most of the time, this just serves to store the new message the user just sent
-	if int(chatCount) < len(request.Messages) {
-		newMessages := request.Messages[int(chatCount):]
-		rows := make([]chatMessageRow, len(newMessages))
-		for i, msg := range newMessages {
-			var toolCallID string
-			if tc := openrouter.GetToolCallID(msg); tc != nil {
-				toolCallID = *tc
-			}
-			rows[i] = chatMessageRow{
-				projectID:        projectID,
-				chatID:           chatID,
-				userID:           userID,
-				externalUserID:   externalUserID,
-				messageID:        "",
-				toolCallID:       toolCallID,
-				role:             openrouter.GetRole(msg),
-				model:            request.Model,
-				content:          msg,
-				finishReason:     nil,
-				toolCalls:        nil,
-				promptTokens:     0,
-				completionTokens: 0,
-				totalTokens:      0,
-				metadata:         metadata,
-			}
-		}
-		if err := storeMessages(ctx, s.logger, s.db, s.assetStorage, rows); err != nil {
-			s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
-		}
-	}
-
-	// This is the first message if there are no existing messages in the chat
-	isFirstMessage := chatCount == 0
-
-	return &startOrResumeChatResult{
-		ChatID:         chatID,
-		IsFirstMessage: isFirstMessage,
-	}, nil
-}
-
-// responseCaptor captures and logs response data
-type responseCaptor struct {
-	http.ResponseWriter
-	//nolint:containedctx // responseCaptor needs to implement io.Writer so its methods cannot accept a context
-	ctx                  context.Context
-	logger               *slog.Logger
-	isStreaming          bool
-	orgID                string
-	chatID               uuid.UUID
-	projectID            uuid.UUID
-	messageContent       *strings.Builder
-	lineBuf              *strings.Builder // Buffer for accumulating partial SSE lines across Write calls
-	messageID            string
-	model                string
-	isDone               bool
-	usageSet             bool
-	messageWritten       bool
-	finishReason         *string
-	repo                 *repo.Queries
-	toolCallID           string
-	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
-	usage                openrouter.Usage
-	// Title generation
-	isFirstMessage          bool
-	chatTitleGenerator      ChatTitleGenerator
-	chatResolutionAnalyzer  ChatResolutionAnalyzer
-	// GenAI telemetry
-	telemetryService *telemetry.Service
-	userID           string
-	externalUserID   string
-	startTime        time.Time // Track request start time for duration calculation
-	httpMetadata     httpMetadata
-}
-
-func (r *responseCaptor) WriteHeader(statusCode int) {
-	r.ResponseWriter.WriteHeader(statusCode)
-}
-
-// Flush implements http.Flusher to ensure SSE streaming data is sent immediately.
-// Without this, the reverse proxy may buffer chunks, breaking stream parsing on the client.
-func (r *responseCaptor) Flush() {
-	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
-}
-
-func (r *responseCaptor) Write(b []byte) (int, error) {
-	// If this is a streaming response, parse and collect the chunks
-	if r.isStreaming {
-		isDoneBeforeLineProcess := r.isDone
-
-		// Append new data to the line buffer
-		r.lineBuf.Write(b)
-		bufData := r.lineBuf.String()
-
-		// Find the last newline - everything before it is complete lines we can process
-		lastNewline := strings.LastIndex(bufData, "\n")
-		if lastNewline >= 0 {
-			// Process all complete lines
-			completeLines := bufData[:lastNewline]
-			for _, line := range strings.Split(completeLines, "\n") {
-				r.processLine(line)
-			}
-
-			// Keep the remainder (partial line) in the buffer for the next Write call
-			r.lineBuf.Reset()
-			if lastNewline < len(bufData)-1 {
-				r.lineBuf.WriteString(bufData[lastNewline+1:])
-			}
-		}
-
-		// Log if we are unexpectedly not receiving usage data on the next message after
-		// Could be a sign of a parsing issue
-		if isDoneBeforeLineProcess && !r.usageSet && r.usage.TotalTokens == 0 {
-			r.logger.ErrorContext(r.ctx, fmt.Sprintf("streaming response finished without usage data for chat message: %s", r.chatID.String()))
-		}
-	}
-
-	// If we're done, log the message
-	// openrouter streams the usage data after the finish_reason, it's important we wait for that
-	if r.isDone && r.usageSet && !r.messageWritten {
-		// Process any remaining buffered line that didn't end with \n
-		if r.lineBuf.Len() > 0 {
-			r.processLine(r.lineBuf.String())
-			r.lineBuf.Reset()
-		}
-
-		// Convert accumulated tool calls to JSON for storage if needed
-		var toolCallsJSON []byte
-		if len(r.accumulatedToolCalls) > 0 {
-			var err error
-			toolCallsArr := slices.Collect(maps.Values(r.accumulatedToolCalls))
-			toolCallsJSON, err = json.Marshal(toolCallsArr)
-			if err != nil {
-				r.logger.ErrorContext(r.ctx, "failed to marshal tool calls", attr.SlogError(err))
-			}
-		}
-
-		// TODO batch insert the messages
-		_, err := r.repo.CreateChatMessage(r.ctx, []repo.CreateChatMessageParams{{
-			ChatID:           r.chatID,
-			ProjectID:        r.projectID,
-			MessageID:        conv.ToPGText(r.messageID),
-			Role:             "assistant",
-			Model:            conv.ToPGText(r.model),
-			Content:          r.messageContent.String(),
-			ContentRaw:       nil,
-			ContentAssetUrl:  conv.ToPGTextEmpty(""),
-			StorageError:     conv.ToPGTextEmpty(""),
-			ToolCallID:       conv.ToPGText(r.toolCallID),
-			ToolCalls:        toolCallsJSON,
-			PromptTokens:     int64(r.usage.PromptTokens),
-			CompletionTokens: int64(r.usage.CompletionTokens),
-			TotalTokens:      int64(r.usage.TotalTokens),
-			FinishReason:     conv.PtrToPGText(r.finishReason),
-			UserID:           conv.ToPGTextEmpty(""), // These are agent messages, not user messages
-			ExternalUserID:   conv.ToPGTextEmpty(""), // These are agent messages, not user messages
-			Origin:           conv.ToPGText(r.httpMetadata.Origin),
-			UserAgent:        conv.ToPGText(r.httpMetadata.UserAgent),
-			IpAddress:        conv.ToPGText(r.httpMetadata.IPAddress),
-			Source:           conv.ToPGText(r.httpMetadata.Source),
-		}})
-		if err != nil {
-			r.logger.ErrorContext(r.ctx, "failed to store chat message", attr.SlogError(err))
-		}
-		r.messageWritten = true
-
-		// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
-		if r.isFirstMessage && r.chatTitleGenerator != nil {
-			if err := r.chatTitleGenerator.ScheduleChatTitleGeneration(
-				context.WithoutCancel(r.ctx),
-				r.chatID.String(),
-				r.orgID,
-			); err != nil {
-				r.logger.WarnContext(r.ctx, "failed to schedule chat title generation", attr.SlogError(err))
-			}
-		}
-
-		// Schedule chat resolution analysis (will reset timer if already scheduled)
-		if r.chatResolutionAnalyzer != nil {
-			if err := r.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
-				context.WithoutCancel(r.ctx),
-				r.chatID,
-				r.projectID,
-				r.orgID,
-			); err != nil {
-				r.logger.WarnContext(r.ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
-			}
-		}
-
-		// Emit GenAI telemetry for observability
-		r.emitGenAITelemetry(toolCallsJSON)
-	}
-
-	n, err := r.ResponseWriter.Write(b)
-	if err != nil {
-		return n, fmt.Errorf("failed to write completion response: %w", err)
-	}
-
-	return n, nil
-}
-
-func (r *responseCaptor) processLine(line string) {
-	if strings.HasPrefix(line, "data: ") {
-		data := strings.TrimPrefix(line, "data: ")
-
-		// Check if this is the [DONE] marker
-		if strings.TrimSpace(data) == "[DONE]" {
-			r.isDone = true
-			r.usageSet = true
-			return
-		}
-
-		// Parse the chunk as JSON
-		var chunk openrouter.StreamingChunk
-		if err := json.Unmarshal([]byte(data), &chunk); err == nil {
-			// Capture ID from the first chunk only
-			if r.messageID == "" && chunk.ID != "" {
-				r.messageID = chunk.ID
-			}
-			r.model = chunk.Model
-
-			if chunk.Usage != nil {
-				r.usage = *chunk.Usage
-				r.usageSet = true
-			}
-
-			// Process each choice in the chunk
-			for _, choice := range chunk.Choices {
-				// Append any content to our message
-				r.messageContent.WriteString(choice.Delta.Content)
-
-				// Process tool calls if present
-				if len(choice.Delta.ToolCalls) > 0 {
-					// Process each tool call
-					for _, tc := range choice.Delta.ToolCalls {
-						r.toolCallID = tc.ID // TODO: is there ever more than one tool call in a chunk?
-
-						if _, ok := r.accumulatedToolCalls[tc.Index]; !ok {
-							r.accumulatedToolCalls[tc.Index] = openrouter.ToolCall{
-								Index: tc.Index,
-								ID:    tc.ID,
-								Type:  tc.Type,
-								Function: openrouter.ToolCallFunction{
-									Name:      "",
-									Arguments: "",
-								},
-							}
-						}
-
-						// Accumulate function name if provided
-						if tc.Function.Name != "" {
-							c := r.accumulatedToolCalls[tc.Index]
-							c.Function.Name = tc.Function.Name
-							r.accumulatedToolCalls[tc.Index] = c
-						}
-
-						// Accumulate function arguments if provided
-						if tc.Function.Arguments != "" {
-							c := r.accumulatedToolCalls[tc.Index]
-							c.Function.Arguments += tc.Function.Arguments
-							r.accumulatedToolCalls[tc.Index] = c
-						}
-					}
-				}
-
-				// If we have a finish reason, the message is complete
-				if choice.FinishReason != nil {
-					r.finishReason = choice.FinishReason
-					r.isDone = true
-				}
-			}
-		} else {
-			r.logger.ErrorContext(r.ctx, "failed to parse streaming chunk", attr.SlogError(err))
-		}
-	}
-}
-
-// emitGenAITelemetry emits GenAI telemetry to ClickHouse for observability.
-func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
-	duration := float64(time.Since(r.startTime).Seconds())
-
-	// Build attributes map. Column-mapped keys are extracted to dedicated columns
-	// but remain in the attributes JSON. Resource attributes are auto-partitioned
-	// based on telemetry.ResourceAttributeKeys.
-	attrs := map[attr.Key]any{
-		attr.ResourceURNKey: "agents:chat:completion",
-		attr.LogBodyKey: fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
-			r.model, r.usage.PromptTokens, r.usage.CompletionTokens),
-
-		// GenAI semantic convention attributes
-		attr.GenAIOperationNameKey:     telemetry.GenAIOperationChat,
-		attr.GenAIRequestModelKey:      r.model,
-		attr.GenAIResponseModelKey:     r.model,
-		attr.GenAIUsageInputTokensKey:  r.usage.PromptTokens,
-		attr.GenAIUsageOutputTokensKey: r.usage.CompletionTokens,
-		attr.GenAIUsageTotalTokensKey:  r.usage.TotalTokens,
-		attr.GenAIConversationIDKey:    r.chatID.String(),
-		attr.GenAIConversationDuration: duration,
-	}
-
-	if r.messageID != "" {
-		attrs[attr.GenAIResponseIDKey] = r.messageID
-	}
-	if r.finishReason != nil {
-		attrs[attr.GenAIResponseFinishReasonsKey] = []string{*r.finishReason}
-	}
-	if len(toolCallsJSON) > 0 {
-		attrs[attr.GenAIToolCallsKey] = string(toolCallsJSON)
-	}
-	if r.userID != "" {
-		attrs[attr.UserIDKey] = r.userID
-	}
-	if r.externalUserID != "" {
-		attrs[attr.ExternalUserIDKey] = r.externalUserID
-	}
-
-	// Extract trace context from the request context
-	spanCtx := trace.SpanContextFromContext(r.ctx)
-	if spanCtx.HasTraceID() {
-		attrs[attr.TraceIDKey] = spanCtx.TraceID().String()
-	}
-	if spanCtx.HasSpanID() {
-		attrs[attr.SpanIDKey] = spanCtx.SpanID().String()
-	}
-
-	toolInfo := telemetry.ToolInfo{
-		ID:             r.chatID.String(),
-		URN:            r.chatID.URN(),
-		Name:           "",
-		ProjectID:      r.projectID.String(),
-		DeploymentID:   "",
-		FunctionID:     nil,
-		OrganizationID: r.orgID,
-	}
-
-	r.telemetryService.CreateLog(telemetry.LogParams{
-		Timestamp:  time.Now(),
-		ToolInfo:   toolInfo,
-		Attributes: attrs,
+	// Insert user feedback
+	_, err = s.repo.InsertUserFeedback(ctx, repo.InsertUserFeedbackParams{
+		ProjectID:           *authCtx.ProjectID,
+		ChatID:              chatID,
+		MessageID:           lastMessageID.UUID,
+		UserResolution:      payload.Feedback,
+		UserResolutionNotes: conv.ToPGTextEmpty(""),
+		ChatResolutionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "user feedback submitted",
+		attr.SlogChatID(chatID.String()),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogOutcome(payload.Feedback),
+	)
+
+	return &gen.SubmitFeedbackResult{Success: true}, nil
 }
 
 // loadMessageContent retrieves the full message content using the precedence:

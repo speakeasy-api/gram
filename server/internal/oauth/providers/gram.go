@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -38,6 +37,7 @@ func (p *GramProvider) ExchangeToken(
 	provider repo.OauthProxyProvider,
 	toolset *toolsets_repo.Toolset,
 	serverURL *url.URL,
+	_ string,
 ) (*TokenExchangeResult, error) {
 	// Exchange code for ID token from Speakeasy
 	idToken, err := p.sessions.ExchangeTokenFromSpeakeasy(ctx, code)
@@ -88,9 +88,20 @@ func (p *GramProvider) ExchangeToken(
 
 	// Use idToken as access token for gram providers
 	return &TokenExchangeResult{
-		AccessToken: idToken,
-		ExpiresAt:   conv.Ptr(time.Now().Add(session.TTL())),
+		AccessToken:  idToken,
+		RefreshToken: "",
+		ExpiresAt:    new(time.Now().Add(session.TTL())),
 	}, nil
+}
+
+// RefreshToken is not supported for Gram providers
+func (p *GramProvider) RefreshToken(
+	_ context.Context,
+	_ string,
+	_ repo.OauthProxyProvider,
+	_ *toolsets_repo.Toolset,
+) (*TokenExchangeResult, error) {
+	return nil, fmt.Errorf("refresh token not supported for gram provider")
 }
 
 // IsAccessDeniedError checks if the error is an access denied error

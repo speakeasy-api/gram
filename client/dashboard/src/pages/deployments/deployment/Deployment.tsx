@@ -21,7 +21,11 @@ import { memo, Suspense } from "react";
 import { useParams } from "react-router";
 import { useActiveDeployment } from "../useActiveDeployment";
 import { useRedeployDeployment } from "../useRedeployDeployment";
+import { useFailedDeploymentSources } from "@/components/sources/useFailedDeploymentSources";
+import { invalidateAllDeployment } from "@gram/client/react-query/index.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { AssetsTabContent } from "./AssetsTabContent";
+import { FailedSourcesSection } from "./FailedSourcesSection";
 import { LogsTabContent } from "./LogsTabContent";
 import { ToolsTabContent } from "./ToolsTabContent";
 import {
@@ -51,8 +55,10 @@ export default function DeploymentPage() {
 
 function DeploymentLogs(props: { deploymentId: string }) {
   const { deploymentId } = props;
+  const queryClient = useQueryClient();
 
   const { searchParams, setSearchParams } = useDeploymentSearchParams();
+  const failedDeployment = useFailedDeploymentSources(deploymentId);
 
   const handleUpdateTab = (tab: string) => {
     setSearchParams({ tab: tab as DeploymentPageSearchParams["tab"] });
@@ -75,6 +81,15 @@ function DeploymentLogs(props: { deploymentId: string }) {
             onClickAssets={() => setSearchParams({ tab: "assets" })}
           />
         </Suspense>
+
+        {failedDeployment.hasFailures && failedDeployment.deployment && (
+          <FailedSourcesSection
+            failedSources={failedDeployment.failedSources}
+            generalErrors={failedDeployment.generalErrors}
+            deployment={failedDeployment.deployment}
+            onRemoveSuccess={() => invalidateAllDeployment(queryClient)}
+          />
+        )}
       </section>
 
       <Tabs
@@ -146,7 +161,10 @@ const HeadingSection = () => {
     } else if (deployment.status === "completed") {
       if (isPending) buttonText = "Rolling Back...";
       else buttonText = "Roll Back";
-    } else return null;
+    } else {
+      if (isPending) buttonText = "Redeploying...";
+      else buttonText = "Redeploy";
+    }
 
     return (
       <Button onClick={handleRedeploy} disabled={isPending}>
@@ -194,6 +212,7 @@ const StatsSection = ({
   if (deployment.functionsAssets) {
     assetCount += deployment.functionsAssets.length;
   }
+  assetCount += deployment.externalMcps?.length ?? 0;
 
   return (
     <div className="text-sm flex items-center gap-3 h-4">
@@ -218,7 +237,10 @@ const StatsSection = ({
         onClick={() => onClickTools?.()}
       >
         <WrenchIcon size={16} />
-        {deployment.openapiv3ToolCount + deployment.functionsToolCount} Tools
+        {deployment.openapiv3ToolCount +
+          deployment.functionsToolCount +
+          deployment.externalMcpToolCount}{" "}
+        Tools
       </button>
     </div>
   );

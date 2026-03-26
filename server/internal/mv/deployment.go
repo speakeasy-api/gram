@@ -32,6 +32,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	stat := rows[0].Status
 	openapiv3ToolCount := rows[0].Openapiv3ToolCount
 	functionsToolCount := rows[0].FunctionsToolCount
+	externalMcpToolCount := rows[0].ExternalMcpToolCount
 	attachedOpenAPIv3 := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
 	attachedFunctionsAssets := make([]*types.DeploymentFunctions, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
@@ -126,24 +127,25 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	}
 
 	return &types.Deployment{
-		ID:                 deployment.ID.String(),
-		CreatedAt:          deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:     deployment.OrganizationID,
-		ProjectID:          deployment.ProjectID.String(),
-		UserID:             deployment.UserID,
-		Status:             stat,
-		ExternalID:         conv.FromPGText[string](deployment.ExternalID),
-		ExternalURL:        conv.FromPGText[string](deployment.ExternalUrl),
-		GithubSha:          conv.FromPGText[string](deployment.GithubSha),
-		GithubPr:           conv.FromPGText[string](deployment.GithubPr),
-		GithubRepo:         conv.FromPGText[string](deployment.GithubRepo),
-		IdempotencyKey:     conv.Ptr(deployment.IdempotencyKey),
-		ClonedFrom:         conv.FromNullableUUID(deployment.ClonedFrom),
-		Packages:           attachedPackages,
-		Openapiv3Assets:    attachedOpenAPIv3,
-		Openapiv3ToolCount: openapiv3ToolCount,
-		FunctionsToolCount: functionsToolCount,
-		FunctionsAssets:    attachedFunctionsAssets,
-		ExternalMcps:       attachedExternalMCPs,
+		ID:                   deployment.ID.String(),
+		CreatedAt:            deployment.CreatedAt.Time.Format(time.RFC3339),
+		OrganizationID:       deployment.OrganizationID,
+		ProjectID:            deployment.ProjectID.String(),
+		UserID:               deployment.UserID,
+		Status:               stat,
+		ExternalID:           conv.FromPGText[string](deployment.ExternalID),
+		ExternalURL:          conv.FromPGText[string](deployment.ExternalUrl),
+		GithubSha:            conv.FromPGText[string](deployment.GithubSha),
+		GithubPr:             conv.FromPGText[string](deployment.GithubPr),
+		GithubRepo:           conv.FromPGText[string](deployment.GithubRepo),
+		IdempotencyKey:       new(deployment.IdempotencyKey),
+		ClonedFrom:           conv.FromNullableUUID(deployment.ClonedFrom),
+		Packages:             attachedPackages,
+		Openapiv3Assets:      attachedOpenAPIv3,
+		Openapiv3ToolCount:   openapiv3ToolCount,
+		FunctionsToolCount:   functionsToolCount,
+		ExternalMcpToolCount: externalMcpToolCount,
+		FunctionsAssets:      attachedFunctionsAssets,
+		ExternalMcps:         attachedExternalMCPs,
 	}, nil
 }

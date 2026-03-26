@@ -8,7 +8,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestTemplatesService_GetTemplate_ByID_Success(t *testing.T) {
@@ -23,11 +22,11 @@ func TestTemplatesService_GetTemplate_ByID_Success(t *testing.T) {
 		ProjectSlugInput: nil,
 		Name:             types.Slug("get-by-id-template"),
 		Prompt:           "Test prompt for get by ID",
-		Description:      conv.Ptr("Test description"),
+		Description:      new("Test description"),
 		Engine:           "mustache",
 		Kind:             "prompt",
 		ToolsHint:        []string{"assistant"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 	})
 	require.NoError(t, err, "create template")
 
@@ -36,7 +35,7 @@ func TestTemplatesService_GetTemplate_ByID_Success(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(created.Template.ID),
+		ID:               new(created.Template.ID),
 		Name:             nil,
 	})
 	require.NoError(t, err, "get template by ID")
@@ -79,7 +78,7 @@ func TestTemplatesService_GetTemplate_ByName_Success(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               nil,
-		Name:             conv.Ptr("get-by-name-template"),
+		Name:             new("get-by-name-template"),
 	})
 	require.NoError(t, err, "get template by name")
 
@@ -100,7 +99,7 @@ func TestTemplatesService_GetTemplate_InvalidID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr("invalid-uuid"),
+		ID:               new("invalid-uuid"),
 		Name:             nil,
 	})
 	require.Error(t, err, "expected error for invalid UUID")
@@ -136,7 +135,7 @@ func TestTemplatesService_GetTemplate_NonExistentName(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               nil,
-		Name:             conv.Ptr("non-existent-template"),
+		Name:             new("non-existent-template"),
 	})
 	require.Error(t, err, "expected error for non-existent template")
 	require.Contains(t, err.Error(), "not found")
@@ -169,7 +168,7 @@ func TestTemplatesService_GetTemplate_EmptyID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(""),
+		ID:               new(""),
 		Name:             nil,
 	})
 	require.Error(t, err, "expected error for empty ID")
@@ -187,7 +186,7 @@ func TestTemplatesService_GetTemplate_EmptyName(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               nil,
-		Name:             conv.Ptr(""),
+		Name:             new(""),
 	})
 	require.Error(t, err, "expected error for empty name")
 	require.Contains(t, err.Error(), "either id or name must be provided")
@@ -203,7 +202,7 @@ func TestTemplatesService_GetTemplate_NilUUID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(uuid.Nil.String()),
+		ID:               new(uuid.Nil.String()),
 		Name:             nil,
 	})
 	require.Error(t, err, "expected error when neither ID nor name provided")
@@ -235,8 +234,8 @@ func TestTemplatesService_GetTemplate_BothIDAndName(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ID:               conv.Ptr(created.Template.ID),
-		Name:             conv.Ptr("both-id-name-template"),
+		ID:               new(created.Template.ID),
+		Name:             new("both-id-name-template"),
 	})
 	require.NoError(t, err, "get template with both ID and name")
 

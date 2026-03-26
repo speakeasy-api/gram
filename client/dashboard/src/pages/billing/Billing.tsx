@@ -1,7 +1,5 @@
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
 import {
-  ProductTier,
   ProductTierBadge,
   productTierColors,
 } from "@/components/product-tier-badge";
@@ -10,9 +8,10 @@ import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useSession } from "@/contexts/Auth";
+import { useIsAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { ProductTier, useProductTier } from "@/hooks/useProductTier";
 import { getServerURL } from "@/lib/utils";
 import { TierLimits } from "@gram/client/models/components";
 import {
@@ -40,9 +39,9 @@ export default function Billing() {
 }
 
 const UsageSection = () => {
-  const session = useSession();
-  const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] =
-    useState(false);
+  const productTier = useProductTier();
+
+  const isAdmin = useIsAdmin();
 
   const { data: creditUsage } = useGetCreditUsage();
   const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
@@ -99,18 +98,28 @@ const UsageSection = () => {
                 label="Tool Calls"
                 tooltip="The number of tool calls processed this period across all your organization's MCP servers."
                 value={periodUsage.toolCalls}
-                included={periodUsage.maxToolCalls || 1000}
-                overageIncrement={periodUsage.maxToolCalls}
-                noMax={session.gramAccountType === "enterprise"}
+                included={periodUsage.includedToolCalls || 1000}
+                overageIncrement={periodUsage.includedToolCalls}
+                noMax={productTier === "enterprise"}
               />
               <UsageItem
                 label="Servers"
                 tooltip="The number of MCP servers enabled across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
                 value={periodUsage.actualEnabledServerCount}
-                included={periodUsage.maxServers || 1}
+                included={periodUsage.includedServers || 1}
                 overageIncrement={1}
-                noMax={session.gramAccountType === "enterprise"}
+                noMax={productTier === "enterprise"}
               />
+              {isAdmin && (
+                <UsageItem
+                  label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
+                  tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+                  value={periodUsage.credits}
+                  included={periodUsage.includedCredits}
+                  overageIncrement={periodUsage.includedCredits}
+                  noMax={productTier === "enterprise"}
+                />
+              )}
             </>
           ) : (
             <>
@@ -136,21 +145,13 @@ const UsageSection = () => {
           )}
         </div>
       </Page.Section.Body>
-      <FeatureRequestModal
-        isOpen={isCreditUpgradeModalOpen}
-        onClose={() => setIsCreditUpgradeModalOpen(false)}
-        title="Increase Credit Limit"
-        description={`To increase your monthly credit limit upgrade from the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-        actionType="credit_upgrade"
-        accountUpgrade
-      />
     </Page.Section>
   );
 };
 
 const UsageTiers = () => {
+  const productTier = useProductTier();
   const { data: usageTiers, isLoading } = useGetUsageTiers();
-  const session = useSession();
   const client = useSdkClient();
   const telemetry = useTelemetry();
   const [checkoutLink, setCheckoutLink] = useState("");
@@ -165,7 +166,7 @@ const UsageTiers = () => {
           console.error("Failed to create checkout link: received empty link");
           telemetry.capture("checkout_link_error", {
             error: "Received empty checkout link",
-            accountType: session.gramAccountType,
+            accountType: productTier,
           });
           setCheckoutError(true);
           return;
@@ -179,7 +180,7 @@ const UsageTiers = () => {
             error instanceof Error
               ? error.message
               : "Failed to create checkout link",
-          accountType: session.gramAccountType,
+          accountType: productTier,
         });
         setCheckoutError(true);
       } finally {
@@ -188,13 +189,13 @@ const UsageTiers = () => {
     };
 
     fetchCheckoutLink();
-  }, [client, telemetry, session.gramAccountType]);
+  }, [client, telemetry, productTier]);
 
   const handleFallbackClick = useCallback(() => {
     telemetry.capture("checkout_fallback_clicked", {
-      accountType: session.gramAccountType,
+      accountType: productTier,
     });
-  }, [telemetry, session.gramAccountType]);
+  }, [telemetry, productTier]);
 
   const UpgradeCTA = useMemo(() => {
     if (checkoutError) {
@@ -207,7 +208,7 @@ const UsageTiers = () => {
                 className="inline-flex"
                 onClick={handleFallbackClick}
               >
-                UPGRADE
+                ADD CARD
               </a>
             </Button>
           </div>
@@ -226,7 +227,7 @@ const UsageTiers = () => {
               data-polar-checkout-theme={"light"}
               className="inline-flex"
             >
-              UPGRADE
+              ADD CARD
             </a>
           </Button>
         </div>
@@ -246,7 +247,7 @@ const UsageTiers = () => {
               );
               telemetry.capture("customer_session_error", {
                 error: "Received empty customer session link",
-                accountType: session.gramAccountType,
+                accountType: productTier,
               });
               return;
             }
@@ -258,11 +259,11 @@ const UsageTiers = () => {
                 error instanceof Error
                   ? error.message
                   : "Failed to create customer session",
-              accountType: session.gramAccountType,
+              accountType: productTier,
             });
           }
         }}
-        disabled={session.gramAccountType === "enterprise"}
+        disabled={productTier === "enterprise"}
       >
         MANAGE BILLING
       </Button>
@@ -273,32 +274,30 @@ const UsageTiers = () => {
     return <Cards isLoading={true} />;
   }
 
-  const enterpriseTier = "Enterprise";
-
   const UsageCard = ({
-    name,
     tier,
+    tierLimits,
     active,
     previousTier,
   }: {
-    name: string;
-    tier: TierLimits;
+    tier: ProductTier;
+    tierLimits: TierLimits;
     active: boolean;
     previousTier?: ProductTier;
   }) => {
     const price =
-      name === enterpriseTier
+      tier === "enterprise"
         ? "Tailored pricing"
-        : `$${tier.basePrice.toLocaleString()}`;
+        : `$${tierLimits.basePrice.toLocaleString()}`;
 
-    const ringColor = productTierColors(name.toLowerCase() as ProductTier).ring;
+    const ringColor = productTierColors(tier).ring;
 
     return (
       <Card className={cn("w-full p-6", active && `ring-2 ${ringColor}`)}>
         <Card.Header>
           <Card.Title>
             <Stack gap={1}>
-              <ProductTierBadge tier={name.toLowerCase() as ProductTier} />
+              <ProductTierBadge tierOverride={tier} />
               <Heading variant="h2">{price}</Heading>
             </Stack>
           </Card.Title>
@@ -318,35 +317,36 @@ const UsageTiers = () => {
                   : "Features"}
               </Type>
               <ul className="list-inside space-y-1">
-                {tier.featureBullets.map((bullet) => (
+                {tierLimits.featureBullets.map((bullet) => (
                   <li>
                     <span className="text-muted-foreground/60">✓</span> {bullet}
                   </li>
                 ))}
               </ul>
             </Stack>
-            {tier.includedBullets && tier.includedBullets.length > 0 && (
-              <Stack gap={1}>
-                <Type
-                  mono
-                  muted
-                  small
-                  variant="subheading"
-                  className="font-medium uppercase"
-                >
-                  Included
-                </Type>
-                <ul className="list-inside space-y-1">
-                  {tier.includedBullets.map((bullet) => (
-                    <li>
-                      <span className="text-muted-foreground/60">✓</span>{" "}
-                      {bullet}
-                    </li>
-                  ))}
-                </ul>
-              </Stack>
-            )}
-            {tier.addOnBullets && tier.addOnBullets.length > 0 && (
+            {tierLimits.includedBullets &&
+              tierLimits.includedBullets.length > 0 && (
+                <Stack gap={1}>
+                  <Type
+                    mono
+                    muted
+                    small
+                    variant="subheading"
+                    className="font-medium uppercase"
+                  >
+                    Included
+                  </Type>
+                  <ul className="list-inside space-y-1">
+                    {tierLimits.includedBullets.map((bullet) => (
+                      <li>
+                        <span className="text-muted-foreground/60">✓</span>{" "}
+                        {bullet}
+                      </li>
+                    ))}
+                  </ul>
+                </Stack>
+              )}
+            {tierLimits.addOnBullets && tierLimits.addOnBullets.length > 0 && (
               <Stack gap={1}>
                 <Type
                   mono
@@ -358,7 +358,7 @@ const UsageTiers = () => {
                   Extras
                 </Type>
                 <ul className="list-inside space-y-1">
-                  {tier.addOnBullets.map((bullet) => (
+                  {tierLimits.addOnBullets.map((bullet) => (
                     <li>
                       <span className="text-muted-foreground/60">✓</span>{" "}
                       {bullet}
@@ -379,33 +379,35 @@ const UsageTiers = () => {
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>
-      {session.gramAccountType === "free" ? UpgradeCTA : polarPortalCTA}
+      {productTier === "base" ? UpgradeCTA : polarPortalCTA}
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>
           {isLoading ? (
             <>
               <CardSkeleton />
               <CardSkeleton />
-              <CardSkeleton />
             </>
           ) : (
             <>
               <UsageCard
-                name={"Free"}
-                tier={usageTiers.free}
-                active={session.gramAccountType === "free"}
+                tier={productTier === "base_PAID" ? "base_PAID" : "base"}
+                tierLimits={usageTiers.free}
+                active={productTier === "base" || productTier === "base_PAID"}
               />
+              {/* Keep this so we can show it to users who are still on the old pricing tier */}
+              {productTier === "__deprecated__pro" && (
+                <UsageCard
+                  tier="__deprecated__pro"
+                  tierLimits={usageTiers.pro}
+                  previousTier="base"
+                  active={productTier === "__deprecated__pro"}
+                />
+              )}
               <UsageCard
-                name={"Pro"}
-                tier={usageTiers.pro}
-                previousTier="free"
-                active={session.gramAccountType === "pro"}
-              />
-              <UsageCard
-                name={enterpriseTier}
-                tier={usageTiers.enterprise}
-                previousTier="pro"
-                active={session.gramAccountType === "enterprise"}
+                tier="enterprise"
+                tierLimits={usageTiers.enterprise}
+                previousTier="base"
+                active={productTier === "enterprise"}
               />
             </>
           )}

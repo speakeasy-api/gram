@@ -19,19 +19,19 @@ A plugin is defined by the following TypeScript interface:
 ```typescript
 interface Plugin {
   // The language identifier for the code fence (e.g., "vega", "mermaid", "d3")
-  language: string
+  language: string;
 
   // Instructions for the LLM on how to use this plugin
-  prompt: string
+  prompt: string;
 
   // Your custom React component that renders the code block
-  SyntaxHighlighter: ComponentType<SyntaxHighlighterProps>
+  SyntaxHighlighter: ComponentType<SyntaxHighlighterProps>;
 
   // Optional: Custom header component for the code block
-  CodeHeader?: ComponentType<CodeHeaderProps> | null
+  CodeHeader?: ComponentType<CodeHeaderProps> | null;
 
   // Optional: Whether to override existing plugins with the same language
-  overrideExisting?: boolean
+  overrideExisting?: boolean;
 }
 ```
 

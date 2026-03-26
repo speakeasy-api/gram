@@ -16,12 +16,12 @@ import (
 )
 
 type logEntry struct {
-	Level   string                 `json:"level"`
-	Msg     string                 `json:"msg"`
-	Attrs   map[string]interface{} `json:"attrs"`
-	ErrorID string                 `json:"gram.error.id"`
-	Error   string                 `json:"error.message"`
-	Stack   string                 `json:"exception.stacktrace"`
+	Level   string         `json:"level"`
+	Msg     string         `json:"msg"`
+	Attrs   map[string]any `json:"attrs"`
+	ErrorID string         `json:"gram.error.id"`
+	Error   string         `json:"error.message"`
+	Stack   string         `json:"exception.stacktrace"`
 }
 
 func captureLogger() (*slog.Logger, *bytes.Buffer) {
@@ -36,7 +36,7 @@ func captureLogger() (*slog.Logger, *bytes.Buffer) {
 func parseLogEntries(t *testing.T, buf *bytes.Buffer) []logEntry {
 	t.Helper()
 	var entries []logEntry
-	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(buf.String()), "\n") {
 		if line == "" {
 			continue
 		}

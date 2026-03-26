@@ -105,25 +105,26 @@ func (c *DeploymentsClient) GetDeployment(
 	}
 
 	return &types.Deployment{
-		ID:                 result.ID,
-		OrganizationID:     result.OrganizationID,
-		ProjectID:          result.ProjectID,
-		UserID:             result.UserID,
-		CreatedAt:          result.CreatedAt,
-		Status:             result.Status,
-		IdempotencyKey:     result.IdempotencyKey,
-		GithubRepo:         result.GithubRepo,
-		GithubPr:           result.GithubPr,
-		GithubSha:          result.GithubSha,
-		ExternalID:         result.ExternalID,
-		ExternalURL:        result.ExternalURL,
-		ClonedFrom:         result.ClonedFrom,
-		Openapiv3ToolCount: result.Openapiv3ToolCount,
-		Openapiv3Assets:    result.Openapiv3Assets,
-		FunctionsToolCount: result.FunctionsToolCount,
-		FunctionsAssets:    result.FunctionsAssets,
-		Packages:           result.Packages,
-		ExternalMcps:       result.ExternalMcps,
+		ID:                   result.ID,
+		OrganizationID:       result.OrganizationID,
+		ProjectID:            result.ProjectID,
+		UserID:               result.UserID,
+		CreatedAt:            result.CreatedAt,
+		Status:               result.Status,
+		IdempotencyKey:       result.IdempotencyKey,
+		GithubRepo:           result.GithubRepo,
+		GithubPr:             result.GithubPr,
+		GithubSha:            result.GithubSha,
+		ExternalID:           result.ExternalID,
+		ExternalURL:          result.ExternalURL,
+		ClonedFrom:           result.ClonedFrom,
+		Openapiv3ToolCount:   result.Openapiv3ToolCount,
+		Openapiv3Assets:      result.Openapiv3Assets,
+		FunctionsToolCount:   result.FunctionsToolCount,
+		FunctionsAssets:      result.FunctionsAssets,
+		ExternalMcpToolCount: result.ExternalMcpToolCount,
+		Packages:             result.Packages,
+		ExternalMcps:         result.ExternalMcps,
 	}, nil
 }
 
@@ -207,4 +208,25 @@ func (c *DeploymentsClient) Evolve(
 	}
 
 	return result, nil
+}
+
+// Redeploy triggers a redeployment of an existing deployment.
+func (c *DeploymentsClient) Redeploy(
+	ctx context.Context,
+	apiKey secret.Secret,
+	projectSlug string,
+	deploymentID string,
+) (*types.Deployment, error) {
+	key := apiKey.Reveal()
+	result, err := c.client.Redeploy(ctx, &deployments.RedeployPayload{
+		ApikeyToken:      &key,
+		ProjectSlugInput: &projectSlug,
+		DeploymentID:     deploymentID,
+		SessionToken:     nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("api error: %w", err)
+	}
+
+	return result.Deployment, nil
 }

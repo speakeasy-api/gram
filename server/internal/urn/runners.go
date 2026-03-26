@@ -107,7 +107,7 @@ func (u *FunctionRunner) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (u *FunctionRunner) Scan(value interface{}) error {
+func (u *FunctionRunner) Scan(value any) error {
 	if value == nil {
 		return nil
 	}

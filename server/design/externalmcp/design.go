@@ -15,6 +15,60 @@ var _ = Service("mcpRegistries", func() {
 	})
 	shared.DeclareErrorResponses()
 
+	Method("clearCache", func() {
+		Description("Clear the registry cache for a specific registry (admin only)")
+
+		Payload(func() {
+			Attribute("registry_id", String, "The registry to clear cache for", func() {
+				Format(FormatUUID)
+			})
+			Required("registry_id")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/mcpRegistries.clearCache")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("registry_id")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "clearMCPRegistryCache")
+		Meta("openapi:extension:x-speakeasy-name-override", "clearCache")
+	})
+
+	Method("listRegistries", func() {
+		Description("List all MCP registries (admin only)")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("registries", ArrayOf(MCPRegistry), "List of MCP registries")
+			Required("registries")
+		})
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.listRegistries")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMCPRegistries")
+		Meta("openapi:extension:x-speakeasy-name-override", "listRegistries")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPRegistries"}`)
+	})
+
 	Method("listCatalog", func() {
 		Description("List available MCP servers from configured registries")
 
@@ -51,6 +105,38 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listCatalog")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPCatalog"}`)
 	})
+
+	Method("getServerDetails", func() {
+		Description("Get detailed information about an MCP server including remotes")
+
+		Payload(func() {
+			Attribute("registry_id", String, "ID of the registry", func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_specifier", String, "Server specifier (e.g., 'io.github.user/server')")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+
+			Required("registry_id", "server_specifier")
+		})
+
+		Result(ExternalMCPServer)
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.getServerDetails")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("registry_id")
+			Param("server_specifier")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMCPServerDetails")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerDetails")
+	})
 })
 
 var ExternalMCPServer = Type("ExternalMCPServer", func() {
@@ -74,8 +160,23 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	})
 	Attribute("meta", Any, "Opaque metadata from the registry")
 	Attribute("tools", ArrayOf(ExternalMCPTool), "Tools available on the server")
+	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 
 	Required("registry_specifier", "version", "description", "registry_id")
+})
+
+var MCPRegistry = Type("MCPRegistry", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An MCP registry")
+
+	Attribute("id", String, "Registry ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name for the registry")
+	Attribute("url", String, "URL of the registry")
+
+	Required("id", "name", "url")
 })
 
 var ExternalMCPTool = Type("ExternalMCPTool", func() {
@@ -85,4 +186,19 @@ var ExternalMCPTool = Type("ExternalMCPTool", func() {
 	Attribute("description", String, "Description of the tool")
 	Attribute("input_schema", Any, "Input schema for the tool")
 	Attribute("annotations", Any, "Annotations for the tool")
+})
+
+var ExternalMCPRemote = Type("ExternalMCPRemote", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A remote endpoint for an MCP server")
+
+	Attribute("url", String, "URL of the remote endpoint", func() {
+		Format(FormatURI)
+	})
+	Attribute("transport_type", String, "Transport type (sse or streamable-http)", func() {
+		Enum("sse", "streamable-http")
+	})
+
+	Required("url", "transport_type")
 })

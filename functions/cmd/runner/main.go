@@ -136,10 +136,10 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /healthz", otelhttp.WithRouteTag("http.healthCheck", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
-	})))
+	}))
 
 	runner.NewService(logger, enc, args.workDir, cmd, cmdArgs).Attach(mux)
 
@@ -164,6 +164,9 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 		cancel(svc.ErrIdleServerTimeout)
 	}()
 
+	// #nosec G118 -- We want the shutdown context lifetime to be separate
+	// from the main context to ensure that it is not immediately canceled
+	// when the main context is canceled.
 	go func() {
 		<-ctx.Done()
 

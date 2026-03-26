@@ -50,7 +50,7 @@ export function parseFilePath(filePath: string): {
   const pathMatch = filePath.match(/^gs:\/\/([^\/]+)\/?(.+)$/);
   if (!pathMatch || !pathMatch[1] || !pathMatch[2]) {
     throw new Error(
-      `Invalid GCS file path format: ${filePath}. Expected format: gs://bucket-name/path/to/file.pdf`
+      `Invalid GCS file path format: ${filePath}. Expected format: gs://bucket-name/path/to/file.pdf`,
     );
   }
   return { bucketName: pathMatch[1], rest: pathMatch[2] };

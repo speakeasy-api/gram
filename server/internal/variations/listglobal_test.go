@@ -9,14 +9,16 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/variations"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestVariationsService_ListGlobal_Success(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
 
 	result, err := ti.service.ListGlobal(ctx, &gen.ListGlobalPayload{
 		ApikeyToken:      nil,
@@ -27,6 +29,10 @@ func TestVariationsService_ListGlobal_Success(t *testing.T) {
 	require.NotNil(t, result, "result should not be nil")
 	require.NotNil(t, result.Variations, "variations should not be nil")
 	require.IsType(t, []*types.ToolVariation{}, result.Variations, "variations should be of correct type")
+
+	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_ListGlobal_EmptyList(t *testing.T) {
@@ -236,9 +242,9 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		SrcToolName:      "first-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
-		Name:             conv.Ptr("first-variation"),
-		Summary:          conv.Ptr("first summary"),
-		Description:      conv.Ptr("first description"),
+		Name:             new("first-variation"),
+		Summary:          new("first summary"),
+		Description:      new("first description"),
 		Tags:             nil,
 		Summarizer:       nil,
 	})
@@ -254,9 +260,9 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		SrcToolName:      "second-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
-		Name:             conv.Ptr("second-variation"),
-		Summary:          conv.Ptr("second summary"),
-		Description:      conv.Ptr("second description"),
+		Name:             new("second-variation"),
+		Summary:          new("second summary"),
+		Description:      new("second description"),
 		Tags:             nil,
 		Summarizer:       nil,
 	})

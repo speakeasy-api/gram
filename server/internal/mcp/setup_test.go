@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/url"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -29,9 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	temporal_client "go.temporal.io/sdk/client"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var (
@@ -40,7 +43,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background())
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -85,8 +88,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -105,11 +107,12 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewChatClient(logger, devProvisioner)
+	chatClient := openrouter.NewUnifiedClient(logger, devProvisioner, nil, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, conn, redisClient)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
+	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
@@ -120,20 +123,16 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager,
 		chatSessions,
 		logsEnabled,
+		toolIOLogsEnabled,
 		posthog,
 	)
 
-	var temporalClient temporal_client.Client
-	temporalClient, devserver := infra.NewTemporalClient(t)
-	t.Cleanup(func() {
-		temporalClient.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
-	})
+	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalClient)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -149,6 +148,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 // mockOAuthService allows controlling OAuth validation behavior in tests
 type mockOAuthService struct {
 	validateFunc func(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error)
+	refreshFunc  func(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error)
 }
 
 func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error) {
@@ -156,6 +156,13 @@ func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uu
 		return m.validateFunc(ctx, toolsetId, accessToken)
 	}
 	return nil, oauth.ErrInvalidAccessToken
+}
+
+func (m *mockOAuthService) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error) {
+	if m.refreshFunc != nil {
+		return m.refreshFunc(ctx, toolsetID, token, proxyProvider, toolset)
+	}
+	return nil, fmt.Errorf("not implemented")
 }
 
 // newTestMCPServiceWithOAuth creates a test MCP service with a custom OAuth service
@@ -176,8 +183,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -195,24 +201,20 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	guardianPolicy := guardian.NewDefaultPolicy()
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewChatClient(logger, devProvisioner)
+	chatClient := openrouter.NewUnifiedClient(logger, devProvisioner, nil, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	featClient := productfeatures.NewClient(logger, conn, redisClient)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	var temporalClient temporal_client.Client
-	temporalClient, devserver := infra.NewTemporalClient(t)
-	t.Cleanup(func() {
-		temporalClient.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
-	})
+	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
+	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 
 	telemService := telemetry.NewService(
 		logger,
@@ -221,9 +223,10 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 		sessionManager,
 		chatSessionsManager,
 		logsEnabled,
+		toolIOLogsEnabled,
 		posthog,
 	)
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalClient)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -250,10 +253,12 @@ func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) stri
 	return *key.Key
 }
 
-// getSessionToken returns a valid session token for testing
+// getSessionToken returns a valid session token for testing.
+// The session must already be established via InitAuthContext.
 func (ti *testInstance) getSessionToken(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	sessionToken, err := ti.sessionManager.PopulateLocalDevDefaultAuthSession(ctx)
-	require.NoError(t, err)
-	return sessionToken
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context must be set before calling getSessionToken")
+	require.NotNil(t, authCtx.SessionID, "session ID must be set in auth context")
+	return *authCtx.SessionID
 }
