@@ -26,53 +26,63 @@ func testClient(t *testing.T, handler http.Handler) *WorkOS {
 	return NewForTest(slog.Default(), client)
 }
 
-// jsonResponse is a helper that writes a JSON response.
 func jsonResponse(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func TestNilClient(t *testing.T) {
+	t.Parallel()
+
 	var w *WorkOS
 
 	t.Run("all methods return error on nil receiver", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 
 		_, err := w.GetUserByEmail(ctx, "test@example.com")
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = w.ListUsersInOrg(ctx, "org_123")
-		assert.Error(t, err)
+		require.Error(t, err)
 
-		_, err = w.SendInvitation(ctx, usermanagement.SendInvitationOpts{})
-		assert.Error(t, err)
+		_, err = w.SendInvitation(ctx, usermanagement.SendInvitationOpts{
+			Email: "test@example.com",
+		})
+		require.Error(t, err)
 
 		_, err = w.ListInvitations(ctx, "org_123")
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = w.RevokeInvitation(ctx, "inv_123")
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = w.ResendInvitation(ctx, "inv_123")
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = w.FindInvitationByToken(ctx, "token_123")
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = w.GetUser(ctx, "user_123")
-		assert.Error(t, err)
+		require.Error(t, err)
+
+		_, err = w.GetInvitation(ctx, "inv_123")
+		require.Error(t, err)
 
 		err = w.DeleteOrganizationMembership(ctx, "mem_123")
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = w.GetOrgMembership(ctx, "user_123", "org_123")
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
 func TestListUsersInOrg(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns all users in org", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			assert.Contains(t, r.URL.Path, "/user_management/users")
@@ -83,7 +93,7 @@ func TestListUsersInOrg(t *testing.T) {
 					{ID: "user_1", Email: "alice@example.com", FirstName: "Alice", LastName: "Smith"},
 					{ID: "user_2", Email: "bob@example.com", FirstName: "Bob"},
 				},
-				ListMetadata: common.ListMetadata{After: ""},
+				ListMetadata: common.ListMetadata{},
 			})
 		}))
 
@@ -96,6 +106,7 @@ func TestListUsersInOrg(t *testing.T) {
 	})
 
 	t.Run("paginates through multiple pages", func(t *testing.T) {
+		t.Parallel()
 		callCount := 0
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			callCount++
@@ -112,7 +123,7 @@ func TestListUsersInOrg(t *testing.T) {
 					Data: []usermanagement.User{
 						{ID: "user_2", Email: "bob@example.com"},
 					},
-					ListMetadata: common.ListMetadata{After: ""},
+					ListMetadata: common.ListMetadata{},
 				})
 			}
 		}))
@@ -124,24 +135,28 @@ func TestListUsersInOrg(t *testing.T) {
 	})
 
 	t.Run("returns error on API failure", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, `{"message":"internal error"}`, http.StatusInternalServerError)
 		}))
 
 		_, err := w.ListUsersInOrg(context.Background(), "org_123")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to list users from workos")
 	})
 }
 
 func TestSendInvitation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("sends invitation successfully", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodPost, r.Method)
 			assert.Equal(t, "/user_management/invitations", r.URL.Path)
 
 			var body usermanagement.SendInvitationOpts
-			json.NewDecoder(r.Body).Decode(&body) //nolint:errcheck
+			_ = json.NewDecoder(r.Body).Decode(&body)
 			assert.Equal(t, "invitee@example.com", body.Email)
 			assert.Equal(t, "org_123", body.OrganizationID)
 			assert.Equal(t, "user_456", body.InviterUserID)
@@ -155,6 +170,7 @@ func TestSendInvitation(t *testing.T) {
 				InviterUserID:  "user_456",
 				ExpiresAt:      "2026-04-02T00:00:00Z",
 				CreatedAt:      "2026-03-26T00:00:00Z",
+				UpdatedAt:      "2026-03-26T00:00:00Z",
 			})
 		}))
 
@@ -171,6 +187,7 @@ func TestSendInvitation(t *testing.T) {
 	})
 
 	t.Run("returns error on API failure", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, `{"message":"conflict"}`, http.StatusConflict)
 		}))
@@ -178,13 +195,16 @@ func TestSendInvitation(t *testing.T) {
 		_, err := w.SendInvitation(context.Background(), usermanagement.SendInvitationOpts{
 			Email: "invitee@example.com",
 		})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to send invitation via workos")
 	})
 }
 
 func TestListInvitations(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns all invitations for org", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			assert.Contains(t, r.URL.Path, "/user_management/invitations")
@@ -195,7 +215,7 @@ func TestListInvitations(t *testing.T) {
 					{ID: "inv_1", Email: "alice@example.com", State: usermanagement.Pending},
 					{ID: "inv_2", Email: "bob@example.com", State: usermanagement.Accepted},
 				},
-				ListMetadata: common.ListMetadata{After: ""},
+				ListMetadata: common.ListMetadata{},
 			})
 		}))
 
@@ -207,6 +227,7 @@ func TestListInvitations(t *testing.T) {
 	})
 
 	t.Run("paginates through multiple pages", func(t *testing.T) {
+		t.Parallel()
 		callCount := 0
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			callCount++
@@ -223,7 +244,7 @@ func TestListInvitations(t *testing.T) {
 					Data: []usermanagement.Invitation{
 						{ID: "inv_2", Email: "bob@example.com", State: usermanagement.Pending},
 					},
-					ListMetadata: common.ListMetadata{After: ""},
+					ListMetadata: common.ListMetadata{},
 				})
 			}
 		}))
@@ -236,7 +257,10 @@ func TestListInvitations(t *testing.T) {
 }
 
 func TestRevokeInvitation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("revokes invitation successfully", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodPost, r.Method)
 			assert.Equal(t, "/user_management/invitations/inv_123/revoke", r.URL.Path)
@@ -256,18 +280,22 @@ func TestRevokeInvitation(t *testing.T) {
 	})
 
 	t.Run("returns error on API failure", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, `{"message":"not found"}`, http.StatusNotFound)
 		}))
 
 		_, err := w.RevokeInvitation(context.Background(), "inv_invalid")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to revoke invitation via workos")
 	})
 }
 
 func TestResendInvitation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("resends invitation successfully", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodPost, r.Method)
 			assert.Equal(t, "/user_management/invitations/inv_123/resend", r.URL.Path)
@@ -289,7 +317,10 @@ func TestResendInvitation(t *testing.T) {
 }
 
 func TestFindInvitationByToken(t *testing.T) {
+	t.Parallel()
+
 	t.Run("finds invitation by token", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			assert.Equal(t, "/user_management/invitations/by_token/tok_abc", r.URL.Path)
@@ -313,18 +344,57 @@ func TestFindInvitationByToken(t *testing.T) {
 	})
 
 	t.Run("returns error when token not found", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, `{"message":"not found"}`, http.StatusNotFound)
 		}))
 
 		_, err := w.FindInvitationByToken(context.Background(), "tok_invalid")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to find invitation by token via workos")
 	})
 }
 
+func TestGetInvitation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("gets invitation by ID", func(t *testing.T) {
+		t.Parallel()
+		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "/user_management/invitations/inv_123", r.URL.Path)
+
+			jsonResponse(rw, http.StatusOK, usermanagement.Invitation{
+				ID:             "inv_123",
+				Email:          "test@example.com",
+				State:          usermanagement.Pending,
+				OrganizationID: "org_123",
+			})
+		}))
+
+		inv, err := w.GetInvitation(context.Background(), "inv_123")
+		require.NoError(t, err)
+		assert.Equal(t, "inv_123", inv.ID)
+		assert.Equal(t, "org_123", inv.OrganizationID)
+	})
+
+	t.Run("returns error on API failure", func(t *testing.T) {
+		t.Parallel()
+		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			http.Error(rw, `{"message":"not found"}`, http.StatusNotFound)
+		}))
+
+		_, err := w.GetInvitation(context.Background(), "inv_invalid")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get invitation from workos")
+	})
+}
+
 func TestGetUser(t *testing.T) {
+	t.Parallel()
+
 	t.Run("gets user by ID", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			assert.Equal(t, "/user_management/users/user_123", r.URL.Path)
@@ -347,18 +417,22 @@ func TestGetUser(t *testing.T) {
 	})
 
 	t.Run("returns error on API failure", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, `{"message":"not found"}`, http.StatusNotFound)
 		}))
 
 		_, err := w.GetUser(context.Background(), "user_invalid")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get user from workos")
 	})
 }
 
 func TestDeleteOrganizationMembership(t *testing.T) {
+	t.Parallel()
+
 	t.Run("deletes membership successfully", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodDelete, r.Method)
 			assert.Equal(t, "/user_management/organization_memberships/mem_123", r.URL.Path)
@@ -370,18 +444,22 @@ func TestDeleteOrganizationMembership(t *testing.T) {
 	})
 
 	t.Run("returns error on API failure", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, `{"message":"forbidden"}`, http.StatusForbidden)
 		}))
 
 		err := w.DeleteOrganizationMembership(context.Background(), "mem_invalid")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to delete organization membership via workos")
 	})
 }
 
 func TestGetOrgMembership(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns membership when found", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			assert.Contains(t, r.URL.Path, "/user_management/organization_memberships")
@@ -410,6 +488,7 @@ func TestGetOrgMembership(t *testing.T) {
 	})
 
 	t.Run("returns nil when no membership found", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			jsonResponse(rw, http.StatusOK, usermanagement.ListOrganizationMembershipsResponse{
 				Data:         []usermanagement.OrganizationMembership{},
@@ -424,7 +503,10 @@ func TestGetOrgMembership(t *testing.T) {
 }
 
 func TestGetUserByEmail(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns user when found", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			assert.Equal(t, "alice@example.com", r.URL.Query().Get("email"))
@@ -445,6 +527,7 @@ func TestGetUserByEmail(t *testing.T) {
 	})
 
 	t.Run("returns nil when no user found", func(t *testing.T) {
+		t.Parallel()
 		w := testClient(t, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			jsonResponse(rw, http.StatusOK, usermanagement.ListUsersResponse{
 				Data:         []usermanagement.User{},

@@ -71,6 +71,9 @@ func (w *WorkOS) ListUsersInOrg(ctx context.Context, workOSOrgID string) ([]user
 			OrganizationID: workOSOrgID,
 			Limit:          100,
 			After:          after,
+			Email:          "",
+			Order:          "",
+			Before:         "",
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list users from workos: %w", err)
@@ -113,6 +116,9 @@ func (w *WorkOS) ListInvitations(ctx context.Context, workOSOrgID string) ([]use
 			OrganizationID: workOSOrgID,
 			Limit:          100,
 			After:          after,
+			Email:          "",
+			Order:          "",
+			Before:         "",
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list invitations from workos: %w", err)
@@ -187,6 +193,21 @@ func (w *WorkOS) GetUser(ctx context.Context, userID string) (*usermanagement.Us
 	}
 
 	return &user, nil
+}
+
+func (w *WorkOS) GetInvitation(ctx context.Context, invitationID string) (usermanagement.Invitation, error) {
+	if w == nil {
+		return usermanagement.Invitation{}, errors.New("workos client is not initialized")
+	}
+
+	inv, err := w.um.GetInvitation(ctx, usermanagement.GetInvitationOpts{
+		Invitation: invitationID,
+	})
+	if err != nil {
+		return usermanagement.Invitation{}, fmt.Errorf("failed to get invitation from workos: %w", err)
+	}
+
+	return inv, nil
 }
 
 func (w *WorkOS) DeleteOrganizationMembership(ctx context.Context, membershipID string) error {

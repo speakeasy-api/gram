@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 )
@@ -47,7 +48,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/teams"),
 		logger:   logger,
 		sessions: sessions,
-		auth:     auth.New(logger, nil, sessions),
+		auth:     auth.New(logger, db, sessions),
 		orgRepo:  orgRepo.New(db),
 		userRepo: userRepo.New(db),
 	}
@@ -70,6 +71,15 @@ func (s *Service) getAuthContext(ctx context.Context) (*contextvalues.AuthContex
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	return authCtx, nil
+}
+
+// requireWorkOS returns the WorkOS client or a proper service error if not configured.
+func (s *Service) requireWorkOS() (*workos.WorkOS, error) {
+	w := s.sessions.WorkOS()
+	if w == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "WorkOS integration is not configured")
+	}
+	return w, nil
 }
 
 // getOrgWorkOSID looks up the WorkOS organization ID for a Gram organization.
@@ -100,6 +110,42 @@ func (s *Service) getUserWorkOSID(ctx context.Context, userID string) (string, e
 	return user.WorkosID.String, nil
 }
 
+// validateOrgAccess checks that the payload org ID matches the session org.
+func (s *Service) validateOrgAccess(payloadOrgID, activeOrgID string) error {
+	if payloadOrgID != activeOrgID {
+		return oops.E(oops.CodeForbidden, nil, "organization_id does not match active organization")
+	}
+	return nil
+}
+
+// verifyInviteBelongsToOrg fetches an invitation and verifies it belongs to the caller's org.
+func (s *Service) verifyInviteBelongsToOrg(ctx context.Context, w *workos.WorkOS, inviteID, workosOrgID string) (usermanagement.Invitation, error) {
+	inv, err := w.GetInvitation(ctx, inviteID)
+	if err != nil {
+		return usermanagement.Invitation{}, oops.E(oops.CodeNotFound, err, "invitation not found").Log(ctx, s.logger)
+	}
+
+	if inv.OrganizationID != workosOrgID {
+		return usermanagement.Invitation{}, oops.E(oops.CodeNotFound, nil, "invitation not found")
+	}
+
+	return inv, nil
+}
+
+func workosDisplayName(firstName, lastName, email string) string {
+	displayName := firstName
+	if lastName != "" {
+		if displayName != "" {
+			displayName += " "
+		}
+		displayName += lastName
+	}
+	if displayName == "" {
+		displayName = email
+	}
+	return displayName
+}
+
 func invitationToGenInvite(inv usermanagement.Invitation, inviterName string) *gen.TeamInvite {
 	return &gen.TeamInvite{
 		ID:        inv.ID,
@@ -111,8 +157,28 @@ func invitationToGenInvite(inv usermanagement.Invitation, inviterName string) *g
 	}
 }
 
+func (s *Service) resolveInviterName(ctx context.Context, w *workos.WorkOS, inviterUserID string) string {
+	if inviterUserID == "" {
+		return ""
+	}
+	inviter, err := w.GetUser(ctx, inviterUserID)
+	if err != nil {
+		return ""
+	}
+	return workosDisplayName(inviter.FirstName, inviter.LastName, inviter.Email)
+}
+
 func (s *Service) ListMembers(ctx context.Context, payload *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
 	authCtx, err := s.getAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.validateOrgAccess(payload.OrganizationID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
+	wos, err := s.requireWorkOS()
 	if err != nil {
 		return nil, err
 	}
@@ -122,33 +188,33 @@ func (s *Service) ListMembers(ctx context.Context, payload *gen.ListMembersPaylo
 		return nil, err
 	}
 
-	workos := s.sessions.WorkOS()
-	users, err := workos.ListUsersInOrg(ctx, workosOrgID)
+	users, err := wos.ListUsersInOrg(ctx, workosOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "failed to list organization members from WorkOS").Log(ctx, s.logger)
 	}
 
 	members := make([]*gen.TeamMember, 0, len(users))
 	for _, u := range users {
-		displayName := u.FirstName
-		if u.LastName != "" {
-			if displayName != "" {
-				displayName += " "
-			}
-			displayName += u.LastName
-		}
-		if displayName == "" {
-			displayName = u.Email
+		// Resolve WorkOS user to Gram user for consistent ID space
+		gramUser, err := s.userRepo.GetUserByWorkosID(ctx, pgtype.Text{String: u.ID, Valid: true})
+		if err != nil {
+			// User exists in WorkOS but not synced to Gram yet — use WorkOS data
+			s.logger.WarnContext(ctx, "WorkOS user not found in Gram DB, skipping",
+				attr.SlogError(err),
+			)
+			continue
 		}
 
-		member := &gen.TeamMember{
-			ID:          u.ID,
-			Email:       u.Email,
-			DisplayName: displayName,
-			JoinedAt:    u.CreatedAt,
+		var photoURL *string
+		if gramUser.PhotoUrl.Valid && gramUser.PhotoUrl.String != "" {
+			photoURL = &gramUser.PhotoUrl.String
 		}
-		if u.ProfilePictureURL != "" {
-			member.PhotoURL = &u.ProfilePictureURL
+		member := &gen.TeamMember{
+			ID:          gramUser.ID,
+			Email:       gramUser.Email,
+			DisplayName: gramUser.DisplayName,
+			PhotoURL:    photoURL,
+			JoinedAt:    u.CreatedAt,
 		}
 		members = append(members, member)
 	}
@@ -158,6 +224,15 @@ func (s *Service) ListMembers(ctx context.Context, payload *gen.ListMembersPaylo
 
 func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPayload) (*gen.InviteMemberResult, error) {
 	authCtx, err := s.getAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.validateOrgAccess(payload.OrganizationID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
+	wos, err := s.requireWorkOS()
 	if err != nil {
 		return nil, err
 	}
@@ -172,12 +247,12 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, err
 	}
 
-	workos := s.sessions.WorkOS()
-	inv, err := workos.SendInvitation(ctx, usermanagement.SendInvitationOpts{
+	inv, err := wos.SendInvitation(ctx, usermanagement.SendInvitationOpts{
 		Email:          payload.Email,
 		OrganizationID: workosOrgID,
 		InviterUserID:  inviterWorkOSID,
 		ExpiresInDays:  7,
+		RoleSlug:       "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "failed to send invitation via WorkOS").Log(ctx, s.logger)
@@ -199,35 +274,28 @@ func (s *Service) ListInvites(ctx context.Context, payload *gen.ListInvitesPaylo
 		return nil, err
 	}
 
+	if err := s.validateOrgAccess(payload.OrganizationID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
+	wos, err := s.requireWorkOS()
+	if err != nil {
+		return nil, err
+	}
+
 	workosOrgID, err := s.getOrgWorkOSID(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
 
-	workos := s.sessions.WorkOS()
-	invitations, err := workos.ListInvitations(ctx, workosOrgID)
+	invitations, err := wos.ListInvitations(ctx, workosOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "failed to list invitations from WorkOS").Log(ctx, s.logger)
 	}
 
 	invites := make([]*gen.TeamInvite, 0, len(invitations))
 	for _, inv := range invitations {
-		inviterName := ""
-		if inv.InviterUserID != "" {
-			if inviter, err := workos.GetUser(ctx, inv.InviterUserID); err == nil {
-				inviterName = inviter.FirstName
-				if inviter.LastName != "" {
-					if inviterName != "" {
-						inviterName += " "
-					}
-					inviterName += inviter.LastName
-				}
-				if inviterName == "" {
-					inviterName = inviter.Email
-				}
-			}
-		}
-
+		inviterName := s.resolveInviterName(ctx, wos, inv.InviterUserID)
 		invites = append(invites, invitationToGenInvite(inv, inviterName))
 	}
 
@@ -235,14 +303,26 @@ func (s *Service) ListInvites(ctx context.Context, payload *gen.ListInvitesPaylo
 }
 
 func (s *Service) CancelInvite(ctx context.Context, payload *gen.CancelInvitePayload) error {
-	_, err := s.getAuthContext(ctx)
+	authCtx, err := s.getAuthContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	workos := s.sessions.WorkOS()
-	_, err = workos.RevokeInvitation(ctx, payload.InviteID)
+	wos, err := s.requireWorkOS()
 	if err != nil {
+		return err
+	}
+
+	workosOrgID, err := s.getOrgWorkOSID(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return err
+	}
+
+	if _, err := s.verifyInviteBelongsToOrg(ctx, wos, payload.InviteID, workosOrgID); err != nil {
+		return err
+	}
+
+	if _, err := wos.RevokeInvitation(ctx, payload.InviteID); err != nil {
 		return oops.E(oops.CodeGatewayError, err, "failed to revoke invitation via WorkOS").Log(ctx, s.logger)
 	}
 
@@ -250,13 +330,26 @@ func (s *Service) CancelInvite(ctx context.Context, payload *gen.CancelInvitePay
 }
 
 func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePayload) (*gen.ResendInviteResult, error) {
-	_, err := s.getAuthContext(ctx)
+	authCtx, err := s.getAuthContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	workos := s.sessions.WorkOS()
-	inv, err := workos.ResendInvitation(ctx, payload.InviteID)
+	wos, err := s.requireWorkOS()
+	if err != nil {
+		return nil, err
+	}
+
+	workosOrgID, err := s.getOrgWorkOSID(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := s.verifyInviteBelongsToOrg(ctx, wos, payload.InviteID, workosOrgID); err != nil {
+		return nil, err
+	}
+
+	inv, err := wos.ResendInvitation(ctx, payload.InviteID)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "failed to resend invitation via WorkOS").Log(ctx, s.logger)
 	}
@@ -267,27 +360,17 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 }
 
 func (s *Service) GetInviteInfo(ctx context.Context, payload *gen.GetInviteInfoPayload) (*gen.InviteInfoResult, error) {
-	workos := s.sessions.WorkOS()
-	inv, err := workos.FindInvitationByToken(ctx, payload.Token)
+	wos, err := s.requireWorkOS()
+	if err != nil {
+		return nil, err
+	}
+
+	inv, err := wos.FindInvitationByToken(ctx, payload.Token)
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "invitation not found").Log(ctx, s.logger)
 	}
 
-	inviterName := ""
-	if inv.InviterUserID != "" {
-		if inviter, err := workos.GetUser(ctx, inv.InviterUserID); err == nil {
-			inviterName = inviter.FirstName
-			if inviter.LastName != "" {
-				if inviterName != "" {
-					inviterName += " "
-				}
-				inviterName += inviter.LastName
-			}
-			if inviterName == "" {
-				inviterName = inviter.Email
-			}
-		}
-	}
+	inviterName := s.resolveInviterName(ctx, wos, inv.InviterUserID)
 
 	orgName := ""
 	if inv.OrganizationID != "" {
@@ -311,8 +394,17 @@ func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPay
 		return err
 	}
 
+	if err := s.validateOrgAccess(payload.OrganizationID, authCtx.ActiveOrganizationID); err != nil {
+		return err
+	}
+
 	if payload.UserID == authCtx.UserID {
 		return oops.E(oops.CodeBadRequest, nil, "cannot remove yourself from the organization")
+	}
+
+	wos, err := s.requireWorkOS()
+	if err != nil {
+		return err
 	}
 
 	workosOrgID, err := s.getOrgWorkOSID(ctx, authCtx.ActiveOrganizationID)
@@ -325,8 +417,7 @@ func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPay
 		return err
 	}
 
-	workos := s.sessions.WorkOS()
-	membership, err := workos.GetOrgMembership(ctx, memberWorkOSID, workosOrgID)
+	membership, err := wos.GetOrgMembership(ctx, memberWorkOSID, workosOrgID)
 	if err != nil {
 		return oops.E(oops.CodeGatewayError, err, "failed to find membership in WorkOS").Log(ctx, s.logger)
 	}
@@ -334,7 +425,7 @@ func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPay
 		return oops.E(oops.CodeNotFound, nil, "user is not a member of this organization")
 	}
 
-	if err := workos.DeleteOrganizationMembership(ctx, membership.ID); err != nil {
+	if err := wos.DeleteOrganizationMembership(ctx, membership.ID); err != nil {
 		return oops.E(oops.CodeGatewayError, err, "failed to remove member via WorkOS").Log(ctx, s.logger)
 	}
 
