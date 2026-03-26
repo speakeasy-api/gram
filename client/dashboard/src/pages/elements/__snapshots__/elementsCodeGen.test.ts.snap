@@ -1,5 +1,9 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`getDangerousApiKeyEnvContent > renders with placeholder when no key provided 1`] = `"GRAM_API_KEY=your_api_key_here"`;
+
+exports[`getDangerousApiKeyEnvContent > renders with provided API key 1`] = `"GRAM_API_KEY=sk_test_123"`;
+
 exports[`getElementsInstall > renders for nextjs 1`] = `"npm add @gram-ai/elements"`;
 
 exports[`getElementsInstall > renders for react 1`] = `"pnpm add @gram-ai/elements"`;

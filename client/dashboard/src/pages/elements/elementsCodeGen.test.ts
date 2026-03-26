@@ -5,6 +5,7 @@ import {
   getPeerDeps,
   getElementsInstall,
   getNextjsApiRoute,
+  getDangerousApiKeyEnvContent,
   getSessionComponentCode,
   getViteApiRoute,
 } from "./elementsCodeGen";
@@ -86,6 +87,18 @@ describe("getSessionComponentCode", () => {
         },
       }),
     ).toMatchSnapshot();
+  });
+});
+
+describe("getDangerousApiKeyEnvContent", () => {
+  it("renders with provided API key", () => {
+    expect(
+      getDangerousApiKeyEnvContent({ apiKey: "sk_test_123" }),
+    ).toMatchSnapshot();
+  });
+
+  it("renders with placeholder when no key provided", () => {
+    expect(getDangerousApiKeyEnvContent({ apiKey: null })).toMatchSnapshot();
   });
 });
 
