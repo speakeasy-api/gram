@@ -2,6 +2,11 @@ import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
+import {
+  getEnvContent,
+  getPeerDeps,
+  getElementsInstall,
+} from "./elementsCodeGen";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +57,7 @@ type Radius = "round" | "soft" | "sharp";
 type Variant = "widget" | "sidecar" | "standalone";
 type ModalPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 
-interface ElementsFormConfig {
+export interface ElementsFormConfig {
   // Connection
   mcp: string;
   // Theme
@@ -976,22 +981,6 @@ function InstallationGuide({
 
   const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;
 
-  const getPeerDeps = () => {
-    const pm = selectedFramework === "nextjs" ? "npm" : "pnpm";
-    return `${pm} add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki`;
-  };
-
-  const getElementsInstall = () => {
-    const pm = selectedFramework === "nextjs" ? "npm" : "pnpm";
-    return `${pm} add @gram-ai/elements`;
-  };
-
-  const getEnvContent = () => {
-    const apiKey = generatedApiKey || "your_api_key_here";
-    return `GRAM_API_KEY=${apiKey}
-EMBED_ORIGIN=http://localhost:3000 # Replace with your actual origin`;
-  };
-
   const getNextjsApiRoute = () => {
     return `// pages/api/session.ts
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -1351,10 +1340,16 @@ export default function GramChat() {
               description="Run these commands in your terminal"
             >
               <div className="space-y-2">
-                <CodeBlock code={getPeerDeps()} language="bash">
+                <CodeBlock
+                  code={getPeerDeps({ framework: selectedFramework! })}
+                  language="bash"
+                >
                   <CodeBlockCopyButton />
                 </CodeBlock>
-                <CodeBlock code={getElementsInstall()} language="bash">
+                <CodeBlock
+                  code={getElementsInstall({ framework: selectedFramework! })}
+                  language="bash"
+                >
                   <CodeBlockCopyButton />
                 </CodeBlock>
               </div>
@@ -1373,7 +1368,10 @@ export default function GramChat() {
                 </>
               }
             >
-              <CodeBlock code={getEnvContent()} language="bash">
+              <CodeBlock
+                code={getEnvContent({ apiKey: generatedApiKey })}
+                language="bash"
+              >
                 <CodeBlockCopyButton />
               </CodeBlock>
             </SetupStep>

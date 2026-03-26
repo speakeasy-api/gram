@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`getElementsInstall > renders for nextjs 1`] = `"npm add @gram-ai/elements"`;
+
+exports[`getElementsInstall > renders for react 1`] = `"pnpm add @gram-ai/elements"`;
+
+exports[`getEnvContent > renders with placeholder when no key provided 1`] = `
+"GRAM_API_KEY=your_api_key_here
+EMBED_ORIGIN=http://localhost:3000 # Replace with your actual origin"
+`;
+
+exports[`getEnvContent > renders with provided API key 1`] = `
+"GRAM_API_KEY=sk_test_123
+EMBED_ORIGIN=http://localhost:3000 # Replace with your actual origin"
+`;
+
+exports[`getPeerDeps > renders for nextjs 1`] = `"npm add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki"`;
+
+exports[`getPeerDeps > renders for react 1`] = `"pnpm add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki"`;
