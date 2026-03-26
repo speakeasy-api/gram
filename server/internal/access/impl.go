@@ -2,7 +2,6 @@ package access
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -85,7 +85,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil {
-		return nil, gen.MakeUnauthorized(errors.New("missing auth context"))
+		return nil, oops.E(oops.CodeUnauthorized, nil, "missing auth context").Log(ctx, s.logger)
 	}
 	return ac, nil
 }
@@ -99,7 +99,7 @@ func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, er
 		return "", fmt.Errorf("get organization metadata: %w", err)
 	}
 	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		return "", gen.MakeBadRequest(errors.New("organization is not linked to WorkOS"))
+		return "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
 	}
 	return org.WorkosID.String, nil
 }
@@ -223,13 +223,13 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list roles from workos: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
 	}
 
 	// Count members per role.
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list members from workos: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
 	}
 	memberCounts := make(map[string]int)
 	for _, m := range members {
@@ -242,7 +242,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	for _, wr := range wRoles {
 		grants, err := s.grantsForRole(ctx, ac.ActiveOrganizationID, wr.Slug)
 		if err != nil {
-			return nil, gen.MakeUnexpected(err)
+			return nil, oops.E(oops.CodeUnexpected, err, "load grants for role").Log(ctx, s.logger)
 		}
 
 		result.Roles = append(result.Roles, &gen.Role{
@@ -274,19 +274,19 @@ func (s *Service) GetRole(ctx context.Context, p *gen.GetRolePayload) (*gen.Role
 	// WorkOS ListOrganizationRoles is the only way to get roles; find ours by ID.
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list roles from workos: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
 	}
 
 	for _, wr := range wRoles {
 		if wr.ID == p.ID {
 			grants, err := s.grantsForRole(ctx, ac.ActiveOrganizationID, wr.Slug)
 			if err != nil {
-				return nil, gen.MakeUnexpected(err)
+				return nil, oops.E(oops.CodeUnexpected, err, "load grants for role").Log(ctx, s.logger)
 			}
 
 			members, err := s.roles.ListMembers(ctx, workosOrgID)
 			if err != nil {
-				return nil, gen.MakeGatewayError(fmt.Errorf("list members: %w", err))
+				return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
 			}
 			count := 0
 			for _, m := range members {
@@ -308,7 +308,7 @@ func (s *Service) GetRole(ctx context.Context, p *gen.GetRolePayload) (*gen.Role
 		}
 	}
 
-	return nil, gen.MakeNotFound(fmt.Errorf("role %q not found", p.ID))
+	return nil, oops.E(oops.CodeNotFound, nil, "role %q not found", p.ID).Log(ctx, s.logger)
 }
 
 func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*gen.Role, error) {
@@ -330,9 +330,9 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "409") || strings.Contains(err.Error(), "slug_conflict") || strings.Contains(err.Error(), "already in use") {
-			return nil, gen.MakeConflict(fmt.Errorf("a role with the name %q already exists", p.Name))
+			return nil, oops.E(oops.CodeConflict, err, "a role with the name %q already exists", p.Name).Log(ctx, s.logger)
 		}
-		return nil, gen.MakeGatewayError(fmt.Errorf("create role in workos: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "create role in workos").Log(ctx, s.logger)
 	}
 
 	// Sync scope grants to local DB. If this fails, clean up the WorkOS role
@@ -345,7 +345,7 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 					attr.SlogError(delErr),
 				)
 			}
-			return nil, gen.MakeUnexpected(fmt.Errorf("sync grants: %w", err))
+			return nil, oops.E(oops.CodeUnexpected, err, "sync grants for new role").Log(ctx, s.logger)
 		}
 	}
 
@@ -354,7 +354,7 @@ func (s *Service) CreateRole(ctx context.Context, p *gen.CreateRolePayload) (*ge
 	if len(p.MemberIds) > 0 {
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
-			return nil, gen.MakeGatewayError(fmt.Errorf("list members: %w", err))
+			return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
 		}
 		// Build a lookup from user_id to membership_id.
 		membershipByUser := make(map[string]string)
@@ -407,7 +407,7 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 	// Find the existing role to get its slug and type.
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list roles: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
 	}
 	var roleName, roleDesc, roleCreatedAt, roleUpdatedAt, roleSlug string
 	var isSystem bool
@@ -425,7 +425,7 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 		}
 	}
 	if !roleFound {
-		return nil, gen.MakeNotFound(fmt.Errorf("role %q not found", p.ID))
+		return nil, oops.E(oops.CodeNotFound, nil, "role %q not found", p.ID).Log(ctx, s.logger)
 	}
 
 	// Update role metadata in WorkOS — skip for system/environment roles
@@ -438,7 +438,7 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 		}
 		wr, err := s.roles.UpdateRole(ctx, workosOrgID, roleSlug, opts)
 		if err != nil {
-			return nil, gen.MakeGatewayError(fmt.Errorf("update role in workos: %w", err))
+			return nil, oops.E(oops.CodeGatewayError, err, "update role in workos").Log(ctx, s.logger)
 		}
 		roleName = wr.Name
 		roleDesc = wr.Description
@@ -449,7 +449,7 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 	// managed by the seed/backfill script, not by users.
 	if p.Grants != nil && !isSystem {
 		if err := s.syncGrants(ctx, ac.ActiveOrganizationID, roleSlug, p.Grants); err != nil {
-			return nil, gen.MakeUnexpected(fmt.Errorf("sync grants: %w", err))
+			return nil, oops.E(oops.CodeUnexpected, err, "sync grants for role").Log(ctx, s.logger)
 		}
 	}
 
@@ -457,7 +457,7 @@ func (s *Service) UpdateRole(ctx context.Context, p *gen.UpdateRolePayload) (*ge
 	if len(p.MemberIds) > 0 {
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
-			return nil, gen.MakeGatewayError(fmt.Errorf("list members for reassignment: %w", err))
+			return nil, oops.E(oops.CodeGatewayError, err, "list members for reassignment").Log(ctx, s.logger)
 		}
 		membershipByUser := make(map[string]string, len(members))
 		for _, m := range members {
@@ -519,25 +519,25 @@ func (s *Service) DeleteRole(ctx context.Context, p *gen.DeleteRolePayload) erro
 	// Find the role to get its slug for grant cleanup.
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return gen.MakeGatewayError(fmt.Errorf("list roles: %w", err))
+		return oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
 	}
 	var roleSlug string
 	for _, wr := range wRoles {
 		if wr.ID == p.ID {
 			if wr.Type == "EnvironmentRole" {
-				return gen.MakeForbidden(errors.New("cannot delete a system role"))
+				return oops.E(oops.CodeForbidden, nil, "cannot delete a system role").Log(ctx, s.logger)
 			}
 			roleSlug = wr.Slug
 			break
 		}
 	}
 	if roleSlug == "" {
-		return gen.MakeNotFound(fmt.Errorf("role %q not found", p.ID))
+		return oops.E(oops.CodeNotFound, nil, "role %q not found", p.ID).Log(ctx, s.logger)
 	}
 
 	// Delete the role from WorkOS (identified by slug, not ID).
 	if err := s.roles.DeleteRole(ctx, workosOrgID, roleSlug); err != nil {
-		return gen.MakeGatewayError(fmt.Errorf("delete role from workos: %w", err))
+		return oops.E(oops.CodeGatewayError, err, "delete role from workos").Log(ctx, s.logger)
 	}
 
 	// Clean up local grants for this role.
@@ -583,13 +583,13 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 
 	memberships, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list members from workos: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
 	}
 
 	// Build slug→ID lookup so we return role IDs the frontend can match.
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list roles: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
 	}
 	slugToID := make(map[string]string, len(wRoles))
 	for _, wr := range wRoles {
@@ -599,7 +599,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	// Batch-fetch all users in the org (single paginated API call instead of N+1).
 	usersByID, err := s.roles.ListOrgUsers(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list org users from workos: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
 	result := &gen.ListMembersResult{
@@ -652,7 +652,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, p *gen.UpdateMemberRoleP
 	// Find the membership for this user in this org.
 	memberships, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list members: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
 	}
 
 	var membershipID string
@@ -663,14 +663,14 @@ func (s *Service) UpdateMemberRole(ctx context.Context, p *gen.UpdateMemberRoleP
 		}
 	}
 	if membershipID == "" {
-		return nil, gen.MakeNotFound(fmt.Errorf("membership not found for user %q", p.UserID))
+		return nil, oops.E(oops.CodeNotFound, nil, "membership not found for user %q", p.UserID).Log(ctx, s.logger)
 	}
 
 	// p.RoleID may be a WorkOS role ID (role_...) or a slug — resolve to slug.
 	roleSlug := p.RoleID
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("list roles: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
 	}
 	for _, wr := range wRoles {
 		if wr.ID == p.RoleID {
@@ -681,12 +681,12 @@ func (s *Service) UpdateMemberRole(ctx context.Context, p *gen.UpdateMemberRoleP
 
 	updated, err := s.roles.UpdateMemberRole(ctx, membershipID, roleSlug)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("update member role: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "update member role in workos").Log(ctx, s.logger)
 	}
 
 	user, err := s.roles.GetUser(ctx, updated.UserID)
 	if err != nil {
-		return nil, gen.MakeGatewayError(fmt.Errorf("get user: %w", err))
+		return nil, oops.E(oops.CodeGatewayError, err, "get user from workos").Log(ctx, s.logger)
 	}
 
 	// Resolve slug back to role ID for the response.
