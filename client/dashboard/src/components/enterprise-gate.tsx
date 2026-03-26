@@ -18,7 +18,7 @@ export function EnterpriseGate({
 }: EnterpriseGateProps) {
   const productTier = useProductTier();
 
-  if (productTier === "enterprise") {
+  if (productTier === "enterprise" || productTier === "enterprise_free_trial") {
     return <>{children}</>;
   }
 

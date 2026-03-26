@@ -61,6 +61,10 @@ type Client struct {
 	// getHooksSummary endpoint.
 	GetHooksSummaryDoer goahttp.Doer
 
+	// ListHooksTraces Doer is the HTTP client used to make requests to the
+	// listHooksTraces endpoint.
+	ListHooksTracesDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -92,6 +96,7 @@ func NewClient(
 		ListFilterOptionsDoer:        doer,
 		ListAttributeKeysDoer:        doer,
 		GetHooksSummaryDoer:          doer,
+		ListHooksTracesDoer:          doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -359,6 +364,30 @@ func (c *Client) GetHooksSummary() goa.Endpoint {
 		resp, err := c.GetHooksSummaryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getHooksSummary", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListHooksTraces returns an endpoint that makes HTTP requests to the
+// telemetry service listHooksTraces server.
+func (c *Client) ListHooksTraces() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListHooksTracesRequest(c.encoder)
+		decodeResponse = DecodeListHooksTracesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListHooksTracesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListHooksTracesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "listHooksTraces", err)
 		}
 		return decodeResponse(resp)
 	}

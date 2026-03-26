@@ -9,6 +9,7 @@ import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectM
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
+import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
@@ -145,6 +146,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListFilterOptionsResult> {
     return unwrapAsync(telemetryListFilterOptions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listHooksTraces telemetry
+   *
+   * @remarks
+   * List hook traces aggregated by trace_id with user information
+   */
+  async listHooksTraces(
+    request: operations.ListHooksTracesRequest,
+    security?: operations.ListHooksTracesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListHooksTracesResult> {
+    return unwrapAsync(telemetryListHooksTraces(
       this,
       request,
       security,

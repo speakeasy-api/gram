@@ -78,6 +78,7 @@ export * from "./listChatsWithResolutions.js";
 export * from "./listDeployments.js";
 export * from "./listEnvironments.js";
 export * from "./listFilterOptions.js";
+export * from "./listHooksTraces.js";
 export * from "./listIntegrations.js";
 export * from "./listMCPCatalog.js";
 export * from "./listMCPRegistries.js";

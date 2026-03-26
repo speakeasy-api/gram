@@ -30,6 +30,7 @@ type Server struct {
 	ListFilterOptions        http.Handler
 	ListAttributeKeys        http.Handler
 	GetHooksSummary          http.Handler
+	ListHooksTraces          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -70,6 +71,7 @@ func New(
 			{"ListFilterOptions", "POST", "/rpc/telemetry.listFilterOptions"},
 			{"ListAttributeKeys", "POST", "/rpc/telemetry.listAttributeKeys"},
 			{"GetHooksSummary", "POST", "/rpc/telemetry.getHooksSummary"},
+			{"ListHooksTraces", "POST", "/rpc/telemetry.listHooksTraces"},
 		},
 		SearchLogs:               NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
 		SearchToolCalls:          NewSearchToolCallsHandler(e.SearchToolCalls, mux, decoder, encoder, errhandler, formatter),
@@ -82,6 +84,7 @@ func New(
 		ListFilterOptions:        NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
 		ListAttributeKeys:        NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
 		GetHooksSummary:          NewGetHooksSummaryHandler(e.GetHooksSummary, mux, decoder, encoder, errhandler, formatter),
+		ListHooksTraces:          NewListHooksTracesHandler(e.ListHooksTraces, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -101,6 +104,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListFilterOptions = m(s.ListFilterOptions)
 	s.ListAttributeKeys = m(s.ListAttributeKeys)
 	s.GetHooksSummary = m(s.GetHooksSummary)
+	s.ListHooksTraces = m(s.ListHooksTraces)
 }
 
 // MethodNames returns the methods served.
@@ -119,6 +123,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListFilterOptionsHandler(mux, h.ListFilterOptions)
 	MountListAttributeKeysHandler(mux, h.ListAttributeKeys)
 	MountGetHooksSummaryHandler(mux, h.GetHooksSummary)
+	MountListHooksTracesHandler(mux, h.ListHooksTraces)
 }
 
 // Mount configures the mux to serve the telemetry endpoints.
@@ -688,6 +693,59 @@ func NewGetHooksSummaryHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getHooksSummary")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListHooksTracesHandler configures the mux to serve the "telemetry"
+// service "listHooksTraces" endpoint.
+func MountListHooksTracesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.listHooksTraces", f)
+}
+
+// NewListHooksTracesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "listHooksTraces" endpoint.
+func NewListHooksTracesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListHooksTracesRequest(mux, decoder)
+		encodeResponse = EncodeListHooksTracesResponse(encoder)
+		encodeError    = EncodeListHooksTracesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listHooksTraces")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {
