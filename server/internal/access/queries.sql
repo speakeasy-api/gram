@@ -47,6 +47,20 @@ DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn;
 
+-- name: SyncPrincipalGrants :exec
+-- Replaces all grants for a principal in one statement: deletes existing grants
+-- then inserts the new set. Pass parallel arrays of scopes and resources.
+-- An empty array set effectively revokes all grants for the principal.
+WITH deleted AS (
+  DELETE FROM principal_grants
+  WHERE organization_id = @organization_id
+    AND principal_urn = @principal_urn
+)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
+SELECT @organization_id, @principal_urn, unnest(@scopes::text[]), unnest(@resources::text[])
+ON CONFLICT (organization_id, principal_urn, scope, resource)
+DO UPDATE SET updated_at = clock_timestamp();
+
 -- name: RemoveResourceFromGrants :execrows
 -- Deletes all grant rows referencing a specific resource within an org.
 -- Called when a resource (project, MCP server) is deleted.

@@ -154,60 +154,32 @@ func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug stri
 	return grants, nil
 }
 
-// syncGrants replaces all principal_grants for a role with the provided grants.
-// The delete-then-insert is wrapped in a transaction so a partial failure does
-// not leave the role with missing grants.
+// syncGrants replaces all principal_grants for a role with the provided grants
+// in a single atomic statement (DELETE + INSERT via CTE).
 func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string, grants []*gen.RoleGrant) error {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op; error is safe to ignore
-
-	q := repo.New(tx)
-	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-
-	// Delete existing grants for this role.
-	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   principalURN,
-	}); err != nil {
-		return fmt.Errorf("delete existing grants: %w", err)
-	}
-
-	// Insert new grants.
+	// Flatten grants into parallel scope/resource arrays for the unnest query.
+	var scopes, resources []string
 	for _, g := range grants {
 		if g.Resources == nil {
 			// Unrestricted grant (null resources = wildcard).
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-				OrganizationID: orgID,
-				PrincipalUrn:   principalURN,
-				Scope:          g.Scope,
-				Resource:       "*",
-			}); err != nil {
-				return fmt.Errorf("upsert unrestricted grant %q: %w", g.Scope, err)
-			}
-		} else if len(g.Resources) > 0 {
-			// Scoped grant — only the listed resources. Empty array = no
-			// grant for this scope (the scope is simply not inserted).
+			scopes = append(scopes, g.Scope)
+			resources = append(resources, "*")
+		} else {
 			for _, res := range g.Resources {
-				if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-					OrganizationID: orgID,
-					PrincipalUrn:   principalURN,
-					Scope:          g.Scope,
-					Resource:       res,
-				}); err != nil {
-					return fmt.Errorf("upsert grant %q resource %q: %w", g.Scope, res, err)
-				}
+				scopes = append(scopes, g.Scope)
+				resources = append(resources, res)
 			}
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
+	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
-	return nil
+	return repo.New(s.db).SyncPrincipalGrants(ctx, repo.SyncPrincipalGrantsParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   principalURN,
+		Scopes:         scopes,
+		Resources:      resources,
+	})
 }
 
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
