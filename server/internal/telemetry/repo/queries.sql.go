@@ -1477,8 +1477,8 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"tool_name",
 		"tool_source",
 		"event_source",
-		"any(toString(attributes.`user.email`)) as user_email",
-		"any(toString(attributes.`gram.hook.source`)) as hook_source",
+		"user_email",
+		"hook_source",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
