@@ -42,10 +42,11 @@ import OrgDomains from "./pages/org/OrgDomains";
 import OrgLogs from "./pages/org/OrgLogs";
 import OrgHome from "./pages/org/OrgHome";
 import OrgAdminSettings from "./pages/org/OrgAdminSettings";
-// OrgTeam is managed externally via Speakeasy IDP for now
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
+import Team from "./pages/team/Team";
+import AcceptInvite from "./pages/invite/AcceptInvite";
 import SourceDetails from "./pages/sources/SourceDetails";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
@@ -124,6 +125,12 @@ const ROUTE_STRUCTURE = {
     title: "Register",
     url: "/register",
     component: Register,
+    unauthenticated: true,
+  },
+  invite: {
+    title: "Accept Invite",
+    url: "/invite",
+    component: AcceptInvite,
     unauthenticated: true,
   },
   onboarding: {
@@ -536,6 +543,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "billing",
     icon: "credit-card",
     component: Billing,
+  },
+  team: {
+    title: "Team",
+    url: "team",
+    icon: "users-round",
+    component: Team,
   },
   apiKeys: {
     title: "API Keys",

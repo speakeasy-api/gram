@@ -209,7 +209,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 // Paths that don't require authentication — skip the loading shell on these
 // to avoid a brief flash of the authenticated skeleton (e.g. after logout).
-const UNAUTHENTICATED_PATHS = ["/login", "/register"];
+const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite"];
 
 // Paths that are authenticated but don't require org/project slug context.
 const SLUG_EXEMPT_PATHS = ["/slack/register"];
