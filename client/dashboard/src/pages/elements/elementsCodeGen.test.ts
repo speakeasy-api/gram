@@ -3,6 +3,8 @@ import {
   getEnvContent,
   getPeerDeps,
   getElementsInstall,
+  getNextjsApiRoute,
+  getViteApiRoute,
 } from "./elementsCodeGen";
 
 describe("getEnvContent", () => {
