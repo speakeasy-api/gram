@@ -76,6 +76,7 @@ const emptySession: Session = {
   },
   organizations: [],
   activeOrganizationId: "",
+  hasActiveSubscription: false,
   session: "",
   rawGramAccountType: "",
   organization: emptyOrganization,

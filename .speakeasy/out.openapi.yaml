@@ -16341,6 +16341,9 @@ components:
           type: string
         gram_account_type:
           type: string
+        has_active_subscription:
+          type: boolean
+          description: Whether the organization has an active billing subscription
         is_admin:
           type: boolean
         organizations:
@@ -16364,6 +16367,7 @@ components:
         - active_organization_id
         - organizations
         - gram_account_type
+        - has_active_subscription
     InstanceMcpServer:
       type: object
       properties:

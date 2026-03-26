@@ -15,6 +15,10 @@ import {
 export type InfoResponseBody = {
   activeOrganizationId: string;
   gramAccountType: string;
+  /**
+   * Whether the organization has an active billing subscription
+   */
+  hasActiveSubscription: boolean;
   isAdmin: boolean;
   organizations: Array<OrganizationEntry>;
   userDisplayName?: string | undefined;
@@ -32,6 +36,7 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
   z.object({
     active_organization_id: z.string(),
     gram_account_type: z.string(),
+    has_active_subscription: z.boolean(),
     is_admin: z.boolean(),
     organizations: z.array(OrganizationEntry$inboundSchema),
     user_display_name: z.optional(z.string()),
@@ -44,6 +49,7 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "active_organization_id": "activeOrganizationId",
       "gram_account_type": "gramAccountType",
+      "has_active_subscription": "hasActiveSubscription",
       "is_admin": "isAdmin",
       "user_display_name": "userDisplayName",
       "user_email": "userEmail",
