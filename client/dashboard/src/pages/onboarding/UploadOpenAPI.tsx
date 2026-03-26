@@ -292,6 +292,8 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
       if (!apiName) {
         setApiName("My API");
       }
+    } catch (_error) {
+      toast.error("Failed to load OpenAPI spec from URL");
     } finally {
       setIsUploading(false);
     }
