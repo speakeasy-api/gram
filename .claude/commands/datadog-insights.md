@@ -333,7 +333,7 @@ Then append sections in this exact order:
 
 **Each monitor gets its own section block.** Do NOT combine them.
 
-````json
+```json
 { "type": "divider" },
 {
   "type": "section",
@@ -345,7 +345,12 @@ Then append sections in this exact order:
     "type": "mrkdwn",
     "text": "🔴 *<Monitor name>* — <type>\n<What it means>\n*Notifying*: `#<channel>`\n*Source*: `server/internal/<path>` (<function>)"
   }
-},
+}
+```
+
+### A2. Error spike (always include if a spike was detected; independent of monitors)
+
+````json
 { "type": "divider" },
 {
   "type": "section",
