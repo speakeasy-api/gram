@@ -5,6 +5,7 @@ import {
   getPeerDeps,
   getElementsInstall,
   getNextjsApiRoute,
+  getDangerousApiKeyComponentCode,
   getDangerousApiKeyEnvContent,
   getSessionComponentCode,
   getViteApiRoute,
@@ -99,6 +100,33 @@ describe("getDangerousApiKeyEnvContent", () => {
 
   it("renders with placeholder when no key provided", () => {
     expect(getDangerousApiKeyEnvContent({ apiKey: null })).toMatchSnapshot();
+  });
+});
+
+describe("getDangerousApiKeyComponentCode", () => {
+  it("renders for nextjs with defaults", () => {
+    expect(getDangerousApiKeyComponentCode(defaultParams)).toMatchSnapshot();
+  });
+
+  it("renders for react with defaults", () => {
+    expect(
+      getDangerousApiKeyComponentCode({ ...defaultParams, framework: "react" }),
+    ).toMatchSnapshot();
+  });
+
+  it("renders with widget variant and modal options", () => {
+    expect(
+      getDangerousApiKeyComponentCode({
+        ...defaultParams,
+        config: {
+          ...defaultParams.config,
+          variant: "widget",
+          modalDefaultOpen: true,
+          modalPosition: "top-left",
+          modalTitle: "Help",
+        },
+      }),
+    ).toMatchSnapshot();
   });
 });
 

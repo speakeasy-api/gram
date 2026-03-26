@@ -56,14 +56,8 @@ export default async function handler(
 }`;
 }
 
-export function getSessionComponentCode(params: CodeGenParams): string {
-  const { framework, projectSlug, mcpUrl, config } = params;
-  const isNextjs = framework === "nextjs";
-  const useClientDirective = isNextjs ? `"use client";\n\n` : "";
-  const sessionEndpoint = isNextjs
-    ? "/api/session"
-    : "http://localhost:3001/chat/session";
-
+function buildConfigLines(params: CodeGenParams): string[] {
+  const { projectSlug, mcpUrl, config } = params;
   const configLines: string[] = [];
   configLines.push(`  projectSlug: "${projectSlug}",`);
   configLines.push(`  mcp: "${mcpUrl}",`);
@@ -132,6 +126,18 @@ export function getSessionComponentCode(params: CodeGenParams): string {
     configLines.push(`  tools: {\n    expandToolGroupsByDefault: true,\n  },`);
   }
 
+  return configLines;
+}
+
+export function getSessionComponentCode(params: CodeGenParams): string {
+  const { framework, projectSlug } = params;
+  const isNextjs = framework === "nextjs";
+  const useClientDirective = isNextjs ? `"use client";\n\n` : "";
+  const sessionEndpoint = isNextjs
+    ? "/api/session"
+    : "http://localhost:3001/chat/session";
+
+  const configLines = buildConfigLines(params);
   configLines.push(`  api: {\n    session: getSession,\n  },`);
 
   return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
@@ -144,6 +150,31 @@ const getSession = async () => {
     .then((res) => res.json())
     .then((data) => data.client_token);
 };
+
+const config: ElementsConfig = {
+${configLines.join("\n")}
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}`;
+}
+
+export function getDangerousApiKeyComponentCode(params: CodeGenParams): string {
+  const { framework } = params;
+  const isNextjs = framework === "nextjs";
+  const useClientDirective = isNextjs ? `"use client";\n\n` : "";
+
+  const configLines = buildConfigLines(params);
+  configLines.push(
+    `  api: {\n    dangerousApiKey: process.env.GRAM_API_KEY!,\n  },`,
+  );
+
+  return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 
 const config: ElementsConfig = {
 ${configLines.join("\n")}

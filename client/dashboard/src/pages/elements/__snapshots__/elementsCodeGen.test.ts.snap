@@ -1,5 +1,75 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`getDangerousApiKeyComponentCode > renders for nextjs with defaults 1`] = `
+""use client";
+
+import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  api: {
+    dangerousApiKey: process.env.GRAM_API_KEY!,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
+exports[`getDangerousApiKeyComponentCode > renders for react with defaults 1`] = `
+"import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  api: {
+    dangerousApiKey: process.env.GRAM_API_KEY!,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
+exports[`getDangerousApiKeyComponentCode > renders with widget variant and modal options 1`] = `
+""use client";
+
+import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  variant: "widget",
+  modal: {
+    title: "Help",
+    position: "top-left",
+    defaultOpen: true,
+  },
+  api: {
+    dangerousApiKey: process.env.GRAM_API_KEY!,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
 exports[`getDangerousApiKeyEnvContent > renders with placeholder when no key provided 1`] = `"GRAM_API_KEY=your_api_key_here"`;
 
 exports[`getDangerousApiKeyEnvContent > renders with provided API key 1`] = `"GRAM_API_KEY=sk_test_123"`;
