@@ -41,6 +41,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, db *pgxpool.Pool, redisCl
 
 	return sessions.NewManager(
 		logger,
+		NewTracerProvider(t),
 		db,
 		redisClient,
 		suffix,

@@ -459,6 +459,7 @@ func newStartCommand() *cli.Command {
 
 			sessionManager := sessions.NewManager(
 				logger,
+				tracerProvider,
 				db,
 				redisClient,
 				cache.SuffixNone,
