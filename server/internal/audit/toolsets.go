@@ -84,12 +84,25 @@ type LogToolsetUpdateEvent struct {
 func LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateEvent) error {
 	action := ActionToolsetUpdate
 
-	beforeSnapshot, err := marshalAuditPayload(event.ToolsetSnapshotBefore)
+	// Clone snapshots and strip the Tools field to avoid serializing a potentially massive list of tools into the audit log.
+	var snapshotBefore, snapshotAfter *types.Toolset
+	if event.ToolsetSnapshotBefore != nil {
+		clone := *event.ToolsetSnapshotBefore
+		clone.Tools = nil
+		snapshotBefore = &clone
+	}
+	if event.ToolsetSnapshotAfter != nil {
+		clone := *event.ToolsetSnapshotAfter
+		clone.Tools = nil
+		snapshotAfter = &clone
+	}
+
+	beforeSnapshot, err := marshalAuditPayload(snapshotBefore)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
 	}
 
-	afterSnapshot, err := marshalAuditPayload(event.ToolsetSnapshotAfter)
+	afterSnapshot, err := marshalAuditPayload(snapshotAfter)
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
