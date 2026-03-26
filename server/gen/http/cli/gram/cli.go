@@ -37,6 +37,7 @@ import (
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
+	teamsc "github.com/speakeasy-api/gram/server/gen/http/teams/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
 	toolsc "github.com/speakeasy-api/gram/server/gen/http/tools/client"
@@ -76,6 +77,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
+		"teams (list-members|invite-member|list-invites|cancel-invite|resend-invite|get-invite-info|remove-member)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -247,8 +249,9 @@ func ParseEndpoint(
 		authCallbackCodeFlag  = authCallbackFlags.String("code", "REQUIRED", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
-		authLoginFlags        = flag.NewFlagSet("login", flag.ExitOnError)
-		authLoginRedirectFlag = authLoginFlags.String("redirect", "", "")
+		authLoginFlags           = flag.NewFlagSet("login", flag.ExitOnError)
+		authLoginRedirectFlag    = authLoginFlags.String("redirect", "", "")
+		authLoginInviteTokenFlag = authLoginFlags.String("invite-token", "", "")
 
 		authSwitchScopesFlags              = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
 		authSwitchScopesOrganizationIDFlag = authSwitchScopesFlags.String("organization-id", "", "")
@@ -681,6 +684,36 @@ func ParseEndpoint(
 		slackDeleteSlackAppSessionTokenFlag     = slackDeleteSlackAppFlags.String("session-token", "", "")
 		slackDeleteSlackAppProjectSlugInputFlag = slackDeleteSlackAppFlags.String("project-slug-input", "", "")
 
+		teamsFlags = flag.NewFlagSet("teams", flag.ContinueOnError)
+
+		teamsListMembersFlags              = flag.NewFlagSet("list-members", flag.ExitOnError)
+		teamsListMembersOrganizationIDFlag = teamsListMembersFlags.String("organization-id", "REQUIRED", "")
+		teamsListMembersSessionTokenFlag   = teamsListMembersFlags.String("session-token", "", "")
+
+		teamsInviteMemberFlags            = flag.NewFlagSet("invite-member", flag.ExitOnError)
+		teamsInviteMemberBodyFlag         = teamsInviteMemberFlags.String("body", "REQUIRED", "")
+		teamsInviteMemberSessionTokenFlag = teamsInviteMemberFlags.String("session-token", "", "")
+
+		teamsListInvitesFlags              = flag.NewFlagSet("list-invites", flag.ExitOnError)
+		teamsListInvitesOrganizationIDFlag = teamsListInvitesFlags.String("organization-id", "REQUIRED", "")
+		teamsListInvitesSessionTokenFlag   = teamsListInvitesFlags.String("session-token", "", "")
+
+		teamsCancelInviteFlags            = flag.NewFlagSet("cancel-invite", flag.ExitOnError)
+		teamsCancelInviteInviteIDFlag     = teamsCancelInviteFlags.String("invite-id", "REQUIRED", "")
+		teamsCancelInviteSessionTokenFlag = teamsCancelInviteFlags.String("session-token", "", "")
+
+		teamsResendInviteFlags            = flag.NewFlagSet("resend-invite", flag.ExitOnError)
+		teamsResendInviteBodyFlag         = teamsResendInviteFlags.String("body", "REQUIRED", "")
+		teamsResendInviteSessionTokenFlag = teamsResendInviteFlags.String("session-token", "", "")
+
+		teamsGetInviteInfoFlags     = flag.NewFlagSet("get-invite-info", flag.ExitOnError)
+		teamsGetInviteInfoTokenFlag = teamsGetInviteInfoFlags.String("token", "REQUIRED", "")
+
+		teamsRemoveMemberFlags              = flag.NewFlagSet("remove-member", flag.ExitOnError)
+		teamsRemoveMemberOrganizationIDFlag = teamsRemoveMemberFlags.String("organization-id", "REQUIRED", "")
+		teamsRemoveMemberUserIDFlag         = teamsRemoveMemberFlags.String("user-id", "REQUIRED", "")
+		teamsRemoveMemberSessionTokenFlag   = teamsRemoveMemberFlags.String("session-token", "", "")
+
 		telemetryFlags = flag.NewFlagSet("telemetry", flag.ContinueOnError)
 
 		telemetrySearchLogsFlags                = flag.NewFlagSet("search-logs", flag.ExitOnError)
@@ -1055,6 +1088,15 @@ func ParseEndpoint(
 	slackUpdateSlackAppFlags.Usage = slackUpdateSlackAppUsage
 	slackDeleteSlackAppFlags.Usage = slackDeleteSlackAppUsage
 
+	teamsFlags.Usage = teamsUsage
+	teamsListMembersFlags.Usage = teamsListMembersUsage
+	teamsInviteMemberFlags.Usage = teamsInviteMemberUsage
+	teamsListInvitesFlags.Usage = teamsListInvitesUsage
+	teamsCancelInviteFlags.Usage = teamsCancelInviteUsage
+	teamsResendInviteFlags.Usage = teamsResendInviteUsage
+	teamsGetInviteInfoFlags.Usage = teamsGetInviteInfoUsage
+	teamsRemoveMemberFlags.Usage = teamsRemoveMemberUsage
+
 	telemetryFlags.Usage = telemetryUsage
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
 	telemetrySearchToolCallsFlags.Usage = telemetrySearchToolCallsUsage
@@ -1167,6 +1209,8 @@ func ParseEndpoint(
 			svcf = resourcesFlags
 		case "slack":
 			svcf = slackFlags
+		case "teams":
+			svcf = teamsFlags
 		case "telemetry":
 			svcf = telemetryFlags
 		case "templates":
@@ -1587,6 +1631,31 @@ func ParseEndpoint(
 
 			}
 
+		case "teams":
+			switch epn {
+			case "list-members":
+				epf = teamsListMembersFlags
+
+			case "invite-member":
+				epf = teamsInviteMemberFlags
+
+			case "list-invites":
+				epf = teamsListInvitesFlags
+
+			case "cancel-invite":
+				epf = teamsCancelInviteFlags
+
+			case "resend-invite":
+				epf = teamsResendInviteFlags
+
+			case "get-invite-info":
+				epf = teamsGetInviteInfoFlags
+
+			case "remove-member":
+				epf = teamsRemoveMemberFlags
+
+			}
+
 		case "telemetry":
 			switch epn {
 			case "search-logs":
@@ -1847,7 +1916,7 @@ func ParseEndpoint(
 				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
-				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag)
+				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginInviteTokenFlag)
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
 				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
@@ -2145,6 +2214,31 @@ func ParseEndpoint(
 			case "delete-slack-app":
 				endpoint = c.DeleteSlackApp()
 				data, err = slackc.BuildDeleteSlackAppPayload(*slackDeleteSlackAppIDFlag, *slackDeleteSlackAppSessionTokenFlag, *slackDeleteSlackAppProjectSlugInputFlag)
+			}
+		case "teams":
+			c := teamsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-members":
+				endpoint = c.ListMembers()
+				data, err = teamsc.BuildListMembersPayload(*teamsListMembersOrganizationIDFlag, *teamsListMembersSessionTokenFlag)
+			case "invite-member":
+				endpoint = c.InviteMember()
+				data, err = teamsc.BuildInviteMemberPayload(*teamsInviteMemberBodyFlag, *teamsInviteMemberSessionTokenFlag)
+			case "list-invites":
+				endpoint = c.ListInvites()
+				data, err = teamsc.BuildListInvitesPayload(*teamsListInvitesOrganizationIDFlag, *teamsListInvitesSessionTokenFlag)
+			case "cancel-invite":
+				endpoint = c.CancelInvite()
+				data, err = teamsc.BuildCancelInvitePayload(*teamsCancelInviteInviteIDFlag, *teamsCancelInviteSessionTokenFlag)
+			case "resend-invite":
+				endpoint = c.ResendInvite()
+				data, err = teamsc.BuildResendInvitePayload(*teamsResendInviteBodyFlag, *teamsResendInviteSessionTokenFlag)
+			case "get-invite-info":
+				endpoint = c.GetInviteInfo()
+				data, err = teamsc.BuildGetInviteInfoPayload(*teamsGetInviteInfoTokenFlag)
+			case "remove-member":
+				endpoint = c.RemoveMember()
+				data, err = teamsc.BuildRemoveMemberPayload(*teamsRemoveMemberOrganizationIDFlag, *teamsRemoveMemberUserIDFlag, *teamsRemoveMemberSessionTokenFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2913,6 +3007,7 @@ func authLoginUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth login", os.Args[0])
 	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprint(os.Stderr, " -invite-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -2921,10 +3016,11 @@ func authLoginUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+	fmt.Fprintln(os.Stderr, `    -invite-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --invite-token \"abc123\"")
 }
 
 func authSwitchScopesUsage() {
@@ -4858,6 +4954,162 @@ func slackDeleteSlackAppUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack delete-slack-app --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// teamsUsage displays the usage of the teams command and its subcommands.
+func teamsUsage() {
+	fmt.Fprintln(os.Stderr, `Manages team members and invites for organizations in Gram.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] teams COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-members: List all members of an organization.`)
+	fmt.Fprintln(os.Stderr, `    invite-member: Invite a new member to the organization.`)
+	fmt.Fprintln(os.Stderr, `    list-invites: List pending invites for an organization.`)
+	fmt.Fprintln(os.Stderr, `    cancel-invite: Cancel a pending invite.`)
+	fmt.Fprintln(os.Stderr, `    resend-invite: Resend an invite email.`)
+	fmt.Fprintln(os.Stderr, `    get-invite-info: Get information about a team invite by its token. Used to display invite details before accepting.`)
+	fmt.Fprintln(os.Stderr, `    remove-member: Remove a member from the organization.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s teams COMMAND --help\n", os.Args[0])
+}
+func teamsListMembersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] teams list-members", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all members of an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams list-members --organization-id \"abc123\" --session-token \"abc123\"")
+}
+
+func teamsInviteMemberUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] teams invite-member", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Invite a new member to the organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams invite-member --body '{\n      \"email\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func teamsListInvitesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] teams list-invites", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List pending invites for an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams list-invites --organization-id \"abc123\" --session-token \"abc123\"")
+}
+
+func teamsCancelInviteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] teams cancel-invite", os.Args[0])
+	fmt.Fprint(os.Stderr, " -invite-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Cancel a pending invite.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -invite-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams cancel-invite --invite-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func teamsResendInviteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] teams resend-invite", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resend an invite email.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams resend-invite --body '{\n      \"invite_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func teamsGetInviteInfoUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] teams get-invite-info", os.Args[0])
+	fmt.Fprint(os.Stderr, " -token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get information about a team invite by its token. Used to display invite details before accepting.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams get-invite-info --token \"abc123\"")
+}
+
+func teamsRemoveMemberUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] teams remove-member", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a member from the organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams remove-member --organization-id \"abc123\" --user-id \"abc123\" --session-token \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its
