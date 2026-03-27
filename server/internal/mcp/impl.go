@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -537,17 +538,25 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	var batch batchedRawRequest
-	err = json.NewDecoder(r.Body).Decode(&batch)
+	// Decode the raw body first to check for batch requests
+	bodyBytes, err := io.ReadAll(r.Body)
 	switch {
-	case errors.Is(err, io.EOF):
+	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
 		return nil
 	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
 	}
 
-	if len(batch) == 0 {
-		return respondWithNoContent(true, w)
+	// Reject batch (array) requests — batch is deprecated in the MCP spec
+	if err := inv.Check("mcp request",
+		"not a batch request", len(bodyBytes) == 0 || bodyBytes[0] != '[',
+	); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "batch requests are not supported").Log(ctx, s.logger)
+	}
+
+	var req rawRequest
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
@@ -579,12 +588,20 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		apiKeyID:         apiKeyID,
 	}
 
-	body, err := s.handleBatch(ctx, mcpInputs, batch)
+	body, err := s.handleRequest(ctx, mcpInputs, &req)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		return NewErrorFromCause(batch[0].ID, err)
+		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
+		if merr != nil {
+			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bs)
+		return nil
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -691,17 +708,25 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	var batch batchedRawRequest
-	err = json.NewDecoder(r.Body).Decode(&batch)
+	// Decode the raw body first to check for batch requests
+	bodyBytes, err := io.ReadAll(r.Body)
 	switch {
-	case errors.Is(err, io.EOF):
+	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
 		return nil
 	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
 	}
 
-	if len(batch) == 0 {
-		return respondWithNoContent(true, w)
+	// Reject batch (array) requests — batch is deprecated in the MCP spec
+	if err := inv.Check("mcp request",
+		"not a batch request", len(bodyBytes) == 0 || bodyBytes[0] != '[',
+	); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "batch requests are not supported").Log(ctx, s.logger)
+	}
+
+	var req rawRequest
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
@@ -733,12 +758,20 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		apiKeyID:         authCtx.APIKeyID,
 	}
 
-	body, err := s.handleBatch(ctx, mcpInputs, batch)
+	body, err := s.handleRequest(ctx, mcpInputs, &req)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		return NewErrorFromCause(batch[0].ID, err)
+		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
+		if merr != nil {
+			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bs)
+		return nil
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -766,36 +799,6 @@ func resolveToolMode(r *http.Request, toolset toolsets_repo.Toolset) ToolMode {
 	return ToolModeStatic
 }
 
-func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch batchedRawRequest) (json.RawMessage, error) {
-	results := make([]json.RawMessage, 0, len(batch))
-	for _, req := range batch {
-		result, err := s.handleRequest(ctx, payload, req)
-		switch {
-		case result == nil && err == nil:
-			return nil, nil
-		case err != nil:
-			bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
-			if merr != nil {
-				return nil, oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
-			}
-
-			result = bs
-		}
-
-		results = append(results, result)
-	}
-
-	if len(results) == 1 {
-		return results[0], nil
-	} else {
-		m, err := json.Marshal(results)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize results").Log(ctx, s.logger)
-		}
-
-		return m, nil
-	}
-}
 
 // parseMcpEnvVariables: Map potential user provided mcp variables into inputs
 // Only inputs that match up with a security or server env var in the proxy will be used in the proxy
