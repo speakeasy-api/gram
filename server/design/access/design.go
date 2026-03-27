@@ -138,6 +138,27 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Members"}`)
 	})
 
+	Method("updateMemberRole", func() {
+		Description("Change a team member's role assignment.")
+
+		Payload(func() {
+			Extend(UpdateMemberRoleForm)
+			security.SessionPayload()
+		})
+
+		Result(MemberModel)
+
+		HTTP(func() {
+			PUT("/rpc/access.updateMemberRole")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateMemberRole")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateMemberRole")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRole"}`)
+	})
+
 	Method("listGrants", func() {
 		Description("List all permissions in your organization, optionally filtered to a specific user or role.")
 		Security(security.ByKey, func() {
@@ -385,6 +406,13 @@ var MemberModel = Type("AccessMember", func() {
 var ListMembersResult = Type("ListMembersResult", func() {
 	Required("members")
 	Attribute("members", ArrayOf(MemberModel), "The members in your organization.")
+})
+
+var UpdateMemberRoleForm = Type("UpdateMemberRoleForm", func() {
+	Required("user_id", "role_id")
+
+	Attribute("user_id", String, "The user ID to update.")
+	Attribute("role_id", String, "The new role ID to assign.")
 })
 
 var UpsertGrantsResult = Type("UpsertGrantsResult", func() {
