@@ -21,6 +21,13 @@ func nonEnterpriseCtx() context.Context {
 	})
 }
 
+func enterpriseAPIKeyCtx() context.Context {
+	return contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
+		AccountType: "enterprise",
+		APIKeyID:    "key_123",
+	})
+}
+
 func TestRequire_allowsScopedGrant(t *testing.T) {
 	t.Parallel()
 
@@ -430,6 +437,28 @@ func TestFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 
 	resourceIDs, err := Filter(nonEnterpriseCtx(), ScopeBuildRead, []string{"proj_123", "proj_456"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
+}
+
+func TestRequire_skipsForAPIKeyAuth(t *testing.T) {
+	t.Parallel()
+
+	err := Require(enterpriseAPIKeyCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	require.NoError(t, err)
+}
+
+func TestRequireAny_skipsForAPIKeyAuth(t *testing.T) {
+	t.Parallel()
+
+	err := RequireAny(enterpriseAPIKeyCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	require.NoError(t, err)
+}
+
+func TestFilter_skipsForAPIKeyAuth(t *testing.T) {
+	t.Parallel()
+
+	resourceIDs, err := Filter(enterpriseAPIKeyCtx(), ScopeBuildRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }

@@ -14,7 +14,7 @@ type Check struct {
 
 // Require enforces that every check is satisfied by the grants in context.
 func Require(ctx context.Context, checks ...Check) error {
-	if !isEnterpriseOrg(ctx) {
+	if !isEnterpriseOrg(ctx) || isAPIKeyAuth(ctx) {
 		return nil
 	}
 
@@ -43,7 +43,7 @@ func Require(ctx context.Context, checks ...Check) error {
 
 // RequireAny enforces that at least one check is satisfied by the grants in context.
 func RequireAny(ctx context.Context, checks ...Check) error {
-	if !isEnterpriseOrg(ctx) {
+	if !isEnterpriseOrg(ctx) || isAPIKeyAuth(ctx) {
 		return nil
 	}
 
@@ -74,7 +74,7 @@ func RequireAny(ctx context.Context, checks ...Check) error {
 
 // Filter returns the subset of candidate resource IDs allowed for the scope.
 func Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
-	if !isEnterpriseOrg(ctx) {
+	if !isEnterpriseOrg(ctx) || isAPIKeyAuth(ctx) {
 		return resourceIDs, nil
 	}
 
@@ -103,6 +103,13 @@ func Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, e
 func isEnterpriseOrg(ctx context.Context) bool {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	return ok && authCtx != nil && authCtx.AccountType == "enterprise"
+}
+
+// isAPIKeyAuth reports whether the request was authenticated via an API key.
+// API keys have their own permissions model and are not subject to RBAC grants.
+func isAPIKeyAuth(ctx context.Context) bool {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.APIKeyID != ""
 }
 
 func validateCheck(check Check) error {
