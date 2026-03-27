@@ -20,7 +20,11 @@ async function run() {
   }
 
   const issuer = process.env["OIDC_ISSUER"];
-  if (typeof issuer === "string" && issuer !== "unset") {
+  if (
+    typeof issuer === "string" &&
+    issuer !== "unset" &&
+    process.env["usage_restart"] !== "true"
+  ) {
     console.log("✅ WorkOS OIDC credentials are already configured.");
     process.exit(0);
   }
