@@ -512,30 +512,6 @@ func newStartCommand() *cli.Command {
 				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
 			}
 
-			{
-				controlServer := control.Server{
-					Address:          c.String("control-address"),
-					Logger:           logger.With(attr.SlogComponent("control")),
-					DisableProfiling: false,
-				}
-
-				temporals := []*o11y.NamedResource[client.Client]{}
-				if temporalEnv != nil {
-					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
-				}
-
-				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
-					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
-					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					temporals,
-				))
-				if err != nil {
-					return fmt.Errorf("failed to start control server: %w", err)
-				}
-
-				shutdownFuncs = append(shutdownFuncs, shutdown)
-			}
-
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)
@@ -675,6 +651,8 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
+			mux.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
@@ -790,6 +768,33 @@ func newStartCommand() *cli.Command {
 					logger.ErrorContext(ctx, "failed to shutdown development server", attr.SlogError(err))
 				}
 			})
+
+			{
+				controlServer := control.Server{
+					Address:          c.String("control-address"),
+					Logger:           logger.With(attr.SlogComponent("control")),
+					DisableProfiling: false,
+				}
+
+				temporals := []*o11y.NamedResource[client.Client]{}
+				if temporalEnv != nil {
+					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
+				}
+
+				healthz := *serverURL
+				healthz.Path = "/healthz"
+				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
+					[]*o11y.NamedResource[*url.URL]{{Name: "api", Resource: &healthz}},
+					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
+					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
+					temporals,
+				))
+				if err != nil {
+					return fmt.Errorf("failed to start control server: %w", err)
+				}
+
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
 
 			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
 			if tlsEnabled {

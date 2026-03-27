@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,11 +39,18 @@ type NamedResource[T any] struct {
 }
 
 func NewHealthCheckHandler(
+	http []*NamedResource[*url.URL],
 	databaseClients []*NamedResource[*pgxpool.Pool],
 	redisClients []*NamedResource[*redis.Client],
 	temporalClients []*NamedResource[client.Client],
 ) http.Handler {
-	pingers := make([]health.Pinger, 0, len(databaseClients)+len(redisClients)+len(temporalClients))
+	pingers := make([]health.Pinger, 0, len(http)+len(databaseClients)+len(redisClients)+len(temporalClients))
+
+	for _, h := range http {
+		n := fmt.Sprintf("http:%s", h.Name)
+		pingers = append(pingers, health.NewPinger(n, h.Resource.Host, health.WithScheme(h.Resource.Scheme), health.WithPath(h.Resource.Path), health.WithTimeout(10*time.Second)))
+	}
+
 	for _, db := range databaseClients {
 		n := fmt.Sprintf("postgres:%s", db.Name)
 		pingers = append(pingers, ping{name: n, timeout: 10 * time.Second, checkFunc: db.Resource.Ping})
