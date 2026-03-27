@@ -60,6 +60,7 @@ async function run() {
   }
 
   await $`touch mise.local.toml`;
+  await $`mise unset --file mise.local.toml OIDC_SKIPPED`;
   await $`mise set --file mise.local.toml OIDC_ISSUER=${WORKOS_ISSUER}`;
   await $`mise set --file mise.local.toml OIDC_CLIENT_ID=${clientId}`;
   await $`mise set --file mise.local.toml OIDC_CLIENT_SECRET=${clientSecret}`;
