@@ -23,12 +23,13 @@ import (
 // fakeWorkOS is a lightweight HTTP handler that mimics the WorkOS API endpoints
 // used by RoleClient. It stores state in memory.
 type fakeWorkOS struct {
-	mu          sync.Mutex
-	roles       map[string][]roles.Role // orgID → roles
-	memberships []usermanagement.OrganizationMembership
-	users       map[string]common.User // userID → user
-	orgUsers    map[string][]string    // orgID → []userID
-	nextRoleID  int
+	mu             sync.Mutex
+	roles          map[string][]roles.Role // orgID → roles
+	memberships    []usermanagement.OrganizationMembership
+	users          map[string]common.User // userID → user
+	orgUsers       map[string][]string    // orgID → []userID
+	memberPageSize int                    // if > 0, paginates ListMembers responses
+	nextRoleID     int
 }
 
 func newFakeWorkOS() *fakeWorkOS {
@@ -171,19 +172,39 @@ func (f *fakeWorkOS) handleDeleteRole(w http.ResponseWriter, orgID, slug string)
 
 func (f *fakeWorkOS) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	orgID := r.URL.Query().Get("organization_id")
+	afterCursor := r.URL.Query().Get("after")
 
 	f.mu.Lock()
-	var members []usermanagement.OrganizationMembership
+	var filtered []usermanagement.OrganizationMembership
 	for _, m := range f.memberships {
 		if m.OrganizationID == orgID {
-			members = append(members, m)
+			filtered = append(filtered, m)
 		}
 	}
+	pageSize := f.memberPageSize
 	f.mu.Unlock()
 
+	// Advance past the cursor if set.
+	start := 0
+	if afterCursor != "" {
+		for i, m := range filtered {
+			if m.ID == afterCursor {
+				start = i + 1
+				break
+			}
+		}
+	}
+	page := filtered[start:]
+
+	var nextCursor string
+	if pageSize > 0 && len(page) > pageSize {
+		page = page[:pageSize]
+		nextCursor = page[len(page)-1].ID
+	}
+
 	writeJSON(w, map[string]any{
-		"data":          members,
-		"list_metadata": common.ListMetadata{},
+		"data":          page,
+		"list_metadata": common.ListMetadata{Before: "", After: nextCursor},
 	})
 }
 
@@ -392,6 +413,25 @@ func TestRoleClient_ListMembers(t *testing.T) {
 	assert.Len(t, members, 1)
 	assert.Equal(t, "user_1", members[0].UserID)
 	assert.Equal(t, "admin", members[0].Role.Slug)
+}
+
+func TestRoleClient_ListMembers_Pagination(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberPageSize = 2
+	fake.memberships = []usermanagement.OrganizationMembership{
+		{ID: "mem_1", UserID: "user_1", OrganizationID: "org_1", Status: usermanagement.Active},
+		{ID: "mem_2", UserID: "user_2", OrganizationID: "org_1", Status: usermanagement.Active},
+		{ID: "mem_3", UserID: "user_3", OrganizationID: "org_1", Status: usermanagement.Active},
+	}
+	client, _ := newTestClient(t, fake)
+
+	members, err := client.ListMembers(context.Background(), "org_1")
+	require.NoError(t, err)
+	require.Len(t, members, 3)
+	assert.Equal(t, "user_1", members[0].UserID)
+	assert.Equal(t, "user_2", members[1].UserID)
+	assert.Equal(t, "user_3", members[2].UserID)
 }
 
 func TestRoleClient_UpdateMemberRole(t *testing.T) {
