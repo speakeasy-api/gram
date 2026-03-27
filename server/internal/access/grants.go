@@ -9,12 +9,7 @@ type Grant struct {
 
 // Grants is the in-memory grant set resolved for a request.
 type Grants struct {
-	rows []grantRow
-}
-
-type grantRow struct {
-	Scope    Scope
-	Resource string
+	rows []Grant
 }
 
 func (g *Grants) hasAccess(scope Scope, resourceID string) bool {

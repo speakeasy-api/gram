@@ -27,9 +27,9 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		return nil, fmt.Errorf("query principal grants: %w", err)
 	}
 
-	grantRows := make([]grantRow, 0, len(rows))
+	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		grantRows = append(grantRows, grantRow{
+		grantRows = append(grantRows, Grant{
 			Scope:    Scope(row.Scope),
 			Resource: row.Resource,
 		})

@@ -11,7 +11,7 @@ func TestRequire_allowsScopedGrant(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: "proj_123",
 		}},
@@ -27,7 +27,7 @@ func TestRequire_allowsWildcardGrant(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: WildcardResource,
 		}},
@@ -43,7 +43,7 @@ func TestRequire_deniesMissingGrant(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: "proj_123",
 		}},
@@ -65,7 +65,7 @@ func TestRequire_appliesAdditiveGrants(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{
+		rows: []Grant{
 			{
 				Scope:    ScopeBuildRead,
 				Resource: WildcardResource,
@@ -117,7 +117,7 @@ func TestRequire_rejectsEmptyResourceID(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: WildcardResource,
 		}},
@@ -138,7 +138,7 @@ func TestRequire_rejectsWildcardResourceID(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: WildcardResource,
 		}},
@@ -167,7 +167,7 @@ func TestRequireAny_allowsWhenAnyCheckMatches(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeMCPConnect,
 			Resource: "tool:b",
 		}},
@@ -186,7 +186,7 @@ func TestRequireAny_deniesWhenNoCheckMatches(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeMCPConnect,
 			Resource: "tool:c",
 		}},
@@ -218,7 +218,7 @@ func TestRequireAny_rejectsEmptyResourceID(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeMCPConnect,
 			Resource: "tool:b",
 		}},
@@ -242,7 +242,7 @@ func TestRequireAny_rejectsWildcardResourceID(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeMCPConnect,
 			Resource: "tool:b",
 		}},
@@ -274,7 +274,7 @@ func TestFilter_returnsAllToolsForWildcardMCPGrant(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeMCPConnect,
 			Resource: WildcardResource,
 		}},
@@ -291,7 +291,7 @@ func TestFilter_returnsGrantedToolSubsetForMCPList(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{
+		rows: []Grant{
 			{
 				Scope:    ScopeMCPConnect,
 				Resource: "toolA",
@@ -314,7 +314,7 @@ func TestFilter_returnsAllProjectsForWildcardBuildGrant(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: WildcardResource,
 		}},
@@ -331,7 +331,7 @@ func TestFilter_returnsOnlyGrantedProjectForProjectList(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: "proj:123",
 		}},
@@ -357,7 +357,7 @@ func TestFilter_rejectsEmptyResourceID(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: WildcardResource,
 		}},
@@ -379,7 +379,7 @@ func TestFilter_rejectsWildcardResourceID(t *testing.T) {
 	t.Parallel()
 
 	grants := &Grants{
-		rows: []grantRow{{
+		rows: []Grant{{
 			Scope:    ScopeBuildRead,
 			Resource: WildcardResource,
 		}},
