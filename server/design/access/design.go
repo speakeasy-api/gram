@@ -118,6 +118,26 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteRole"}`)
 	})
 
+	Method("listMembers", func() {
+		Description("List all team members with their role assignments.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListMembersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listMembers")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMembers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMembers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Members"}`)
+	})
+
 	Method("listGrants", func() {
 		Description("List all permissions in your organization, optionally filtered to a specific user or role.")
 		Security(security.ByKey, func() {
@@ -346,6 +366,25 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("description", String, "Updated description.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Updated scope grants.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to reassign to this role.")
+})
+
+var MemberModel = Type("AccessMember", func() {
+	Required("id", "name", "email", "role_id", "joined_at")
+
+	Attribute("id", String, "User ID.")
+	Attribute("name", String, "Display name.")
+	Attribute("email", String, "Email address.")
+	Attribute("photo_url", String, "Avatar URL.")
+	Attribute("role_id", String, "Currently assigned role ID.")
+	Attribute("joined_at", String, func() {
+		Description("When the member joined the organization.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListMembersResult = Type("ListMembersResult", func() {
+	Required("members")
+	Attribute("members", ArrayOf(MemberModel), "The members in your organization.")
 })
 
 var UpsertGrantsResult = Type("UpsertGrantsResult", func() {
