@@ -102,6 +102,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		Email:                 nil,
 		AccountType:           "",
 		HasActiveSubscription: false,
+		Whitelisted:           false,
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		APIKeyID:              "",
@@ -127,6 +128,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 
 	authCtx.AccountType = orgMetadata.GramAccountType
 	authCtx.HasActiveSubscription = orgMetadata.HasActiveSubscription
+	authCtx.Whitelisted = orgMetadata.Whitelisted
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 

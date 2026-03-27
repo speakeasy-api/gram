@@ -19,6 +19,7 @@ type AuthContext struct {
 	Email                 *string
 	AccountType           string
 	HasActiveSubscription bool
+	Whitelisted           bool
 	ProjectSlug           *string
 	APIKeyScopes          []string
 }
