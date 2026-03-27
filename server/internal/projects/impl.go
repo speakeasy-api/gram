@@ -135,6 +135,10 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if payload.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
+	}
+
 	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: payload.OrganizationID}); err != nil {
 		return nil, err
 	}
@@ -223,6 +227,10 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if payload.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
 	}
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
