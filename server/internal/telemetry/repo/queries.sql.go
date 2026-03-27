@@ -1477,7 +1477,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"event_source",
 		"user_email",
 		"hook_source",
-		"multiIf(max(hook_has_success) = 1, 'success', max(hook_has_failure) = 1, 'failure', 'pending') as hook_status",
+		"multiIf(max(hook_has_failure) = 1, 'failure', max(hook_has_success) = 1, 'success', 'pending') as hook_status",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
