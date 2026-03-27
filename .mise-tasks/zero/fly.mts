@@ -61,7 +61,7 @@ async function run() {
     🎈 A Fly.io organization-scoped token (https://fly.io/tokens/create or \`fly tokens create org --name <name>\`)
     🎈 A Fly.io app hosting the the Gram Functions runner images
     🐅 A Tigris bucket associated with the Fly.io organization
-    🐅 A Tigris access key and secret with permissions to access the bucket (https://console.tigris.dev)
+    🐅 A Tigris Access Key ID and Secret Access Key with permissions to access the bucket (https://console.tigris.dev)
 `.slice(1, -1),
     "Pre-requisites",
   );
@@ -140,12 +140,12 @@ async function run() {
   const initialTigrisKey =
     process.env["GRAM_FUNCTIONS_TIGRIS_KEY"] || undefined;
   const tigrisKey = await text({
-    message: `🐅 Enter your Tigris access key for ${bucket} (leave blank to skip)`,
+    message: `🐅 Enter your Tigris Access Key ID for ${bucket} (leave blank to skip)`,
     initialValue: initialTigrisKey,
     validate: (value) => {
       if (!value) return;
       if (!value.startsWith("tid_")) {
-        return "Invalid Tigris access key. It should start with 'tid_'. Leave blank to skip.";
+        return "Invalid Tigris Access Key ID. It should start with 'tid_'. Leave blank to skip.";
       }
     },
   });
@@ -159,7 +159,7 @@ async function run() {
 
   const initialTigrisSecret =
     process.env["GRAM_FUNCTIONS_TIGRIS_SECRET"] || undefined;
-  let tigrisSecretMessage = `🐅 Enter your Tigris secret key for ${bucket}`;
+  let tigrisSecretMessage = `🐅 Enter your Tigris Secret Access Key for ${bucket}`;
   if (initialTigrisSecret) {
     tigrisSecretMessage += " (leave blank to keep existing)";
   }
@@ -168,7 +168,7 @@ async function run() {
     validate: (value) => {
       if (!value) return;
       if (!value.startsWith("tsec_")) {
-        return "Invalid Tigris secret key. It should start with 'tsec_'. Leave blank to skip.";
+        return "Invalid Tigris Secret Access Key. It should start with 'tsec_'. Leave blank to skip.";
       }
     },
   });
