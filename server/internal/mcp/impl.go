@@ -596,6 +596,16 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
+		// Translate SecurityUnsatisfiedError to HTTP 401 + WWW-Authenticate
+		var secErr *toolconfig.SecurityUnsatisfiedError
+		if errors.As(err, &secErr) && mcpInputs.oauthRequired {
+			w.Header().Set(
+				"WWW-Authenticate",
+				fmt.Sprintf(`Bearer resource_metadata="%s"`, mcpInputs.baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpInputs.mcpSlug),
+			)
+			return oops.E(oops.CodeUnauthorized, secErr, secErr.Error())
+		}
+
 		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
 		if merr != nil {
 			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
