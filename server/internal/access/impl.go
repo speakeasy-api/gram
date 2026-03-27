@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -22,20 +23,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+var errWorkOSOrganizationNotLinked = errors.New("organization is not linked to WorkOS")
 
 type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
+	roles  workos.RoleProvider
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles workos.RoleProvider) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
@@ -43,6 +49,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger: logger,
 		db:     db,
 		auth:   auth.New(logger, db, sessions),
+		roles:  roles,
 	}
 }
 
@@ -58,6 +65,83 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	if s.roles == nil {
+		return nil, oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
+	}
+
+	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
+	switch {
+	case errors.Is(err, errWorkOSOrganizationNotLinked):
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	default:
+	}
+
+	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+	}
+
+	members, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+	}
+	memberCounts := make(map[string]int)
+	for _, member := range members {
+		memberCounts[member.RoleSlug]++
+	}
+
+	roles := make([]*gen.Role, 0, len(wRoles))
+	for _, wr := range wRoles {
+		grants, err := s.grantsForRole(ctx, ac.ActiveOrganizationID, wr.Slug)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, s.logger)
+		}
+		roles = append(roles, &gen.Role{
+			ID:          wr.ID,
+			Name:        wr.Name,
+			Description: wr.Description,
+			IsSystem:    isSystemRole(wr.Slug),
+			Grants:      grants,
+			MemberCount: memberCounts[wr.Slug],
+			CreatedAt:   time.Time{}.UTC().Format(time.RFC3339),
+			UpdatedAt:   time.Time{}.UTC().Format(time.RFC3339),
+		})
+	}
+
+	return &gen.ListRolesResult{Roles: roles}, nil
+}
+
+func (s *Service) GetRole(context.Context, *gen.GetRolePayload) (*gen.Role, error) {
+	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+}
+
+func (s *Service) CreateRole(context.Context, *gen.CreateRolePayload) (*gen.Role, error) {
+	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+}
+
+func (s *Service) UpdateRole(context.Context, *gen.UpdateRolePayload) (*gen.Role, error) {
+	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+}
+
+func (s *Service) DeleteRole(context.Context, *gen.DeleteRolePayload) error {
+	return oops.E(oops.CodeNotImplemented, nil, "not implemented")
+}
+
+func (s *Service) ListMembers(context.Context, *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
+	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+}
+
+func (s *Service) UpdateMemberRole(context.Context, *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
+	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
 }
 
 func (s *Service) ListGrants(ctx context.Context, payload *gen.ListGrantsPayload) (*gen.ListGrantsResult, error) {
@@ -239,6 +323,80 @@ func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string,
 	}
 
 	return nil
+}
+
+func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug string) ([]*gen.RoleGrant, error) {
+	rows, err := repo.New(s.db).ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug).String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list grants for role %q: %w", roleSlug, err)
+	}
+
+	type scopeAgg struct {
+		unrestricted bool
+		resources    []string
+	}
+	byScope := make(map[string]*scopeAgg)
+	for _, row := range rows {
+		agg, ok := byScope[row.Scope]
+		if !ok {
+			agg = &scopeAgg{unrestricted: false, resources: nil}
+			byScope[row.Scope] = agg
+		}
+		if row.Resource == WildcardResource {
+			agg.unrestricted = true
+			agg.resources = nil
+			continue
+		}
+		if !agg.unrestricted {
+			agg.resources = append(agg.resources, row.Resource)
+		}
+	}
+
+	grants := make([]*gen.RoleGrant, 0, len(byScope))
+	for scope, agg := range byScope {
+		grant := &gen.RoleGrant{Scope: scope, Resources: nil}
+		if agg.unrestricted {
+			grant.Resources = nil
+		} else {
+			grant.Resources = append([]string(nil), agg.resources...)
+		}
+		grants = append(grants, grant)
+	}
+
+	return grants, nil
+}
+
+func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, errors.New("missing auth context")
+	}
+
+	return ac, nil
+}
+
+func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, error) {
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, gramOrgID)
+	if err != nil {
+		return "", fmt.Errorf("get organization metadata: %w", err)
+	}
+	if !org.WorkosID.Valid || org.WorkosID.String == "" {
+		return "", errWorkOSOrganizationNotLinked
+	}
+
+	return org.WorkosID.String, nil
+}
+
+func isSystemRole(roleSlug string) bool {
+	switch roleSlug {
+	case "admin", "member":
+		return true
+	default:
+		return false
+	}
 }
 
 func grantFromRow(row repo.PrincipalGrant) *gen.Grant {
