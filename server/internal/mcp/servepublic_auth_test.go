@@ -209,10 +209,9 @@ func TestServePublicAuth_PrivateServer_ValidSession_Succeeds(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Use the authenticated context — session is already established via InitAuthContext
-	sessionToken := ti.getSessionToken(ctx, t)
-
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), sessionToken)
+	// Use the authenticated context — session is already established via InitAuthContext.
+	// The auth context is carried on ctx, no need to pass a token header.
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 }
