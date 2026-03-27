@@ -9,26 +9,33 @@ import (
 )
 
 type MockRoleProvider struct {
-	mu      sync.Mutex
-	roles   map[string][]Role
-	members map[string][]Member
-	users   map[string]User
-	nextID  int
+	mu             sync.Mutex
+	roles          map[string][]Role
+	members        map[string][]Member
+	users          map[string]User
+	nextID         int
+	errListRoles   error
+	errListMembers error
 }
 
 func NewMockRoleProvider() *MockRoleProvider {
 	return &MockRoleProvider{
-		mu:      sync.Mutex{},
-		roles:   make(map[string][]Role),
-		members: make(map[string][]Member),
-		users:   make(map[string]User),
-		nextID:  0,
+		mu:             sync.Mutex{},
+		roles:          make(map[string][]Role),
+		members:        make(map[string][]Member),
+		users:          make(map[string]User),
+		nextID:         0,
+		errListRoles:   nil,
+		errListMembers: nil,
 	}
 }
 
 func (m *MockRoleProvider) ListRoles(_ context.Context, orgID string) ([]Role, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.errListRoles != nil {
+		return nil, m.errListRoles
+	}
 
 	return append([]Role(nil), m.roles[orgID]...), nil
 }
@@ -84,6 +91,9 @@ func (m *MockRoleProvider) DeleteRole(_ context.Context, orgID string, roleSlug 
 func (m *MockRoleProvider) ListMembers(_ context.Context, orgID string) ([]Member, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.errListMembers != nil {
+		return nil, m.errListMembers
+	}
 
 	return append([]Member(nil), m.members[orgID]...), nil
 }
@@ -150,4 +160,18 @@ func (m *MockRoleProvider) AddUser(user User) {
 	defer m.mu.Unlock()
 
 	m.users[user.ID] = user
+}
+
+func (m *MockRoleProvider) SetListRolesError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.errListRoles = err
+}
+
+func (m *MockRoleProvider) SetListMembersError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.errListMembers = err
 }

@@ -120,8 +120,64 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	return &gen.ListRolesResult{Roles: roles}, nil
 }
 
-func (s *Service) GetRole(context.Context, *gen.GetRolePayload) (*gen.Role, error) {
-	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*gen.Role, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	if s.roles == nil {
+		return nil, oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
+	}
+
+	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
+	switch {
+	case errors.Is(err, errWorkOSOrganizationNotLinked):
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	default:
+	}
+
+	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+	}
+
+	for _, wr := range wRoles {
+		if wr.ID != payload.ID {
+			continue
+		}
+
+		grants, err := s.grantsForRole(ctx, ac.ActiveOrganizationID, wr.Slug)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, s.logger)
+		}
+
+		members, err := s.roles.ListMembers(ctx, workosOrgID)
+		if err != nil {
+			return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+		}
+
+		memberCount := 0
+		for _, member := range members {
+			if member.RoleSlug == wr.Slug {
+				memberCount++
+			}
+		}
+
+		return &gen.Role{
+			ID:          wr.ID,
+			Name:        wr.Name,
+			Description: wr.Description,
+			IsSystem:    isSystemRole(wr.Slug),
+			Grants:      grants,
+			MemberCount: memberCount,
+			CreatedAt:   time.Time{}.UTC().Format(time.RFC3339),
+			UpdatedAt:   time.Time{}.UTC().Format(time.RFC3339),
+		}, nil
+	}
+
+	return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 }
 
 func (s *Service) CreateRole(context.Context, *gen.CreateRolePayload) (*gen.Role, error) {
