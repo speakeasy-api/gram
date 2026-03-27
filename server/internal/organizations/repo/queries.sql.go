@@ -160,22 +160,38 @@ func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) 
 	return err
 }
 
-const setOrgWorkosID = `-- name: SetOrgWorkosID :exec
+const setOrgWorkosID = `-- name: SetOrgWorkosID :one
 UPDATE organization_metadata
 SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
-	WorkosID pgtype.Text
-	ID       string
+	WorkosID       pgtype.Text
+	OrganizationID string
 }
 
-func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) error {
-	_, err := q.db.Exec(ctx, setOrgWorkosID, arg.WorkosID, arg.ID)
-	return err
+func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, setOrgWorkosID, arg.WorkosID, arg.OrganizationID)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.SsoConnectionID,
+		&i.WorkosID,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
 }
 
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one

@@ -80,9 +80,10 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
 
--- name: SetOrgWorkosID :exec
+-- name: SetOrgWorkosID :one
 UPDATE organization_metadata
 SET workos_id = @workos_id,
     updated_at = clock_timestamp()
-WHERE id = @id AND
-    workos_id IS NULL;
+WHERE id = @organization_id AND
+    workos_id IS NULL
+RETURNING *;
