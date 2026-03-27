@@ -88,7 +88,9 @@ type InfoResult struct {
 	GramAccountType      string
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool
-	Organizations         []*OrganizationEntry
+	// Whether the organization is whitelisted to access the platform
+	Whitelisted   bool
+	Organizations []*OrganizationEntry
 	// The authentication session
 	SessionToken string
 	// The authentication session

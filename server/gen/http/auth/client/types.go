@@ -33,8 +33,10 @@ type InfoResponseBody struct {
 	ActiveOrganizationID *string `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
 	GramAccountType      *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
 	// Whether the organization has an active billing subscription
-	HasActiveSubscription *bool                            `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
-	Organizations         []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
+	// Whether the organization is whitelisted to access the platform
+	Whitelisted   *bool                            `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	Organizations []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1929,6 +1931,7 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 		ActiveOrganizationID:  *body.ActiveOrganizationID,
 		GramAccountType:       *body.GramAccountType,
 		HasActiveSubscription: *body.HasActiveSubscription,
+		Whitelisted:           *body.Whitelisted,
 	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -2108,6 +2111,9 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.HasActiveSubscription == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("has_active_subscription", "body"))
+	}
+	if body.Whitelisted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
 	for _, e := range body.Organizations {
 		if e != nil {

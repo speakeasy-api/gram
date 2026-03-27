@@ -199,17 +199,23 @@ INSERT INTO organization_metadata (
     id,
     name,
     slug,
-    sso_connection_id
+    sso_connection_id,
+    whitelisted
 ) VALUES (
     $1,
     $2,
     $3,
-    $4
+    $4,
+    COALESCE($5::boolean, TRUE)
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     slug = EXCLUDED.slug,
     sso_connection_id = EXCLUDED.sso_connection_id,
+    whitelisted = CASE
+        WHEN $5::boolean IS NOT NULL THEN $5::boolean
+        ELSE organization_metadata.whitelisted
+    END,
     updated_at = clock_timestamp()
 RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 `
@@ -219,6 +225,7 @@ type UpsertOrganizationMetadataParams struct {
 	Name            string
 	Slug            string
 	SsoConnectionID pgtype.Text
+	Whitelisted     pgtype.Bool
 }
 
 func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
@@ -227,6 +234,7 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		arg.Name,
 		arg.Slug,
 		arg.SsoConnectionID,
+		arg.Whitelisted,
 	)
 	var i OrganizationMetadatum
 	err := row.Scan(
