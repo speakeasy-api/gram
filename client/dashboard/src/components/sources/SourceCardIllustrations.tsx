@@ -74,31 +74,6 @@ export function MCPPatternIllustration({
 }
 
 /**
- * Large hero illustration for MCP details page
- * Uses the same pattern as the card at full saturation
- */
-export function MCPHeroIllustration({
-  className,
-  toolsetSlug,
-}: IllustrationProps & { toolsetSlug: string }) {
-  const seed = hashString(toolsetSlug);
-  const random = seededRandom(seed);
-
-  const colorIndex = Math.floor(random() * PATTERN_IMAGES.length);
-  const patternIndex = Math.floor(random() * PATTERN_IMAGES[colorIndex].length);
-  const patternImage = PATTERN_IMAGES[colorIndex][patternIndex];
-
-  return (
-    <img
-      src={patternImage}
-      alt=""
-      className={cn("w-full h-full object-fill", className)}
-      aria-hidden="true"
-    />
-  );
-}
-
-/**
  * Illustration for external MCP servers
  * Shows the server logo on a pattern background if available,
  * otherwise uses the pattern alone
