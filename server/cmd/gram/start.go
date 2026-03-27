@@ -643,6 +643,16 @@ func newStartCommand() *cli.Command {
 
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
+						w.WriteHeader(http.StatusOK)
+						return
+					}
+
+					h.ServeHTTP(w, r)
+				})
+			})
+			mux.Use(func(h http.Handler) http.Handler {
 				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
 			})
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
@@ -650,8 +660,6 @@ func newStartCommand() *cli.Command {
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
-
-			mux.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 
