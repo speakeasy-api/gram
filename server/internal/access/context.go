@@ -53,7 +53,7 @@ func LoadIntoContext(ctx context.Context, logger *slog.Logger, db accessrepo.DBT
 			attr.SlogUserID(authCtx.UserID),
 			attr.SlogError(err),
 		)
-		return nil, fmt.Errorf("load access grants: %w", err)
+		return ctx, fmt.Errorf("load access grants: %w", err)
 	}
 
 	return GrantsToContext(ctx, grants), nil
