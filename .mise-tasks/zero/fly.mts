@@ -5,6 +5,7 @@
 //USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
 import process from "node:process";
+import os from "node:os";
 import { $ } from "zx";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +37,14 @@ function randomAppName() {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   const bytes = crypto.getRandomValues(new Uint8Array(6));
   const suffix = Array.from(bytes, (b) => chars[b % chars.length]).join("");
+
+  let username = "";
+
+  try {
+    username = os.userInfo().username;
+  } catch {
+    // Ignore error and set up fallback username later
+  }
 
   const user = process.env["USER"]?.toLowerCase() || "user";
   return `${user}-${suffix}`;
