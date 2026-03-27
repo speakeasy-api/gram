@@ -47,12 +47,6 @@ DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn;
 
--- name: SeedOrgRoleGrants :copyfrom
--- Bulk-inserts default role grants when an organization is created.
--- Uses COPY for efficiency over individual INSERTs.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
-VALUES (@organization_id, @principal_urn, @scope, @resource);
-
 -- name: RemoveResourceFromGrants :execrows
 -- Deletes all grant rows referencing a specific resource within an org.
 -- Called when a resource (project, MCP server) is deleted.

@@ -79,3 +79,11 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     workos_membership_id = COALESCE(organization_user_relationships.workos_membership_id, EXCLUDED.workos_membership_id),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
+
+-- name: SetOrgWorkosID :one
+UPDATE organization_metadata
+SET workos_id = @workos_id,
+    updated_at = clock_timestamp()
+WHERE id = @organization_id AND
+    workos_id IS NULL
+RETURNING *;
