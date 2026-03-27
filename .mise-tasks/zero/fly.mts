@@ -32,6 +32,15 @@ function checkExistingConfig(): { exists: boolean; hasProvider: boolean } {
   return { exists: true, hasProvider };
 }
 
+function randomAppName() {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  const suffix = Array.from(bytes, (b) => chars[b % chars.length]).join("");
+
+  const user = process.env["USER"]?.toLowerCase() || "user";
+  return `${user}-${suffix}`;
+}
+
 async function run() {
   if (
     checkExistingConfig().hasProvider &&
@@ -107,9 +116,11 @@ async function run() {
   }
 
   const initialApp =
-    process.env["GRAM_FUNCTIONS_RUNNER_OCI_IMAGE"]?.split("/")[1] || undefined;
+    process.env["GRAM_FUNCTIONS_RUNNER_OCI_IMAGE"]?.split("/")[1] ||
+    randomAppName();
   const app = await text({
-    message: "🎈 Enter your Fly.io app name for Gram Functions runner images",
+    message:
+      "🎈 Enter your Fly.io app name for Gram Functions runner images (accept the default if unsure)",
     initialValue: initialApp,
   });
   if (isCancel(app)) {
