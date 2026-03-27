@@ -9,7 +9,6 @@ import { cn, getServerURL } from "@/lib/utils";
 import { Link } from "@/components/ui/link";
 import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
-import { useParams } from "react-router";
 import { toast } from "sonner";
 
 const BUILT_IN_TOOLS = [
@@ -68,7 +67,6 @@ const TAB_TRIGGER_CLASS = cn(
 );
 
 export function BuiltInMCPDetailPage() {
-  const { builtInSlug } = useParams();
   const { orgSlug } = useSlugs();
   const [activeTab, setActiveTab] = useState("overview");
 
