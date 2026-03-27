@@ -381,7 +381,7 @@ func newWorkerCommand() *cli.Command {
 				}
 
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
-					[]*o11y.NamedResource[*url.URL]{},
+					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					nil,
 					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalEnv.Client()}},

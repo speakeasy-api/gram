@@ -769,6 +769,8 @@ func newStartCommand() *cli.Command {
 				}
 			})
 
+			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -781,10 +783,31 @@ func newStartCommand() *cli.Command {
 					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
 				}
 
-				healthz := *serverURL
-				healthz.Path = "/healthz"
+				listenAddr := srv.Addr
+				if listenAddr == "" {
+					listenAddr = ":8080"
+				}
+				host, port, _ := net.SplitHostPort(listenAddr)
+				if host == "" {
+					host = "localhost"
+				}
+				healthzEndpoint := &o11y.HTTPEndpoint{
+					URL: &url.URL{
+						Scheme: conv.Ternary(tlsEnabled, "https", "http"),
+						Host:   net.JoinHostPort(host, port),
+						Path:   "/healthz",
+					},
+					TLSCertificate: nil,
+				}
+				if tlsEnabled {
+					cert, err := os.ReadFile(c.String("ssl-cert-file"))
+					if err != nil {
+						return fmt.Errorf("failed to read TLS certificate for health check: %w", err)
+					}
+					healthzEndpoint.TLSCertificate = cert
+				}
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
-					[]*o11y.NamedResource[*url.URL]{{Name: "api", Resource: &healthz}},
+					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
 					temporals,
@@ -796,7 +819,6 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
 			if tlsEnabled {
 				logger.InfoContext(ctx, "server started with tls", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file")); err != nil && !errors.Is(err, http.ErrServerClosed) {

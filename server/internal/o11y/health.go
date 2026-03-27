@@ -2,16 +2,24 @@ package o11y
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
 	"goa.design/clue/health"
 )
+
+type HTTPEndpoint struct {
+	URL            *url.URL
+	TLSCertificate []byte
+}
 
 type ping struct {
 	name      string
@@ -39,16 +47,32 @@ type NamedResource[T any] struct {
 }
 
 func NewHealthCheckHandler(
-	http []*NamedResource[*url.URL],
+	httpEndpoints []*NamedResource[*HTTPEndpoint],
 	databaseClients []*NamedResource[*pgxpool.Pool],
 	redisClients []*NamedResource[*redis.Client],
 	temporalClients []*NamedResource[client.Client],
 ) http.Handler {
-	pingers := make([]health.Pinger, 0, len(http)+len(databaseClients)+len(redisClients)+len(temporalClients))
+	pingers := make([]health.Pinger, 0, len(httpEndpoints)+len(databaseClients)+len(redisClients)+len(temporalClients))
 
-	for _, h := range http {
+	for _, h := range httpEndpoints {
 		n := fmt.Sprintf("http:%s", h.Name)
-		pingers = append(pingers, health.NewPinger(n, h.Resource.Host, health.WithScheme(h.Resource.Scheme), health.WithPath(h.Resource.Path), health.WithTimeout(10*time.Second)))
+		u := h.Resource.URL
+
+		transport := cleanhttp.DefaultTransport()
+		if h.Resource.TLSCertificate != nil {
+			certPool := x509.NewCertPool()
+			certPool.AppendCertsFromPEM(h.Resource.TLSCertificate)
+			transport.TLSClientConfig = &tls.Config{RootCAs: certPool}
+		}
+
+		opts := []health.Option{
+			health.WithScheme(u.Scheme),
+			health.WithPath(u.Path),
+			health.WithTimeout(10 * time.Second),
+			health.WithTransport(transport),
+		}
+
+		pingers = append(pingers, health.NewPinger(n, u.Host, opts...))
 	}
 
 	for _, db := range databaseClients {
