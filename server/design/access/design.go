@@ -97,6 +97,27 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateRole"}`)
 	})
 
+	Method("deleteRole", func() {
+		Description("Delete a custom role (system roles cannot be deleted).")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the role to delete.")
+			Required("id")
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/access.deleteRole")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteRole")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteRole")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteRole"}`)
+	})
+
 	Method("listGrants", func() {
 		Description("List all permissions in your organization, optionally filtered to a specific user or role.")
 		Security(security.ByKey, func() {
