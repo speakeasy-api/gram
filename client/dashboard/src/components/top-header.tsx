@@ -184,14 +184,14 @@ export function TopHeader() {
 
         {/* Right side - Nav links, Theme toggle & User menu */}
         <div className="ml-auto flex items-center gap-4">
-          <nav className="hidden lg:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               className="text-sm"
               onClick={() => window.Pylon?.("show")}
             >
-              Support
+              Get Support
             </Button>
             <Button variant="outline" size="sm" className="text-sm" asChild>
               <a
