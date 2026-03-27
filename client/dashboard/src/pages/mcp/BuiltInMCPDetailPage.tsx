@@ -1,6 +1,6 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
+import { DetailHero } from "@/components/detail-hero";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
@@ -9,7 +9,6 @@ import { cn, getServerURL } from "@/lib/utils";
 import { Link } from "@/components/ui/link";
 import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
-import { useParams } from "react-router";
 import { toast } from "sonner";
 
 const BUILT_IN_TOOLS = [
@@ -68,8 +67,7 @@ const TAB_TRIGGER_CLASS = cn(
 );
 
 export function BuiltInMCPDetailPage() {
-  const { builtInSlug } = useParams();
-  const { orgSlug, projectSlug } = useSlugs();
+  const { orgSlug } = useSlugs();
   const [activeTab, setActiveTab] = useState("overview");
 
   if (!orgSlug) {
@@ -78,64 +76,35 @@ export function BuiltInMCPDetailPage() {
 
   const mcpUrl = `${getServerURL()}/mcp/${orgSlug}-mcp-logs`;
 
-  const configJson = `{
-  "mcpServers": {
-    "MCPLogs": {
-      "command": "npx",
-      "args": [
-        "mcp-remote@0.1.25",
-        "${mcpUrl}",
-        "--header",
-        "Mcp-Gram-Apikey-Header-Gram-Key:\${GRAM_LOGS_API_KEY}",
-        "--header",
-        "Mcp-Gram-Project-Slug-Header-Gram-Project:\${GRAM_PROJECT_SLUG}"
-      ],
-      "env": {
-        "GRAM_LOGS_API_KEY": "<your-value-here>",
-        "GRAM_PROJECT_SLUG": "${projectSlug}"
-      }
-    }
-  }
-}`;
-
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body fullWidth noPadding>
-        {/* Hero Header */}
-        <div className="relative w-full h-64 overflow-hidden">
-          <MCPHeroIllustration
-            toolsetSlug={`built-in-${builtInSlug}`}
-            className="saturate-[.3]"
-          />
-
-          {/* Overlay for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
-            <div className="flex items-end justify-between">
-              <Stack gap={2}>
-                <div className="flex items-center gap-3 ml-1">
-                  <Heading variant="h1" className="text-background">
-                    MCP Logs
-                  </Heading>
-                  <Badge variant="information">
-                    <Badge.Text>Built-in</Badge.Text>
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2 ml-1">
-                  <Type className="max-w-2xl truncate !text-background/70">
-                    {mcpUrl}
-                  </Type>
-                  <button
-                    type="button"
-                    className="shrink-0 text-background/70 hover:text-background transition-colors"
-                    onClick={() => {
-                      navigator.clipboard.writeText(mcpUrl);
-                      toast.success("URL copied to clipboard");
-                    }}
-                  >
+        <DetailHero>
+          <div className="flex items-end justify-between">
+            <Stack gap={2}>
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1">MCP Logs</Heading>
+                <Badge variant="information">
+                  <Badge.Text>Built-in</Badge.Text>
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Type className="max-w-2xl truncate text-muted-foreground">
+                  {mcpUrl}
+                </Type>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(mcpUrl);
+                    toast.success("URL copied to clipboard");
+                  }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <Button.LeftIcon>
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="16"
@@ -150,12 +119,13 @@ export function BuiltInMCPDetailPage() {
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
                     </svg>
-                  </button>
-                </div>
-              </Stack>
-            </div>
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Copy URL</Button.Text>
+                </Button>
+              </div>
+            </Stack>
           </div>
-        </div>
+        </DetailHero>
 
         {/* Sub-navigation tabs */}
         <Tabs
@@ -179,7 +149,7 @@ export function BuiltInMCPDetailPage() {
           {/* Tab Content */}
           <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
             <TabsContent value="overview" className="mt-0 w-full">
-              <BuiltInOverviewTab mcpUrl={mcpUrl} configJson={configJson} />
+              <BuiltInOverviewTab mcpUrl={mcpUrl} />
             </TabsContent>
 
             <TabsContent value="tools" className="mt-0 w-full">
@@ -192,15 +162,7 @@ export function BuiltInMCPDetailPage() {
   );
 }
 
-function BuiltInOverviewTab({
-  mcpUrl,
-  configJson,
-}: {
-  mcpUrl: string;
-  configJson: string;
-}) {
-  const { projectSlug } = useSlugs();
-
+function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
   return (
     <Stack className="mb-4">
       <PageSection
@@ -214,38 +176,24 @@ function BuiltInOverviewTab({
         heading="Install Page"
         description="Share this page to give simple instructions for getting started with this MCP server in Cursor or Claude Desktop."
       >
-        <Stack direction="horizontal" align="center" gap={2}>
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
           <CodeBlock
-            className="flex-grow overflow-hidden pr-10"
+            className="flex-grow overflow-hidden"
+            innerClassName="!p-2 !pr-10 !bg-white dark:!bg-zinc-950"
             preClassName="whitespace-nowrap overflow-auto"
             copyable={true}
           >
             {`${mcpUrl}/install`}
           </CodeBlock>
           <Link external to={`${mcpUrl}/install`} noIcon>
-            <Button variant="secondary" className="px-4">
-              <Button.Text>View</Button.Text>
-              <Button.RightIcon>
+            <Button variant="primary" className="px-4">
+              <Button.LeftIcon>
                 <Icon name="external-link" className="w-4 h-4" />
-              </Button.RightIcon>
+              </Button.LeftIcon>
+              <Button.Text>View</Button.Text>
             </Button>
           </Link>
-        </Stack>
-      </PageSection>
-
-      <PageSection
-        heading="Configuration"
-        description="Add this to your MCP client configuration. Replace the API key placeholder with your Gram API key from Settings."
-      >
-        <Type className="font-medium">
-          Claude Desktop / Cursor Configuration
-        </Type>
-        <Type muted small className="max-w-3xl mb-2!">
-          Uses <code>mcp-remote</code> to connect via stdio. The project slug{" "}
-          <code>{projectSlug}</code> is pre-filled. Replace{" "}
-          <code>GRAM_LOGS_API_KEY</code> with your Gram API key from Settings.
-        </Type>
-        <CodeBlock>{configJson}</CodeBlock>
+        </div>
       </PageSection>
     </Stack>
   );
