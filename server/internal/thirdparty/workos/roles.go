@@ -90,8 +90,6 @@ func NewRoleClient(apiKey string, opts ...RoleClientOpts) *RoleClient {
 	}
 }
 
-// --- Role operations ---
-
 func (rc *RoleClient) ListRoles(ctx context.Context, orgID string) ([]roles.Role, error) {
 	if rc == nil {
 		return nil, errors.New("role client is not initialized")
@@ -185,8 +183,6 @@ func (rc *RoleClient) DeleteRole(ctx context.Context, orgID string, roleSlug str
 
 	return nil
 }
-
-// --- Membership operations ---
 
 // ListMembers lists all organization memberships (active only) for the given org.
 func (rc *RoleClient) ListMembers(ctx context.Context, orgID string) ([]usermanagement.OrganizationMembership, error) {
