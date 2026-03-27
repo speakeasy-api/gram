@@ -43,6 +43,24 @@ func TestProjectsService_GetProject(t *testing.T) {
 		assert.NotEmpty(t, result.Project.UpdatedAt)
 	})
 
+	t.Run("it skips RBAC when feature is disabled", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestProjectsServiceWithOptions(t, testProjectsOptions{enableRBAC: false})
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectSlug)
+
+		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
+			Slug: types.Slug(*authCtx.ProjectSlug),
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.NotNil(t, result.Project)
+	})
+
 	t.Run("it rejects when build read access is missing", func(t *testing.T) {
 		t.Parallel()
 

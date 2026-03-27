@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -45,11 +46,16 @@ type Service struct {
 	envRepo  *envrepo.Queries
 	sessions *sessions.Manager
 	auth     *auth.Auth
+	features featureChecker
+}
+
+type featureChecker interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, features featureChecker) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
@@ -60,6 +66,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		envRepo:  envrepo.New(db),
 		sessions: sessions,
 		auth:     auth.New(logger, db, sessions),
+		features: features,
 	}
 }
 
@@ -105,7 +112,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	if err := access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: proj.ID.String()}); err != nil {
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: proj.ID.String()}); err != nil {
 		return nil, mapAccessError(err)
 	}
 
@@ -128,7 +135,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: payload.OrganizationID}); err != nil {
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: payload.OrganizationID}); err != nil {
 		return nil, mapAccessError(err)
 	}
 
@@ -243,7 +250,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		projectIDs = append(projectIDs, project.ID.String())
 	}
 
-	allowedProjectIDs, err := access.Filter(ctx, access.ScopeBuildRead, projectIDs)
+	allowedProjectIDs, err := s.filterByAccess(ctx, access.ScopeBuildRead, projectIDs)
 	if err != nil {
 		return nil, mapAccessError(err)
 	}
@@ -277,7 +284,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, mapAccessError(err)
 	}
 
@@ -343,7 +350,7 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, mapAccessError(err)
 	}
 
@@ -375,7 +382,7 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, mapAccessError(err)
 	}
 
@@ -417,7 +424,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeInvalid, err, "invalid project id").Log(ctx, s.logger)
 	}
 
-	if err := access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
 		return mapAccessError(err)
 	}
 
@@ -483,6 +490,36 @@ func toProject(p repo.Project) *gen.Project {
 		CreatedAt:      p.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      p.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+func (s *Service) requireAccess(ctx context.Context, checks ...access.Check) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, s.logger)
+	}
+	if !enabled {
+		return nil
+	}
+	return access.Require(ctx, checks...)
+}
+
+func (s *Service) filterByAccess(ctx context.Context, scope access.Scope, resourceIDs []string) ([]string, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, s.logger)
+	}
+	if !enabled {
+		return resourceIDs, nil
+	}
+	return access.Filter(ctx, scope, resourceIDs)
 }
 
 func mapAccessError(err error) error {

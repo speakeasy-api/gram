@@ -2,12 +2,12 @@ package access
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -44,17 +44,23 @@ func LoadIntoContext(ctx context.Context, logger *slog.Logger, db accessrepo.DBT
 		return ctx, nil
 	}
 
+	if authCtx.AccountType != "enterprise" {
+		return ctx, nil
+	}
+
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 	principals = append(principals, hardcodedRolePrincipalsByUserID[authCtx.UserID]...)
 
 	grants, err := LoadGrants(ctx, db, authCtx.ActiveOrganizationID, principals)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load access grants").Log(
+		logger.ErrorContext(
 			ctx,
-			logger,
+			"failed to load access grants",
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 			attr.SlogUserID(authCtx.UserID),
+			attr.SlogError(err),
 		)
+		return nil, fmt.Errorf("load access grants: %w", err)
 	}
 
 	return GrantsToContext(ctx, grants), nil

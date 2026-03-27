@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -52,7 +53,25 @@ type testInstance struct {
 	assetStorage   assets.BlobStore
 }
 
+type testProjectsOptions struct {
+	enableRBAC bool
+}
+
+type stubFeatureChecker struct {
+	enabled bool
+}
+
+func (s stubFeatureChecker) IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error) {
+	return s.enabled, nil
+}
+
 func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestProjectsServiceWithOptions(t, testProjectsOptions{enableRBAC: true})
+}
+
+func newTestProjectsServiceWithOptions(t *testing.T, opts testProjectsOptions) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -73,6 +92,9 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	authCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
 	ctx = withAccessGrants(t, ctx, conn,
 		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
 		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
@@ -82,7 +104,7 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	svc := projects.NewService(logger, conn, sessionManager)
+	svc := projects.NewService(logger, conn, sessionManager, stubFeatureChecker{enabled: opts.enableRBAC})
 
 	return ctx, &testInstance{
 		service:        svc,

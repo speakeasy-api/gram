@@ -208,6 +208,29 @@ func TestSetLogo_ForbiddenWithoutBuildWriteGrant(t *testing.T) {
 	assert.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestSetLogo_SkipsRBACForNonEnterpriseOrgs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.AccountType = "pro"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	assetID := uuid.New()
+	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		SessionToken:     nil,
+		AssetID:          assetID.String(),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Project)
+	require.NotNil(t, result.Project.LogoAssetID)
+	require.Equal(t, assetID.String(), *result.Project.LogoAssetID)
+}
+
 func TestSetLogo_UnauthorizedNoAuthContext(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
