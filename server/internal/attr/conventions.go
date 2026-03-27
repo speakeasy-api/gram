@@ -203,7 +203,6 @@ const (
 	HookErrorKey       = attribute.Key("gram.hook.error")
 	HookIsInterruptKey = attribute.Key("gram.hook.is_interrupt")
 	HookSourceKey      = attribute.Key("gram.hook.source")
-	HookTypeKey        = attribute.Key("gram.hook.type")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")

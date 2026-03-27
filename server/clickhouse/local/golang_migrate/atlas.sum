@@ -1,4 +1,4 @@
-h1:sf5l9pu37TKqXPDhEULAi8tWIuJyAaGMC/KOG4M6zmQ=
+h1:6vJnuki+C4CX8XJsiQWH+FohrUltlS7OS4cOhaUN3Oo=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -26,3 +26,4 @@ h1:sf5l9pu37TKqXPDhEULAi8tWIuJyAaGMC/KOG4M6zmQ=
 20260317141706_add-toolset-slug-materialized-col.up.sql h1:778pwTDG4f/5PCdBTr0z4G5Pye8AAVAe9EUCRArY3/w=
 20260326183215_add-user-email-hook-source-cols.up.sql h1:eTEINTDjjyV8GdI0g/7Z25iV6ffn66aN0ItpR0pXhwM=
 20260326185340_add-user-email-hook-source-to-trace-summaries.up.sql h1:ZTLt4LjsV143JbuBDWugWHnwzu2nCDQD50t6RjUyBLM=
+20260327154813_add-hook-status-to-trace-summaries.up.sql h1:VqskH6QBcT8F8kSFz/Lh1YXhgsOhrrStMFPr34No6JQ=
