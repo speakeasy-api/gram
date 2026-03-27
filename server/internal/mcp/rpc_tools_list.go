@@ -57,6 +57,27 @@ func handleToolsList(
 		return nil, err
 	}
 
+	// Check if security schemes are satisfied at the toolset level.
+	// This ensures MCP clients get an auth challenge eagerly at install time
+	// rather than waiting until a tool is called.
+	schemes := toolconfig.DescribeToolSecurity(toolset.SecurityVariables)
+	if len(schemes) > 0 {
+		userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
+		var oauthToken string
+		for _, t := range payload.oauthTokenInputs {
+			if len(t.securityKeys) == 0 && t.Token != "" {
+				oauthToken = t.Token
+				break
+			}
+		}
+		if !toolconfig.AnySchemeSatisfied(schemes, userConfig, oauthToken) {
+			return nil, &toolconfig.SecurityUnsatisfiedError{
+				ToolName: "tools/list",
+				Schemes:  schemes,
+			}
+		}
+	}
+
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]any{
 			"project_id":           payload.projectID.String(),
