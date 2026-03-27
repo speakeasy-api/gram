@@ -32,6 +32,15 @@ function checkExistingConfig(): { exists: boolean; hasProvider: boolean } {
   return { exists: true, hasProvider };
 }
 
+async function fallbackToLocal() {
+  const args = ["GRAM_FUNCTIONS_PROVIDER=local"];
+  await $`mise set --file mise.local.toml ${args}`;
+  outro(
+    "Defaulted to stubbed local provider. To start this onboarding again, run `mise run zero:fly --restart`.",
+  );
+  process.exit(0);
+}
+
 async function run() {
   if (
     checkExistingConfig().hasProvider &&
@@ -56,19 +65,17 @@ async function run() {
 `.slice(1, -1),
     "Pre-requisites",
   );
-  const proceed = await confirm({ message: "Are you ready to proceed?" });
+  const proceed = await confirm({
+    message: "Set up Fly.io and Tigris",
+    active: "Start",
+    inactive: "Skip",
+  });
   if (isCancel(proceed)) {
     cancel("Operation cancelled.");
     process.exit(0);
   }
   if (!proceed) {
-    const args = ["GRAM_FUNCTIONS_PROVIDER=local"];
-    await $`mise set --file mise.local.toml ${args}`;
-
-    outro(
-      "Defaulted to stubbed local provider. To start this onboarding again, run `mise run zero:fly --restart`.",
-    );
-    process.exit(0);
+    await fallbackToLocal();
   }
 
   const initialToken =
@@ -80,11 +87,9 @@ async function run() {
   let token = await password({
     message: tokenMessage,
     validate: (value) => {
-      if (!value && initialToken) {
-        return;
-      }
-      if (!value?.startsWith("FlyV1 ")) {
-        return "Invalid Fly.io token. It should start with 'FlyV1 ...'.";
+      if (!value) return;
+      if (!value.startsWith("FlyV1 ")) {
+        return "Invalid Fly.io token. It should start with 'FlyV1 ...'. Leave blank to skip.";
       }
     },
   });
@@ -94,6 +99,9 @@ async function run() {
   }
   if (!token && initialToken) {
     token = initialToken;
+  }
+  if (!token) {
+    await fallbackToLocal();
   }
 
   const initialOrg = process.env["GRAM_FUNCTIONS_FLYIO_ORG"] || undefined;
@@ -132,17 +140,21 @@ async function run() {
   const initialTigrisKey =
     process.env["GRAM_FUNCTIONS_TIGRIS_KEY"] || undefined;
   const tigrisKey = await text({
-    message: `🐅 Enter your Tigris access key for ${bucket}`,
+    message: `🐅 Enter your Tigris access key for ${bucket} (leave blank to skip)`,
     initialValue: initialTigrisKey,
     validate: (value) => {
-      if (!value?.startsWith("tid_")) {
-        return "Invalid Tigris access key. It should start with 'tid_'.";
+      if (!value) return;
+      if (!value.startsWith("tid_")) {
+        return "Invalid Tigris access key. It should start with 'tid_'. Leave blank to skip.";
       }
     },
   });
   if (isCancel(tigrisKey)) {
     cancel("Operation cancelled.");
     process.exit(0);
+  }
+  if (!tigrisKey) {
+    await fallbackToLocal();
   }
 
   const initialTigrisSecret =
@@ -154,11 +166,9 @@ async function run() {
   let tigrisSecret = await password({
     message: tigrisSecretMessage,
     validate: (value) => {
-      if (!value && initialToken) {
-        return;
-      }
-      if (!value?.startsWith("tsec_")) {
-        return "Invalid Tigris secret key. It should start with 'tsec_'.";
+      if (!value) return;
+      if (!value.startsWith("tsec_")) {
+        return "Invalid Tigris secret key. It should start with 'tsec_'. Leave blank to skip.";
       }
     },
   });
@@ -168,6 +178,9 @@ async function run() {
   }
   if (!tigrisSecret && initialTigrisSecret) {
     tigrisSecret = initialTigrisSecret;
+  }
+  if (!tigrisSecret) {
+    await fallbackToLocal();
   }
 
   const args = [
