@@ -53,7 +53,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
-		"access (list-grants|upsert-grants|remove-grants|remove-principal-grants)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-members|update-member-role|list-grants|upsert-grants|remove-grants|remove-principal-grants)",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
@@ -88,7 +88,7 @@ func UsageCommands() []string {
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
-		os.Args[0] + " " + "access list-grants --principal-urn \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "access list-roles --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
@@ -110,6 +110,32 @@ func ParseEndpoint(
 		aboutOpenapiFlags = flag.NewFlagSet("openapi", flag.ExitOnError)
 
 		accessFlags = flag.NewFlagSet("access", flag.ContinueOnError)
+
+		accessListRolesFlags            = flag.NewFlagSet("list-roles", flag.ExitOnError)
+		accessListRolesSessionTokenFlag = accessListRolesFlags.String("session-token", "", "")
+
+		accessGetRoleFlags            = flag.NewFlagSet("get-role", flag.ExitOnError)
+		accessGetRoleIDFlag           = accessGetRoleFlags.String("id", "REQUIRED", "")
+		accessGetRoleSessionTokenFlag = accessGetRoleFlags.String("session-token", "", "")
+
+		accessCreateRoleFlags            = flag.NewFlagSet("create-role", flag.ExitOnError)
+		accessCreateRoleBodyFlag         = accessCreateRoleFlags.String("body", "REQUIRED", "")
+		accessCreateRoleSessionTokenFlag = accessCreateRoleFlags.String("session-token", "", "")
+
+		accessUpdateRoleFlags            = flag.NewFlagSet("update-role", flag.ExitOnError)
+		accessUpdateRoleBodyFlag         = accessUpdateRoleFlags.String("body", "REQUIRED", "")
+		accessUpdateRoleSessionTokenFlag = accessUpdateRoleFlags.String("session-token", "", "")
+
+		accessDeleteRoleFlags            = flag.NewFlagSet("delete-role", flag.ExitOnError)
+		accessDeleteRoleIDFlag           = accessDeleteRoleFlags.String("id", "REQUIRED", "")
+		accessDeleteRoleSessionTokenFlag = accessDeleteRoleFlags.String("session-token", "", "")
+
+		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
+		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
+
+		accessUpdateMemberRoleFlags            = flag.NewFlagSet("update-member-role", flag.ExitOnError)
+		accessUpdateMemberRoleBodyFlag         = accessUpdateMemberRoleFlags.String("body", "REQUIRED", "")
+		accessUpdateMemberRoleSessionTokenFlag = accessUpdateMemberRoleFlags.String("session-token", "", "")
 
 		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
 		accessListGrantsPrincipalUrnFlag = accessListGrantsFlags.String("principal-urn", "", "")
@@ -908,6 +934,13 @@ func ParseEndpoint(
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
 
 	accessFlags.Usage = accessUsage
+	accessListRolesFlags.Usage = accessListRolesUsage
+	accessGetRoleFlags.Usage = accessGetRoleUsage
+	accessCreateRoleFlags.Usage = accessCreateRoleUsage
+	accessUpdateRoleFlags.Usage = accessUpdateRoleUsage
+	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
+	accessListMembersFlags.Usage = accessListMembersUsage
+	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpsertGrantsFlags.Usage = accessUpsertGrantsUsage
 	accessRemoveGrantsFlags.Usage = accessRemoveGrantsUsage
@@ -1198,6 +1231,27 @@ func ParseEndpoint(
 
 		case "access":
 			switch epn {
+			case "list-roles":
+				epf = accessListRolesFlags
+
+			case "get-role":
+				epf = accessGetRoleFlags
+
+			case "create-role":
+				epf = accessCreateRoleFlags
+
+			case "update-role":
+				epf = accessUpdateRoleFlags
+
+			case "delete-role":
+				epf = accessDeleteRoleFlags
+
+			case "list-members":
+				epf = accessListMembersFlags
+
+			case "update-member-role":
+				epf = accessUpdateMemberRoleFlags
+
 			case "list-grants":
 				epf = accessListGrantsFlags
 
@@ -1743,6 +1797,27 @@ func ParseEndpoint(
 		case "access":
 			c := accessc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "list-roles":
+				endpoint = c.ListRoles()
+				data, err = accessc.BuildListRolesPayload(*accessListRolesSessionTokenFlag)
+			case "get-role":
+				endpoint = c.GetRole()
+				data, err = accessc.BuildGetRolePayload(*accessGetRoleIDFlag, *accessGetRoleSessionTokenFlag)
+			case "create-role":
+				endpoint = c.CreateRole()
+				data, err = accessc.BuildCreateRolePayload(*accessCreateRoleBodyFlag, *accessCreateRoleSessionTokenFlag)
+			case "update-role":
+				endpoint = c.UpdateRole()
+				data, err = accessc.BuildUpdateRolePayload(*accessUpdateRoleBodyFlag, *accessUpdateRoleSessionTokenFlag)
+			case "delete-role":
+				endpoint = c.DeleteRole()
+				data, err = accessc.BuildDeleteRolePayload(*accessDeleteRoleIDFlag, *accessDeleteRoleSessionTokenFlag)
+			case "list-members":
+				endpoint = c.ListMembers()
+				data, err = accessc.BuildListMembersPayload(*accessListMembersSessionTokenFlag)
+			case "update-member-role":
+				endpoint = c.UpdateMemberRole()
+				data, err = accessc.BuildUpdateMemberRolePayload(*accessUpdateMemberRoleBodyFlag, *accessUpdateMemberRoleSessionTokenFlag)
 			case "list-grants":
 				endpoint = c.ListGrants()
 				data, err = accessc.BuildListGrantsPayload(*accessListGrantsPrincipalUrnFlag, *accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
@@ -2306,9 +2381,16 @@ func aboutOpenapiUsage() {
 
 // accessUsage displays the usage of the access command and its subcommands.
 func accessUsage() {
-	fmt.Fprintln(os.Stderr, `Manage access permissions for users and roles across your organization.`)
+	fmt.Fprintln(os.Stderr, `Manage roles, grants, and team member access control.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-roles: List all roles for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    get-role: Get a role by ID.`)
+	fmt.Fprintln(os.Stderr, `    create-role: Create a new custom role.`)
+	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
+	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
+	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
+	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List all permissions in your organization, optionally filtered to a specific user or role.`)
 	fmt.Fprintln(os.Stderr, `    upsert-grants: Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.`)
 	fmt.Fprintln(os.Stderr, `    remove-grants: Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).`)
@@ -2317,6 +2399,142 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
 }
+func accessListRolesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-roles", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all roles for the current organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-roles --session-token \"abc123\"")
+}
+
+func accessGetRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access get-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a role by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-role --id \"abc123\" --session-token \"abc123\"")
+}
+
+func accessCreateRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access create-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new custom role.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func accessUpdateRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update an existing custom role.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func accessDeleteRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access delete-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a custom role (system roles cannot be deleted).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-role --id \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListMembersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-members", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all team members with their role assignments.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-members --session-token \"abc123\"")
+}
+
+func accessUpdateMemberRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-member-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Change a team member's role assignment.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-role --body '{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
 func accessListGrantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])

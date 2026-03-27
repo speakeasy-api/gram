@@ -17,6 +17,34 @@ import (
 
 // Client lists the access service endpoint HTTP clients.
 type Client struct {
+	// ListRoles Doer is the HTTP client used to make requests to the listRoles
+	// endpoint.
+	ListRolesDoer goahttp.Doer
+
+	// GetRole Doer is the HTTP client used to make requests to the getRole
+	// endpoint.
+	GetRoleDoer goahttp.Doer
+
+	// CreateRole Doer is the HTTP client used to make requests to the createRole
+	// endpoint.
+	CreateRoleDoer goahttp.Doer
+
+	// UpdateRole Doer is the HTTP client used to make requests to the updateRole
+	// endpoint.
+	UpdateRoleDoer goahttp.Doer
+
+	// DeleteRole Doer is the HTTP client used to make requests to the deleteRole
+	// endpoint.
+	DeleteRoleDoer goahttp.Doer
+
+	// ListMembers Doer is the HTTP client used to make requests to the listMembers
+	// endpoint.
+	ListMembersDoer goahttp.Doer
+
+	// UpdateMemberRole Doer is the HTTP client used to make requests to the
+	// updateMemberRole endpoint.
+	UpdateMemberRoleDoer goahttp.Doer
+
 	// ListGrants Doer is the HTTP client used to make requests to the listGrants
 	// endpoint.
 	ListGrantsDoer goahttp.Doer
@@ -53,6 +81,13 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ListRolesDoer:             doer,
+		GetRoleDoer:               doer,
+		CreateRoleDoer:            doer,
+		UpdateRoleDoer:            doer,
+		DeleteRoleDoer:            doer,
+		ListMembersDoer:           doer,
+		UpdateMemberRoleDoer:      doer,
 		ListGrantsDoer:            doer,
 		UpsertGrantsDoer:          doer,
 		RemoveGrantsDoer:          doer,
@@ -62,6 +97,174 @@ func NewClient(
 		host:                      host,
 		decoder:                   dec,
 		encoder:                   enc,
+	}
+}
+
+// ListRoles returns an endpoint that makes HTTP requests to the access service
+// listRoles server.
+func (c *Client) ListRoles() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRolesRequest(c.encoder)
+		decodeResponse = DecodeListRolesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRolesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRolesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listRoles", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRole returns an endpoint that makes HTTP requests to the access service
+// getRole server.
+func (c *Client) GetRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRoleRequest(c.encoder)
+		decodeResponse = DecodeGetRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "getRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateRole returns an endpoint that makes HTTP requests to the access
+// service createRole server.
+func (c *Client) CreateRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateRoleRequest(c.encoder)
+		decodeResponse = DecodeCreateRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "createRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateRole returns an endpoint that makes HTTP requests to the access
+// service updateRole server.
+func (c *Client) UpdateRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateRoleRequest(c.encoder)
+		decodeResponse = DecodeUpdateRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "updateRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteRole returns an endpoint that makes HTTP requests to the access
+// service deleteRole server.
+func (c *Client) DeleteRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteRoleRequest(c.encoder)
+		decodeResponse = DecodeDeleteRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "deleteRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMembers returns an endpoint that makes HTTP requests to the access
+// service listMembers server.
+func (c *Client) ListMembers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMembersRequest(c.encoder)
+		decodeResponse = DecodeListMembersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMembersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMembersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listMembers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateMemberRole returns an endpoint that makes HTTP requests to the access
+// service updateMemberRole server.
+func (c *Client) UpdateMemberRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateMemberRoleRequest(c.encoder)
+		decodeResponse = DecodeUpdateMemberRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateMemberRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateMemberRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "updateMemberRole", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
