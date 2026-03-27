@@ -62,7 +62,26 @@ func handleToolsList(
 	// rather than waiting until a tool is called.
 	schemes := toolconfig.DescribeToolSecurity(toolset.SecurityVariables)
 	if len(schemes) > 0 {
-		userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
+		toolsetID, err := uuid.Parse(toolset.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").Log(ctx, logger)
+		}
+
+		// Load system env (toolset + attached environments) so we check against
+		// credentials configured in Gram environments, not just MCP request headers.
+		systemEnv, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, "", "")
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
+		}
+
+		mergedEnv := toolconfig.NewCaseInsensitiveEnv()
+		for k, v := range systemEnv.All() {
+			mergedEnv.Set(k, v)
+		}
+		for k, v := range payload.mcpEnvVariables {
+			mergedEnv.Set(k, v)
+		}
+
 		var oauthToken string
 		for _, t := range payload.oauthTokenInputs {
 			if len(t.securityKeys) == 0 && t.Token != "" {
@@ -70,7 +89,8 @@ func handleToolsList(
 				break
 			}
 		}
-		if !toolconfig.AnySchemeSatisfied(schemes, userConfig, oauthToken) {
+
+		if !toolconfig.AnySchemeSatisfied(schemes, mergedEnv, oauthToken) {
 			return nil, &toolconfig.SecurityUnsatisfiedError{
 				ToolName: "tools/list",
 				Schemes:  schemes,
