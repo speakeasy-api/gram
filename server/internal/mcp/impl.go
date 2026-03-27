@@ -591,11 +591,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case err != nil:
 		// Translate SecurityUnsatisfiedError to HTTP 401 + WWW-Authenticate
 		var secErr *toolconfig.SecurityUnsatisfiedError
-		if errors.As(err, &secErr) && oauthRequired {
-			w.Header().Set(
-				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
-			)
+		if errors.As(err, &secErr) {
+			if oauthRequired {
+				w.Header().Set(
+					"WWW-Authenticate",
+					fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+				)
+			}
 			return oops.E(oops.CodeUnauthorized, secErr, "security scheme not satisfied")
 		}
 
