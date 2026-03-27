@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -97,11 +98,29 @@ func handleToolsList(
 			mergedEnv.Set(k, v)
 		}
 
+		// Map any available OAuth tokens to ACCESS_TOKEN env vars on OAuth security
+		// schemes. At the tools/list level we don't need per-key matching — if the
+		// user has any OAuth token and the toolset has any OAuth scheme, they've
+		// authenticated. Per-key matching happens at tools/call time.
 		var oauthToken string
 		for _, t := range payload.oauthTokenInputs {
-			if len(t.securityKeys) == 0 && t.Token != "" {
+			if t.Token != "" {
 				oauthToken = t.Token
 				break
+			}
+		}
+		if oauthToken != "" {
+			for _, sv := range toolset.SecurityVariables {
+				if sv.Type == nil {
+					continue
+				}
+				if *sv.Type == "oauth2" || *sv.Type == "openIdConnect" {
+					for _, envVar := range sv.EnvVariables {
+						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+							mergedEnv.Set(envVar, oauthToken)
+						}
+					}
+				}
 			}
 		}
 
