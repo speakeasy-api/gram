@@ -107,10 +107,10 @@ type mcpInputs struct {
 	authenticated    bool
 	sessionID        string
 	chatID           string
-	mode           ToolMode
-	userID         string
-	externalUserID string
-	apiKeyID       string
+	mode             ToolMode
+	userID           string
+	externalUserID   string
+	apiKeyID         string
 }
 
 func NewService(
@@ -186,7 +186,6 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP)
 
 	// OAuth 2.1 Authorization Server Metadata
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
@@ -660,134 +659,6 @@ func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUI
 	}
 
 	return result
-}
-
-func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	var err error
-
-	projectSlug := chi.URLParam(r, "project")
-	if projectSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "a project slug must be provided")
-	}
-
-	toolsetSlug := chi.URLParam(r, "toolset")
-	if toolsetSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "a toolset slug must be provided")
-	}
-
-	environmentSlug := chi.URLParam(r, "environment")
-	if environmentSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an environment slug must be provided")
-	}
-
-	sc := security.APIKeyScheme{
-		Name:           constants.KeySecurityScheme,
-		Scopes:         []string{"consumer"},
-		RequiredScopes: []string{},
-	}
-	token := r.Header.Get("Authorization")
-	token = strings.TrimPrefix(token, "Bearer ")
-	token = strings.TrimPrefix(token, "bearer ")
-	ctx, err = s.auth.Authorize(ctx, token, &sc)
-	if err != nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	// Authorize with project
-	sc = security.APIKeyScheme{
-		Name:           constants.ProjectSlugSecuritySchema,
-		Scopes:         []string{},
-		RequiredScopes: []string{},
-	}
-	ctx, err = s.auth.Authorize(ctx, projectSlug, &sc)
-	if err != nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
-
-	// authorization check
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	// Decode the raw body first to check for batch requests
-	bodyBytes, err := io.ReadAll(r.Body)
-	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
-		return nil
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
-	}
-
-	// Reject batch (array) requests — batch is deprecated in the MCP spec
-	if err := inv.Check("mcp request",
-		"not a batch request", len(bodyBytes) == 0 || bodyBytes[0] != '[',
-	); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "batch requests are not supported").Log(ctx, s.logger)
-	}
-
-	var req rawRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
-	}
-
-	sessionID := parseMcpSessionID(r.Header)
-	w.Header().Set("Mcp-Session-Id", sessionID)
-
-	toolset, err := s.toolsetsRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
-		Slug:      toolsetSlug,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
-	}
-
-	// Load header display names for remapping
-	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
-
-	mcpInputs := &mcpInputs{
-		projectID:        *authCtx.ProjectID,
-		toolset:          toolsetSlug,
-		environment:      environmentSlug,
-		mcpEnvVariables:  parseMcpEnvVariables(r, headerDisplayNames),
-		authenticated:    true,
-		oauthTokenInputs: []oauthTokenInputs{},
-		sessionID:        sessionID,
-		chatID:           r.Header.Get("Gram-Chat-ID"),
-		mode:             resolveToolMode(r, toolset),
-		userID:           authCtx.UserID,
-		externalUserID:   authCtx.ExternalUserID,
-		apiKeyID:         authCtx.APIKeyID,
-	}
-
-	body, err := s.handleRequest(ctx, mcpInputs, &req)
-	switch {
-	case body == nil && err == nil:
-		return respondWithNoContent(true, w)
-	case err != nil:
-		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
-		if merr != nil {
-			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(bs)
-		return nil
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
-	}
-	return nil
 }
 
 // TODO: this is for demo. There probably needs to still be annotation per toolset on if it allows dynamic tool calling
