@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.36.0
+
+### Minor Changes
+
+- 7710d31: Introduced a diff viewer that highlights the changes in audit subjects for update events.
+
+  This establishes a baseline UX for understanding the changes happening in orgs/projects. In future iterations, some of the changes will be promoted to natural language bullet points under each audit log message.
+
+  Additionally this change adds a preprocessing step to rename toolset:_ audit events to mcp:_ since "toolsets" are no longer a visible primitive on the dashboard.
+
+### Patch Changes
+
+- ba94c5a: Make deployment interactions non-blocking by passing `nonBlocking: true` to create/evolve API calls. The UI now polls for deployment completion instead of blocking the request, preventing timeouts on long-running deployments. Added error handling for polling failures so the UI shows an error state instead of getting stuck on a permanent spinner.
+
 ## 0.35.0
 
 ### Minor Changes

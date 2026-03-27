@@ -1,5 +1,13 @@
 # server
 
+## 0.32.1
+
+### Patch Changes
+
+- 1295324: Strip tools from toolset audit log snapshots
+
+  The Tools field on Toolset can be very large. Cloning the before/after snapshots and nilling out Tools avoids serializing this data into audit log entries where it is not needed.
+
 ## 0.32.0
 
 ### Minor Changes
