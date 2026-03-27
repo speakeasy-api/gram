@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -70,8 +71,10 @@ func servePublicHTTP(
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	err := ti.service.ServePublic(w, req)
-	return w, err
+	if err := ti.service.ServePublic(w, req); err != nil {
+		return w, fmt.Errorf("serve public: %w", err)
+	}
+	return w, nil
 }
 
 // createPublicMCPToolset creates a public MCP toolset for testing.

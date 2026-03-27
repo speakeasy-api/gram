@@ -7,10 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:fix inline
-func ptr(s string) *string { return new(s) }
-
 func TestDescribeToolSecurity_APIKey(t *testing.T) {
+	t.Parallel()
 	secVars := []*types.SecurityVariable{
 		{
 			ID:           "sv-1",
@@ -30,6 +28,8 @@ func TestDescribeToolSecurity_APIKey(t *testing.T) {
 }
 
 func TestDescribeToolSecurity_Bearer(t *testing.T) {
+	t.Parallel()
+
 	secVars := []*types.SecurityVariable{
 		{
 			ID:           "sv-2",
@@ -47,6 +47,8 @@ func TestDescribeToolSecurity_Bearer(t *testing.T) {
 }
 
 func TestDescribeToolSecurity_OAuth2AuthCode(t *testing.T) {
+	t.Parallel()
+
 	secVars := []*types.SecurityVariable{
 		{
 			ID:           "sv-3",
@@ -64,6 +66,8 @@ func TestDescribeToolSecurity_OAuth2AuthCode(t *testing.T) {
 }
 
 func TestDescribeToolSecurity_ClientCredentials(t *testing.T) {
+	t.Parallel()
+
 	secVars := []*types.SecurityVariable{
 		{
 			ID:           "sv-4",
@@ -81,6 +85,8 @@ func TestDescribeToolSecurity_ClientCredentials(t *testing.T) {
 }
 
 func TestDescribeToolSecurity_OpenIDConnect(t *testing.T) {
+	t.Parallel()
+
 	secVars := []*types.SecurityVariable{
 		{
 			ID:           "sv-5",
@@ -97,6 +103,8 @@ func TestDescribeToolSecurity_OpenIDConnect(t *testing.T) {
 }
 
 func TestDescribeToolSecurity_MultipleSchemes(t *testing.T) {
+	t.Parallel()
+
 	secVars := []*types.SecurityVariable{
 		{
 			ID:           "sv-1",
@@ -123,11 +131,15 @@ func TestDescribeToolSecurity_MultipleSchemes(t *testing.T) {
 }
 
 func TestDescribeToolSecurity_Empty(t *testing.T) {
+	t.Parallel()
+
 	require.Empty(t, DescribeToolSecurity(nil))
 	require.Empty(t, DescribeToolSecurity([]*types.SecurityVariable{}))
 }
 
 func TestDescribeToolSecurity_NilType(t *testing.T) {
+	t.Parallel()
+
 	secVars := []*types.SecurityVariable{
 		{
 			ID:           "sv-x",
@@ -144,6 +156,8 @@ func TestDescribeToolSecurity_NilType(t *testing.T) {
 }
 
 func TestSchemeSatisfied_APIKeyPresent(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 	env.Set("x_api_key", "my-secret")
 
@@ -156,6 +170,8 @@ func TestSchemeSatisfied_APIKeyPresent(t *testing.T) {
 }
 
 func TestSchemeSatisfied_APIKeyMissing(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 
 	scheme := SecurityRequirement{
@@ -167,6 +183,8 @@ func TestSchemeSatisfied_APIKeyMissing(t *testing.T) {
 }
 
 func TestSchemeSatisfied_BearerPresent(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 	env.Set("bearer_token", "tok123")
 
@@ -179,6 +197,8 @@ func TestSchemeSatisfied_BearerPresent(t *testing.T) {
 }
 
 func TestSchemeSatisfied_BasicBothPresent(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 	env.Set("username", "user")
 	env.Set("password", "pass")
@@ -192,6 +212,8 @@ func TestSchemeSatisfied_BasicBothPresent(t *testing.T) {
 }
 
 func TestSchemeSatisfied_BasicMissingPassword(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 	env.Set("username", "user")
 
@@ -204,6 +226,8 @@ func TestSchemeSatisfied_BasicMissingPassword(t *testing.T) {
 }
 
 func TestSchemeSatisfied_OAuth2WithAccessToken(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 	env.Set("github_access_token", "ghp_xxx")
 
@@ -216,6 +240,8 @@ func TestSchemeSatisfied_OAuth2WithAccessToken(t *testing.T) {
 }
 
 func TestSchemeSatisfied_OAuth2WithOAuthTokenFallback(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 
 	scheme := SecurityRequirement{
@@ -227,6 +253,8 @@ func TestSchemeSatisfied_OAuth2WithOAuthTokenFallback(t *testing.T) {
 }
 
 func TestSchemeSatisfied_OAuth2NoEnvVarsWithOAuthToken(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 
 	scheme := SecurityRequirement{
@@ -238,6 +266,8 @@ func TestSchemeSatisfied_OAuth2NoEnvVarsWithOAuthToken(t *testing.T) {
 }
 
 func TestSchemeSatisfied_OAuth2NoEnvVarsNoOAuthToken(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 
 	scheme := SecurityRequirement{
@@ -249,6 +279,8 @@ func TestSchemeSatisfied_OAuth2NoEnvVarsNoOAuthToken(t *testing.T) {
 }
 
 func TestSchemeSatisfied_ClientCredentialsBothPresent(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 	env.Set("my_client_id", "id123")
 	env.Set("my_client_secret", "secret456")
@@ -262,6 +294,8 @@ func TestSchemeSatisfied_ClientCredentialsBothPresent(t *testing.T) {
 }
 
 func TestSchemeSatisfied_ClientCredentialsMissingSecret(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 	env.Set("my_client_id", "id123")
 
@@ -274,6 +308,8 @@ func TestSchemeSatisfied_ClientCredentialsMissingSecret(t *testing.T) {
 }
 
 func TestAnySchemeSatisfied_OneOfTwoMet(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 	env.Set("x_api_key", "my-key")
 
@@ -286,6 +322,8 @@ func TestAnySchemeSatisfied_OneOfTwoMet(t *testing.T) {
 }
 
 func TestAnySchemeSatisfied_NoneMet(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 
 	schemes := []SecurityRequirement{
@@ -297,6 +335,8 @@ func TestAnySchemeSatisfied_NoneMet(t *testing.T) {
 }
 
 func TestAnySchemeSatisfied_EmptySchemes(t *testing.T) {
+	t.Parallel()
+
 	env := NewCaseInsensitiveEnv()
 
 	require.True(t, AnySchemeSatisfied(nil, env, ""))
@@ -304,6 +344,8 @@ func TestAnySchemeSatisfied_EmptySchemes(t *testing.T) {
 }
 
 func TestSecurityUnsatisfiedError_Message(t *testing.T) {
+	t.Parallel()
+
 	err := &SecurityUnsatisfiedError{
 		ToolName: "my_tool",
 		Schemes: []SecurityRequirement{
