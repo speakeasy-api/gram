@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/common"
 	"github.com/workos/workos-go/v6/pkg/roles"
@@ -302,9 +301,9 @@ func TestRoleClient_ListRoles(t *testing.T) {
 
 	result, err := client.ListRoles(context.Background(), "org_1")
 	require.NoError(t, err)
-	assert.Len(t, result, 2)
-	assert.Equal(t, "Admin", result[0].Name)
-	assert.Equal(t, "Editor", result[1].Name)
+	require.Len(t, result, 2)
+	require.Equal(t, "Admin", result[0].Name)
+	require.Equal(t, "Editor", result[1].Name)
 }
 
 func TestRoleClient_ListRoles_EmptyOrg(t *testing.T) {
@@ -313,7 +312,7 @@ func TestRoleClient_ListRoles_EmptyOrg(t *testing.T) {
 
 	result, err := client.ListRoles(context.Background(), "org_empty")
 	require.NoError(t, err)
-	assert.Empty(t, result)
+	require.Empty(t, result)
 }
 
 func TestRoleClient_CreateRole(t *testing.T) {
@@ -326,13 +325,13 @@ func TestRoleClient_CreateRole(t *testing.T) {
 		Description: "Can deploy",
 	})
 	require.NoError(t, err)
-	assert.NotEmpty(t, role.ID)
-	assert.Equal(t, "Deployer", role.Name)
-	assert.Equal(t, "org-deployer", role.Slug)
+	require.NotEmpty(t, role.ID)
+	require.Equal(t, "Deployer", role.Name)
+	require.Equal(t, "org-deployer", role.Slug)
 
 	// Verify it was stored.
 	fake.mu.Lock()
-	assert.Len(t, fake.roles["org_1"], 1)
+	require.Len(t, fake.roles["org_1"], 1)
 	fake.mu.Unlock()
 }
 
@@ -351,9 +350,9 @@ func TestRoleClient_UpdateRole(t *testing.T) {
 		Description: &newDesc,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "New Name", updated.Name)
-	assert.Equal(t, "Updated description", updated.Description)
-	assert.Equal(t, "2026-01-02T00:00:00Z", updated.UpdatedAt)
+	require.Equal(t, "New Name", updated.Name)
+	require.Equal(t, "Updated description", updated.Description)
+	require.Equal(t, "2026-01-02T00:00:00Z", updated.UpdatedAt)
 }
 
 func TestRoleClient_UpdateRole_NotFound(t *testing.T) {
@@ -365,7 +364,7 @@ func TestRoleClient_UpdateRole_NotFound(t *testing.T) {
 		Name: &newName,
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "404")
+	require.Contains(t, err.Error(), "404")
 }
 
 func TestRoleClient_DeleteRole(t *testing.T) {
@@ -381,7 +380,7 @@ func TestRoleClient_DeleteRole(t *testing.T) {
 
 	// Verify removed.
 	fake.mu.Lock()
-	assert.Empty(t, fake.roles["org_1"])
+	require.Empty(t, fake.roles["org_1"])
 	fake.mu.Unlock()
 }
 
@@ -391,7 +390,7 @@ func TestRoleClient_DeleteRole_NotFound(t *testing.T) {
 
 	err := client.DeleteRole(context.Background(), "org_1", "org-nonexistent")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "404")
+	require.Contains(t, err.Error(), "404")
 }
 
 func TestRoleClient_ListMembers(t *testing.T) {
@@ -410,9 +409,9 @@ func TestRoleClient_ListMembers(t *testing.T) {
 
 	members, err := client.ListMembers(context.Background(), "org_1")
 	require.NoError(t, err)
-	assert.Len(t, members, 1)
-	assert.Equal(t, "user_1", members[0].UserID)
-	assert.Equal(t, "admin", members[0].Role.Slug)
+	require.Len(t, members, 1)
+	require.Equal(t, "user_1", members[0].UserID)
+	require.Equal(t, "admin", members[0].Role.Slug)
 }
 
 func TestRoleClient_ListMembers_Pagination(t *testing.T) {
@@ -429,9 +428,9 @@ func TestRoleClient_ListMembers_Pagination(t *testing.T) {
 	members, err := client.ListMembers(context.Background(), "org_1")
 	require.NoError(t, err)
 	require.Len(t, members, 3)
-	assert.Equal(t, "user_1", members[0].UserID)
-	assert.Equal(t, "user_2", members[1].UserID)
-	assert.Equal(t, "user_3", members[2].UserID)
+	require.Equal(t, "user_1", members[0].UserID)
+	require.Equal(t, "user_2", members[1].UserID)
+	require.Equal(t, "user_3", members[2].UserID)
 }
 
 func TestRoleClient_UpdateMemberRole(t *testing.T) {
@@ -448,7 +447,7 @@ func TestRoleClient_UpdateMemberRole(t *testing.T) {
 
 	updated, err := client.UpdateMemberRole(context.Background(), "mem_1", "org-editor")
 	require.NoError(t, err)
-	assert.Equal(t, "org-editor", updated.Role.Slug)
+	require.Equal(t, "org-editor", updated.Role.Slug)
 }
 
 func TestRoleClient_GetUser(t *testing.T) {
@@ -464,8 +463,8 @@ func TestRoleClient_GetUser(t *testing.T) {
 
 	user, err := client.GetUser(context.Background(), "user_1")
 	require.NoError(t, err)
-	assert.Equal(t, "Jane", user.FirstName)
-	assert.Equal(t, "jane@example.com", user.Email)
+	require.Equal(t, "Jane", user.FirstName)
+	require.Equal(t, "jane@example.com", user.Email)
 }
 
 func TestRoleClient_GetUser_NotFound(t *testing.T) {
@@ -489,10 +488,10 @@ func TestRoleClient_ListOrgUsers(t *testing.T) {
 
 	users, err := client.ListOrgUsers(context.Background(), "org_1")
 	require.NoError(t, err)
-	assert.Len(t, users, 2)
-	assert.Equal(t, "Alice", users["user_1"].FirstName)
-	assert.Equal(t, "Bob", users["user_2"].FirstName)
-	assert.NotContains(t, users, "user_3")
+	require.Len(t, users, 2)
+	require.Equal(t, "Alice", users["user_1"].FirstName)
+	require.Equal(t, "Bob", users["user_2"].FirstName)
+	require.NotContains(t, users, "user_3")
 }
 
 func TestRoleClient_NilClient(t *testing.T) {
@@ -501,5 +500,5 @@ func TestRoleClient_NilClient(t *testing.T) {
 	var rc *workos.RoleClient
 	_, err := rc.ListRoles(context.Background(), "org_1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not initialized")
+	require.Contains(t, err.Error(), "not initialized")
 }
