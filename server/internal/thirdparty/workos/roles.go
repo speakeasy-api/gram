@@ -76,6 +76,7 @@ func NewRoleClient(apiKey string, opts ...RoleClientOpts) *RoleClient {
 	}
 
 	um := usermanagement.NewClient(apiKey)
+	um.HTTPClient = httpClient
 	if opt.Endpoint != "" {
 		um.Endpoint = opt.Endpoint
 	}
@@ -84,7 +85,7 @@ func NewRoleClient(apiKey string, opts ...RoleClientOpts) *RoleClient {
 		apiKey:     apiKey,
 		endpoint:   endpoint,
 		httpClient: httpClient,
-		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: nil, Endpoint: opt.Endpoint, JSONEncode: nil},
+		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:         um,
 	}
 }

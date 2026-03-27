@@ -26,14 +26,16 @@ type fakeWorkOS struct {
 	mu          sync.Mutex
 	roles       map[string][]roles.Role // orgID → roles
 	memberships []usermanagement.OrganizationMembership
-	users       map[string]common.User
+	users       map[string]common.User // userID → user
+	orgUsers    map[string][]string    // orgID → []userID
 	nextRoleID  int
 }
 
 func newFakeWorkOS() *fakeWorkOS {
 	return &fakeWorkOS{
-		roles: make(map[string][]roles.Role),
-		users: make(map[string]common.User),
+		roles:    make(map[string][]roles.Role),
+		users:    make(map[string]common.User),
+		orgUsers: make(map[string][]string),
 	}
 }
 
@@ -85,7 +87,7 @@ func (f *fakeWorkOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// SDK: GET /user_management/users (list)
 	case r.Method == http.MethodGet && path == "/user_management/users":
-		f.handleListUsers(w)
+		f.handleListUsers(w, r)
 
 	default:
 		http.NotFound(w, r)
@@ -167,9 +169,16 @@ func (f *fakeWorkOS) handleDeleteRole(w http.ResponseWriter, orgID, slug string)
 	http.Error(w, "role not found", http.StatusNotFound)
 }
 
-func (f *fakeWorkOS) handleListMembers(w http.ResponseWriter, _ *http.Request) {
+func (f *fakeWorkOS) handleListMembers(w http.ResponseWriter, r *http.Request) {
+	orgID := r.URL.Query().Get("organization_id")
+
 	f.mu.Lock()
-	members := f.memberships
+	var members []usermanagement.OrganizationMembership
+	for _, m := range f.memberships {
+		if m.OrganizationID == orgID {
+			members = append(members, m)
+		}
+	}
 	f.mu.Unlock()
 
 	writeJSON(w, map[string]any{
@@ -212,11 +221,15 @@ func (f *fakeWorkOS) handleGetUser(w http.ResponseWriter, userID string) {
 	writeJSON(w, u)
 }
 
-func (f *fakeWorkOS) handleListUsers(w http.ResponseWriter) {
+func (f *fakeWorkOS) handleListUsers(w http.ResponseWriter, r *http.Request) {
+	orgID := r.URL.Query().Get("organization_id")
+
 	f.mu.Lock()
-	all := make([]common.User, 0, len(f.users))
-	for _, u := range f.users {
-		all = append(all, u)
+	var all []common.User
+	for _, userID := range f.orgUsers[orgID] {
+		if u, ok := f.users[userID]; ok {
+			all = append(all, u)
+		}
 	}
 	f.mu.Unlock()
 
@@ -426,16 +439,12 @@ func TestRoleClient_GetUser_NotFound(t *testing.T) {
 func TestRoleClient_ListOrgUsers(t *testing.T) {
 	t.Parallel()
 	fake := newFakeWorkOS()
-	fake.users["user_1"] = common.User{
-		ID:        "user_1",
-		FirstName: "Alice",
-		Email:     "alice@example.com",
-	}
-	fake.users["user_2"] = common.User{
-		ID:        "user_2",
-		FirstName: "Bob",
-		Email:     "bob@example.com",
-	}
+	fake.users["user_1"] = common.User{ID: "user_1", FirstName: "Alice", Email: "alice@example.com"}
+	fake.users["user_2"] = common.User{ID: "user_2", FirstName: "Bob", Email: "bob@example.com"}
+	fake.users["user_3"] = common.User{ID: "user_3", FirstName: "Carol", Email: "carol@example.com"}
+	fake.orgUsers["org_1"] = []string{"user_1", "user_2"}
+	// user_3 belongs to a different org — should not appear in results
+	fake.orgUsers["org_2"] = []string{"user_3"}
 	client, _ := newTestClient(t, fake)
 
 	users, err := client.ListOrgUsers(context.Background(), "org_1")
@@ -443,6 +452,7 @@ func TestRoleClient_ListOrgUsers(t *testing.T) {
 	assert.Len(t, users, 2)
 	assert.Equal(t, "Alice", users["user_1"].FirstName)
 	assert.Equal(t, "Bob", users["user_2"].FirstName)
+	assert.NotContains(t, users, "user_3")
 }
 
 func TestRoleClient_NilClient(t *testing.T) {
