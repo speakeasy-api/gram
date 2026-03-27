@@ -5,6 +5,7 @@
 //USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
 import process from "node:process";
+import os from "node:os";
 import { $ } from "zx";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -30,6 +31,23 @@ function checkExistingConfig(): { exists: boolean; hasProvider: boolean } {
   const hasProvider = /^\s*GRAM_FUNCTIONS_PROVIDER\s*=/gm.test(content);
 
   return { exists: true, hasProvider };
+}
+
+function randomAppName() {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  const suffix = Array.from(bytes, (b) => chars[b % chars.length]).join("");
+
+  let username = "";
+
+  try {
+    username = os.userInfo().username;
+  } catch {
+    // Ignore error and set up fallback username later
+  }
+
+  const user = username.toLowerCase().replaceAll(".", "-") || "user";
+  return `${user}-${suffix}`;
 }
 
 async function run() {
@@ -107,9 +125,11 @@ async function run() {
   }
 
   const initialApp =
-    process.env["GRAM_FUNCTIONS_RUNNER_OCI_IMAGE"]?.split("/")[1] || undefined;
+    process.env["GRAM_FUNCTIONS_RUNNER_OCI_IMAGE"]?.split("/")[1] ||
+    randomAppName();
   const app = await text({
-    message: "🎈 Enter your Fly.io app name for Gram Functions runner images",
+    message:
+      "🎈 Enter your Fly.io app name for Gram Functions runner images (accept the default if unsure)",
     initialValue: initialApp,
   });
   if (isCancel(app)) {
