@@ -251,10 +251,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
-  if (
-    session.activeOrganizationId &&
-    !session.whitelisted
-  ) {
+  if (session.activeOrganizationId && !session.whitelisted) {
     return <BookDemo />;
   }
 

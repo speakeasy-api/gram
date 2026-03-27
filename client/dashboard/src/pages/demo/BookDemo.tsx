@@ -8,7 +8,8 @@ export default function BookDemo() {
           Book a Demo to Access the Speakeasy MCP Platform
         </h1>
         <p className="text-muted-foreground">
-          To access the Speakeasy MCP Platform, please book a demo with our team.
+          To access the Speakeasy MCP Platform, please book a demo with our
+          team.
         </p>
         <Button asChild size="lg">
           <a
