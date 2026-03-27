@@ -167,9 +167,8 @@ func (rc *RoleClient) CreateRole(ctx context.Context, orgID string, opts CreateR
 }
 
 type UpdateRoleOpts struct {
-	Name        *string  `json:"name,omitempty"`
-	Description *string  `json:"description,omitempty"`
-	Permissions []string `json:"permissions,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 // UpdateRole updates a role by slug via the WorkOS REST API (PATCH).
