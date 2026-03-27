@@ -32,6 +32,29 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Roles"}`)
 	})
 
+	Method("getRole", func() {
+		Description("Get a role by ID.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the role.")
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(RoleModel)
+
+		HTTP(func() {
+			GET("/rpc/access.getRole")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRole")
+		Meta("openapi:extension:x-speakeasy-name-override", "getRole")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Role"}`)
+	})
+
 	Method("listGrants", func() {
 		Description("List all permissions in your organization, optionally filtered to a specific user or role.")
 		Security(security.ByKey, func() {
