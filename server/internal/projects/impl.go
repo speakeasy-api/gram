@@ -113,7 +113,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 	}
 
 	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: proj.ID.String()}); err != nil {
-		return nil, mapAccessError(err)
+		return nil, err
 	}
 
 	return &gen.GetProjectResult{
@@ -136,7 +136,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	}
 
 	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: payload.OrganizationID}); err != nil {
-		return nil, mapAccessError(err)
+		return nil, err
 	}
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
@@ -252,7 +252,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 
 	allowedProjectIDs, err := s.filterByAccess(ctx, access.ScopeBuildRead, projectIDs)
 	if err != nil {
-		return nil, mapAccessError(err)
+		return nil, err
 	}
 
 	allowedProjects := make(map[string]struct{}, len(allowedProjectIDs))
@@ -285,7 +285,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 	}
 
 	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
-		return nil, mapAccessError(err)
+		return nil, err
 	}
 
 	assetID, err := uuid.Parse(payload.AssetID)
@@ -351,7 +351,7 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 	}
 
 	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
-		return nil, mapAccessError(err)
+		return nil, err
 	}
 
 	allowedOrigins, err := s.repo.ListAllowedOriginsByProjectID(ctx, *authCtx.ProjectID)
@@ -383,7 +383,7 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 	}
 
 	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
-		return nil, mapAccessError(err)
+		return nil, err
 	}
 
 	// Use the status from payload or default to "pending"
@@ -425,7 +425,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	}
 
 	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
-		return mapAccessError(err)
+		return err
 	}
 
 	err = s.auth.CheckProjectAccess(ctx, s.logger, projectID)
