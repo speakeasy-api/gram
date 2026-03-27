@@ -16384,10 +16384,13 @@ components:
         hook_source:
           type: string
           description: Hook source (from attributes.gram.hook.source)
-        http_status_code:
-          type: integer
-          description: HTTP status code (if applicable)
-          format: int32
+        hook_status:
+          type: string
+          description: Hook execution status
+          enum:
+            - success
+            - failure
+            - pending
         log_count:
           type: integer
           description: Total number of logs in this trace

@@ -2895,8 +2895,8 @@ type HookTraceSummaryResponseBody struct {
 	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
 	// Total number of logs in this trace
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
-	// HTTP status code (if applicable)
-	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// Hook execution status
+	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
 	// Gram URN associated with this hook trace
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 	// Tool name (from materialized column)
@@ -8826,6 +8826,11 @@ func ValidateHookTraceSummaryResponseBody(body *HookTraceSummaryResponseBody) (e
 	}
 	if body.TraceID != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
+	}
+	if body.HookStatus != nil {
+		if !(*body.HookStatus == "success" || *body.HookStatus == "failure" || *body.HookStatus == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_status", *body.HookStatus, []any{"success", "failure", "pending"}))
+		}
 	}
 	return
 }

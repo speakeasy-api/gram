@@ -2803,8 +2803,8 @@ type HookTraceSummaryResponseBody struct {
 	StartTimeUnixNano string `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
 	// Total number of logs in this trace
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
-	// HTTP status code (if applicable)
-	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// Hook execution status
+	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
 	// Gram URN associated with this hook trace
 	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
 	// Tool name (from materialized column)
