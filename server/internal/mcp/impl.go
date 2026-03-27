@@ -111,6 +111,9 @@ type mcpInputs struct {
 	userID           string
 	externalUserID   string
 	apiKeyID         string
+	baseURL          string
+	mcpSlug          string
+	oauthRequired    bool
 }
 
 func NewService(
@@ -414,51 +417,48 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		oAuthProxyProvider = &providers[0]
 	}
 
-	// Switch handling auth based on both MCP configuration and request context.
+	// Token extraction — best effort for public MCPs with OAuth.
+	// We collect tokens if present but don't return 401 here. Per-tool security
+	// checks in the RPC handlers will enforce auth requirements and return
+	// SecurityUnsatisfiedError which gets translated to HTTP 401 + WWW-Authenticate.
 	//
-	// Possible MCP configurations, for reference:
-	// - "External OAuth" - User-provided OAuth server separate from Gram
-	// - "External MCP OAuth" - OAuth provided by a 3rd party MCP server
-	//   (usually via catalog)
-	// - "OAuth Proxy" - Gram acts as the OAuth2.1 DCR server between MCP client
-	//   & non-DCR OAuth Server
+	// Private MCPs still enforce identity auth at this level since that's user
+	// identity, not per-tool security.
+	oauthRequired := toolset.ExternalOauthServerID.Valid || (oAuthProxyProvider != nil)
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
-		// External OAuth server flow - only accept Authorization header
-		if authToken == "" {
-			s.logger.WarnContext(ctx, "No authorization token provided")
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-		}
-
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        authToken,
-		})
-	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-		// Custom OAuth provider flow - only accept Authorization header
-		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
-		if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
-			s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-			oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
-			if err != nil {
-				s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
-			}
-		}
-		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
-		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-
-		for _, externalSecret := range oauthToken.ExternalSecrets {
+		// External OAuth server flow — collect token if present
+		if authToken != "" {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: externalSecret.SecurityKeys,
-				Token:        externalSecret.Token,
+				securityKeys: []string{},
+				Token:        authToken,
 			})
 		}
+	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+		// Custom OAuth provider flow — validate and collect tokens if present
+		if authToken != "" {
+			oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
+			if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
+				s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+				oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+				if err != nil {
+					s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+				}
+			}
+			if err != nil {
+				s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
+			} else {
+				s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+				for _, externalSecret := range oauthToken.ExternalSecrets {
+					tokenInputs = append(tokenInputs, oauthTokenInputs{
+						securityKeys: externalSecret.SecurityKeys,
+						Token:        externalSecret.Token,
+					})
+				}
+			}
+		}
 	case !toolset.McpIsPublic:
-		// Private MCP - always allow chatSessionJwt fallback since private servers require user authentication
+		// Private MCP — identity auth is required at HTTP level
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 		token := authToken
 		if token == "" {
@@ -479,7 +479,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
-		// Public MCP without OAuth - allow chatSessionJwt fallback
+		// Public MCP without OAuth — allow chatSessionJwt fallback
 		token := authToken
 		if token == "" {
 			token = chatSessionJwt
@@ -586,6 +586,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		userID:           userID,
 		externalUserID:   externalUserID,
 		apiKeyID:         apiKeyID,
+		baseURL:          baseURL,
+		mcpSlug:          mcpSlug,
+		oauthRequired:    oauthRequired,
 	}
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
@@ -756,6 +759,9 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		userID:           authCtx.UserID,
 		externalUserID:   authCtx.ExternalUserID,
 		apiKeyID:         authCtx.APIKeyID,
+		baseURL:          "",
+		mcpSlug:          "",
+		oauthRequired:    false,
 	}
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
@@ -798,7 +804,6 @@ func resolveToolMode(r *http.Request, toolset toolsets_repo.Toolset) ToolMode {
 
 	return ToolModeStatic
 }
-
 
 // parseMcpEnvVariables: Map potential user provided mcp variables into inputs
 // Only inputs that match up with a security or server env var in the proxy will be used in the proxy
