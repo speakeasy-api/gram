@@ -107,13 +107,10 @@ type mcpInputs struct {
 	authenticated    bool
 	sessionID        string
 	chatID           string
-	mode             ToolMode
-	userID           string
-	externalUserID   string
-	apiKeyID         string
-	baseURL          string
-	mcpSlug          string
-	oauthRequired    bool
+	mode           ToolMode
+	userID         string
+	externalUserID string
+	apiKeyID       string
 }
 
 func NewService(
@@ -586,9 +583,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		userID:           userID,
 		externalUserID:   externalUserID,
 		apiKeyID:         apiKeyID,
-		baseURL:          baseURL,
-		mcpSlug:          mcpSlug,
-		oauthRequired:    oauthRequired,
 	}
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
@@ -598,10 +592,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case err != nil:
 		// Translate SecurityUnsatisfiedError to HTTP 401 + WWW-Authenticate
 		var secErr *toolconfig.SecurityUnsatisfiedError
-		if errors.As(err, &secErr) && mcpInputs.oauthRequired {
+		if errors.As(err, &secErr) && oauthRequired {
 			w.Header().Set(
 				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata="%s"`, mcpInputs.baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpInputs.mcpSlug),
+				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
 			)
 			return oops.E(oops.CodeUnauthorized, secErr, "security scheme not satisfied")
 		}
@@ -769,9 +763,6 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		userID:           authCtx.UserID,
 		externalUserID:   authCtx.ExternalUserID,
 		apiKeyID:         authCtx.APIKeyID,
-		baseURL:          "",
-		mcpSlug:          "",
-		oauthRequired:    false,
 	}
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)

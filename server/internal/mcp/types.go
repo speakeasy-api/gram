@@ -89,8 +89,5 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		userID:           m.UserID,
 		externalUserID:   m.ExternalUserID,
 		apiKeyID:         m.APIKeyID,
-		baseURL:          "",
-		mcpSlug:          "",
-		oauthRequired:    false,
 	}
 }
