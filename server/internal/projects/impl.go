@@ -504,7 +504,10 @@ func (s *Service) requireAccess(ctx context.Context, checks ...access.Check) err
 	if !enabled {
 		return nil
 	}
-	return access.Require(ctx, checks...)
+	if err := access.Require(ctx, checks...); err != nil {
+		return mapAccessError(err)
+	}
+	return nil
 }
 
 func (s *Service) filterByAccess(ctx context.Context, scope access.Scope, resourceIDs []string) ([]string, error) {
@@ -519,7 +522,11 @@ func (s *Service) filterByAccess(ctx context.Context, scope access.Scope, resour
 	if !enabled {
 		return resourceIDs, nil
 	}
-	return access.Filter(ctx, scope, resourceIDs)
+	resourceIDs, err = access.Filter(ctx, scope, resourceIDs)
+	if err != nil {
+		return nil, mapAccessError(err)
+	}
+	return resourceIDs, nil
 }
 
 func mapAccessError(err error) error {
