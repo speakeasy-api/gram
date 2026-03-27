@@ -17,7 +17,7 @@ import (
 func TestProjectsService_CreateProject_CreatesAuditLog(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
@@ -46,7 +46,7 @@ func TestProjectsService_CreateProject_CreatesAuditLog(t *testing.T) {
 func TestProjectsService_CreateProject_ForbiddenDoesNotCreateAuditLog(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectCreate)
 	require.NoError(t, err)
 
@@ -71,7 +71,7 @@ func TestProjectsService_CreateProject_ForbiddenDoesNotCreateAuditLog(t *testing
 func TestProjectsService_CreateProject_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	ctx = access.GrantsToContext(ctx, &access.Grants{})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -91,10 +91,27 @@ func TestProjectsService_CreateProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestProjectsService_CreateProject_SkipsRBACWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t, false)
+	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	result, err := ti.service.CreateProject(ctx, &gen.CreateProjectPayload{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "rbac-disabled-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Project)
+}
+
 func TestProjectsService_CreateProject_AuditLogRecord(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)

@@ -20,7 +20,7 @@ import (
 func TestSetLogo_CreatesAuditLog(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
@@ -48,7 +48,7 @@ func TestSetLogo_CreatesAuditLog(t *testing.T) {
 func TestSetLogo_InvalidAssetID_DoesNotCreateAuditLog(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
@@ -72,7 +72,7 @@ func TestSetLogo_InvalidAssetID_DoesNotCreateAuditLog(t *testing.T) {
 func TestSetLogo_AuditLogSnapshots(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
@@ -115,7 +115,7 @@ func TestSetLogo_AuditLogSnapshots(t *testing.T) {
 
 func TestSetLogo_Success(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
@@ -164,7 +164,7 @@ func TestSetLogo_Success(t *testing.T) {
 
 func TestSetLogo_InvalidAssetID(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
@@ -190,7 +190,7 @@ func TestSetLogo_InvalidAssetID(t *testing.T) {
 func TestSetLogo_ForbiddenWithoutBuildWriteGrant(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	ctx = access.GrantsToContext(ctx, &access.Grants{})
 
 	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{
@@ -208,14 +208,11 @@ func TestSetLogo_ForbiddenWithoutBuildWriteGrant(t *testing.T) {
 	assert.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestSetLogo_SkipsRBACForNonEnterpriseOrgs(t *testing.T) {
+func TestSetLogo_SkipsRBACWhenDisabled(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = "pro"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	ctx, ti := newTestProjectsService(t, false)
+	ctx = access.GrantsToContext(ctx, &access.Grants{})
 
 	assetID := uuid.New()
 	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{
@@ -234,7 +231,7 @@ func TestSetLogo_SkipsRBACForNonEnterpriseOrgs(t *testing.T) {
 func TestSetLogo_UnauthorizedNoAuthContext(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	_, ti := newTestProjectsService(t)
+	_, ti := newTestProjectsService(t, true)
 
 	// Call SetLogo without auth context
 	payload := &projects.SetLogoPayload{
@@ -258,7 +255,7 @@ func TestSetLogo_UnauthorizedNoAuthContext(t *testing.T) {
 
 func TestSetLogo_UnauthorizedNoProjectID(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 
 	// Clear project ID from auth context
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -288,7 +285,7 @@ func TestSetLogo_UnauthorizedNoProjectID(t *testing.T) {
 
 func TestSetLogo_DatabaseErrorProjectNotFound(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
 	require.NoError(t, err)
 
@@ -327,7 +324,7 @@ func TestSetLogo_DatabaseErrorProjectNotFound(t *testing.T) {
 
 func TestSetLogo_EmptyAssetID(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 
 	// Call SetLogo with empty asset ID
 	payload := &projects.SetLogoPayload{
@@ -352,7 +349,7 @@ func TestSetLogo_EmptyAssetID(t *testing.T) {
 
 func TestSetLogo_NilPayload(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 
 	// Call SetLogo with nil payload - this should panic
 	assert.Panics(t, func() {
@@ -362,7 +359,7 @@ func TestSetLogo_NilPayload(t *testing.T) {
 
 func TestSetLogo_UpdateExistingLogo(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 
 	// First, set an initial logo
 	firstAssetID := uuid.New()

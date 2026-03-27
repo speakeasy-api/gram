@@ -19,7 +19,7 @@ import (
 func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	project := createProjectForDeletion(t, ctx, ti, "audit-delete-project-"+uuid.NewString()[:8])
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -53,7 +53,7 @@ func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
 func TestProjectsService_DeleteProject_InvalidIDDoesNotCreateAuditLog(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
 	require.NoError(t, err)
 
@@ -72,7 +72,7 @@ func TestProjectsService_DeleteProject_InvalidIDDoesNotCreateAuditLog(t *testing
 func TestProjectsService_DeleteProject_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	project := createProjectForDeletion(t, ctx, ti, "no-wildcard-"+uuid.NewString()[:8])
 	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: project.ID.String()})
 
@@ -86,6 +86,19 @@ func TestProjectsService_DeleteProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestProjectsService_DeleteProject_SkipsRBACWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t, false)
+	project := createProjectForDeletion(t, ctx, ti, "rbac-disabled-"+uuid.NewString()[:8])
+	ctx = access.GrantsToContext(ctx, &access.Grants{})
+
+	err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
+		ID: project.ID.String(),
+	})
+	require.NoError(t, err)
 }
 
 func createProjectForDeletion(t *testing.T, ctx context.Context, ti *testInstance, name string) projectsrepo.Project {
@@ -111,7 +124,7 @@ func TestProjectsService_DeleteProject(t *testing.T) {
 	t.Run("it rejects deleting with invalid project ID", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t)
+		ctx, ti := newTestProjectsService(t, true)
 
 		// Try to delete with invalid UUID
 		err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
@@ -128,7 +141,7 @@ func TestProjectsService_DeleteProject(t *testing.T) {
 	t.Run("it rejects deleting without auth context", func(t *testing.T) {
 		t.Parallel()
 
-		_, ti := newTestProjectsService(t)
+		_, ti := newTestProjectsService(t, true)
 
 		// Try to delete without auth context
 		err := ti.service.DeleteProject(context.Background(), &gen.DeleteProjectPayload{
@@ -145,7 +158,7 @@ func TestProjectsService_DeleteProject(t *testing.T) {
 	t.Run("it rejects deleting a non-existent project", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t)
+		ctx, ti := newTestProjectsService(t, true)
 		nonExistentProjectID := uuid.New()
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
@@ -164,7 +177,7 @@ func TestProjectsService_DeleteProject(t *testing.T) {
 	t.Run("it rejects deleting a default project", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t)
+		ctx, ti := newTestProjectsService(t, true)
 
 		// Try to delete a default project, which should be forbidden
 		err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{

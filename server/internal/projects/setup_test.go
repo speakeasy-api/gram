@@ -53,25 +53,15 @@ type testInstance struct {
 	assetStorage   assets.BlobStore
 }
 
-type testProjectsOptions struct {
-	enableRBAC bool
-}
-
 type stubFeatureChecker struct {
 	enabled bool
 }
 
-func (s stubFeatureChecker) IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error) {
+func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ productfeatures.Feature) (bool, error) {
 	return s.enabled, nil
 }
 
-func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
-	t.Helper()
-
-	return newTestProjectsServiceWithOptions(t, testProjectsOptions{enableRBAC: true})
-}
-
-func newTestProjectsServiceWithOptions(t *testing.T, opts testProjectsOptions) (context.Context, *testInstance) {
+func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -104,7 +94,7 @@ func newTestProjectsServiceWithOptions(t *testing.T, opts testProjectsOptions) (
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	svc := projects.NewService(logger, conn, sessionManager, stubFeatureChecker{enabled: opts.enableRBAC})
+	svc := projects.NewService(logger, conn, sessionManager, stubFeatureChecker{enabled: enableRBAC})
 
 	return ctx, &testInstance{
 		service:        svc,
