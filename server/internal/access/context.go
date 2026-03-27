@@ -36,7 +36,6 @@ func LoadIntoContext(ctx context.Context, logger *slog.Logger, db accessrepo.DBT
 		return ctx, nil
 	}
 
-	fmt.Println(authCtx.AccountType)
 	if authCtx.AccountType != "enterprise" {
 		return ctx, nil
 	}

@@ -504,6 +504,9 @@ func (s *Service) requireAccess(ctx context.Context, checks ...access.Check) err
 	if !enabled {
 		return nil
 	}
+	if _, ok := access.GrantsFromContext(ctx); !ok {
+		return nil
+	}
 	return access.Require(ctx, checks...)
 }
 
@@ -517,6 +520,9 @@ func (s *Service) filterByAccess(ctx context.Context, scope access.Scope, resour
 		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, s.logger)
 	}
 	if !enabled {
+		return resourceIDs, nil
+	}
+	if _, ok := access.GrantsFromContext(ctx); !ok {
 		return resourceIDs, nil
 	}
 	return access.Filter(ctx, scope, resourceIDs)
