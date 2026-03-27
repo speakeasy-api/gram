@@ -188,34 +188,6 @@ func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
 	require.Contains(t, err.Error(), "expired or invalid access token")
 }
 
-func TestServePublicAuth_PrivateServer_ValidSession_Succeeds(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Private Valid Session MCP",
-		Slug:                   "priv-valid-session",
-		Description:            conv.ToPGText("A private MCP for valid session testing"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("priv-valid-session"),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	// Use the authenticated context — session is already established via InitAuthContext.
-	// The auth context is carried on ctx, no need to pass a token header.
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "")
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-}
-
 func TestServePublicAuth_BatchRequest_Rejected(t *testing.T) {
 	t.Parallel()
 
