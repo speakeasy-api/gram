@@ -5,8 +5,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Hook execution status
+ */
+export const HookStatus = {
+  Success: "success",
+  Failure: "failure",
+  Pending: "pending",
+} as const;
+/**
+ * Hook execution status
+ */
+export type HookStatus = ClosedEnum<typeof HookStatus>;
 
 /**
  * Summary information for a hook trace
@@ -25,9 +39,9 @@ export type HookTraceSummary = {
    */
   hookSource?: string | undefined;
   /**
-   * HTTP status code (if applicable)
+   * Hook execution status
    */
-  httpStatusCode?: number | undefined;
+  hookStatus?: HookStatus | undefined;
   /**
    * Total number of logs in this trace
    */
@@ -55,6 +69,10 @@ export type HookTraceSummary = {
 };
 
 /** @internal */
+export const HookStatus$inboundSchema: z.ZodMiniEnum<typeof HookStatus> = z
+  .enum(HookStatus);
+
+/** @internal */
 export const HookTraceSummary$inboundSchema: z.ZodMiniType<
   HookTraceSummary,
   unknown
@@ -63,7 +81,7 @@ export const HookTraceSummary$inboundSchema: z.ZodMiniType<
     event_source: z.optional(z.string()),
     gram_urn: z.string(),
     hook_source: z.optional(z.string()),
-    http_status_code: z.optional(z.int()),
+    hook_status: z.optional(HookStatus$inboundSchema),
     log_count: z.int(),
     start_time_unix_nano: z.string(),
     tool_name: z.optional(z.string()),
@@ -76,7 +94,7 @@ export const HookTraceSummary$inboundSchema: z.ZodMiniType<
       "event_source": "eventSource",
       "gram_urn": "gramUrn",
       "hook_source": "hookSource",
-      "http_status_code": "httpStatusCode",
+      "hook_status": "hookStatus",
       "log_count": "logCount",
       "start_time_unix_nano": "startTimeUnixNano",
       "tool_name": "toolName",

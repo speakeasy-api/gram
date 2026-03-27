@@ -1199,7 +1199,7 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 			TraceID:           item.TraceID,
 			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
 			LogCount:          item.LogCount,
-			HTTPStatusCode:    item.HTTPStatusCode,
+			HookStatus:        item.HookStatus,
 			GramUrn:           item.GramURN,
 			ToolName:          item.ToolName,
 			ToolSource:        item.ToolSource,

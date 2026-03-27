@@ -1163,7 +1163,9 @@ var HookTraceSummary = Type("HookTraceSummary", func() {
 	})
 	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("log_count", UInt64, "Total number of logs in this trace")
-	Attribute("http_status_code", Int32, "HTTP status code (if applicable)")
+	Attribute("hook_status", String, "Hook execution status", func() {
+		Enum("success", "failure", "pending")
+	})
 	Attribute("gram_urn", String, "Gram URN associated with this hook trace")
 	Attribute("tool_name", String, "Tool name (from materialized column)")
 	Attribute("tool_source", String, "Tool call source (from materialized column)")

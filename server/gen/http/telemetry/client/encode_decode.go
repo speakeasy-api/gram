@@ -3428,7 +3428,7 @@ func unmarshalHookTraceSummaryResponseBodyToTelemetryHookTraceSummary(v *HookTra
 		TraceID:           *v.TraceID,
 		StartTimeUnixNano: *v.StartTimeUnixNano,
 		LogCount:          *v.LogCount,
-		HTTPStatusCode:    v.HTTPStatusCode,
+		HookStatus:        v.HookStatus,
 		GramUrn:           *v.GramUrn,
 		ToolName:          v.ToolName,
 		ToolSource:        v.ToolSource,
