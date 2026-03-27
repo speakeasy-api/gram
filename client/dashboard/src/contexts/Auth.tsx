@@ -493,7 +493,6 @@ export function usePylonInAppChat(user: User | undefined) {
     window.pylon = {
       chat_settings: {
         app_id: "f9cade16-8d3c-4826-9a2a-034fad495102",
-        hide_default_launcher: true,
         email: email,
         name: displayName,
         avatar_url: user?.photoUrl,
