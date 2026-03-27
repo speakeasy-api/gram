@@ -248,11 +248,11 @@ func sendMCPRequest(
 	ctx context.Context,
 	ti *testInstance,
 	mcpSlug string,
-	requests []map[string]any,
+	request map[string]any,
 ) *httptest.ResponseRecorder {
 	t.Helper()
 
-	bodyBytes, err := json.Marshal(requests)
+	bodyBytes, err := json.Marshal(request)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
@@ -314,8 +314,7 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 	config := setupToolsetWithExternalMCP(t, ctx, ti, mockServer.URL, externalmcp_types.TransportTypeStreamableHTTP, "weather-http")
 
 	// Step 1: Initialize
-	initResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
-		{
+	initResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      1,
 			"method":  "initialize",
@@ -327,17 +326,14 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 					"version": "1.0.0",
 				},
 			},
-		},
 	})
 	require.Equal(t, http.StatusOK, initResp.Code, "initialize failed: %s", initResp.Body.String())
 
 	// Step 2: List tools - should include external tools with prefix
-	listResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
-		{
+	listResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      2,
 			"method":  "tools/list",
-		},
 	})
 	require.Equal(t, http.StatusOK, listResp.Code, "tools/list failed: %s", listResp.Body.String())
 
@@ -366,8 +362,7 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 	require.Equal(t, "Get current weather for a location", foundTool["description"])
 
 	// Step 3: Call the external tool
-	callResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
-		{
+	callResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      3,
 			"method":  "tools/call",
@@ -377,7 +372,6 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 					"location": "San Francisco",
 				},
 			},
-		},
 	})
 	require.Equal(t, http.StatusOK, callResp.Code, "tools/call failed: %s", callResp.Body.String())
 
@@ -438,8 +432,7 @@ func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 	config := setupToolsetWithExternalMCP(t, ctx, ti, mockServer.URL, externalmcp_types.TransportTypeSSE, "calc-sse")
 
 	// Step 1: Initialize
-	initResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
-		{
+	initResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      1,
 			"method":  "initialize",
@@ -451,17 +444,14 @@ func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 					"version": "1.0.0",
 				},
 			},
-		},
 	})
 	require.Equal(t, http.StatusOK, initResp.Code, "initialize failed: %s", initResp.Body.String())
 
 	// Step 2: List tools - should include external tools with prefix
-	listResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
-		{
+	listResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      2,
 			"method":  "tools/list",
-		},
 	})
 	require.Equal(t, http.StatusOK, listResp.Code, "tools/list failed: %s", listResp.Body.String())
 
@@ -490,8 +480,7 @@ func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 	require.Equal(t, "Perform a calculation", foundTool["description"])
 
 	// Step 3: Call the external tool
-	callResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
-		{
+	callResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      3,
 			"method":  "tools/call",
@@ -501,7 +490,6 @@ func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 					"expression": "6 * 7",
 				},
 			},
-		},
 	})
 	require.Equal(t, http.StatusOK, callResp.Code, "tools/call failed: %s", callResp.Body.String())
 
@@ -578,8 +566,7 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 	config := setupToolsetWithExternalMCP(t, ctx, ti, mockServer.URL, externalmcp_types.TransportTypeStreamableHTTP, "annot-test")
 
 	// Initialize
-	initResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
-		{
+	initResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      1,
 			"method":  "initialize",
@@ -588,17 +575,14 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 				"capabilities":    map[string]any{},
 				"clientInfo":      map[string]any{"name": "test-client", "version": "1.0.0"},
 			},
-		},
 	})
 	require.Equal(t, http.StatusOK, initResp.Code, "initialize failed: %s", initResp.Body.String())
 
 	// List tools
-	listResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
-		{
+	listResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      2,
 			"method":  "tools/list",
-		},
 	})
 	require.Equal(t, http.StatusOK, listResp.Code, "tools/list failed: %s", listResp.Body.String())
 

@@ -3,7 +3,9 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -55,6 +57,79 @@ func handleToolsList(
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if security schemes are satisfied at the toolset level.
+	// This ensures MCP clients get an auth challenge eagerly at install time
+	// rather than waiting until a tool is called.
+	schemes := toolconfig.DescribeToolSecurity(toolset.SecurityVariables)
+	if len(schemes) > 0 {
+		toolsetID, err := uuid.Parse(toolset.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").Log(ctx, logger)
+		}
+
+		// Load system env (toolset + attached environments) so we check against
+		// credentials configured in Gram environments, not just MCP request headers.
+		systemEnv, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, "", "")
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
+		}
+
+		mergedEnv := toolconfig.NewCaseInsensitiveEnv()
+		for k, v := range systemEnv.All() {
+			mergedEnv.Set(k, v)
+		}
+
+		// Load the authenticated user's selected Gram environment.
+		// This is separate from system env — it contains user-owned credentials
+		// stored in a named Gram environment (e.g. "production").
+		if payload.environment != "" && payload.authenticated {
+			storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
+			if err != nil && !errors.Is(err, toolconfig.ErrNotFound) {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to load user environment").Log(ctx, logger)
+			}
+			for k, v := range storedEnvVars {
+				mergedEnv.Set(k, v)
+			}
+		}
+
+		for k, v := range payload.mcpEnvVariables {
+			mergedEnv.Set(k, v)
+		}
+
+		// Map any available OAuth tokens to ACCESS_TOKEN env vars on OAuth security
+		// schemes. At the tools/list level we don't need per-key matching — if the
+		// user has any OAuth token and the toolset has any OAuth scheme, they've
+		// authenticated. Per-key matching happens at tools/call time.
+		var oauthToken string
+		for _, t := range payload.oauthTokenInputs {
+			if t.Token != "" {
+				oauthToken = t.Token
+				break
+			}
+		}
+		if oauthToken != "" {
+			for _, sv := range toolset.SecurityVariables {
+				if sv.Type == nil {
+					continue
+				}
+				if *sv.Type == "oauth2" || *sv.Type == "openIdConnect" {
+					for _, envVar := range sv.EnvVariables {
+						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+							mergedEnv.Set(envVar, oauthToken)
+						}
+					}
+				}
+			}
+		}
+
+		if !toolconfig.AnySchemeSatisfied(schemes, mergedEnv, oauthToken) {
+			return nil, &toolconfig.SecurityUnsatisfiedError{
+				ToolName: "tools/list",
+				Schemes:  schemes,
+			}
+		}
 	}
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
