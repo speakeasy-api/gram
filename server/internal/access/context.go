@@ -15,14 +15,6 @@ type contextKey string
 
 const grantsContextKey contextKey = "access_grants"
 
-const hardcodedRBACUserID = "ed974e40-fe5d-132b-7f6e-358655d97b13"
-
-var hardcodedRolePrincipalsByUserID = map[string][]urn.Principal{
-	hardcodedRBACUserID: {
-		urn.NewPrincipal(urn.PrincipalTypeRole, "admin"),
-	},
-}
-
 // GrantsToContext stores resolved grants on the request context.
 func GrantsToContext(ctx context.Context, grants *Grants) context.Context {
 	return context.WithValue(ctx, grantsContextKey, grants)
@@ -49,9 +41,9 @@ func LoadIntoContext(ctx context.Context, logger *slog.Logger, db accessrepo.DBT
 		return ctx, nil
 	}
 
-	fmt.Println(authCtx.UserID)
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
-	principals = append(principals, hardcodedRolePrincipalsByUserID[authCtx.UserID]...)
+	// TODO: once we have role mapping we need to also add grants for roles here
+	// principals = append(principals, roleMapping[authCtx.UserID]...)
 
 	grants, err := LoadGrants(ctx, db, authCtx.ActiveOrganizationID, principals)
 	if err != nil {
