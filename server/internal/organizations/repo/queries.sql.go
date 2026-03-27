@@ -60,7 +60,7 @@ func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg De
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -75,9 +75,6 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.GramAccountType,
 		&i.SsoConnectionID,
 		&i.WorkosID,
-		&i.Whitelisted,
-		&i.FreeTrialStartedAt,
-		&i.FreeTrialEndsAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -160,6 +157,24 @@ func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) 
 	return err
 }
 
+const setOrgWorkosID = `-- name: SetOrgWorkosID :exec
+UPDATE organization_metadata
+SET workos_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2 AND
+    workos_id IS NULL
+`
+
+type SetOrgWorkosIDParams struct {
+	WorkosID pgtype.Text
+	ID       string
+}
+
+func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, setOrgWorkosID, arg.WorkosID, arg.ID)
+	return err
+}
+
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
 INSERT INTO organization_metadata (
     id,
@@ -177,7 +192,7 @@ ON CONFLICT (id) DO UPDATE SET
     slug = EXCLUDED.slug,
     sso_connection_id = EXCLUDED.sso_connection_id,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
@@ -202,9 +217,6 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.GramAccountType,
 		&i.SsoConnectionID,
 		&i.WorkosID,
-		&i.Whitelisted,
-		&i.FreeTrialStartedAt,
-		&i.FreeTrialEndsAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
