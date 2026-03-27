@@ -46,7 +46,7 @@ function randomAppName() {
     // Ignore error and set up fallback username later
   }
 
-  const user = process.env["USER"]?.toLowerCase() || "user";
+  const user = username.toLowerCase().replaceAll(".", "-") || "user";
   return `${user}-${suffix}`;
 }
 
