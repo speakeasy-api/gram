@@ -603,7 +603,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				"WWW-Authenticate",
 				fmt.Sprintf(`Bearer resource_metadata="%s"`, mcpInputs.baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpInputs.mcpSlug),
 			)
-			return oops.E(oops.CodeUnauthorized, secErr, secErr.Error())
+			return oops.E(oops.CodeUnauthorized, secErr, "security scheme not satisfied")
 		}
 
 		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))

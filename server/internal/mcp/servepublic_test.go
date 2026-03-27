@@ -72,8 +72,7 @@ func TestService_ServePublic(t *testing.T) {
 			SessionID:            authCtx.SessionID,
 		}
 
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
@@ -85,7 +84,6 @@ func TestService_ServePublic(t *testing.T) {
 						"version": "1.0.0",
 					},
 				},
-			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -150,12 +148,10 @@ func TestService_ServePublic(t *testing.T) {
 			SessionID:            authCtx.SessionID,
 		}
 
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
-			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -216,8 +212,7 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
@@ -229,7 +224,6 @@ func TestService_ServePublic(t *testing.T) {
 						"version": "1.0.0",
 					},
 				},
-			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -295,8 +289,7 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
@@ -308,7 +301,6 @@ func TestService_ServePublic(t *testing.T) {
 						"version": "1.0.0",
 					},
 				},
-			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -362,12 +354,10 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
-			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -426,8 +416,7 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
@@ -439,7 +428,6 @@ func TestService_ServePublic(t *testing.T) {
 						"version": "1.0.0",
 					},
 				},
-			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -498,12 +486,10 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
-			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -569,8 +555,7 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
@@ -582,7 +567,6 @@ func TestService_ServePublic(t *testing.T) {
 						"version": "1.0.0",
 					},
 				},
-			},
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -624,8 +608,7 @@ func TestService_ServePublic_PrivateMCP_WithOAuth(t *testing.T) {
 
 	// Helper to create initialize request body
 	initializeBody := func() []byte {
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
@@ -905,8 +888,7 @@ func TestService_ServePublic_CustomOAuthProxy(t *testing.T) {
 	t.Parallel()
 
 	initializeBody := func() []byte {
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
@@ -1137,8 +1119,7 @@ func TestService_ServePublic_PrivateMCP_WithoutOAuth(t *testing.T) {
 
 	// Helper to create initialize request body
 	initializeBody := func() []byte {
-		reqBody := []map[string]any{
-			{
+		reqBody := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      1,
 				"method":  "initialize",
