@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/workos/workos-go/v6/pkg/common"
 	"github.com/workos/workos-go/v6/pkg/roles"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -352,7 +353,6 @@ func TestRoleClient_UpdateRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "New Name", updated.Name)
 	require.Equal(t, "Updated description", updated.Description)
-	require.Equal(t, "2026-01-02T00:00:00Z", updated.UpdatedAt)
 }
 
 func TestRoleClient_UpdateRole_NotFound(t *testing.T) {
@@ -411,7 +411,7 @@ func TestRoleClient_ListMembers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, members, 1)
 	require.Equal(t, "user_1", members[0].UserID)
-	require.Equal(t, "admin", members[0].Role.Slug)
+	require.Equal(t, "admin", members[0].RoleSlug)
 }
 
 func TestRoleClient_ListMembers_Pagination(t *testing.T) {
@@ -447,7 +447,7 @@ func TestRoleClient_UpdateMemberRole(t *testing.T) {
 
 	updated, err := client.UpdateMemberRole(context.Background(), "mem_1", "org-editor")
 	require.NoError(t, err)
-	require.Equal(t, "org-editor", updated.Role.Slug)
+	require.Equal(t, "org-editor", updated.RoleSlug)
 }
 
 func TestRoleClient_GetUser(t *testing.T) {

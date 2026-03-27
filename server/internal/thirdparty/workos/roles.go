@@ -13,13 +13,39 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/workos/workos-go/v6/pkg/organizations"
-	"github.com/workos/workos-go/v6/pkg/roles"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const workosBaseURL = "https://api.workos.com"
+
+// Role represents an organization role as returned by WorkOS.
+type Role struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	Description string `json:"description"`
+}
+
+// Member represents an active organization membership.
+// RoleSlug is the slug of the member's assigned role.
+type Member struct {
+	ID             string
+	UserID         string
+	OrganizationID string
+	RoleSlug       string
+}
+
+// User represents a WorkOS user with the fields used by Gram.
+type User struct {
+	ID        string
+	FirstName string
+	LastName  string
+	Email     string
+}
+
+// --- Errors ---
 
 // APIError is returned by do when the WorkOS API responds with a 4xx or 5xx status.
 // Callers can use errors.As to inspect the StatusCode for specific handling (e.g. 409 conflict).
@@ -90,7 +116,7 @@ func NewRoleClient(apiKey string, opts ...RoleClientOpts) *RoleClient {
 	}
 }
 
-func (rc *RoleClient) ListRoles(ctx context.Context, orgID string) ([]roles.Role, error) {
+func (rc *RoleClient) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
 	if rc == nil {
 		return nil, errors.New("role client is not initialized")
 	}
@@ -102,7 +128,11 @@ func (rc *RoleClient) ListRoles(ctx context.Context, orgID string) ([]roles.Role
 		return nil, fmt.Errorf("list organization roles: %w", err)
 	}
 
-	return resp.Data, nil
+	out := make([]Role, len(resp.Data))
+	for i, r := range resp.Data {
+		out[i] = Role{ID: r.ID, Name: r.Name, Slug: r.Slug, Description: r.Description}
+	}
+	return out, nil
 }
 
 type CreateRoleOpts struct {
@@ -113,7 +143,7 @@ type CreateRoleOpts struct {
 
 // CreateRole creates a custom role for an organization via the WorkOS REST API.
 // The Go SDK does not expose role CRUD, so we use raw HTTP against the /authorization/ endpoints.
-func (rc *RoleClient) CreateRole(ctx context.Context, orgID string, opts CreateRoleOpts) (*roles.Role, error) {
+func (rc *RoleClient) CreateRole(ctx context.Context, orgID string, opts CreateRoleOpts) (*Role, error) {
 	if rc == nil {
 		return nil, errors.New("role client is not initialized")
 	}
@@ -128,7 +158,7 @@ func (rc *RoleClient) CreateRole(ctx context.Context, orgID string, opts CreateR
 		return nil, fmt.Errorf("marshal create role request: %w", err)
 	}
 
-	var role roles.Role
+	var role Role
 	if err := rc.do(ctx, http.MethodPost, path, body, &role); err != nil {
 		return nil, fmt.Errorf("create role: %w", err)
 	}
@@ -143,7 +173,7 @@ type UpdateRoleOpts struct {
 }
 
 // UpdateRole updates a role by slug via the WorkOS REST API (PATCH).
-func (rc *RoleClient) UpdateRole(ctx context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*roles.Role, error) {
+func (rc *RoleClient) UpdateRole(ctx context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*Role, error) {
 	if rc == nil {
 		return nil, errors.New("role client is not initialized")
 	}
@@ -158,7 +188,7 @@ func (rc *RoleClient) UpdateRole(ctx context.Context, orgID string, roleSlug str
 		return nil, fmt.Errorf("marshal update role request: %w", err)
 	}
 
-	var role roles.Role
+	var role Role
 	if err := rc.do(ctx, http.MethodPatch, path, body, &role); err != nil {
 		return nil, fmt.Errorf("update role: %w", err)
 	}
@@ -184,13 +214,15 @@ func (rc *RoleClient) DeleteRole(ctx context.Context, orgID string, roleSlug str
 	return nil
 }
 
-// ListMembers lists all organization memberships (active only) for the given org.
-func (rc *RoleClient) ListMembers(ctx context.Context, orgID string) ([]usermanagement.OrganizationMembership, error) {
+// --- Membership operations ---
+
+// ListMembers lists all active organization memberships for the given org.
+func (rc *RoleClient) ListMembers(ctx context.Context, orgID string) ([]Member, error) {
 	if rc == nil {
 		return nil, errors.New("role client is not initialized")
 	}
 
-	var all []usermanagement.OrganizationMembership
+	var all []Member
 	after := ""
 
 	for {
@@ -207,7 +239,14 @@ func (rc *RoleClient) ListMembers(ctx context.Context, orgID string) ([]usermana
 			return nil, fmt.Errorf("list organization memberships: %w", err)
 		}
 
-		all = append(all, resp.Data...)
+		for _, m := range resp.Data {
+			all = append(all, Member{
+				ID:             m.ID,
+				UserID:         m.UserID,
+				OrganizationID: m.OrganizationID,
+				RoleSlug:       m.Role.Slug,
+			})
+		}
 
 		if resp.ListMetadata.After == "" {
 			break
@@ -219,26 +258,26 @@ func (rc *RoleClient) ListMembers(ctx context.Context, orgID string) ([]usermana
 }
 
 // GetUser returns a WorkOS user by ID.
-func (rc *RoleClient) GetUser(ctx context.Context, userID string) (*usermanagement.User, error) {
+func (rc *RoleClient) GetUser(ctx context.Context, userID string) (*User, error) {
 	if rc == nil {
 		return nil, errors.New("role client is not initialized")
 	}
 
-	user, err := rc.um.GetUser(ctx, usermanagement.GetUserOpts{User: userID})
+	u, err := rc.um.GetUser(ctx, usermanagement.GetUserOpts{User: userID})
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 
-	return &user, nil
+	return &User{ID: u.ID, FirstName: u.FirstName, LastName: u.LastName, Email: u.Email}, nil
 }
 
 // ListOrgUsers returns all users in the given organization as a map of userID → User.
-func (rc *RoleClient) ListOrgUsers(ctx context.Context, orgID string) (map[string]usermanagement.User, error) {
+func (rc *RoleClient) ListOrgUsers(ctx context.Context, orgID string) (map[string]User, error) {
 	if rc == nil {
 		return nil, errors.New("role client is not initialized")
 	}
 
-	users := make(map[string]usermanagement.User)
+	users := make(map[string]User)
 	after := ""
 
 	for {
@@ -255,7 +294,7 @@ func (rc *RoleClient) ListOrgUsers(ctx context.Context, orgID string) (map[strin
 		}
 
 		for _, u := range resp.Data {
-			users[u.ID] = u
+			users[u.ID] = User{ID: u.ID, FirstName: u.FirstName, LastName: u.LastName, Email: u.Email}
 		}
 
 		if resp.ListMetadata.After == "" {
@@ -268,12 +307,12 @@ func (rc *RoleClient) ListOrgUsers(ctx context.Context, orgID string) (map[strin
 }
 
 // UpdateMemberRole changes a member's role within an organization membership.
-func (rc *RoleClient) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*usermanagement.OrganizationMembership, error) {
+func (rc *RoleClient) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*Member, error) {
 	if rc == nil {
 		return nil, errors.New("role client is not initialized")
 	}
 
-	membership, err := rc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
+	m, err := rc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
 		RoleSlug:  roleSlug,
 		RoleSlugs: nil,
 	})
@@ -281,7 +320,7 @@ func (rc *RoleClient) UpdateMemberRole(ctx context.Context, membershipID string,
 		return nil, fmt.Errorf("update member role: %w", err)
 	}
 
-	return &membership, nil
+	return &Member{ID: m.ID, UserID: m.UserID, OrganizationID: m.OrganizationID, RoleSlug: m.Role.Slug}, nil
 }
 
 // do performs a raw HTTP request against the WorkOS REST API.
