@@ -1,5 +1,15 @@
 # server
 
+## 0.33.0
+
+### Minor Changes
+
+- 2850644: Allow multiple security schemes even when OAuth servers are configured on public servers
+
+### Patch Changes
+
+- 6160abf: Moved control server initialization after all routes and middleware are attached, and added a /healthz endpoint to the main API mux so the control server can verify the API is actually serving traffic before reporting healthy.
+
 ## 0.32.1
 
 ### Patch Changes
