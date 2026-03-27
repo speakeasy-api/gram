@@ -180,8 +180,89 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 	return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 }
 
-func (s *Service) CreateRole(context.Context, *gen.CreateRolePayload) (*gen.Role, error) {
-	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload) (*gen.Role, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	if s.roles == nil {
+		return nil, oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
+	}
+
+	// CreateRole is intentionally ordered so that member assignment happens last.
+	// If WorkOS role creation succeeds but local grant sync fails, we return an
+	// error with no users assigned to the new role. That leaves a partially
+	// created role behind, but keeps the outcome safe and retryable: repeating the
+	// request can finish configuration without having granted accidental access.
+
+	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
+	switch {
+	case errors.Is(err, errWorkOSOrganizationNotLinked):
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	default:
+	}
+
+	roleSlug := conv.ToSlug(payload.Name)
+	wr, err := s.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
+		Name:        payload.Name,
+		Slug:        roleSlug,
+		Description: payload.Description,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "create role in workos").Log(ctx, s.logger)
+	}
+
+	// Stop before assigning members if grant sync fails. That can leave behind a
+	// newly created WorkOS role with no local grants, but it avoids assigning users
+	// to a role whose effective permissions are incomplete or unknown. Returning an
+	// error makes the setup retryable without creating accidental access.
+	if err := s.syncGrants(ctx, ac.ActiveOrganizationID, wr.Slug, roleGrantPayloads(payload.Grants)); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, s.logger)
+	}
+
+	assignedCount := 0
+	if len(payload.MemberIds) > 0 {
+		members, err := s.roles.ListMembers(ctx, workosOrgID)
+		if err != nil {
+			return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+		}
+
+		membershipByUser := make(map[string]string, len(members))
+		for _, member := range members {
+			membershipByUser[member.UserID] = member.ID
+		}
+
+		for _, userID := range payload.MemberIds {
+			membershipID, ok := membershipByUser[userID]
+			if !ok {
+				continue
+			}
+
+			if _, err := s.roles.UpdateMemberRole(ctx, membershipID, wr.Slug); err != nil {
+				return nil, oops.E(oops.CodeGatewayError, err, "assign members to created role").Log(ctx, s.logger)
+			}
+
+			assignedCount++
+		}
+	}
+
+	grants, err := s.grantsForRole(ctx, ac.ActiveOrganizationID, wr.Slug)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, s.logger)
+	}
+
+	return &gen.Role{
+		ID:          wr.ID,
+		Name:        wr.Name,
+		Description: wr.Description,
+		IsSystem:    false,
+		Grants:      grants,
+		MemberCount: assignedCount,
+		CreatedAt:   time.Time{}.UTC().Format(time.RFC3339),
+		UpdatedAt:   time.Time{}.UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func (s *Service) UpdateRole(context.Context, *gen.UpdateRolePayload) (*gen.Role, error) {
@@ -453,6 +534,22 @@ func isSystemRole(roleSlug string) bool {
 	default:
 		return false
 	}
+}
+
+func roleGrantPayloads(grants []*gen.RoleGrant) []*RoleGrant {
+	out := make([]*RoleGrant, 0, len(grants))
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+
+		out = append(out, &RoleGrant{
+			Scope:     grant.Scope,
+			Resources: append([]string(nil), grant.Resources...),
+		})
+	}
+
+	return out
 }
 
 func grantFromRow(row repo.PrincipalGrant) *gen.Grant {

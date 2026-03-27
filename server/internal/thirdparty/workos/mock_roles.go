@@ -9,24 +9,28 @@ import (
 )
 
 type MockRoleProvider struct {
-	mu             sync.Mutex
-	roles          map[string][]Role
-	members        map[string][]Member
-	users          map[string]User
-	nextID         int
-	errListRoles   error
-	errListMembers error
+	mu              sync.Mutex
+	roles           map[string][]Role
+	members         map[string][]Member
+	users           map[string]User
+	nextID          int
+	errCreateRole   error
+	errListRoles    error
+	errListMembers  error
+	afterCreateRole func()
 }
 
 func NewMockRoleProvider() *MockRoleProvider {
 	return &MockRoleProvider{
-		mu:             sync.Mutex{},
-		roles:          make(map[string][]Role),
-		members:        make(map[string][]Member),
-		users:          make(map[string]User),
-		nextID:         0,
-		errListRoles:   nil,
-		errListMembers: nil,
+		mu:              sync.Mutex{},
+		roles:           make(map[string][]Role),
+		members:         make(map[string][]Member),
+		users:           make(map[string]User),
+		nextID:          0,
+		errCreateRole:   nil,
+		errListRoles:    nil,
+		errListMembers:  nil,
+		afterCreateRole: nil,
 	}
 }
 
@@ -43,11 +47,18 @@ func (m *MockRoleProvider) ListRoles(_ context.Context, orgID string) ([]Role, e
 func (m *MockRoleProvider) CreateRole(_ context.Context, orgID string, opts CreateRoleOpts) (*Role, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.errCreateRole != nil {
+		return nil, m.errCreateRole
+	}
 
 	m.nextID++
 	role := Role{ID: "role_" + strconv.Itoa(m.nextID), Name: opts.Name, Slug: opts.Slug, Description: opts.Description}
 	m.roles[orgID] = append(m.roles[orgID], role)
+	afterCreateRole := m.afterCreateRole
 	created := m.roles[orgID][len(m.roles[orgID])-1]
+	if afterCreateRole != nil {
+		afterCreateRole()
+	}
 	return &created, nil
 }
 
@@ -167,6 +178,20 @@ func (m *MockRoleProvider) SetListRolesError(err error) {
 	defer m.mu.Unlock()
 
 	m.errListRoles = err
+}
+
+func (m *MockRoleProvider) SetCreateRoleError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.errCreateRole = err
+}
+
+func (m *MockRoleProvider) SetAfterCreateRole(fn func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.afterCreateRole = fn
 }
 
 func (m *MockRoleProvider) SetListMembersError(err error) {
