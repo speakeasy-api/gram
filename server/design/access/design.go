@@ -8,9 +8,29 @@ import (
 )
 
 var _ = Service("access", func() {
-	Description("Manage access permissions for users and roles across your organization.")
+	Description("Manage roles, grants, and team member access control.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+
+	Method("listRoles", func() {
+		Description("List all roles for the current organization.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListRolesResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listRoles")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRoles")
+		Meta("openapi:extension:x-speakeasy-name-override", "listRoles")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Roles"}`)
+	})
 
 	Method("listGrants", func() {
 		Description("List all permissions in your organization, optionally filtered to a specific user or role.")
@@ -153,6 +173,35 @@ var GrantsForm = Type("GrantsForm", func() {
 	Required("grants")
 })
 
+var RoleGrantModel = Type("RoleGrant", func() {
+	Required("scope")
+
+	Attribute("scope", String, func() {
+		Description("The scope slug this grant applies to.")
+		Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+	})
+	Attribute("resources", ArrayOf(String), func() {
+		Description("Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.")
+	})
+})
+
+var RoleModel = Type("Role", func() {
+	Required("id", "name", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
+
+	Attribute("id", String, "Unique role identifier.")
+	Attribute("name", String, "Display name of the role.")
+	Attribute("description", String, "Human-readable description.")
+	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
+	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
+	Attribute("member_count", Int, "Number of members assigned to this role.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
 var Grant = Type("Grant", func() {
 	Description("A permission record giving a user or role the ability to perform an action on a resource.")
 	Required("id", "organization_id", "principal_urn", "principal_type", "scope", "resource", "created_at", "updated_at")
@@ -187,6 +236,11 @@ var Grant = Type("Grant", func() {
 var ListGrantsResult = Type("ListGrantsResult", func() {
 	Required("grants")
 	Attribute("grants", ArrayOf(Grant), "The permissions in your organization.")
+})
+
+var ListRolesResult = Type("ListRolesResult", func() {
+	Required("roles")
+	Attribute("roles", ArrayOf(RoleModel), "The roles in your organization.")
 })
 
 var UpsertGrantsResult = Type("UpsertGrantsResult", func() {
