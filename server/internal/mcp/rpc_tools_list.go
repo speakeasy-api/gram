@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -78,6 +79,20 @@ func handleToolsList(
 		for k, v := range systemEnv.All() {
 			mergedEnv.Set(k, v)
 		}
+
+		// Load the authenticated user's selected Gram environment.
+		// This is separate from system env — it contains user-owned credentials
+		// stored in a named Gram environment (e.g. "production").
+		if payload.environment != "" && payload.authenticated {
+			storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
+			if err != nil && !errors.Is(err, toolconfig.ErrNotFound) {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to load user environment").Log(ctx, logger)
+			}
+			for k, v := range storedEnvVars {
+				mergedEnv.Set(k, v)
+			}
+		}
+
 		for k, v := range payload.mcpEnvVariables {
 			mergedEnv.Set(k, v)
 		}
