@@ -55,6 +55,27 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Role"}`)
 	})
 
+	Method("createRole", func() {
+		Description("Create a new custom role.")
+
+		Payload(func() {
+			Extend(CreateRoleForm)
+			security.SessionPayload()
+		})
+
+		Result(RoleModel)
+
+		HTTP(func() {
+			POST("/rpc/access.createRole")
+			security.SessionHeader()
+			Response(StatusCreated)
+		})
+
+		Meta("openapi:operationId", "createRole")
+		Meta("openapi:extension:x-speakeasy-name-override", "createRole")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateRole"}`)
+	})
+
 	Method("listGrants", func() {
 		Description("List all permissions in your organization, optionally filtered to a specific user or role.")
 		Security(security.ByKey, func() {
@@ -264,6 +285,15 @@ var ListGrantsResult = Type("ListGrantsResult", func() {
 var ListRolesResult = Type("ListRolesResult", func() {
 	Required("roles")
 	Attribute("roles", ArrayOf(RoleModel), "The roles in your organization.")
+})
+
+var CreateRoleForm = Type("CreateRoleForm", func() {
+	Required("name", "description", "grants")
+
+	Attribute("name", String, "Display name for the role.")
+	Attribute("description", String, "Description of what this role can do.")
+	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
+	Attribute("member_ids", ArrayOf(String), "Optional member IDs to assign on creation.")
 })
 
 var UpsertGrantsResult = Type("UpsertGrantsResult", func() {
