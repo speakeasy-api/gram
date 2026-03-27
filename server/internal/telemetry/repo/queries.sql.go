@@ -1301,7 +1301,7 @@ type GetHooksSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams) ([]HooksServerSummaryRow, error) {
 	sb := sq.Select(
-		"ifNull(tool_source, 'local') as server_name",
+		"if(tool_source = '', 'local', tool_source) as server_name",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
 		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
