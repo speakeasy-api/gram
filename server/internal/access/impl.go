@@ -180,6 +180,12 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 	return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 }
 
+// CreateRole is creates a role for a user of a given organization.
+// It is an idempotent operation intentionally ordered so that member assignment happens last.
+// If WorkOS role creation succeeds but local grant sync fails, we return an
+// error with no users assigned to the new role. That leaves a partially
+// created role behind, but keeps the outcome safe and retryable: repeating the
+// request can finish configuration without having granted accidental access.
 func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload) (*gen.Role, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -188,12 +194,6 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	if s.roles == nil {
 		return nil, oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
 	}
-
-	// CreateRole is intentionally ordered so that member assignment happens last.
-	// If WorkOS role creation succeeds but local grant sync fails, we return an
-	// error with no users assigned to the new role. That leaves a partially
-	// created role behind, but keeps the outcome safe and retryable: repeating the
-	// request can finish configuration without having granted accidental access.
 
 	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
 	switch {
@@ -265,8 +265,108 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	}, nil
 }
 
-func (s *Service) UpdateRole(context.Context, *gen.UpdateRolePayload) (*gen.Role, error) {
-	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload) (*gen.Role, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	if s.roles == nil {
+		return nil, oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
+	}
+
+	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
+	switch {
+	case errors.Is(err, errWorkOSOrganizationNotLinked):
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	default:
+	}
+
+	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+	}
+
+	var currentRole *workos.Role
+	for i := range wRoles {
+		if wRoles[i].ID == payload.ID {
+			currentRole = &wRoles[i]
+			break
+		}
+	}
+	if currentRole == nil {
+		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
+	}
+	if isSystemRole(currentRole.Slug) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "system roles cannot be updated").Log(ctx, s.logger)
+	}
+
+	updatedRole, err := s.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
+		Name:        payload.Name,
+		Description: payload.Description,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "update role in workos").Log(ctx, s.logger)
+	}
+
+	// As with role creation, member reassignment happens after local grant sync so
+	// a failed sync never leaves users attached to a role with incomplete access.
+	if payload.Grants != nil {
+		if err := s.syncGrants(ctx, ac.ActiveOrganizationID, currentRole.Slug, roleGrantPayloads(payload.Grants)); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, s.logger)
+		}
+	}
+
+	if payload.MemberIds != nil {
+		members, err := s.roles.ListMembers(ctx, workosOrgID)
+		if err != nil {
+			return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+		}
+
+		membershipByUser := make(map[string]string, len(members))
+		for _, member := range members {
+			membershipByUser[member.UserID] = member.ID
+		}
+
+		for _, userID := range payload.MemberIds {
+			membershipID, ok := membershipByUser[userID]
+			if !ok {
+				continue
+			}
+
+			if _, err := s.roles.UpdateMemberRole(ctx, membershipID, currentRole.Slug); err != nil {
+				return nil, oops.E(oops.CodeGatewayError, err, "assign members to updated role").Log(ctx, s.logger)
+			}
+		}
+	}
+
+	grants, err := s.grantsForRole(ctx, ac.ActiveOrganizationID, currentRole.Slug)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, s.logger)
+	}
+
+	members, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+	}
+	memberCount := 0
+	for _, member := range members {
+		if member.RoleSlug == currentRole.Slug {
+			memberCount++
+		}
+	}
+
+	return &gen.Role{
+		ID:          updatedRole.ID,
+		Name:        updatedRole.Name,
+		Description: updatedRole.Description,
+		IsSystem:    false,
+		Grants:      grants,
+		MemberCount: memberCount,
+		CreatedAt:   time.Time{}.UTC().Format(time.RFC3339),
+		UpdatedAt:   time.Time{}.UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func (s *Service) DeleteRole(context.Context, *gen.DeleteRolePayload) error {
