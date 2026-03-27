@@ -76,6 +76,27 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateRole"}`)
 	})
 
+	Method("updateRole", func() {
+		Description("Update an existing custom role.")
+
+		Payload(func() {
+			Extend(UpdateRoleForm)
+			security.SessionPayload()
+		})
+
+		Result(RoleModel)
+
+		HTTP(func() {
+			PUT("/rpc/access.updateRole")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateRole")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateRole")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateRole"}`)
+	})
+
 	Method("listGrants", func() {
 		Description("List all permissions in your organization, optionally filtered to a specific user or role.")
 		Security(security.ByKey, func() {
@@ -294,6 +315,16 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 	Attribute("description", String, "Description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to assign on creation.")
+})
+
+var UpdateRoleForm = Type("UpdateRoleForm", func() {
+	Required("id")
+
+	Attribute("id", String, "The ID of the role to update.")
+	Attribute("name", String, "Updated display name.")
+	Attribute("description", String, "Updated description.")
+	Attribute("grants", ArrayOf(RoleGrantModel), "Updated scope grants.")
+	Attribute("member_ids", ArrayOf(String), "Optional member IDs to reassign to this role.")
 })
 
 var UpsertGrantsResult = Type("UpsertGrantsResult", func() {
