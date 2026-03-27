@@ -15,7 +15,7 @@ type contextKey string
 
 const grantsContextKey contextKey = "access_grants"
 
-const hardcodedRBACUserID = "dev-user-1"
+const hardcodedRBACUserID = "ed974e40-fe5d-132b-7f6e-358655d97b13"
 
 var hardcodedRolePrincipalsByUserID = map[string][]urn.Principal{
 	hardcodedRBACUserID: {
@@ -44,10 +44,12 @@ func LoadIntoContext(ctx context.Context, logger *slog.Logger, db accessrepo.DBT
 		return ctx, nil
 	}
 
+	fmt.Println(authCtx.AccountType)
 	if authCtx.AccountType != "enterprise" {
 		return ctx, nil
 	}
 
+	fmt.Println(authCtx.UserID)
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 	principals = append(principals, hardcodedRolePrincipalsByUserID[authCtx.UserID]...)
 

@@ -14,6 +14,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -97,6 +98,12 @@ func mustParsePrincipal(t *testing.T, s string) urn.Principal {
 	p, err := urn.ParsePrincipal(s)
 	require.NoError(t, err)
 	return p
+}
+
+func enterpriseCtx() context.Context {
+	return contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
+		AccountType: "enterprise",
+	})
 }
 
 func newTestDB(t *testing.T) *pgxpool.Pool {
