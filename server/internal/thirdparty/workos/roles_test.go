@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -248,8 +248,10 @@ func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.RoleClient, *fakeWor
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 
-	logger := slog.Default()
-	client := workos.NewRoleClientWithEndpoint(logger, "test-api-key", srv.URL)
+	client := workos.NewRoleClient("test-api-key", workos.RoleClientOpts{
+		Endpoint:   srv.URL,
+		HTTPClient: &http.Client{Timeout: 10 * time.Second},
+	})
 	return client, fake
 }
 

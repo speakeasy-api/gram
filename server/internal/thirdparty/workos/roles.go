@@ -7,61 +7,85 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/roles"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+const workosBaseURL = "https://api.workos.com"
+
+// APIError is returned by do when the WorkOS API responds with a 4xx or 5xx status.
+// Callers can use errors.As to inspect the StatusCode for specific handling (e.g. 409 conflict).
+type APIError struct {
+	Method     string
+	Path       string
+	StatusCode int
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("workos api %s %s: status %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
+}
 
 // RoleClient wraps WorkOS API calls for role and membership management.
 // It is designed to have a caching layer added later.
 type RoleClient struct {
-	logger     *slog.Logger
 	apiKey     string
-	endpoint   string // base URL for raw HTTP calls (doAPI); defaults to workosBaseURL
+	endpoint   string // base URL for raw HTTP calls; defaults to workosBaseURL
 	httpClient *http.Client
 	orgs       *organizations.Client
 	um         *usermanagement.Client
 }
 
-func NewRoleClient(logger *slog.Logger, apiKey string) *RoleClient {
+// RoleClientOpts configures optional overrides for NewRoleClient.
+// Zero values use production defaults. Primarily used in tests.
+type RoleClientOpts struct {
+	// Endpoint overrides the WorkOS base URL for both raw HTTP and SDK calls.
+	Endpoint string
+	// HTTPClient overrides the default retryable HTTP client.
+	HTTPClient *http.Client
+}
+
+func NewRoleClient(apiKey string, opts ...RoleClientOpts) *RoleClient {
 	if apiKey == "" || apiKey == "unset" {
 		return nil
 	}
 
-	return &RoleClient{
-		logger:     logger,
-		apiKey:     apiKey,
-		endpoint:   workosBaseURL,
-		httpClient: newRetryableClient(30 * time.Second),
-		orgs:       &organizations.Client{APIKey: apiKey},
-		um:         usermanagement.NewClient(apiKey),
+	var opt RoleClientOpts
+	if len(opts) > 0 {
+		opt = opts[0]
 	}
-}
 
-// NewRoleClientWithEndpoint creates a RoleClient that targets a custom endpoint
-// instead of the real WorkOS API. Used in tests with httptest.Server.
-func NewRoleClientWithEndpoint(logger *slog.Logger, apiKey string, endpoint string) *RoleClient {
+	endpoint := workosBaseURL
+	if opt.Endpoint != "" {
+		endpoint = opt.Endpoint
+	}
+
+	httpClient := opt.HTTPClient
+	if httpClient == nil {
+		rc := retryablehttp.NewClient()
+		rc.HTTPClient.Timeout = 30 * time.Second
+		httpClient = rc.StandardClient()
+	}
+
 	um := usermanagement.NewClient(apiKey)
-	um.Endpoint = endpoint
-	um.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	if opt.Endpoint != "" {
+		um.Endpoint = opt.Endpoint
+	}
 
 	return &RoleClient{
-		logger:   logger,
-		apiKey:   apiKey,
-		endpoint: endpoint,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-		orgs: &organizations.Client{
-			APIKey:   apiKey,
-			Endpoint: endpoint,
-		},
-		um: um,
+		apiKey:     apiKey,
+		endpoint:   endpoint,
+		httpClient: httpClient,
+		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: nil, Endpoint: opt.Endpoint, JSONEncode: nil},
+		um:         um,
 	}
 }
 
@@ -95,13 +119,18 @@ func (rc *RoleClient) CreateRole(ctx context.Context, orgID string, opts CreateR
 		return nil, errors.New("role client is not initialized")
 	}
 
+	path, err := url.JoinPath("/authorization/organizations", orgID, "roles")
+	if err != nil {
+		return nil, fmt.Errorf("build path: %w", err)
+	}
+
 	body, err := json.Marshal(opts)
 	if err != nil {
 		return nil, fmt.Errorf("marshal create role request: %w", err)
 	}
 
 	var role roles.Role
-	if err := rc.doAPI(ctx, http.MethodPost, "/authorization/organizations/"+orgID+"/roles", body, &role); err != nil {
+	if err := rc.do(ctx, http.MethodPost, path, body, &role); err != nil {
 		return nil, fmt.Errorf("create role: %w", err)
 	}
 
@@ -120,13 +149,18 @@ func (rc *RoleClient) UpdateRole(ctx context.Context, orgID string, roleSlug str
 		return nil, errors.New("role client is not initialized")
 	}
 
+	path, err := url.JoinPath("/authorization/organizations", orgID, "roles", roleSlug)
+	if err != nil {
+		return nil, fmt.Errorf("build path: %w", err)
+	}
+
 	body, err := json.Marshal(opts)
 	if err != nil {
 		return nil, fmt.Errorf("marshal update role request: %w", err)
 	}
 
 	var role roles.Role
-	if err := rc.doAPI(ctx, http.MethodPatch, "/authorization/organizations/"+orgID+"/roles/"+roleSlug, body, &role); err != nil {
+	if err := rc.do(ctx, http.MethodPatch, path, body, &role); err != nil {
 		return nil, fmt.Errorf("update role: %w", err)
 	}
 
@@ -139,7 +173,12 @@ func (rc *RoleClient) DeleteRole(ctx context.Context, orgID string, roleSlug str
 		return errors.New("role client is not initialized")
 	}
 
-	if err := rc.doAPI(ctx, http.MethodDelete, "/authorization/organizations/"+orgID+"/roles/"+roleSlug, nil, nil); err != nil {
+	path, err := url.JoinPath("/authorization/organizations", orgID, "roles", roleSlug)
+	if err != nil {
+		return fmt.Errorf("build path: %w", err)
+	}
+
+	if err := rc.do(ctx, http.MethodDelete, path, nil, nil); err != nil {
 		return fmt.Errorf("delete role: %w", err)
 	}
 
@@ -160,8 +199,11 @@ func (rc *RoleClient) ListMembers(ctx context.Context, orgID string) ([]usermana
 	for {
 		resp, err := rc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
 			OrganizationID: orgID,
+			UserID:         "",
 			Statuses:       []usermanagement.OrganizationMembershipStatus{usermanagement.Active},
 			Limit:          100,
+			Order:          "",
+			Before:         "",
 			After:          after,
 		})
 		if err != nil {
@@ -235,7 +277,8 @@ func (rc *RoleClient) UpdateMemberRole(ctx context.Context, membershipID string,
 	}
 
 	membership, err := rc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
-		RoleSlug: roleSlug,
+		RoleSlug:  roleSlug,
+		RoleSlugs: nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update member role: %w", err)
@@ -244,46 +287,23 @@ func (rc *RoleClient) UpdateMemberRole(ctx context.Context, membershipID string,
 	return &membership, nil
 }
 
-// --- Internal helpers ---
-
-const workosBaseURL = "https://api.workos.com"
-
-func newRetryableClient(timeout time.Duration) *http.Client {
-	c := retryablehttp.NewClient().StandardClient()
-	c.Timeout = timeout
-	return c
-}
-
-// doAPI performs a raw HTTP request against the WorkOS REST API.
-// Used for endpoints not covered by the Go SDK (role CRUD).
-func (rc *RoleClient) doAPI(ctx context.Context, method, path string, body []byte, out any) error {
-	var bodyReader io.Reader
-	if body != nil {
-		bodyReader = bytes.NewReader(body)
-	}
-
-	baseURL := rc.endpoint
-	if baseURL == "" {
-		baseURL = workosBaseURL
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, bodyReader)
+// do performs a raw HTTP request against the WorkOS REST API.
+// Pass a non-nil out pointer to decode a JSON response body; pass nil to discard it (e.g. DELETE).
+func (rc *RoleClient) do(ctx context.Context, method, path string, body []byte, out any) error {
+	req, err := rc.newRequest(ctx, method, path, body)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return err
 	}
-
-	req.Header.Set("Authorization", "Bearer "+rc.apiKey)
-	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := rc.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("workos api %s %s returned %d: %s", method, path, resp.StatusCode, string(respBody))
+		return &APIError{Method: method, Path: path, StatusCode: resp.StatusCode, Body: string(respBody)}
 	}
 
 	if out != nil {
@@ -293,4 +313,27 @@ func (rc *RoleClient) doAPI(ctx context.Context, method, path string, body []byt
 	}
 
 	return nil
+}
+
+// newRequest builds an authenticated HTTP request targeting the WorkOS API.
+func (rc *RoleClient) newRequest(ctx context.Context, method, path string, body []byte) (*http.Request, error) {
+	reqURL, err := url.JoinPath(rc.endpoint, path)
+	if err != nil {
+		return nil, fmt.Errorf("build url: %w", err)
+	}
+
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+rc.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	return req, nil
 }
