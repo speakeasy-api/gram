@@ -1301,19 +1301,18 @@ type GetHooksSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams) ([]HooksServerSummaryRow, error) {
 	sb := sq.Select(
-		"ifNull(toString(attributes.`gram.tool_call.source`), 'local') as server_name",
+		"if(tool_source = '', 'local', tool_source) as server_name",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
-		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
-		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUseFailure') as failure_count",
+		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
+		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		GroupBy("server_name").
 		OrderBy("event_count DESC")
 
@@ -1409,19 +1408,18 @@ type GetHooksUserSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSummaryParams) ([]HooksUserSummaryRow, error) {
 	sb := sq.Select(
-		"ifNull(toString(attributes.`user.email`), 'Unknown') as user_email",
+		"if(user_email = '', 'Unknown', user_email) as user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
-		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
-		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUseFailure') as failure_count",
+		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
+		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		GroupBy("user_email").
 		OrderBy("event_count DESC")
 
@@ -1477,9 +1475,9 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"tool_name",
 		"tool_source",
 		"event_source",
-		"any(user_email) as user_email",
-		"any(hook_source) as hook_source",
-		"anyIfMerge(http_status_code) as http_status_code",
+		"user_email",
+		"hook_source",
+		"multiIf(max(hook_has_failure) = 1, 'failure', max(hook_has_success) = 1, 'success', 'pending') as hook_status",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1534,7 +1532,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		}
 	}
 
-	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source")
+	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source")
 
 	// Pagination based on trace_id cursor
 	if arg.Cursor != "" {

@@ -211,6 +211,24 @@ func handleToolsCall(
 		GramEmail:  gramEmail,
 	}
 
+	// Check if at least one security scheme is satisfied for this tool
+	schemes := toolconfig.DescribeToolSecurity(toolset.SecurityVariables)
+	if len(schemes) > 0 {
+		mergedEnv := toolconfig.NewCaseInsensitiveEnv()
+		for k, v := range systemConfig.All() {
+			mergedEnv.Set(k, v)
+		}
+		for k, v := range userConfig.All() {
+			mergedEnv.Set(k, v)
+		}
+		if !toolconfig.AnySchemeSatisfied(schemes, mergedEnv, oauthToken) {
+			return nil, &toolconfig.SecurityUnsatisfiedError{
+				ToolName: params.Name,
+				Schemes:  schemes,
+			}
+		}
+	}
+
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").Log(ctx, logger)

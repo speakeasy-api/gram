@@ -1526,7 +1526,6 @@ async function seedObservabilityData(init: {
         "gram.project.id": projectId,
         "gen_ai.conversation.id": sessionId,
         "gen_ai.tool_call.id": toolUseId,
-        "http.response.status_code": isFailure ? 500 : 200,
       };
       if (userEmail) postToolAttrs["user.email"] = userEmail;
       if (mcpServer) postToolAttrs["gram.tool_call.source"] = mcpServer;

@@ -16235,10 +16235,13 @@ components:
                 hook_source:
                     type: string
                     description: Hook source (from attributes.gram.hook.source)
-                http_status_code:
-                    type: integer
-                    description: HTTP status code (if applicable)
-                    format: int32
+                hook_status:
+                    type: string
+                    description: Hook execution status
+                    enum:
+                        - success
+                        - failure
+                        - pending
                 log_count:
                     type: integer
                     description: Total number of logs in this trace
@@ -16359,6 +16362,9 @@ components:
                     type: string
                 user_signature:
                     type: string
+                whitelisted:
+                    type: boolean
+                    description: Whether the organization is whitelisted to access the platform
             required:
                 - user_id
                 - user_email
@@ -16367,6 +16373,7 @@ components:
                 - organizations
                 - gram_account_type
                 - has_active_subscription
+                - whitelisted
         InstanceMcpServer:
             type: object
             properties:

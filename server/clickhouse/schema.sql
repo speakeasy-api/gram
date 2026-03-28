@@ -104,7 +104,12 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
     log_count SimpleAggregateFunction(sum, UInt64),
 
-    http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8)
+    http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8),
+
+    -- Hook status tracking (0 = false, 1 = true)
+    -- Using max() ensures once we see a 1, it stays 1 across merges
+    hook_has_success SimpleAggregateFunction(max, UInt8),
+    hook_has_failure SimpleAggregateFunction(max, UInt8)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
@@ -128,7 +133,9 @@ SELECT
     anyIfState(
         toInt32OrNull(toString(attributes.http.response.status_code)),
         toString(attributes.http.response.status_code) != ''
-    ) AS http_status_code
+    ) AS http_status_code,
+    max(if(toString(attributes.gram.hook.event) = 'PostToolUse', 1, 0)) AS hook_has_success,
+    max(if(toString(attributes.gram.hook.event) = 'PostToolUseFailure', 1, 0)) AS hook_has_failure
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;

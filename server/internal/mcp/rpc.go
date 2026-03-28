@@ -153,27 +153,6 @@ type rawRequest struct {
 	Params  json.RawMessage `json:"params"`
 }
 
-type batchedRawRequest []*rawRequest
-
-func (b *batchedRawRequest) UnmarshalJSON(data []byte) error {
-	var many []*rawRequest
-	var err error
-	if manyErr := json.Unmarshal(data, &many); manyErr == nil {
-		*b = many
-		return nil
-	} else {
-		err = manyErr
-	}
-
-	var one rawRequest
-	if oneErr := json.Unmarshal(data, &one); oneErr == nil {
-		*b = batchedRawRequest{&one}
-		return nil
-	} else {
-		return err
-	}
-}
-
 type rpcError struct {
 	ID      msgID
 	Code    errorCode

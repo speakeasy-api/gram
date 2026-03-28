@@ -243,8 +243,8 @@ type HookTraceSummary struct {
 	StartTimeUnixNano string
 	// Total number of logs in this trace
 	LogCount uint64
-	// HTTP status code (if applicable)
-	HTTPStatusCode *int32
+	// Hook execution status
+	HookStatus *string
 	// Gram URN associated with this hook trace
 	GramUrn string
 	// Tool name (from materialized column)

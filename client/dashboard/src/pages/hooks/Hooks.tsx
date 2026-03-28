@@ -1359,13 +1359,13 @@ function HookTraceRow({
   }, [displayServerName]);
 
   const statusConfig = useMemo(() => {
-    if (trace.httpStatusCode === 500) {
+    if (trace.hookStatus === "failure") {
       return {
         color: "text-destructive",
         bgColor: "bg-destructive/10",
         label: "Failure",
       };
-    } else if (trace.httpStatusCode === 200) {
+    } else if (trace.hookStatus === "success") {
       return {
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
@@ -1377,7 +1377,7 @@ function HookTraceRow({
       bgColor: "bg-muted",
       label: "Pending",
     };
-  }, [trace.httpStatusCode]);
+  }, [trace.hookStatus]);
 
   return (
     <div className="border-b border-border/50 last:border-b-0">

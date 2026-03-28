@@ -512,30 +512,6 @@ func newStartCommand() *cli.Command {
 				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
 			}
 
-			{
-				controlServer := control.Server{
-					Address:          c.String("control-address"),
-					Logger:           logger.With(attr.SlogComponent("control")),
-					DisableProfiling: false,
-				}
-
-				temporals := []*o11y.NamedResource[client.Client]{}
-				if temporalEnv != nil {
-					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
-				}
-
-				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
-					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
-					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					temporals,
-				))
-				if err != nil {
-					return fmt.Errorf("failed to start control server: %w", err)
-				}
-
-				shutdownFuncs = append(shutdownFuncs, shutdown)
-			}
-
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)
@@ -667,6 +643,16 @@ func newStartCommand() *cli.Command {
 
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
+						w.WriteHeader(http.StatusOK)
+						return
+					}
+
+					h.ServeHTTP(w, r)
+				})
+			})
+			mux.Use(func(h http.Handler) http.Handler {
 				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
 			})
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
@@ -792,6 +778,55 @@ func newStartCommand() *cli.Command {
 			})
 
 			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
+
+			{
+				controlServer := control.Server{
+					Address:          c.String("control-address"),
+					Logger:           logger.With(attr.SlogComponent("control")),
+					DisableProfiling: false,
+				}
+
+				temporals := []*o11y.NamedResource[client.Client]{}
+				if temporalEnv != nil {
+					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
+				}
+
+				listenAddr := srv.Addr
+				if listenAddr == "" {
+					listenAddr = ":8080"
+				}
+				host, port, _ := net.SplitHostPort(listenAddr)
+				if host == "" {
+					host = "localhost"
+				}
+				healthzEndpoint := &o11y.HTTPEndpoint{
+					URL: &url.URL{
+						Scheme: conv.Ternary(tlsEnabled, "https", "http"),
+						Host:   net.JoinHostPort(host, port),
+						Path:   "/healthz",
+					},
+					TLSCertificate: nil,
+				}
+				if tlsEnabled {
+					cert, err := os.ReadFile(c.String("ssl-cert-file"))
+					if err != nil {
+						return fmt.Errorf("failed to read TLS certificate for health check: %w", err)
+					}
+					healthzEndpoint.TLSCertificate = cert
+				}
+				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
+					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
+					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
+					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
+					temporals,
+				))
+				if err != nil {
+					return fmt.Errorf("failed to start control server: %w", err)
+				}
+
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+
 			if tlsEnabled {
 				logger.InfoContext(ctx, "server started with tls", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file")); err != nil && !errors.Is(err, http.ErrServerClosed) {

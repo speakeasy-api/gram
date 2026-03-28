@@ -86,7 +86,7 @@ type HookTraceSummary struct {
 	TraceID           string  `ch:"trace_id"`             // FixedString(32)
 	StartTimeUnixNano int64   `ch:"start_time_unix_nano"` // Int64 - earliest log timestamp
 	LogCount          uint64  `ch:"log_count"`            // UInt64 - total logs in trace
-	HTTPStatusCode    *int32  `ch:"http_status_code"`     // Nullable(Int32) - any HTTP status code
+	HookStatus        *string `ch:"hook_status"`          // String - hook execution status: "success", "failure", or "pending"
 	GramURN           string  `ch:"gram_urn"`             // String - any gram_urn from the trace
 	ToolName          *string `ch:"tool_name"`            // String - tool name from materialized column
 	ToolSource        *string `ch:"tool_source"`          // String - tool call source from materialized column
