@@ -448,6 +448,9 @@ export function PlaygroundConfigPanel({
                     <SelectItem value="anthropic/claude-haiku-4.5">
                       Claude 4.5 Haiku
                     </SelectItem>
+                    <SelectItem value="anthropic/claude-opus-4.6">
+                      Claude 4.6 Opus (Expensive)
+                    </SelectItem>
                     <SelectItem value="anthropic/claude-sonnet-4">
                       Claude 4 Sonnet
                     </SelectItem>
@@ -456,16 +459,13 @@ export function PlaygroundConfigPanel({
                     <SelectItem value="openai/gpt-4o-mini">
                       GPT-4o-mini
                     </SelectItem>
-                    <SelectItem value="openai/gpt-5">GPT-5</SelectItem>
+                    <SelectItem value="openai/gpt-5.1">GPT-5.1</SelectItem>
                     <SelectItem value="openai/gpt-4.1">GPT-4.1</SelectItem>
-                    <SelectItem value="anthropic/claude-3.7-sonnet">
-                      Claude 3.7 Sonnet
+                    <SelectItem value="google/gemini-3.1-pro-preview">
+                      Gemini 3.1 Pro Preview
                     </SelectItem>
-                    <SelectItem value="anthropic/claude-opus-4">
-                      Claude 4 Opus (Expensive)
-                    </SelectItem>
-                    <SelectItem value="google/gemini-2.5-pro-preview">
-                      Gemini 2.5 Pro Preview
+                    <SelectItem value="google/gemini-2.5-pro">
+                      Gemini 2.5 Pro
                     </SelectItem>
                     <SelectItem value="moonshotai/kimi-k2">Kimi K2</SelectItem>
                     <SelectItem value="mistralai/mistral-medium-3">
