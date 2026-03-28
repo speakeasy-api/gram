@@ -11,6 +11,7 @@ interface ViteTypeOptions {
 
 interface ImportMetaEnv {
   readonly VITE_DEV_HOSTNAMES?: string | undefined;
+  readonly VITE_GRAM_OBSERVABILITY_MCP_URL?: string | undefined;
 }
 
 interface ImportMeta {

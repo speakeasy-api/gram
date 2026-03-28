@@ -53,7 +53,7 @@ export function useObservabilityMcpConfig({
       ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
       : serverURL.includes("dev.getgram.ai")
         ? "https://dev.getgram.ai/mcp/speakeasy-team-gram"
-        : undefined;
+        : import.meta.env.VITE_GRAM_OBSERVABILITY_MCP_URL || undefined;
 
     return {
       projectSlug,
@@ -74,3 +74,11 @@ export function useObservabilityMcpConfig({
     };
   }, [toolsToInclude, getSession, session, projectSlug]);
 }
+
+/**
+ * Whether the observability MCP URL is missing in local dev.
+ * True when running in dev mode and `mise seed` hasn't been run
+ * (VITE_GRAM_OBSERVABILITY_MCP_URL is not set).
+ */
+export const devObservabilityMcpMissing =
+  import.meta.env.DEV && !import.meta.env.VITE_GRAM_OBSERVABILITY_MCP_URL;
