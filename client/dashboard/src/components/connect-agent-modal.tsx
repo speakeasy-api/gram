@@ -40,8 +40,11 @@ export function triggerConnectAgentModal(toolsetSlug: string) {
   );
 }
 
-/** Call on login to show a generic (no toolset) version of the modal. */
+const LOGIN_DISMISSED_KEY = "connect_agent_login_dismissed";
+
+/** Call on login to show a generic (no toolset) version of the modal. Shows only once. */
 export function triggerConnectAgentOnLogin() {
+  if (localStorage.getItem(LOGIN_DISMISSED_KEY)) return;
   localStorage.setItem(SHOW_ON_LOGIN_KEY, "true");
 }
 
@@ -70,6 +73,7 @@ export function useConnectAgentModal() {
   const dismiss = useCallback(() => {
     if (slug === "__login__") {
       localStorage.removeItem(SHOW_ON_LOGIN_KEY);
+      localStorage.setItem(LOGIN_DISMISSED_KEY, "true");
     } else if (slug) {
       dismissSlug(slug);
     }

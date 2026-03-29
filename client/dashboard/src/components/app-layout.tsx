@@ -6,7 +6,7 @@ import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { Modal, ModalProvider } from "@speakeasy-api/moonshine";
 import { ShieldAlert } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
@@ -92,9 +92,14 @@ const AppLayoutContent = ({
   isImpersonating: boolean;
 }) => {
   const connectAgent = useConnectAgentModal();
-  const [connectAgentOpen, setConnectAgentOpen] = useState(
-    connectAgent.shouldShow,
-  );
+  const [connectAgentOpen, setConnectAgentOpen] = useState(false);
+
+  // Open the modal whenever a new trigger appears
+  useEffect(() => {
+    if (connectAgent.shouldShow) {
+      setConnectAgentOpen(true);
+    }
+  }, [connectAgent.shouldShow, connectAgent.toolsetSlug]);
 
   const handleConnectAgentClose = (open: boolean) => {
     setConnectAgentOpen(open);
