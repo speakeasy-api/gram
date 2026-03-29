@@ -1,3 +1,4 @@
+import { ConnectAgentButton } from "@/components/connect-agent-modal";
 import { InputDialog } from "@/components/input-dialog";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { MCPCard } from "@/components/mcp/MCPCard";
@@ -144,6 +145,9 @@ export function MCPOverview() {
             <ViewToggle value={viewMode} onChange={setViewMode} />
           </Page.Section.CTA>
           <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
+          <Page.Section.CTA>
+            <ConnectAgentButton />
+          </Page.Section.CTA>
           <Page.Section.Description className="max-w-2xl">
             Each source is exposed as an MCP server. First-party sources like
             functions and OpenAPI specs are private by default, while catalog
