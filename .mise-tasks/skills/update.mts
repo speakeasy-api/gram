@@ -103,7 +103,10 @@ async function captureCliHelp(): Promise<Map<string, CliCommand>> {
           inOptions = false;
           continue;
         }
-        if (trimmed === "" || /^(USAGE|DESCRIPTION|NAME):?\s*$/i.test(trimmed)) {
+        if (
+          trimmed === "" ||
+          /^(USAGE|DESCRIPTION|NAME):?\s*$/i.test(trimmed)
+        ) {
           inOptions = false;
           inCommands = false;
           continue;
@@ -140,9 +143,16 @@ async function captureCliHelp(): Promise<Map<string, CliCommand>> {
 
 // Flags that are global / covered by gram-context — don't warn about these in other skills
 const GLOBAL_FLAGS = new Set([
-  "--help", "-h", "--version", "-v",
-  "--log-level", "--log-pretty",
-  "--api-key", "--project", "--org", "--profile",
+  "--help",
+  "-h",
+  "--version",
+  "-v",
+  "--log-level",
+  "--log-pretty",
+  "--api-key",
+  "--project",
+  "--org",
+  "--profile",
 ]);
 
 // Extract all --flag mentions anywhere in the skill (for "undocumented" checks)
@@ -309,12 +319,15 @@ async function validateStructure() {
       continue;
     }
     if (!fm.name) error(`${skillName}: frontmatter missing 'name'`);
-    if (!fm.description) error(`${skillName}: frontmatter missing 'description'`);
+    if (!fm.description)
+      error(`${skillName}: frontmatter missing 'description'`);
     if (!fm.license) warn(`${skillName}: frontmatter missing 'license'`);
 
     // Check trigger phrases in description
     if (fm.description) {
-      const hasTriggers = fm.description.includes('"') && fm.description.toLowerCase().includes("trigger");
+      const hasTriggers =
+        fm.description.includes('"') &&
+        fm.description.toLowerCase().includes("trigger");
       if (!hasTriggers) {
         warn(`${skillName}: description may be missing trigger phrases`);
       }
@@ -322,7 +335,9 @@ async function validateStructure() {
 
     // Check name matches directory
     if (fm.name && fm.name !== skillName) {
-      warn(`${skillName}: frontmatter name '${fm.name}' doesn't match directory name`);
+      warn(
+        `${skillName}: frontmatter name '${fm.name}' doesn't match directory name`,
+      );
     }
 
     // Check line count
@@ -334,9 +349,13 @@ async function validateStructure() {
     }
 
     // Check cross-references
-    const relatedSection = content.match(/## Related Skills\n([\s\S]*?)(?=\n##|\n$|$)/);
+    const relatedSection = content.match(
+      /## Related Skills\n([\s\S]*?)(?=\n##|\n$|$)/,
+    );
     if (relatedSection) {
-      const refs = [...relatedSection[1].matchAll(/\*\*(\S+?)\*\*/g)].map((m) => m[1]);
+      const refs = [...relatedSection[1].matchAll(/\*\*(\S+?)\*\*/g)].map(
+        (m) => m[1],
+      );
       for (const ref of refs) {
         if (!skills.includes(ref)) {
           error(`${skillName}: broken cross-reference to '${ref}'`);
@@ -357,11 +376,21 @@ async function validateStructure() {
     error(`plugin.json: ${e.message}`);
   }
 
-  // Check marketplace.json
+  // Check root marketplace.json references this plugin
   try {
-    const marketRaw = await readFile("skills/.claude-plugin/marketplace.json", "utf-8");
-    JSON.parse(marketRaw);
-    info("  marketplace.json: valid ✓");
+    const marketRaw = await readFile(
+      ".claude-plugin/marketplace.json",
+      "utf-8",
+    );
+    const market = JSON.parse(marketRaw);
+    const hasSkills = market.plugins?.some(
+      (p: any) => p.name === "gram-skills",
+    );
+    if (hasSkills) {
+      info("  marketplace.json: gram-skills entry found ✓");
+    } else {
+      error("marketplace.json: missing gram-skills entry in plugins array");
+    }
   } catch (e: any) {
     error(`marketplace.json: ${e.message}`);
   }
@@ -442,8 +471,10 @@ async function run() {
   console.log(chalk.bold("\n● Summary\n"));
   const { errors, warnings, fixes } = result;
 
-  if (fixes.length > 0) console.log(chalk.green(`  ${fixes.length} fix(es) applied`));
-  if (warnings.length > 0) console.log(chalk.yellow(`  ${warnings.length} warning(s)`));
+  if (fixes.length > 0)
+    console.log(chalk.green(`  ${fixes.length} fix(es) applied`));
+  if (warnings.length > 0)
+    console.log(chalk.yellow(`  ${warnings.length} warning(s)`));
   if (errors.length > 0) console.log(chalk.red(`  ${errors.length} error(s)`));
   if (errors.length === 0 && warnings.length === 0) {
     console.log(chalk.green("  All checks passed!"));
