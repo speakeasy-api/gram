@@ -25,6 +25,8 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function Billing() {
+  const productTier = useProductTier();
+
   return (
     <Page>
       <Page.Header>
@@ -32,7 +34,9 @@ export default function Billing() {
       </Page.Header>
       <Page.Body>
         <UsageSection />
-        <UsageTiers />
+        {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
+        {(productTier === "base_PAID" ||
+          productTier === "__deprecated__pro") && <UsageTiers />}
       </Page.Body>
     </Page>
   );
@@ -389,11 +393,14 @@ const UsageTiers = () => {
             </>
           ) : (
             <>
-              <UsageCard
-                tier={productTier === "base_PAID" ? "base_PAID" : "base"}
-                tierLimits={usageTiers.free}
-                active={productTier === "base" || productTier === "base_PAID"}
-              />
+              {/* Show the paid base tier card only if the user is on the tier (otherwise it's deprecated) */}
+              {productTier === "base_PAID" && (
+                <UsageCard
+                  tier="base_PAID"
+                  tierLimits={usageTiers.free}
+                  active={productTier === "base_PAID"}
+                />
+              )}
               {/* Keep this so we can show it to users who are still on the old pricing tier */}
               {productTier === "__deprecated__pro" && (
                 <UsageCard
