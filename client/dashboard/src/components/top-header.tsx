@@ -273,7 +273,7 @@ export function TopHeader() {
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                {window.Pylon && (
+                {"Pylon" in window && (
                   <DropdownMenuItem onClick={togglePylon}>
                     <MessageCircleIcon className="mr-2 h-4 w-4" />
                     {pylonOpen ? "Close Support" : "Get Support"}
