@@ -28,7 +28,7 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router";
 import { GramLogo } from "./gram-logo";
 import { InputDialog } from "./input-dialog";
@@ -55,6 +55,15 @@ export function TopHeader() {
   const [open, setOpen] = useState(false);
   const isAdmin = useIsAdmin();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [pylonOpen, setPylonOpen] = useState(false);
+  const togglePylon = useCallback(() => {
+    if (pylonOpen) {
+      window.Pylon?.("hide");
+    } else {
+      window.Pylon?.("show");
+    }
+    setPylonOpen((prev) => !prev);
+  }, [pylonOpen]);
   const [newProjectName, setNewProjectName] = useState("");
   const client = useSdkClient();
 
@@ -189,9 +198,9 @@ export function TopHeader() {
               variant="default"
               size="sm"
               className="text-sm"
-              onClick={() => window.Pylon?.("show")}
+              onClick={togglePylon}
             >
-              Get Support
+              {pylonOpen ? "Close Support" : "Get Support"}
             </Button>
             <Button variant="outline" size="sm" className="text-sm" asChild>
               <a
@@ -265,9 +274,9 @@ export function TopHeader() {
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 {window.Pylon && (
-                  <DropdownMenuItem onClick={() => window.Pylon("show")}>
+                  <DropdownMenuItem onClick={togglePylon}>
                     <MessageCircleIcon className="mr-2 h-4 w-4" />
-                    Get Support
+                    {pylonOpen ? "Close Support" : "Get Support"}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem asChild>
