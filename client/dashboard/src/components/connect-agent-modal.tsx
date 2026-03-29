@@ -1,6 +1,7 @@
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Button as MoonshineButton } from "@speakeasy-api/moonshine";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Terminal } from "lucide-react";
 import { useCallback, useState, useSyncExternalStore } from "react";
@@ -182,12 +183,16 @@ export function ConnectAgentButton({ toolsetSlug }: { toolsetSlug?: string }) {
 
   return (
     <>
-      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-        <Button.LeftIcon>
+      <MoonshineButton
+        variant="secondary"
+        size="sm"
+        onClick={() => setOpen(true)}
+      >
+        <MoonshineButton.LeftIcon>
           <Terminal className="size-4" />
-        </Button.LeftIcon>
-        <Button.Text>Install Skills</Button.Text>
-      </Button>
+        </MoonshineButton.LeftIcon>
+        <MoonshineButton.Text>Install Skills</MoonshineButton.Text>
+      </MoonshineButton>
       <ConnectAgentModal
         open={open}
         onOpenChange={setOpen}
