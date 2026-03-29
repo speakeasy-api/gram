@@ -209,6 +209,14 @@ WHERE tp.toolset_id = @toolset_id
   AND tp.project_id = @project_id
 ORDER BY tp.prompt_name;
 
+-- name: ListToolsetsBySlackAppID :many
+SELECT t.*
+FROM toolsets t
+JOIN slack_app_toolsets sat ON t.id = sat.toolset_id
+WHERE sat.slack_app_id = @slack_app_id
+  AND t.deleted IS FALSE
+ORDER BY t.created_at DESC;
+
 -- name: GetToolsetsByToolURN :many
 SELECT
     t.*,

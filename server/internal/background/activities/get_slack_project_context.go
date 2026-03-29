@@ -59,9 +59,9 @@ func (s *GetSlackProjectContext) Do(ctx context.Context, event types.SlackEvent)
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting app auth info").Log(ctx, s.logger)
 	}
 
-	toolsets, err := s.toolsetRepo.ListToolsetsByProject(ctx, authInfo.ProjectID)
+	toolsets, err := s.toolsetRepo.ListToolsetsBySlackAppID(ctx, gramAppID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting asset").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing toolsets for slack app").Log(ctx, s.logger)
 	}
 
 	projects, err := s.projectRepo.ListProjectsByOrganization(ctx, authInfo.OrganizationID)
