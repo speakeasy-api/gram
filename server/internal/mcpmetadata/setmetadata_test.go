@@ -14,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -235,6 +237,81 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.Nil(t, result.LogoAssetID)
 		require.Nil(t, result.ExternalDocumentationURL)
 	})
+}
+
+func TestService_SetMcpMetadata_DefaultEnvironmentID_Valid(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "test-mcp-env-valid")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	envRepo := environments_repo.New(ti.conn)
+	env, err := envRepo.CreateEnvironment(ctx, environments_repo.CreateEnvironmentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           "Production",
+		Slug:           "production",
+		Description:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	envID := env.ID.String()
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:          types.Slug(toolset.Slug),
+		DefaultEnvironmentID: &envID,
+		SessionToken:         nil,
+		ProjectSlugInput:     nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.DefaultEnvironmentID)
+	require.Equal(t, envID, *result.DefaultEnvironmentID)
+}
+
+func TestService_SetMcpMetadata_DefaultEnvironmentID_WrongProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "test-mcp-env-wrong-proj")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Create a second project to own the environment
+	projRepo := projects_repo.New(ti.conn)
+	otherProject, err := projRepo.CreateProject(ctx, projects_repo.CreateProjectParams{
+		Name:           "Other Project",
+		Slug:           "other-project",
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	otherProjectID := otherProject.ID
+
+	envRepo := environments_repo.New(ti.conn)
+	env, err := envRepo.CreateEnvironment(ctx, environments_repo.CreateEnvironmentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      otherProjectID,
+		Name:           "Other Env",
+		Slug:           "other-env",
+		Description:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	envID := env.ID.String()
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:          types.Slug(toolset.Slug),
+		DefaultEnvironmentID: &envID,
+		SessionToken:         nil,
+		ProjectSlugInput:     nil,
+	})
+	require.Nil(t, result)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
 func TestService_SetMcpMetadata_AuditLogCountOnCreate(t *testing.T) {
