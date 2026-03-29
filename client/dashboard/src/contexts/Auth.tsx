@@ -507,6 +507,7 @@ export function usePylonInAppChat(user: User | undefined) {
         name: displayName,
         avatar_url: user?.photoUrl,
         ...(user?.signature && { email_hash: user.signature }),
+        hide_default_launcher: true,
       },
     };
 

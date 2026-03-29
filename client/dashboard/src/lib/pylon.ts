@@ -20,6 +20,7 @@ declare global {
         name: string;
         avatar_url?: string;
         email_hash?: string;
+        hide_default_launcher?: boolean;
       };
     };
   }
