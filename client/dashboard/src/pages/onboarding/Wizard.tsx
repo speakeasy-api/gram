@@ -1,5 +1,5 @@
 import { CodeBlock } from "@/components/code";
-import { CONNECT_AGENT_TOOLSET_KEY } from "@/components/connect-agent-modal";
+import { triggerConnectAgentModal } from "@/components/connect-agent-modal";
 import { Expandable } from "@/components/expandable";
 import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
@@ -975,8 +975,7 @@ const McpStep = ({
       await invalidateAllListToolsets(queryClient);
       await invalidateAllLatestDeployment(queryClient);
 
-      // Signal the Home page to show the "Connect your agent" modal
-      localStorage.setItem(CONNECT_AGENT_TOOLSET_KEY, mcpSlug);
+      triggerConnectAgentModal(mcpSlug);
 
       toast.success("MCP server created successfully");
       routes.home.goTo();

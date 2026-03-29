@@ -3,36 +3,99 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Terminal } from "lucide-react";
-
-const CONNECT_AGENT_DISMISSED_KEY = "connect_agent_modal_dismissed";
+import { useCallback, useSyncExternalStore } from "react";
 
 /**
- * Set by the onboarding wizard when MCP setup completes.
- * The Home page reads this to know which toolset slug to pre-fill.
+ * Set this key to a toolset slug to trigger the "Connect your agent" modal.
+ * The modal shows once per slug — dismissed slugs are tracked so re-setting
+ * the same slug won't re-show it, but a new slug will.
  */
 export const CONNECT_AGENT_TOOLSET_KEY = "connect_agent_toolset_slug";
+const DISMISSED_SLUGS_KEY = "connect_agent_dismissed_slugs";
+const SHOW_ON_LOGIN_KEY = "connect_agent_show_on_login";
 
-export function useConnectAgentModal() {
-  const dismissed = localStorage.getItem(CONNECT_AGENT_DISMISSED_KEY);
-  const toolsetSlug = localStorage.getItem(CONNECT_AGENT_TOOLSET_KEY);
-
-  const shouldShow = !dismissed && !!toolsetSlug;
-
-  const dismiss = () => {
-    localStorage.setItem(CONNECT_AGENT_DISMISSED_KEY, "true");
-    localStorage.removeItem(CONNECT_AGENT_TOOLSET_KEY);
-  };
-
-  return { shouldShow, toolsetSlug, dismiss };
+function getDismissedSlugs(): Set<string> {
+  try {
+    return new Set(
+      JSON.parse(localStorage.getItem(DISMISSED_SLUGS_KEY) ?? "[]"),
+    );
+  } catch {
+    return new Set();
+  }
 }
 
-function buildInstallCommands(toolsetSlug: string) {
-  return [
+function dismissSlug(slug: string) {
+  const slugs = getDismissedSlugs();
+  slugs.add(slug);
+  localStorage.setItem(DISMISSED_SLUGS_KEY, JSON.stringify([...slugs]));
+  localStorage.removeItem(CONNECT_AGENT_TOOLSET_KEY);
+}
+
+/** Call after source creation to trigger the modal with the new toolset. */
+export function triggerConnectAgentModal(toolsetSlug: string) {
+  localStorage.setItem(CONNECT_AGENT_TOOLSET_KEY, toolsetSlug);
+  // Notify any listening components
+  window.dispatchEvent(
+    new StorageEvent("storage", { key: CONNECT_AGENT_TOOLSET_KEY }),
+  );
+}
+
+/** Call on login to show a generic (no toolset) version of the modal. */
+export function triggerConnectAgentOnLogin() {
+  localStorage.setItem(SHOW_ON_LOGIN_KEY, "true");
+}
+
+function getSnapshot(): string | null {
+  const loginShow = localStorage.getItem(SHOW_ON_LOGIN_KEY);
+  const toolsetSlug = localStorage.getItem(CONNECT_AGENT_TOOLSET_KEY);
+
+  if (toolsetSlug) {
+    const dismissed = getDismissedSlugs();
+    if (!dismissed.has(toolsetSlug)) return toolsetSlug;
+  }
+
+  if (loginShow === "true") return "__login__";
+
+  return null;
+}
+
+function subscribe(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+
+export function useConnectAgentModal() {
+  const slug = useSyncExternalStore(subscribe, getSnapshot);
+
+  const dismiss = useCallback(() => {
+    if (slug === "__login__") {
+      localStorage.removeItem(SHOW_ON_LOGIN_KEY);
+    } else if (slug) {
+      dismissSlug(slug);
+    }
+    // Force re-render
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: CONNECT_AGENT_TOOLSET_KEY }),
+    );
+  }, [slug]);
+
+  return {
+    shouldShow: slug !== null,
+    toolsetSlug: slug === "__login__" ? null : slug,
+    dismiss,
+  };
+}
+
+function buildInstallCommands(toolsetSlug: string | null) {
+  const lines = [
     "claude plugin marketplace add speakeasy-api/gram",
     "claude plugin install gram-hooks@gram",
     "claude plugin install gram-skills@gram",
-    `gram install claude-code --toolset ${toolsetSlug}`,
-  ].join("\n");
+  ];
+  if (toolsetSlug) {
+    lines.push(`gram install claude-code --toolset ${toolsetSlug}`);
+  }
+  return lines.join("\n");
 }
 
 export function ConnectAgentModal({
@@ -42,16 +105,15 @@ export function ConnectAgentModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  toolsetSlug: string;
+  toolsetSlug: string | null;
 }) {
   const telemetry = useTelemetry();
-
   const commands = buildInstallCommands(toolsetSlug);
 
   const handleCopy = () => {
     telemetry.capture("connect_agent_modal", {
       action: "copied_commands",
-      toolset_slug: toolsetSlug,
+      toolset_slug: toolsetSlug ?? "none",
     });
   };
 
@@ -64,8 +126,9 @@ export function ConnectAgentModal({
             Connect your coding agent
           </Dialog.Title>
           <Dialog.Description>
-            Your MCP server is live. Paste these commands into your terminal to
-            connect Claude Code with Gram hooks, skills, and your new toolset.
+            {toolsetSlug
+              ? "Your MCP server is live. Paste these commands into your terminal to connect Claude Code with Gram hooks, skills, and your new toolset."
+              : "Connect Claude Code with Gram for hooks, skills, and deployment workflows."}
           </Dialog.Description>
         </Dialog.Header>
 
@@ -78,10 +141,14 @@ export function ConnectAgentModal({
             <div className="mt-3 text-muted-foreground"># Install plugins</div>
             <div>claude plugin install gram-hooks@gram</div>
             <div>claude plugin install gram-skills@gram</div>
-            <div className="mt-3 text-muted-foreground">
-              # Connect your MCP server
-            </div>
-            <div>gram install claude-code --toolset {toolsetSlug}</div>
+            {toolsetSlug && (
+              <>
+                <div className="mt-3 text-muted-foreground">
+                  # Connect your MCP server
+                </div>
+                <div>gram install claude-code --toolset {toolsetSlug}</div>
+              </>
+            )}
           </div>
           <CopyButton text={commands} absolute onCopy={handleCopy} />
         </div>

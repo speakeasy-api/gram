@@ -3,6 +3,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { triggerConnectAgentModal } from "@/components/connect-agent-modal";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
@@ -97,6 +98,7 @@ export default function DeployStep() {
         });
 
         stepper.meta.current.toolset = toolset;
+        triggerConnectAgentModal(toolset.slug);
         telemetry.capture("onboarding_event", {
           action: "toolset_auto_created",
           toolset_name: assetName,

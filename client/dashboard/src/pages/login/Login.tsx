@@ -1,3 +1,4 @@
+import { triggerConnectAgentOnLogin } from "@/components/connect-agent-modal";
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { JourneyDemo } from "./components/journey-demo";
@@ -14,6 +15,7 @@ export default function Login() {
   const redirectTo = searchParams.get("redirect");
   useEffect(() => {
     if (session.session !== "") {
+      triggerConnectAgentOnLogin();
       if (redirectTo) {
         navigate(redirectTo, { replace: true });
       } else {
