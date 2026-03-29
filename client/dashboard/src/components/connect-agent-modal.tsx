@@ -94,7 +94,6 @@ export function useConnectAgentModal() {
 function buildInstallCommands(toolsetSlug: string | null) {
   const lines = [
     "claude plugin marketplace add speakeasy-api/gram",
-    "claude plugin install gram-hooks@gram",
     "claude plugin install gram-skills@gram",
   ];
   if (toolsetSlug) {
@@ -132,8 +131,8 @@ export function ConnectAgentModal({
           </Dialog.Title>
           <Dialog.Description>
             {toolsetSlug
-              ? "Your MCP server is live. Paste these commands into your terminal to connect Claude Code with Gram hooks, skills, and your new toolset."
-              : "Connect Claude Code with Gram for hooks, skills, and deployment workflows."}
+              ? "Your MCP server is live. Install the Gram skills plugin to get guided deployment workflows in Claude Code."
+              : "Install the Gram skills plugin for guided deployment workflows in Claude Code."}
           </Dialog.Description>
         </Dialog.Header>
 
@@ -143,8 +142,9 @@ export function ConnectAgentModal({
               # Add the Gram marketplace
             </div>
             <div>claude plugin marketplace add speakeasy-api/gram</div>
-            <div className="mt-3 text-muted-foreground"># Install plugins</div>
-            <div>claude plugin install gram-hooks@gram</div>
+            <div className="mt-3 text-muted-foreground">
+              # Install the skills plugin
+            </div>
             <div>claude plugin install gram-skills@gram</div>
             {toolsetSlug && (
               <>
