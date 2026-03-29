@@ -1,3 +1,7 @@
+import {
+  ConnectAgentModal,
+  useConnectAgentModal,
+} from "@/components/connect-agent-modal";
 import { MCPCard } from "@/components/mcp/MCPCard";
 import { Page } from "@/components/page-layout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +20,7 @@ import {
   MessageCircleIcon,
   ServerIcon,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 
 export const LINKED_FROM_PARAM = "from";
@@ -47,6 +51,19 @@ export default function Home() {
   const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
+
+  // Post-onboarding "Connect your agent" modal
+  const connectAgent = useConnectAgentModal();
+  const [connectAgentOpen, setConnectAgentOpen] = useState(
+    connectAgent.shouldShow,
+  );
+
+  const handleConnectAgentClose = (open: boolean) => {
+    setConnectAgentOpen(open);
+    if (!open) {
+      connectAgent.dismiss();
+    }
+  };
 
   const featuredServers = useMemo(() => {
     if (!data?.pages) return [];
@@ -251,6 +268,14 @@ export default function Home() {
           </div>
         )}
       </Page.Body>
+
+      {connectAgent.toolsetSlug && (
+        <ConnectAgentModal
+          open={connectAgentOpen}
+          onOpenChange={handleConnectAgentClose}
+          toolsetSlug={connectAgent.toolsetSlug}
+        />
+      )}
     </Page>
   );
 }
