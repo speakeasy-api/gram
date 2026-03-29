@@ -1,3 +1,4 @@
+import { ConnectAgentButton } from "@/components/connect-agent-modal";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
 import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
@@ -323,6 +324,9 @@ export default function Sources() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </Page.Section.CTA>
+        <Page.Section.CTA>
+          <ConnectAgentButton />
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (

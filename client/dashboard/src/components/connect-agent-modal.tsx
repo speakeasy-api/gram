@@ -3,7 +3,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Terminal } from "lucide-react";
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 
 /**
  * Set this key to a toolset slug to trigger the "Connect your agent" modal.
@@ -173,5 +173,26 @@ export function ConnectAgentModal({
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
+  );
+}
+
+/** Standalone button that opens the connect agent modal inline. */
+export function ConnectAgentButton({ toolsetSlug }: { toolsetSlug?: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        <Button.LeftIcon>
+          <Terminal className="size-4" />
+        </Button.LeftIcon>
+        <Button.Text>Install Skills</Button.Text>
+      </Button>
+      <ConnectAgentModal
+        open={open}
+        onOpenChange={setOpen}
+        toolsetSlug={toolsetSlug ?? null}
+      />
+    </>
   );
 }
