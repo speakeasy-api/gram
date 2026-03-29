@@ -6,6 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -15,6 +18,8 @@ func TestRemoveGrants_RemovesSingleGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
 
 	userURN := "user:user_abc"
 
@@ -23,7 +28,7 @@ func TestRemoveGrants_RemovesSingleGrant(t *testing.T) {
 	upsertGrant(t, ctx, ti.service, userURN, "mcp:connect", "*")
 
 	// Remove only the build:read grant
-	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
+	err = ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "build:read", Resource: "*"},
 		},
@@ -37,12 +42,18 @@ func TestRemoveGrants_RemovesSingleGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 1)
 	require.Equal(t, "mcp:connect", result.Grants[0].Scope)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestRemoveGrants_BatchRemovesMultipleGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
 
 	userURN := "user:user_abc"
 
@@ -51,7 +62,7 @@ func TestRemoveGrants_BatchRemovesMultipleGrants(t *testing.T) {
 	upsertGrant(t, ctx, ti.service, userURN, "org:admin", "*")
 
 	// Remove two of three grants in a single batch call
-	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
+	err = ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "build:read", Resource: "*"},
 			{PrincipalUrn: mustParsePrincipal(t, userURN), Scope: "mcp:connect", Resource: "*"},
@@ -65,6 +76,10 @@ func TestRemoveGrants_BatchRemovesMultipleGrants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 1)
 	require.Equal(t, "org:admin", result.Grants[0].Scope)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+2, afterCount)
 }
 
 func TestRemoveGrants_DoesNotAffectOtherPrincipals(t *testing.T) {
@@ -128,14 +143,20 @@ func TestRemoveGrants_NoOpForNonExistentGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
 
 	// Removing a grant that doesn't exist is a silent no-op (batch semantics)
-	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
+	err = ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.NoError(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 // TestRemoveGrants_InvalidPrincipalURN verifies that a zero-value Principal
@@ -145,21 +166,29 @@ func TestRemoveGrants_InvalidPrincipalURN(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
 
-	err := ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
+	err = ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
 		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: urn.Principal{}, Scope: "build:read", Resource: "*"},
 		},
 	})
 	require.Error(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestRemoveGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestAccessService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
 
-	err := ti.service.RemoveGrants(t.Context(), &gen.RemoveGrantsPayload{
+	err = ti.service.RemoveGrants(t.Context(), &gen.RemoveGrantsPayload{
 		Grants: []*gen.GrantEntry{
 			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
 		},
@@ -169,4 +198,80 @@ func TestRemoveGrants_UnauthorizedWithoutAuthContext(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+	afterCount, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestRemoveGrants_UnauthorizedWithoutActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		ActiveOrganizationID:  "",
+		UserID:                authCtx.UserID,
+		ExternalUserID:        authCtx.ExternalUserID,
+		APIKeyID:              authCtx.APIKeyID,
+		SessionID:             authCtx.SessionID,
+		ProjectID:             authCtx.ProjectID,
+		OrganizationSlug:      authCtx.OrganizationSlug,
+		Email:                 authCtx.Email,
+		AccountType:           authCtx.AccountType,
+		HasActiveSubscription: authCtx.HasActiveSubscription,
+		ProjectSlug:           authCtx.ProjectSlug,
+		APIKeyScopes:          authCtx.APIKeyScopes,
+	})
+
+	err = ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
+		Grants: []*gen.GrantEntry{{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"}},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestRemoveGrants_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+
+	upsertGrant(t, ctx, ti.service, "user:user_abc", "build:read", "*")
+
+	err = ti.service.RemoveGrants(ctx, &gen.RemoveGrantsPayload{
+		Grants: []*gen.GrantEntry{
+			{PrincipalUrn: mustParsePrincipal(t, "user:user_abc"), Scope: "build:read", Resource: "*"},
+		},
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionAccessGrantRemove), record.Action)
+	require.Equal(t, "access_grant", record.SubjectType)
+	require.Equal(t, "user:user_abc", record.SubjectDisplay)
+	require.NotNil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	require.Nil(t, record.Metadata)
+	require.Contains(t, string(record.BeforeSnapshot), "user:user_abc")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
