@@ -258,10 +258,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, oops.E(oops.CodeGatewayError, err, "failed to send invitation via WorkOS").Log(ctx, s.logger)
 	}
 
-	inviterName := ""
-	if authCtx.Email != nil {
-		inviterName = *authCtx.Email
-	}
+	inviterName := s.resolveInviterName(ctx, wos, inviterWorkOSID)
 
 	return &gen.InviteMemberResult{
 		Invite: invitationToGenInvite(inv, inviterName),

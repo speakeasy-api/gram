@@ -290,26 +290,24 @@ func TestResendInvite(t *testing.T) {
 		mux := http.NewServeMux()
 		// GetInvitation (ownership check)
 		mux.HandleFunc("/user_management/invitations/inv_resend", func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/user_management/invitations/inv_resend/resend" {
-				// ResendInvitation
-				jsonResp(w, http.StatusOK, usermanagement.Invitation{
-					ID:             "inv_resend",
-					Email:          "resend@example.com",
-					State:          usermanagement.Pending,
-					InviterUserID:  "wos_inviter_123",
-					OrganizationID: testWorkOSOrgID,
-					ExpiresAt:      "2026-04-02T00:00:00Z",
-					CreatedAt:      "2026-03-26T00:00:00Z",
-					UpdatedAt:      "2026-03-26T00:00:00Z",
-				})
-				return
-			}
-			// GetInvitation
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
 				ID:             "inv_resend",
 				Email:          "resend@example.com",
 				State:          usermanagement.Pending,
 				OrganizationID: testWorkOSOrgID,
+			})
+		})
+		// ResendInvitation
+		mux.HandleFunc("/user_management/invitations/inv_resend/resend", func(w http.ResponseWriter, r *http.Request) {
+			jsonResp(w, http.StatusOK, usermanagement.Invitation{
+				ID:             "inv_resend",
+				Email:          "resend@example.com",
+				State:          usermanagement.Pending,
+				InviterUserID:  "wos_inviter_123",
+				OrganizationID: testWorkOSOrgID,
+				ExpiresAt:      "2026-04-02T00:00:00Z",
+				CreatedAt:      "2026-03-26T00:00:00Z",
+				UpdatedAt:      "2026-03-26T00:00:00Z",
 			})
 		})
 		// GetUser for inviter name resolution
