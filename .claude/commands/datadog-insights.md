@@ -10,10 +10,10 @@ You are producing a health report for Gram's production services. The report mus
 
 > ⚠️ **MANDATORY FORMAT RULES — READ BEFORE COMPOSING THE MESSAGE:**
 >
-> 1. **Every major section MUST be preceded by a `divider` block.**
+> 1. **Every major section MUST be preceded by a Unicode divider line**: `──────────────────────────────────────` on its own line, with a blank line above and below.
 > 2. **Top endpoints, error type breakdowns, and latency tables MUST use triple-backtick code blocks** — never bullet points for tabular data.
 > 3. **Code block tables must have aligned columns** using spaces. Minimum widths: endpoint 38 chars, count 8 chars, err% 6 chars, p95 8 chars.
-> 4. **Monitors in alert MUST each get their own `section` block** — never combine them.
+> 4. **Each monitor in alert MUST get its own paragraph** — never combine multiple monitors into one block.
 > 5. **Do NOT collapse or omit data** to save space. If there are 8 monitors, show all 8.
 
 ---
@@ -298,148 +298,136 @@ This recommendation goes into the Slack message as a dedicated section.
 
 ## Step 7: Compose the Slack message
 
-Build a Slack Block Kit payload. Structure it so critical items are at the top and impossible to miss.
+Use the `slack_send_message` MCP tool with the `message` parameter (Slack markdown). The tool does **not** support Block Kit `blocks` — use plain Slack markdown only.
 
-**REQUIRED: Use `slack_send_message` MCP tool** with the `blocks` array. Do NOT use curl unless the MCP tool is unavailable.
+Slack markdown syntax: `*bold*`, `_italic_`, `` `code` ``, ` ```code block``` `, `<URL|link text>`.
 
-### Base structure
+### Message structure
 
-```json
-{
-  "channel": "C0AKLE930BX",
-  "text": "<plain text fallback summarizing the verdict>",
-  "blocks": [
-    {
-      "type": "header",
-      "text": {
-        "type": "plain_text",
-        "text": "Gram Health Digest — <DAY> <DATE>"
-      }
-    },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "<VERDICT_EMOJI> *<One-line overall verdict>*"
-      }
-    }
-  ]
-}
+The message opens with two lines — no separate header block:
+
+```
+*Gram Health Digest — <DAY> <DATE>*
+<VERDICT_EMOJI> *<One-line overall verdict>*
 ```
 
-Then append sections in this exact order:
+Then append sections in this exact order, each preceded by the Unicode divider line on its own line with a blank line above and below:
+
+```
+──────────────────────────────────────
+```
 
 ### A. Monitors in alert (only if any exist)
 
-**Each monitor gets its own section block.** Do NOT combine them.
+**Each monitor gets its own paragraph.** Do NOT combine multiple monitors.
 
-```json
-{ "type": "divider" },
-{
-  "type": "section",
-  "text": { "type": "mrkdwn", "text": "🚨 *MONITORS IN ALERT*" }
-},
-{
-  "type": "section",
-  "text": {
-    "type": "mrkdwn",
-    "text": "🔴 *<Monitor name>* — <type>\n<What it means>\n*Notifying*: `#<channel>`\n*Source*: `server/internal/<path>` (<function>)"
-  }
-}
+```
+──────────────────────────────────────
+
+
+🚨 *MONITORS IN ALERT*
+
+🔴 *<Monitor name>* — <type>
+<What it means and why it matters>
+*Notifying:* `#<channel>`
+
+🔴 *<Next monitor name>* — <type>
+<What it means>
+*Notifying:* `#<channel>`
 ```
 
 ### A2. Error spike (always include if a spike was detected; independent of monitors)
 
-````json
-{ "type": "divider" },
-{
-  "type": "section",
-  "text": { "type": "mrkdwn", "text": "⚠️ *Error Spike (last 6h vs prior 18h)*\n• `gram-server`: X errors in 6h (Y/h) vs Z in prior 18h (W/h) — *~Nx spike*" }
-},
-{
-  "type": "section",
-  "text": {
-    "type": "mrkdwn",
-    "text": "*Top gram-server error types (24h):*\n```\nerror message                     count   pct\nmcp server not found              2,662   41%\nmissing authorization code          686   11%\ninvalid or expired access token     300    5%\n```"
-  }
-}
-````
+```
+──────────────────────────────────────
+
+
+⚠️ *Error Spike (last 6h vs prior 18h)*
+• `gram-server`: X errors in 6h (Y/h) vs Z in prior 18h (W/h) — *~Nx spike*
+
+*Top gram-server error types (24h):*
+```
+error message                          count    pct
+mcp server not found                   1,288  17.8%
+token exchange failed                    447   6.2%
+not found                                273   3.8%
+```
+```
 
 > ⚠️ **The error type breakdown MUST be a code block table with aligned columns.** Never use bullet points for this data.
 
 ### B. Traffic summary
 
-```json
-{ "type": "divider" },
-{
-  "type": "section",
-  "text": {
-    "type": "mrkdwn",
-    "text": "📊 *Traffic (24h)*\n• `gram-server`: ~Xk requests — ↑Y% vs previous 12h\n• `gram` (frontend): ~Xk log events — ↑Y%\n• `gram-worker`: ~Xk\n• `fly` (functions): ~Xk"
-  }
-}
+```
+──────────────────────────────────────
+
+
+📊 *Traffic (24h)*
+• `gram-server`: ~Xk requests — ↑Y% vs previous 12h
+• `gram` (frontend): ~X error log events
+• `gram-worker`: ~Xk
+• `fly` (functions): X errors
 ```
 
 ### C. Top endpoints — MUST be a code block table
 
-````json
-{ "type": "divider" },
-{
-  "type": "section",
-  "text": {
-    "type": "mrkdwn",
-    "text": "🔝 *Top Endpoints (gram-server, 24h)*\n```\nEndpoint                               Reqs    Err%   p95     Notes\nPOST /mcp/{slug}                       95.3k   3.2%   28ms\nPOST /rpc/hooks.otel/v1/logs           33.6k   0.0%   11ms\nGET  /mcp/{slug}                       21.2k   1.1%    3ms\n...```"
-  }
-}
-````
+```
+──────────────────────────────────────
+
+
+🔝 *Top Endpoints — gram-server (last ~Xh)*
+```
+Endpoint                                         Hits    Err%   p95
+POST /mcp/{mcpSlug}                           191,311   0.1%   21ms
+GET  /.well-known/oauth-protected-resource     39,262   0.1%    3ms
+GET  /.well-known/oauth-authorization-server   39,158   0.0%    5ms
+GET  /mcp/{mcpSlug}                            13,211   0.0%    2ms
+POST /rpc/hooks.claude                          1,267   0.0%   80ms
+```
+```
 
 > ⚠️ **This section MUST use a triple-backtick code block with space-aligned columns. NEVER use bullet points for the endpoint table.**
 
-Column widths: endpoint 40 chars, reqs 8 chars, err% 6 chars, p95 8 chars, notes remaining.
+Column widths: endpoint 48 chars, hits 8 chars, err% 6 chars, p95 8 chars, notes remaining. Flag any endpoint with Err% > 5% with ⚠️.
 
 ### D. Slow endpoints (only if p95 > 2s)
 
-````json
-{ "type": "divider" },
-{
-  "type": "section",
-  "text": {
-    "type": "mrkdwn",
-    "text": "🐢 *Slow Endpoints (p95 > 2s)*\n```\nEndpoint                               p95      p50    vol\nGET /rpc/auditlogs.listfacets          3.91s   800ms   4 req\nGET /rpc/auth.callback                 3.57s   400ms   6 req\n```\n*Global*: p50: Xms · p95: Xms · p99: Xms"
-  }
-}
-````
+```
+──────────────────────────────────────
 
-> ⚠️ **The slow endpoint table MUST also be a code block with aligned columns. Never use bullet points.**
 
-If all endpoints are fast, replace with: `⚡ *Latency* — All endpoints healthy. p50: Xms · p95: Xms · p99: Xms 🟢`
+🐢 *Slow Endpoints (p95 > 2s)*
+```
+Endpoint                                p95       p50    Hits
+GET /rpc/usage.getperiodusage         2,040ms   817ms      6  ⚠️
+GET /rpc/auth.info                      638ms     8ms      6
+```
+*Global:* p50: Xms · p95: Xms · p99: Xms
+```
+
+> ⚠️ **The slow endpoint table MUST use a code block with aligned columns. Never use bullet points.**
+
+If all endpoints are fast, use instead:
+```
+⚡ *Latency* — All endpoints healthy. p50: Xms · p95: Xms · p99: Xms 🟢
+```
 
 ### E. Recommendation
 
-```json
-{ "type": "divider" },
-{
-  "type": "section",
-  "text": {
-    "type": "mrkdwn",
-    "text": "💡 *Recommendation*\n<Your specific, concrete recommendation for the on-call engineer. One or two sentences. Name the action and where to look.>"
-  }
-}
+```
+──────────────────────────────────────
+
+
+💡 *Recommendation*
+<Specific, concrete recommendation for the on-call engineer. One or two sentences. Name the action and where to look.>
 ```
 
 ### F. Footer
 
-```json
-{ "type": "divider" },
-{
-  "type": "context",
-  "elements": [
-    {
-      "type": "mrkdwn",
-      "text": "🔴 Critical  🟡 Warning  🟢 Healthy | <NOTEBOOK_URL|View charts in Datadog> | Generated by Claude Code + Datadog MCP"
-    }
-  ]
-}
+```
+──────────────────────────────────────
+
+🔴 Critical  🟡 Warning  🟢 Healthy  |  <NOTEBOOK_URL|View charts in Datadog>  |  Generated by Claude Code + Datadog MCP
 ```
 
 Replace `NOTEBOOK_URL` with the notebook URL from Step 5.
@@ -456,26 +444,4 @@ Replace `NOTEBOOK_URL` with the notebook URL from Step 5.
 
 ## Step 8: Post to Slack
 
-**Preferred: use `slack_send_message` MCP tool** — pass the `blocks` array directly.
-
-**Fallback** (if MCP tool unavailable): write the JSON payload via Python then curl:
-
-```bash
-python3 << 'PYEOF'
-import json
-# ... build your payload dict here ...
-with open("/tmp/slack-digest.json", "w") as f:
-    json.dump(payload, f)
-PYEOF
-
-mise exec -- bash -c 'curl -s -X POST https://slack.com/api/chat.postMessage \
-  -H "Authorization: Bearer $DATADOG_DIGEST_BOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  --data @/tmp/slack-digest.json'
-```
-
-If `DATADOG_DIGEST_BOT_TOKEN` is not set, print the composed payload to the terminal instead and remind the user to:
-
-1. Create a Slack app at https://api.slack.com/apps with the `chat:write` scope
-2. Install it to the workspace and copy the Bot User OAuth Token (`xoxb-...`)
-3. Add `DATADOG_DIGEST_BOT_TOKEN = "xoxb-..."` to `mise.local.toml`
+Use `slack_send_message` with `channel_id: C0AKLE930BX` and the composed `message` string. If the MCP tool is unavailable, print the message to the terminal instead.
