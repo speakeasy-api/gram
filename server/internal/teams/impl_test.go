@@ -90,9 +90,7 @@ func TestListMembers(t *testing.T) {
 	t.Run("returns members from local DB", func(t *testing.T) {
 		t.Parallel()
 
-		// ListMembers uses the local DB, no WorkOS mock needed
-		wos := workosStub(t, http.NewServeMux())
-		ctx, ti := newTestTeamsService(t, wos)
+		ctx, ti := newTestTeamsService(t, nil)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
@@ -110,8 +108,7 @@ func TestListMembers(t *testing.T) {
 	t.Run("rejects mismatched organization ID", func(t *testing.T) {
 		t.Parallel()
 
-		wos := workosStub(t, http.NewServeMux())
-		ctx, ti := newTestTeamsService(t, wos)
+		ctx, ti := newTestTeamsService(t, nil)
 
 		_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{
 			OrganizationID: "wrong-org-id",
@@ -168,8 +165,7 @@ func TestInviteMember(t *testing.T) {
 	t.Run("rejects mismatched organization ID", func(t *testing.T) {
 		t.Parallel()
 
-		wos := workosStub(t, http.NewServeMux())
-		ctx, ti := newTestTeamsService(t, wos)
+		ctx, ti := newTestTeamsService(t, nil)
 
 		_, err := ti.service.InviteMember(ctx, &gen.InviteMemberPayload{
 			OrganizationID: "wrong-org-id",
@@ -367,8 +363,7 @@ func TestRemoveMember(t *testing.T) {
 	t.Run("prevents self-removal", func(t *testing.T) {
 		t.Parallel()
 
-		wos := workosStub(t, http.NewServeMux())
-		ctx, ti := newTestTeamsService(t, wos)
+		ctx, ti := newTestTeamsService(t, nil)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
@@ -384,8 +379,7 @@ func TestRemoveMember(t *testing.T) {
 	t.Run("rejects mismatched organization ID", func(t *testing.T) {
 		t.Parallel()
 
-		wos := workosStub(t, http.NewServeMux())
-		ctx, ti := newTestTeamsService(t, wos)
+		ctx, ti := newTestTeamsService(t, nil)
 
 		err := ti.service.RemoveMember(ctx, &gen.RemoveMemberPayload{
 			OrganizationID: "wrong-org-id",

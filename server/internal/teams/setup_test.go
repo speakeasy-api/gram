@@ -42,7 +42,6 @@ type testInstance struct {
 	service        *teams.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
-	workos         *workos.WorkOS
 }
 
 func newTestTeamsService(t *testing.T, wos *workos.WorkOS) (context.Context, *testInstance) {
@@ -75,6 +74,5 @@ func newTestTeamsService(t *testing.T, wos *workos.WorkOS) (context.Context, *te
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
-		workos:         wos,
 	}
 }
