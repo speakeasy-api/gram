@@ -276,10 +276,20 @@ func (s *Service) ListInvites(ctx context.Context, payload *gen.ListInvitesPaylo
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
+	// Deduplicate inviter lookups to avoid N+1 API calls
+	inviterNames := make(map[string]string)
+	for _, inv := range invitations {
+		if inv.InviterUserID != "" {
+			inviterNames[inv.InviterUserID] = ""
+		}
+	}
+	for userID := range inviterNames {
+		inviterNames[userID] = s.resolveInviterName(ctx, wos, userID)
+	}
+
 	invites := make([]*gen.TeamInvite, 0, len(invitations))
 	for _, inv := range invitations {
-		inviterName := s.resolveInviterName(ctx, wos, inv.InviterUserID)
-		invites = append(invites, invitationToGenInvite(inv, inviterName))
+		invites = append(invites, invitationToGenInvite(inv, inviterNames[inv.InviterUserID]))
 	}
 
 	return &gen.ListInvitesResult{Invites: invites}, nil
