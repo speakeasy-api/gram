@@ -303,6 +303,10 @@ async function seed() {
     log.info(
       `${verb} MCP Logs toolset '${mcpLogsToolset.slug}' for project '${projectSlug}' (mcp_url = ${mcpLogsToolset.mcpURL})`,
     );
+
+    await $`mise set --file mise.local.toml \
+      VITE_GRAM_OBSERVABILITY_MCP_URL=${mcpLogsToolset.mcpURL}`;
+    log.info(`Set VITE_GRAM_OBSERVABILITY_MCP_URL in mise.local.toml`);
   }
 
   // Seed a default environment for each project
