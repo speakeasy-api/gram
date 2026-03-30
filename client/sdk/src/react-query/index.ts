@@ -95,6 +95,7 @@ export * from "./mcpMetadataSet.js";
 export * from "./mcpRegistriesClearCache.js";
 export * from "./mcpRegistriesGetServerDetails.js";
 export * from "./project.js";
+export * from "./projectsSetOrganizationWhitelist.js";
 export * from "./publishPackage.js";
 export * from "./redeployDeployment.js";
 export * from "./register.js";
