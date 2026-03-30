@@ -125,8 +125,3 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, grants)
 }
-
-//go:fix inline
-func stringPtr(v string) *string {
-	return new(v)
-}

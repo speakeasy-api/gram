@@ -420,8 +420,61 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	return nil
 }
 
-func (s *Service) ListMembers(context.Context, *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
-	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	if s.roles == nil {
+		return nil, oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
+	}
+
+	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
+	switch {
+	case errors.Is(err, errWorkOSOrganizationNotLinked):
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	default:
+	}
+
+	roles, err := s.roles.ListRoles(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+	}
+	roleIDBySlug := make(map[string]string, len(roles))
+	for _, role := range roles {
+		roleIDBySlug[role.Slug] = role.ID
+	}
+
+	members, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+	}
+
+	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list org users from workos").Log(ctx, s.logger)
+	}
+
+	result := make([]*gen.AccessMember, 0, len(members))
+	for _, member := range members {
+		user, ok := users[member.UserID]
+		if !ok {
+			continue
+		}
+
+		result = append(result, &gen.AccessMember{
+			ID:       user.ID,
+			Name:     formatUserName(user),
+			Email:    user.Email,
+			PhotoURL: nil,
+			RoleID:   roleIDBySlug[member.RoleSlug],
+			JoinedAt: time.Time{}.UTC().Format(time.RFC3339),
+		})
+	}
+
+	return &gen.ListMembersResult{Members: result}, nil
 }
 
 func (s *Service) UpdateMemberRole(context.Context, *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
@@ -697,6 +750,19 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*RoleGrant {
 	}
 
 	return out
+}
+
+func formatUserName(user workos.User) string {
+	switch {
+	case user.FirstName != "" && user.LastName != "":
+		return user.FirstName + " " + user.LastName
+	case user.FirstName != "":
+		return user.FirstName
+	case user.LastName != "":
+		return user.LastName
+	default:
+		return user.Email
+	}
 }
 
 func grantFromRow(row repo.PrincipalGrant) *gen.Grant {
