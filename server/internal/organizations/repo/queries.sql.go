@@ -86,7 +86,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 }
 
 const getOrganizationMetadataByWorkosID = `-- name: GetOrganizationMetadataByWorkosID :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
 `
@@ -101,6 +101,7 @@ func (q *Queries) GetOrganizationMetadataByWorkosID(ctx context.Context, workosI
 		&i.GramAccountType,
 		&i.SsoConnectionID,
 		&i.WorkosID,
+		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
 		&i.CreatedAt,
