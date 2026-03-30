@@ -3,7 +3,6 @@ package access_test
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -12,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -40,8 +40,8 @@ func TestService_CreateRole(t *testing.T) {
 	require.Equal(t, "Can build selected resources", role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 2, role.MemberCount)
-	require.Equal(t, time.Time{}.UTC().Format(time.RFC3339), role.CreatedAt)
-	require.Equal(t, time.Time{}.UTC().Format(time.RFC3339), role.UpdatedAt)
+	require.Equal(t, thirdpartyworkos.MockRoleTimestamp(), role.CreatedAt)
+	require.Equal(t, thirdpartyworkos.MockRoleTimestamp(), role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
 	roles, err := ti.roles.ListRoles(ctx, "org_workos_test")

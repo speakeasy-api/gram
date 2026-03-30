@@ -26,6 +26,8 @@ type Role struct {
 	Name        string `json:"name"`
 	Slug        string `json:"slug"`
 	Description string `json:"description"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 // Member represents an active organization membership.
@@ -130,7 +132,14 @@ func (rc *RoleClient) ListRoles(ctx context.Context, orgID string) ([]Role, erro
 
 	out := make([]Role, len(resp.Data))
 	for i, r := range resp.Data {
-		out[i] = Role{ID: r.ID, Name: r.Name, Slug: r.Slug, Description: r.Description}
+		out[i] = Role{
+			ID:          r.ID,
+			Name:        r.Name,
+			Slug:        r.Slug,
+			Description: r.Description,
+			CreatedAt:   r.CreatedAt,
+			UpdatedAt:   r.UpdatedAt,
+		}
 	}
 	return out, nil
 }

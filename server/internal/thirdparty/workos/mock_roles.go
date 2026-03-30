@@ -8,6 +8,12 @@ import (
 	"sync"
 )
 
+const mockRoleTimestamp = "2024-12-28T07:55:09Z"
+
+func MockRoleTimestamp() string {
+	return mockRoleTimestamp
+}
+
 type MockRoleProvider struct {
 	mu                  sync.Mutex
 	roles               map[string][]Role
@@ -60,7 +66,7 @@ func (m *MockRoleProvider) CreateRole(_ context.Context, orgID string, opts Crea
 	}
 
 	m.nextID++
-	role := Role{ID: "role_" + strconv.Itoa(m.nextID), Name: opts.Name, Slug: opts.Slug, Description: opts.Description}
+	role := Role{ID: "role_" + strconv.Itoa(m.nextID), Name: opts.Name, Slug: opts.Slug, Description: opts.Description, CreatedAt: mockRoleTimestamp, UpdatedAt: mockRoleTimestamp}
 	m.roles[orgID] = append(m.roles[orgID], role)
 	afterCreateRole := m.afterCreateRole
 	created := m.roles[orgID][len(m.roles[orgID])-1]
@@ -87,6 +93,7 @@ func (m *MockRoleProvider) UpdateRole(_ context.Context, orgID string, roleSlug 
 		if opts.Description != nil {
 			m.roles[orgID][i].Description = *opts.Description
 		}
+		m.roles[orgID][i].UpdatedAt = mockRoleTimestamp
 		updated := m.roles[orgID][i]
 		return &updated, nil
 	}
@@ -171,12 +178,18 @@ func (m *MockRoleProvider) ListOrgUsers(_ context.Context, _ string) (map[string
 func (m *MockRoleProvider) AddRole(orgID string, role Role) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if role.CreatedAt == "" {
+		role.CreatedAt = mockRoleTimestamp
+	}
+	if role.UpdatedAt == "" {
+		role.UpdatedAt = mockRoleTimestamp
+	}
 
 	m.roles[orgID] = append(m.roles[orgID], role)
 }
 
 func (m *MockRoleProvider) AddSystemRole(orgID, id, name, slug string) {
-	m.AddRole(orgID, Role{ID: id, Name: name, Slug: slug, Description: ""})
+	m.AddRole(orgID, Role{ID: id, Name: name, Slug: slug, Description: "", CreatedAt: mockRoleTimestamp, UpdatedAt: mockRoleTimestamp})
 }
 
 func (m *MockRoleProvider) AddMember(orgID, membershipID, userID, roleSlug string) {
