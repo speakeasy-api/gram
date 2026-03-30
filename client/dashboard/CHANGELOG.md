@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.36.2
+
+### Patch Changes
+
+- b0f341b: Fix Pylon chat widget overlapping playground send button by hiding the default launcher and adding toggle support to the Get Support button.
+
 ## 0.36.1
 
 ### Patch Changes
