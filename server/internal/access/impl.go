@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -154,7 +155,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		return nil, err
 	}
 
-	roleSlug := conv.ToSlug(payload.Name)
+	roleSlug := slugify(payload.Name)
 	wr, err := s.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
 		Name:        payload.Name,
 		Slug:        roleSlug,
@@ -642,6 +643,34 @@ func grantFromRow(row repo.PrincipalGrant) *gen.Grant {
 		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+func slugify(name string) string {
+	var b strings.Builder
+	prevDash := false
+
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevDash = false
+		case r == ' ' || r == '-' || r == '_':
+			if b.Len() > 0 && !prevDash {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+
+	slug := strings.Trim(b.String(), "-")
+	if slug == "" {
+		return ""
+	}
+	if !strings.HasPrefix(slug, "org-") {
+		slug = "org-" + slug
+	}
+
+	return slug
 }
 
 func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, error) {

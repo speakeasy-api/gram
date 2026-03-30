@@ -47,17 +47,18 @@ func TestService_CreateRole(t *testing.T) {
 	roles, err := ti.roles.ListRoles(ctx, "org_workos_test")
 	require.NoError(t, err)
 	require.Len(t, roles, 1)
-	require.Equal(t, "custom-builder", roles[0].Slug)
+	require.Equal(t, "org-custom-builder", roles[0].Slug)
 
-	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: new(urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder").String())})
+	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder").String()
+	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: &principalURN})
 	require.NoError(t, err)
 	require.Len(t, grants.Grants, 3)
 
 	members, err := ti.roles.ListMembers(ctx, "org_workos_test")
 	require.NoError(t, err)
 	require.Len(t, members, 2)
-	require.Equal(t, "custom-builder", members[0].RoleSlug)
-	require.Equal(t, "custom-builder", members[1].RoleSlug)
+	require.Equal(t, "org-custom-builder", members[0].RoleSlug)
+	require.Equal(t, "org-custom-builder", members[1].RoleSlug)
 }
 
 func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
@@ -110,7 +111,7 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 	roles, err := ti.roles.ListRoles(ctx, "org_workos_test")
 	require.NoError(t, err)
 	require.Len(t, roles, 1)
-	require.Equal(t, "broken-builder", roles[0].Slug)
+	require.Equal(t, "org-broken-builder", roles[0].Slug)
 
 	members, err := ti.roles.ListMembers(ctx, "org_workos_test")
 	require.NoError(t, err)
@@ -120,7 +121,7 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 
 	grants, err := accessrepo.New(inspectConn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, "broken-builder").String(),
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, "org-broken-builder").String(),
 	})
 	require.NoError(t, err)
 	require.Empty(t, grants)
