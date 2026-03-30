@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -285,6 +286,19 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, logger)
 		}
+
+		envr := environments_repo.New(dbtx)
+		_, err = envr.GetEnvironmentByID(ctx, environments_repo.GetEnvironmentByIDParams{
+			ID:        parsedDefaultEnvironmentID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeBadRequest, err, "default environment not found in this project").Log(ctx, logger)
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "validate default environment ID").Log(ctx, logger)
+		}
+
 		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
 	}
 
