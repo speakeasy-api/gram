@@ -22,7 +22,7 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(ScopeBuildWrite), "project-stale")
 	seedInternalGrant(t, ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "other-role"), string(ScopeBuildRead), "project-other")
 
-	err := svc.syncGrants(ctx, organizationID, roleSlug, []*RoleGrant{
+	err := syncGrants(ctx, svc.logger, conn, organizationID, roleSlug, []*RoleGrant{
 		{
 			Scope:     string(ScopeBuildRead),
 			Resources: nil,
@@ -76,7 +76,7 @@ func TestService_syncGrants_clearsRoleGrantsWhenEmpty(t *testing.T) {
 	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(ScopeBuildRead), WildcardResource)
 	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(ScopeMCPRead), "tool:payments")
 
-	err := svc.syncGrants(ctx, organizationID, roleSlug, nil)
+	err := syncGrants(ctx, svc.logger, conn, organizationID, roleSlug, nil)
 	require.NoError(t, err)
 
 	rows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{

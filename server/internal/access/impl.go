@@ -165,7 +165,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	// newly created WorkOS role with no local grants, but it avoids assigning users
 	// to a role whose effective permissions are incomplete or unknown. Returning an
 	// error makes the setup retryable without creating accidental access.
-	if err := s.syncGrants(ctx, ac.ActiveOrganizationID, wr.Slug, roleGrantPayloads(payload.Grants)); err != nil {
+	if err := syncGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID, wr.Slug, roleGrantPayloads(payload.Grants)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, s.logger)
 	}
 
@@ -227,7 +227,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	// As with role creation, member reassignment happens after local grant sync so
 	// a failed sync never leaves users attached to a role with incomplete access.
 	if payload.Grants != nil {
-		if err := s.syncGrants(ctx, ac.ActiveOrganizationID, currentRole.Slug, roleGrantPayloads(payload.Grants)); err != nil {
+		if err := syncGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID, currentRole.Slug, roleGrantPayloads(payload.Grants)); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, s.logger)
 		}
 	}
@@ -535,114 +535,6 @@ func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.Remove
 	return nil
 }
 
-type RoleGrant struct {
-	Scope     string
-	Resources []string
-}
-
-func (s *Service) syncGrants(ctx context.Context, orgID string, roleSlug string, grants []*RoleGrant) error {
-	if orgID == "" {
-		return fmt.Errorf("organization id is required")
-	}
-
-	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin grant sync transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	q := repo.New(tx)
-
-	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   principalURN,
-	}); err != nil {
-		return fmt.Errorf("delete grants for role %q: %w", roleSlug, err)
-	}
-
-	for _, grant := range grants {
-		if grant == nil {
-			continue
-		}
-
-		if grant.Resources == nil {
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-				OrganizationID: orgID,
-				PrincipalUrn:   principalURN,
-				Scope:          grant.Scope,
-				Resource:       WildcardResource,
-			}); err != nil {
-				return fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
-			}
-
-			continue
-		}
-
-		for _, resource := range grant.Resources {
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-				OrganizationID: orgID,
-				PrincipalUrn:   principalURN,
-				Scope:          grant.Scope,
-				Resource:       resource,
-			}); err != nil {
-				return fmt.Errorf("upsert grant %q on resource %q for role %q: %w", grant.Scope, resource, roleSlug, err)
-			}
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit grant sync transaction: %w", err)
-	}
-
-	return nil
-}
-
-func (s *Service) grantsForRole(ctx context.Context, orgID string, roleSlug string) ([]*gen.RoleGrant, error) {
-	rows, err := repo.New(s.db).ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug).String(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list grants for role %q: %w", roleSlug, err)
-	}
-
-	type scopeAgg struct {
-		unrestricted bool
-		resources    []string
-	}
-	byScope := make(map[string]*scopeAgg)
-	for _, row := range rows {
-		agg, ok := byScope[row.Scope]
-		if !ok {
-			agg = &scopeAgg{unrestricted: false, resources: nil}
-			byScope[row.Scope] = agg
-		}
-		if row.Resource == WildcardResource {
-			agg.unrestricted = true
-			agg.resources = nil
-			continue
-		}
-		if !agg.unrestricted {
-			agg.resources = append(agg.resources, row.Resource)
-		}
-	}
-
-	grants := make([]*gen.RoleGrant, 0, len(byScope))
-	for scope, agg := range byScope {
-		grant := &gen.RoleGrant{Scope: scope, Resources: nil}
-		if agg.unrestricted {
-			grant.Resources = nil
-		} else {
-			grant.Resources = append([]string(nil), agg.resources...)
-		}
-		grants = append(grants, grant)
-	}
-
-	return grants, nil
-}
-
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil {
@@ -726,9 +618,9 @@ func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContex
 }
 
 func (s *Service) buildRole(ctx context.Context, organizationID string, role workos.Role, memberCount int) (*gen.Role, error) {
-	grants, err := s.grantsForRole(ctx, organizationID, role.Slug)
+	grants, err := grantsForRole(ctx, s.logger, s.db, organizationID, role.Slug)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, s.logger)
+		return nil, err
 	}
 
 	return &gen.Role{
