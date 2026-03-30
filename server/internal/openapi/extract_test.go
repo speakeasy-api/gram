@@ -48,7 +48,8 @@ func (m *MockedDBTX) CopyFrom(ctx context.Context, tableName pgx.Identifier, col
 func TestDoProcess_ValidatesJSONSchema_Speakeasy(t *testing.T) {
 	t.Parallel()
 
-	logger := testenv.NewLogger(t)
+	handler := newCapturingHandler()
+	logger := slog.New(handler)
 	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
 
 	p := &ToolExtractor{
@@ -106,6 +107,22 @@ paths:
 	result, err := p.doSpeakeasy(t.Context(), logger, tracer, tx, validDoc, tet)
 	require.NoError(t, err)
 	require.NotNil(t, result)
+
+	// Verify start/end info logs are emitted
+	records := handler.getRecords()
+	var foundStartLog, foundEndLog bool
+	for _, r := range records {
+		if r.Level == slog.LevelInfo && strings.Contains(r.Message, "[test] processing OpenAPI source") {
+			foundStartLog = true
+		}
+		if r.Level == slog.LevelInfo && strings.Contains(r.Message, "[test] processed OpenAPI source") {
+			foundEndLog = true
+			require.Contains(t, r.Message, "1 tools created", "should report 1 tool created")
+			require.Contains(t, r.Message, "0 tools skipped", "should report 0 tools skipped")
+		}
+	}
+	require.True(t, foundStartLog, "expected info log for processing OpenAPI source")
+	require.True(t, foundEndLog, "expected info log for processed OpenAPI source")
 }
 
 func TestDoProcess_RejectsInvalidJSONSchema_Speakeasy(t *testing.T) {
@@ -457,4 +474,78 @@ paths:
 
 	// Verify the active endpoint was processed (should have a tool definition created)
 	require.Len(t, mockedDBTX.recordedQueryRows, 1, "should have created one tool definition for the active endpoint")
+}
+
+func TestDoProcess_MissingServerURLLoggedAsWarning(t *testing.T) {
+	t.Parallel()
+
+	handler := newCapturingHandler()
+	logger := slog.New(handler)
+	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
+
+	p := &ToolExtractor{
+		logger:       logger,
+		tracer:       tracer,
+		db:           nil,
+		feature:      nil,
+		assetStorage: nil,
+	}
+
+	mockedDBTX := &MockedDBTX{
+		recordedQueryRows: [][]any{},
+		recordedExec:      [][]any{},
+	}
+	tx := repo.New(mockedDBTX)
+
+	deploymentID := uuid.MustParse("87654321-4321-4321-4321-210987654321")
+	projectID := uuid.MustParse("12345678-1234-1234-1234-123456789012")
+	openapiDocID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+
+	// OpenAPI document with no servers section
+	docWithoutServers := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /test:
+    get:
+      operationId: testGet
+      summary: Test operation
+      responses:
+        '200':
+          description: OK
+`)
+
+	tet := ToolExtractorTask{
+		Parser: "speakeasy",
+		DocInfo: &types.OpenAPIv3DeploymentAsset{
+			Name:    "test",
+			Slug:    "test",
+			ID:      "a",
+			AssetID: "b",
+		},
+		ProjectID:          projectID,
+		DeploymentID:       deploymentID,
+		DocumentID:         openapiDocID,
+		DocURL:             nil,
+		ProjectSlug:        "c",
+		OrgSlug:            "d",
+		OnOperationSkipped: nil,
+	}
+
+	result, err := p.doSpeakeasy(t.Context(), logger, tracer, tx, docWithoutServers, tet)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify tool definition was still created
+	require.Len(t, mockedDBTX.recordedQueryRows, 1, "should have created one tool definition despite missing server URL")
+
+	// Verify no error-level logs about server URLs
+	records := handler.getRecords()
+	for _, r := range records {
+		if r.Level == slog.LevelError && strings.Contains(r.Message, "server") {
+			t.Errorf("unexpected error log about server: %s", r.Message)
+		}
+	}
 }

@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"runtime"
@@ -22,6 +23,7 @@ import (
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
@@ -92,6 +94,22 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	orgData, err := p.projects.GetProjectWithOrganizationMetadata(ctx, uuid.MustParse(deployment.ProjectID))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").Log(ctx, p.logger)
+	}
+
+	numOpenAPISources := len(deployment.Openapiv3Assets)
+	numFunctionSources := len(deployment.FunctionsAssets)
+	numExternalMCPs := len(deployment.ExternalMcps)
+
+	logErr := p.repo.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
+		DeploymentID:   deploymentID,
+		ProjectID:      projectID,
+		Event:          "log:info",
+		Message:        fmt.Sprintf("Processing deployment: %d OpenAPI sources, %d function sources, %d external MCP servers", numOpenAPISources, numFunctionSources, numExternalMCPs),
+		AttachmentID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		AttachmentType: conv.ToPGTextEmpty(""),
+	})
+	if logErr != nil {
+		p.logger.ErrorContext(ctx, "error logging deployment event", attr.SlogError(logErr))
 	}
 
 	workers := pool.New().WithErrors().WithMaxGoroutines(max(2, runtime.GOMAXPROCS(0)))
