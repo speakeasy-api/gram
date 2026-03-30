@@ -525,6 +525,87 @@ paths:
             x-speakeasy-name-override: listRoles
             x-speakeasy-react-hook:
                 name: Roles
+    /rpc/access.listScopes:
+        get:
+            description: List all available scopes and their resource types.
+            operationId: listScopes
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListScopesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listScopes access
+            tags:
+                - access
+            x-speakeasy-name-override: listScopes
+            x-speakeasy-react-hook:
+                name: ListScopes
     /rpc/access.removeGrants:
         post:
             description: Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).
@@ -17546,6 +17627,16 @@ components:
                     description: The roles in your organization.
             required:
                 - roles
+        ListScopesResult:
+            type: object
+            properties:
+                scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ScopeDefinition'
+                    description: The scopes available in access control.
+            required:
+                - scopes
         ListSlackAppsResult:
             type: object
             properties:
@@ -18862,6 +18953,34 @@ components:
                         - mcp:connect
             required:
                 - scope
+        ScopeDefinition:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What this scope protects.
+                resource_type:
+                    type: string
+                    description: The type of resource this scope applies to.
+                    enum:
+                        - org
+                        - project
+                        - mcp
+                slug:
+                    type: string
+                    description: Unique scope identifier.
+                    enum:
+                        - org:read
+                        - org:admin
+                        - build:read
+                        - build:write
+                        - mcp:read
+                        - mcp:write
+                        - mcp:connect
+            required:
+                - slug
+                - description
+                - resource_type
         SearchChatsFilter:
             type: object
             properties:

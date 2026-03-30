@@ -118,6 +118,26 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteRole"}`)
 	})
 
+	Method("listScopes", func() {
+		Description("List all available scopes and their resource types.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListScopesResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listScopes")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listScopes")
+		Meta("openapi:extension:x-speakeasy-name-override", "listScopes")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListScopes"}`)
+	})
+
 	Method("listMembers", func() {
 		Description("List all team members with their role assignments.")
 
@@ -368,6 +388,25 @@ var ListGrantsResult = Type("ListGrantsResult", func() {
 var ListRolesResult = Type("ListRolesResult", func() {
 	Required("roles")
 	Attribute("roles", ArrayOf(RoleModel), "The roles in your organization.")
+})
+
+var ScopeModel = Type("ScopeDefinition", func() {
+	Required("slug", "description", "resource_type")
+
+	Attribute("slug", String, func() {
+		Description("Unique scope identifier.")
+		Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+	})
+	Attribute("description", String, "What this scope protects.")
+	Attribute("resource_type", String, func() {
+		Description("The type of resource this scope applies to.")
+		Enum("org", "project", "mcp")
+	})
+})
+
+var ListScopesResult = Type("ListScopesResult", func() {
+	Required("scopes")
+	Attribute("scopes", ArrayOf(ScopeModel), "The scopes available in access control.")
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {

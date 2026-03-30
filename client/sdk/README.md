@@ -140,6 +140,7 @@ run();
 * [list](docs/sdks/access/README.md#list) - listGrants access
 * [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
+* [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
 * [remove](docs/sdks/access/README.md#remove) - removeGrants access
 * [removePrincipal](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 * [updateMemberRole](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
@@ -380,6 +381,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessList`](docs/sdks/access/README.md#list) - listGrants access
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
+- [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
 - [`accessRemove`](docs/sdks/access/README.md#remove) - removeGrants access
 - [`accessRemovePrincipal`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 - [`accessUpdateMemberRole`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
@@ -622,6 +624,7 @@ To learn about this feature and how to get started, check
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
+- [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
 - [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets

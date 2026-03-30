@@ -1169,6 +1169,236 @@ func DecodeDeleteRoleResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildListScopesRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "listScopes" endpoint
+func (c *Client) BuildListScopesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListScopesAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listScopes", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListScopesRequest returns an encoder for requests sent to the access
+// listScopes server.
+func EncodeListScopesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListScopesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listScopes", "*access.ListScopesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListScopesResponse returns a decoder for responses returned by the
+// access listScopes endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListScopesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListScopesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			res := NewListScopesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListScopesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			return nil, NewListScopesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListScopesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			return nil, NewListScopesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListScopesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			return nil, NewListScopesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListScopesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			return nil, NewListScopesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListScopesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			return nil, NewListScopesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListScopesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			return nil, NewListScopesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListScopesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			return nil, NewListScopesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListScopesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+				}
+				err = ValidateListScopesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listScopes", err)
+				}
+				return nil, NewListScopesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListScopesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+				}
+				err = ValidateListScopesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listScopes", err)
+				}
+				return nil, NewListScopesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listScopes", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListScopesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			return nil, NewListScopesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listScopes", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListMembersRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "listMembers" endpoint
 func (c *Client) BuildListMembersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2628,6 +2858,19 @@ func marshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *acce
 		for i, val := range v.Resources {
 			res.Resources[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition builds a value
+// of type *access.ScopeDefinition from a value of type
+// *ScopeDefinitionResponseBody.
+func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinitionResponseBody) *access.ScopeDefinition {
+	res := &access.ScopeDefinition{
+		Slug:         *v.Slug,
+		Description:  *v.Description,
+		ResourceType: *v.ResourceType,
 	}
 
 	return res

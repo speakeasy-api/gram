@@ -88,6 +88,7 @@ export * from "./listpackages.js";
 export * from "./listprojects.js";
 export * from "./listresources.js";
 export * from "./listroles.js";
+export * from "./listscopes.js";
 export * from "./listservernameoverrides.js";
 export * from "./listslackapps.js";
 export * from "./listtemplates.js";

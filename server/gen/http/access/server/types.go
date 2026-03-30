@@ -138,6 +138,13 @@ type UpdateRoleResponseBody struct {
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ListScopesResponseBody is the type of the "access" service "listScopes"
+// endpoint HTTP response body.
+type ListScopesResponseBody struct {
+	// The scopes available in access control.
+	Scopes []*ScopeDefinitionResponseBody `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
 // ListMembersResponseBody is the type of the "access" service "listMembers"
 // endpoint HTTP response body.
 type ListMembersResponseBody struct {
@@ -1061,6 +1068,186 @@ type DeleteRoleUnexpectedResponseBody struct {
 // DeleteRoleGatewayErrorResponseBody is the type of the "access" service
 // "deleteRole" endpoint HTTP response body for the "gateway_error" error.
 type DeleteRoleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesUnauthorizedResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "unauthorized" error.
+type ListScopesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesForbiddenResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "forbidden" error.
+type ListScopesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesBadRequestResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "bad_request" error.
+type ListScopesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesNotFoundResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "not_found" error.
+type ListScopesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesConflictResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "conflict" error.
+type ListScopesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesUnsupportedMediaResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "unsupported_media" error.
+type ListScopesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesInvalidResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "invalid" error.
+type ListScopesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesInvariantViolationResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "invariant_violation" error.
+type ListScopesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesUnexpectedResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "unexpected" error.
+type ListScopesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListScopesGatewayErrorResponseBody is the type of the "access" service
+// "listScopes" endpoint HTTP response body for the "gateway_error" error.
+type ListScopesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2197,6 +2384,16 @@ type RoleGrantResponseBody struct {
 	Resources []string `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 }
 
+// ScopeDefinitionResponseBody is used to define fields on response body types.
+type ScopeDefinitionResponseBody struct {
+	// Unique scope identifier.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// What this scope protects.
+	Description string `form:"description" json:"description" xml:"description"`
+	// The type of resource this scope applies to.
+	ResourceType string `form:"resource_type" json:"resource_type" xml:"resource_type"`
+}
+
 // AccessMemberResponseBody is used to define fields on response body types.
 type AccessMemberResponseBody struct {
 	// User ID.
@@ -2350,6 +2547,25 @@ func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 		}
 	} else {
 		body.Grants = []*RoleGrantResponseBody{}
+	}
+	return body
+}
+
+// NewListScopesResponseBody builds the HTTP response body from the result of
+// the "listScopes" endpoint of the "access" service.
+func NewListScopesResponseBody(res *access.ListScopesResult) *ListScopesResponseBody {
+	body := &ListScopesResponseBody{}
+	if res.Scopes != nil {
+		body.Scopes = make([]*ScopeDefinitionResponseBody, len(res.Scopes))
+		for i, val := range res.Scopes {
+			if val == nil {
+				body.Scopes[i] = nil
+				continue
+			}
+			body.Scopes[i] = marshalAccessScopeDefinitionToScopeDefinitionResponseBody(val)
+		}
+	} else {
+		body.Scopes = []*ScopeDefinitionResponseBody{}
 	}
 	return body
 }
@@ -3115,6 +3331,146 @@ func NewDeleteRoleUnexpectedResponseBody(res *goa.ServiceError) *DeleteRoleUnexp
 // result of the "deleteRole" endpoint of the "access" service.
 func NewDeleteRoleGatewayErrorResponseBody(res *goa.ServiceError) *DeleteRoleGatewayErrorResponseBody {
 	body := &DeleteRoleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listScopes" endpoint of the "access" service.
+func NewListScopesUnauthorizedResponseBody(res *goa.ServiceError) *ListScopesUnauthorizedResponseBody {
+	body := &ListScopesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesForbiddenResponseBody builds the HTTP response body from the
+// result of the "listScopes" endpoint of the "access" service.
+func NewListScopesForbiddenResponseBody(res *goa.ServiceError) *ListScopesForbiddenResponseBody {
+	body := &ListScopesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesBadRequestResponseBody builds the HTTP response body from the
+// result of the "listScopes" endpoint of the "access" service.
+func NewListScopesBadRequestResponseBody(res *goa.ServiceError) *ListScopesBadRequestResponseBody {
+	body := &ListScopesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listScopes" endpoint of the "access" service.
+func NewListScopesNotFoundResponseBody(res *goa.ServiceError) *ListScopesNotFoundResponseBody {
+	body := &ListScopesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesConflictResponseBody builds the HTTP response body from the
+// result of the "listScopes" endpoint of the "access" service.
+func NewListScopesConflictResponseBody(res *goa.ServiceError) *ListScopesConflictResponseBody {
+	body := &ListScopesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listScopes" endpoint of the "access" service.
+func NewListScopesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListScopesUnsupportedMediaResponseBody {
+	body := &ListScopesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesInvalidResponseBody builds the HTTP response body from the
+// result of the "listScopes" endpoint of the "access" service.
+func NewListScopesInvalidResponseBody(res *goa.ServiceError) *ListScopesInvalidResponseBody {
+	body := &ListScopesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listScopes" endpoint of the "access" service.
+func NewListScopesInvariantViolationResponseBody(res *goa.ServiceError) *ListScopesInvariantViolationResponseBody {
+	body := &ListScopesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listScopes" endpoint of the "access" service.
+func NewListScopesUnexpectedResponseBody(res *goa.ServiceError) *ListScopesUnexpectedResponseBody {
+	body := &ListScopesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListScopesGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listScopes" endpoint of the "access" service.
+func NewListScopesGatewayErrorResponseBody(res *goa.ServiceError) *ListScopesGatewayErrorResponseBody {
+	body := &ListScopesGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4051,6 +4407,14 @@ func NewUpdateRolePayload(body *UpdateRoleRequestBody, sessionToken *string) *ac
 func NewDeleteRolePayload(id string, sessionToken *string) *access.DeleteRolePayload {
 	v := &access.DeleteRolePayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListScopesPayload builds a access service listScopes endpoint payload.
+func NewListScopesPayload(sessionToken *string) *access.ListScopesPayload {
+	v := &access.ListScopesPayload{}
 	v.SessionToken = sessionToken
 
 	return v

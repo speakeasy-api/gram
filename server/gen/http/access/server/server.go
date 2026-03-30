@@ -24,6 +24,7 @@ type Server struct {
 	CreateRole            http.Handler
 	UpdateRole            http.Handler
 	DeleteRole            http.Handler
+	ListScopes            http.Handler
 	ListMembers           http.Handler
 	UpdateMemberRole      http.Handler
 	ListGrants            http.Handler
@@ -64,6 +65,7 @@ func New(
 			{"CreateRole", "POST", "/rpc/access.createRole"},
 			{"UpdateRole", "PUT", "/rpc/access.updateRole"},
 			{"DeleteRole", "DELETE", "/rpc/access.deleteRole"},
+			{"ListScopes", "GET", "/rpc/access.listScopes"},
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"UpdateMemberRole", "PUT", "/rpc/access.updateMemberRole"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
@@ -76,6 +78,7 @@ func New(
 		CreateRole:            NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
 		UpdateRole:            NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
 		DeleteRole:            NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
+		ListScopes:            NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
 		ListMembers:           NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		UpdateMemberRole:      NewUpdateMemberRoleHandler(e.UpdateMemberRole, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:            NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
@@ -95,6 +98,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRole = m(s.CreateRole)
 	s.UpdateRole = m(s.UpdateRole)
 	s.DeleteRole = m(s.DeleteRole)
+	s.ListScopes = m(s.ListScopes)
 	s.ListMembers = m(s.ListMembers)
 	s.UpdateMemberRole = m(s.UpdateMemberRole)
 	s.ListGrants = m(s.ListGrants)
@@ -113,6 +117,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRoleHandler(mux, h.CreateRole)
 	MountUpdateRoleHandler(mux, h.UpdateRole)
 	MountDeleteRoleHandler(mux, h.DeleteRole)
+	MountListScopesHandler(mux, h.ListScopes)
 	MountListMembersHandler(mux, h.ListMembers)
 	MountUpdateMemberRoleHandler(mux, h.UpdateMemberRole)
 	MountListGrantsHandler(mux, h.ListGrants)
@@ -368,6 +373,59 @@ func NewDeleteRoleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteRole")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListScopesHandler configures the mux to serve the "access" service
+// "listScopes" endpoint.
+func MountListScopesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listScopes", f)
+}
+
+// NewListScopesHandler creates a HTTP handler which loads the HTTP request and
+// calls the "access" service "listScopes" endpoint.
+func NewListScopesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListScopesRequest(mux, decoder)
+		encodeResponse = EncodeListScopesResponse(encoder)
+		encodeError    = EncodeListScopesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listScopes")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

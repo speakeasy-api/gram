@@ -87,6 +87,7 @@ export * from "./listMCPRegistries.js";
 export * from "./listPackages.js";
 export * from "./listProjects.js";
 export * from "./listResources.js";
+export * from "./listScopes.js";
 export * from "./listSlackApps.js";
 export * from "./listTools.js";
 export * from "./listToolsets.js";

@@ -37,6 +37,10 @@ type Client struct {
 	// endpoint.
 	DeleteRoleDoer goahttp.Doer
 
+	// ListScopes Doer is the HTTP client used to make requests to the listScopes
+	// endpoint.
+	ListScopesDoer goahttp.Doer
+
 	// ListMembers Doer is the HTTP client used to make requests to the listMembers
 	// endpoint.
 	ListMembersDoer goahttp.Doer
@@ -86,6 +90,7 @@ func NewClient(
 		CreateRoleDoer:            doer,
 		UpdateRoleDoer:            doer,
 		DeleteRoleDoer:            doer,
+		ListScopesDoer:            doer,
 		ListMembersDoer:           doer,
 		UpdateMemberRoleDoer:      doer,
 		ListGrantsDoer:            doer,
@@ -215,6 +220,30 @@ func (c *Client) DeleteRole() goa.Endpoint {
 		resp, err := c.DeleteRoleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "deleteRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListScopes returns an endpoint that makes HTTP requests to the access
+// service listScopes server.
+func (c *Client) ListScopes() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListScopesRequest(c.encoder)
+		decodeResponse = DecodeListScopesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListScopesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListScopesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listScopes", err)
 		}
 		return decodeResponse(resp)
 	}

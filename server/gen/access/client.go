@@ -20,6 +20,7 @@ type Client struct {
 	CreateRoleEndpoint            goa.Endpoint
 	UpdateRoleEndpoint            goa.Endpoint
 	DeleteRoleEndpoint            goa.Endpoint
+	ListScopesEndpoint            goa.Endpoint
 	ListMembersEndpoint           goa.Endpoint
 	UpdateMemberRoleEndpoint      goa.Endpoint
 	ListGrantsEndpoint            goa.Endpoint
@@ -29,13 +30,14 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listMembers, updateMemberRole, listGrants, upsertGrants, removeGrants, removePrincipalGrants goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, updateMemberRole, listGrants, upsertGrants, removeGrants, removePrincipalGrants goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:             listRoles,
 		GetRoleEndpoint:               getRole,
 		CreateRoleEndpoint:            createRole,
 		UpdateRoleEndpoint:            updateRole,
 		DeleteRoleEndpoint:            deleteRole,
+		ListScopesEndpoint:            listScopes,
 		ListMembersEndpoint:           listMembers,
 		UpdateMemberRoleEndpoint:      updateMemberRole,
 		ListGrantsEndpoint:            listGrants,
@@ -149,6 +151,28 @@ func (c *Client) UpdateRole(ctx context.Context, p *UpdateRolePayload) (res *Rol
 func (c *Client) DeleteRole(ctx context.Context, p *DeleteRolePayload) (err error) {
 	_, err = c.DeleteRoleEndpoint(ctx, p)
 	return
+}
+
+// ListScopes calls the "listScopes" endpoint of the "access" service.
+// ListScopes may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListScopes(ctx context.Context, p *ListScopesPayload) (res *ListScopesResult, err error) {
+	var ires any
+	ires, err = c.ListScopesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListScopesResult), nil
 }
 
 // ListMembers calls the "listMembers" endpoint of the "access" service.

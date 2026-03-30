@@ -180,6 +180,21 @@ func BuildDeleteRolePayload(accessDeleteRoleID string, accessDeleteRoleSessionTo
 	return v, nil
 }
 
+// BuildListScopesPayload builds the payload for the access listScopes endpoint
+// from CLI flags.
+func BuildListScopesPayload(accessListScopesSessionToken string) (*access.ListScopesPayload, error) {
+	var sessionToken *string
+	{
+		if accessListScopesSessionToken != "" {
+			sessionToken = &accessListScopesSessionToken
+		}
+	}
+	v := &access.ListScopesPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListMembersPayload builds the payload for the access listMembers
 // endpoint from CLI flags.
 func BuildListMembersPayload(accessListMembersSessionToken string) (*access.ListMembersPayload, error) {

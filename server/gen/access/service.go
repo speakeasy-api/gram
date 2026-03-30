@@ -27,6 +27,8 @@ type Service interface {
 	UpdateRole(context.Context, *UpdateRolePayload) (res *Role, err error)
 	// Delete a custom role (system roles cannot be deleted).
 	DeleteRole(context.Context, *DeleteRolePayload) (err error)
+	// List all available scopes and their resource types.
+	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
 	// List all team members with their role assignments.
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
 	// Change a team member's role assignment.
@@ -64,7 +66,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listMembers", "updateMemberRole", "listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants"}
+var MethodNames = [12]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "updateMemberRole", "listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants"}
 
 // AccessMember is the result type of the access service updateMemberRole
 // method.
@@ -186,6 +188,18 @@ type ListRolesResult struct {
 	Roles []*Role
 }
 
+// ListScopesPayload is the payload type of the access service listScopes
+// method.
+type ListScopesPayload struct {
+	SessionToken *string
+}
+
+// ListScopesResult is the result type of the access service listScopes method.
+type ListScopesResult struct {
+	// The scopes available in access control.
+	Scopes []*ScopeDefinition
+}
+
 // RemoveGrantsPayload is the payload type of the access service removeGrants
 // method.
 type RemoveGrantsPayload struct {
@@ -229,6 +243,15 @@ type RoleGrant struct {
 	// Resource allowlist. Null means unrestricted access. An array means only the
 	// listed resource IDs.
 	Resources []string
+}
+
+type ScopeDefinition struct {
+	// Unique scope identifier.
+	Slug string
+	// What this scope protects.
+	Description string
+	// The type of resource this scope applies to.
+	ResourceType string
 }
 
 // UpdateMemberRolePayload is the payload type of the access service

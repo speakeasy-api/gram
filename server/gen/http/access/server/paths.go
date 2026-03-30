@@ -32,6 +32,11 @@ func DeleteRoleAccessPath() string {
 	return "/rpc/access.deleteRole"
 }
 
+// ListScopesAccessPath returns the URL path to the access service listScopes HTTP endpoint.
+func ListScopesAccessPath() string {
+	return "/rpc/access.listScopes"
+}
+
 // ListMembersAccessPath returns the URL path to the access service listMembers HTTP endpoint.
 func ListMembersAccessPath() string {
 	return "/rpc/access.listMembers"

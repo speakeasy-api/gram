@@ -53,7 +53,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-members|update-member-role|list-grants|upsert-grants|remove-grants|remove-principal-grants)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|update-member-role|list-grants|upsert-grants|remove-grants|remove-principal-grants)",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
@@ -129,6 +129,9 @@ func ParseEndpoint(
 		accessDeleteRoleFlags            = flag.NewFlagSet("delete-role", flag.ExitOnError)
 		accessDeleteRoleIDFlag           = accessDeleteRoleFlags.String("id", "REQUIRED", "")
 		accessDeleteRoleSessionTokenFlag = accessDeleteRoleFlags.String("session-token", "", "")
+
+		accessListScopesFlags            = flag.NewFlagSet("list-scopes", flag.ExitOnError)
+		accessListScopesSessionTokenFlag = accessListScopesFlags.String("session-token", "", "")
 
 		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
 		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
@@ -939,6 +942,7 @@ func ParseEndpoint(
 	accessCreateRoleFlags.Usage = accessCreateRoleUsage
 	accessUpdateRoleFlags.Usage = accessUpdateRoleUsage
 	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
+	accessListScopesFlags.Usage = accessListScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
@@ -1245,6 +1249,9 @@ func ParseEndpoint(
 
 			case "delete-role":
 				epf = accessDeleteRoleFlags
+
+			case "list-scopes":
+				epf = accessListScopesFlags
 
 			case "list-members":
 				epf = accessListMembersFlags
@@ -1812,6 +1819,9 @@ func ParseEndpoint(
 			case "delete-role":
 				endpoint = c.DeleteRole()
 				data, err = accessc.BuildDeleteRolePayload(*accessDeleteRoleIDFlag, *accessDeleteRoleSessionTokenFlag)
+			case "list-scopes":
+				endpoint = c.ListScopes()
+				data, err = accessc.BuildListScopesPayload(*accessListScopesSessionTokenFlag)
 			case "list-members":
 				endpoint = c.ListMembers()
 				data, err = accessc.BuildListMembersPayload(*accessListMembersSessionTokenFlag)
@@ -2389,6 +2399,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    create-role: Create a new custom role.`)
 	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
 	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
+	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List all permissions in your organization, optionally filtered to a specific user or role.`)
@@ -2495,6 +2506,24 @@ func accessDeleteRoleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-role --id \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListScopesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-scopes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all available scopes and their resource types.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-scopes --session-token \"abc123\"")
 }
 
 func accessListMembersUsage() {

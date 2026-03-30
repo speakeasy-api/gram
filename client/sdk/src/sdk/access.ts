@@ -8,6 +8,7 @@ import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessList } from "../funcs/accessList.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
+import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessRemove } from "../funcs/accessRemove.js";
 import { accessRemovePrincipal } from "../funcs/accessRemovePrincipal.js";
 import { accessUpdateMemberRole } from "../funcs/accessUpdateMemberRole.js";
@@ -126,6 +127,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListRolesResult> {
     return unwrapAsync(accessListRoles(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listScopes access
+   *
+   * @remarks
+   * List all available scopes and their resource types.
+   */
+  async listScopes(
+    request?: operations.ListScopesRequest | undefined,
+    security?: operations.ListScopesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListScopesResult> {
+    return unwrapAsync(accessListScopes(
       this,
       request,
       security,

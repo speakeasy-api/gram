@@ -299,6 +299,22 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	return nil
 }
 
+func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
+	if _, err := s.authContext(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
+		{Slug: string(ScopeOrgRead), Description: "Read organization metadata and members.", ResourceType: "org"},
+		{Slug: string(ScopeOrgAdmin), Description: "Manage organization access and settings.", ResourceType: "org"},
+		{Slug: string(ScopeBuildRead), Description: "View projects and build-related resources.", ResourceType: "project"},
+		{Slug: string(ScopeBuildWrite), Description: "Create and modify projects and build-related resources.", ResourceType: "project"},
+		{Slug: string(ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
+		{Slug: string(ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
+		{Slug: string(ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
+	}}, nil
+}
+
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
 	_, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
