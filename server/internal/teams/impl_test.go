@@ -44,6 +44,25 @@ func jsonResp(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// seedInviterUser creates a user in the local DB with the given WorkOS ID and display name,
+// so that resolveInviterName can look them up without calling the WorkOS API.
+func seedInviterUser(t *testing.T, ti *testInstance, workosUserID, displayName string) {
+	t.Helper()
+	ctx := context.Background()
+	userID := "inviter-" + workosUserID
+	_, err := userRepo.New(ti.conn).UpsertUser(ctx, userRepo.UpsertUserParams{
+		ID:          userID,
+		Email:       userID + "@example.com",
+		DisplayName: displayName,
+	})
+	require.NoError(t, err)
+	err = userRepo.New(ti.conn).SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+		WorkosID: pgtype.Text{String: workosUserID, Valid: true},
+		ID:       userID,
+	})
+	require.NoError(t, err)
+}
+
 // seedWorkOSIDs sets workos_id on the test user and organization so the service
 // can resolve Gram IDs to WorkOS IDs.
 func seedWorkOSIDs(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext) {
@@ -296,15 +315,6 @@ func TestResendInvite(t *testing.T) {
 				UpdatedAt:      "2026-03-26T00:00:00Z",
 			})
 		})
-		// GetUser for inviter name resolution
-		mux.HandleFunc("/user_management/users/wos_inviter_123", func(w http.ResponseWriter, r *http.Request) {
-			jsonResp(w, http.StatusOK, usermanagement.User{
-				ID:        "wos_inviter_123",
-				Email:     "inviter@example.com",
-				FirstName: "Jane",
-				LastName:  "Doe",
-			})
-		})
 
 		wos := workosStub(t, mux)
 		ctx, ti := newTestTeamsService(t, wos)
@@ -312,6 +322,7 @@ func TestResendInvite(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		seedWorkOSIDs(t, ti, authCtx)
+		seedInviterUser(t, ti, "wos_inviter_123", "Jane Doe")
 
 		result, err := ti.service.ResendInvite(ctx, &gen.ResendInvitePayload{
 			InviteID: "inv_resend",
@@ -319,7 +330,7 @@ func TestResendInvite(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "inv_resend", result.Invite.ID)
-		assert.Equal(t, "Jane Doe", result.Invite.InvitedBy, "inviter name should be resolved from WorkOS")
+		assert.Equal(t, "Jane Doe", result.Invite.InvitedBy, "inviter name should be resolved from local DB")
 	})
 
 	t.Run("IDOR: rejects invite belonging to another org", func(t *testing.T) {
@@ -405,22 +416,13 @@ func TestGetInviteInfo(t *testing.T) {
 				InviterUserID:  "wos_inviter_456",
 			})
 		})
-		// GetUser for inviter
-		mux.HandleFunc("/user_management/users/wos_inviter_456", func(w http.ResponseWriter, r *http.Request) {
-			jsonResp(w, http.StatusOK, usermanagement.User{
-				ID:        "wos_inviter_456",
-				Email:     "boss@example.com",
-				FirstName: "The",
-				LastName:  "Boss",
-			})
-		})
-
 		wos := workosStub(t, mux)
 		ctx, ti := newTestTeamsService(t, wos)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		seedWorkOSIDs(t, ti, authCtx)
+		seedInviterUser(t, ti, "wos_inviter_456", "The Boss")
 
 		result, err := ti.service.GetInviteInfo(ctx, &gen.GetInviteInfoPayload{
 			Token: "tok_test",

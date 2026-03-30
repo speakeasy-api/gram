@@ -136,20 +136,6 @@ func (s *Service) verifyInviteBelongsToOrg(ctx context.Context, w *workos.WorkOS
 	return inv, nil
 }
 
-func workosDisplayName(firstName, lastName, email string) string {
-	displayName := firstName
-	if lastName != "" {
-		if displayName != "" {
-			displayName += " "
-		}
-		displayName += lastName
-	}
-	if displayName == "" {
-		displayName = email
-	}
-	return displayName
-}
-
 func invitationToGenInvite(inv usermanagement.Invitation, inviterName string) *gen.TeamInvite {
 	return &gen.TeamInvite{
 		ID:        inv.ID,
@@ -161,15 +147,15 @@ func invitationToGenInvite(inv usermanagement.Invitation, inviterName string) *g
 	}
 }
 
-func (s *Service) resolveInviterName(ctx context.Context, w *workos.WorkOS, inviterUserID string) string {
-	if inviterUserID == "" {
+func (s *Service) resolveInviterName(ctx context.Context, inviterWorkOSUserID string) string {
+	if inviterWorkOSUserID == "" {
 		return ""
 	}
-	inviter, err := w.GetUser(ctx, inviterUserID)
+	user, err := s.userRepo.GetUserByWorkosID(ctx, pgtype.Text{String: inviterWorkOSUserID, Valid: true})
 	if err != nil {
 		return ""
 	}
-	return workosDisplayName(inviter.FirstName, inviter.LastName, inviter.Email)
+	return user.DisplayName
 }
 
 func (s *Service) ListMembers(ctx context.Context, payload *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
@@ -243,7 +229,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	inviterName := s.resolveInviterName(ctx, wos, inviterWorkOSID)
+	inviterName := s.resolveInviterName(ctx, inviterWorkOSID)
 
 	return &gen.InviteMemberResult{
 		Invite: invitationToGenInvite(inv, inviterName),
@@ -276,7 +262,7 @@ func (s *Service) ListInvites(ctx context.Context, payload *gen.ListInvitesPaylo
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	// Deduplicate inviter lookups to avoid N+1 API calls
+	// Deduplicate inviter lookups to avoid N+1 DB queries
 	inviterNames := make(map[string]string)
 	for _, inv := range invitations {
 		if inv.InviterUserID != "" {
@@ -284,7 +270,7 @@ func (s *Service) ListInvites(ctx context.Context, payload *gen.ListInvitesPaylo
 		}
 	}
 	for userID := range inviterNames {
-		inviterNames[userID] = s.resolveInviterName(ctx, wos, userID)
+		inviterNames[userID] = s.resolveInviterName(ctx, userID)
 	}
 
 	invites := make([]*gen.TeamInvite, 0, len(invitations))
@@ -354,7 +340,7 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	inviterName := s.resolveInviterName(ctx, wos, inv.InviterUserID)
+	inviterName := s.resolveInviterName(ctx, inv.InviterUserID)
 
 	return &gen.ResendInviteResult{
 		Invite: invitationToGenInvite(inv, inviterName),
@@ -372,7 +358,7 @@ func (s *Service) GetInviteInfo(ctx context.Context, payload *gen.GetInviteInfoP
 		return nil, oops.E(oops.CodeNotFound, err, "invitation not found").Log(ctx, s.logger)
 	}
 
-	inviterName := s.resolveInviterName(ctx, wos, inv.InviterUserID)
+	inviterName := s.resolveInviterName(ctx, inv.InviterUserID)
 
 	var orgName string
 	if inv.OrganizationID != "" {
