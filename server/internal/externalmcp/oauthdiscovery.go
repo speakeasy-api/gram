@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -235,12 +236,74 @@ func buildWellKnownURL(baseURL string) string {
 	return baseURL + "/.well-known/oauth-authorization-server"
 }
 
+// isPrivateIP returns true if the given IP is in a private, loopback, or link-local range.
+func isPrivateIP(ip net.IP) bool {
+	privateRanges := []string{
+		"127.0.0.0/8",    // IPv4 loopback
+		"10.0.0.0/8",     // RFC 1918
+		"172.16.0.0/12",  // RFC 1918
+		"192.168.0.0/16", // RFC 1918
+		"169.254.0.0/16", // Link-local / cloud metadata
+		"0.0.0.0/8",      // Current network
+		"::1/128",         // IPv6 loopback
+		"fc00::/7",        // IPv6 unique local
+		"fe80::/10",       // IPv6 link-local
+	}
+	for _, cidr := range privateRanges {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// validateFetchURL checks that a URL is safe to fetch: it must use HTTPS and must not
+// resolve to a private/internal IP address. This prevents SSRF attacks where a malicious
+// external MCP server could trick the Gram server into making requests to internal services.
+func validateFetchURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	if u.Scheme != "https" {
+		return fmt.Errorf("URL scheme must be https, got %q", u.Scheme)
+	}
+
+	hostname := u.Hostname()
+	ips, err := net.LookupHost(hostname)
+	if err != nil {
+		return fmt.Errorf("DNS lookup failed for %q: %w", hostname, err)
+	}
+
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			return fmt.Errorf("could not parse resolved IP %q", ipStr)
+		}
+		if isPrivateIP(ip) {
+			return fmt.Errorf("URL %q resolves to private/internal IP %s", rawURL, ipStr)
+		}
+	}
+
+	return nil
+}
+
 // fetchJSON fetches JSON from a URL and decodes it into the target.
-func fetchJSON[T any](ctx context.Context, logger *slog.Logger, url string) (*T, error) {
+// The URL is validated before fetching to prevent SSRF attacks.
+func fetchJSON[T any](ctx context.Context, logger *slog.Logger, fetchURL string) (*T, error) {
+	if err := validateFetchURL(fetchURL); err != nil {
+		return nil, fmt.Errorf("URL validation failed: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
