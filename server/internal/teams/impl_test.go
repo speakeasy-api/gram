@@ -72,11 +72,11 @@ func TestListMembers(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
-		// ListUsersInOrg
-		mux.HandleFunc("/user_management/users", func(w http.ResponseWriter, r *http.Request) {
-			jsonResp(w, http.StatusOK, usermanagement.ListUsersResponse{
-				Data: []usermanagement.User{
-					{ID: testWorkOSUserID, Email: "alice@example.com", FirstName: "Alice", LastName: "Smith"},
+		// ListOrgMemberships
+		mux.HandleFunc("/user_management/organization_memberships", func(w http.ResponseWriter, r *http.Request) {
+			jsonResp(w, http.StatusOK, usermanagement.ListOrganizationMembershipsResponse{
+				Data: []usermanagement.OrganizationMembership{
+					{ID: "om_1", UserID: testWorkOSUserID, OrganizationID: testWorkOSOrgID, CreatedAt: "2026-01-15T00:00:00Z"},
 				},
 				ListMetadata: common.ListMetadata{},
 			})
@@ -100,6 +100,8 @@ func TestListMembers(t *testing.T) {
 		for _, m := range result.Members {
 			assert.NotEqual(t, testWorkOSUserID, m.ID, "member ID should be Gram user ID, not WorkOS ID")
 		}
+		// JoinedAt should reflect the membership date, not the user account creation date
+		assert.Equal(t, "2026-01-15T00:00:00Z", result.Members[0].JoinedAt)
 	})
 
 	t.Run("rejects mismatched organization ID", func(t *testing.T) {

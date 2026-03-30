@@ -225,6 +225,35 @@ func (w *WorkOS) DeleteOrganizationMembership(ctx context.Context, membershipID 
 	return nil
 }
 
+func (w *WorkOS) ListOrgMemberships(ctx context.Context, workOSOrgID string) ([]usermanagement.OrganizationMembership, error) {
+	if w == nil {
+		return nil, errors.New("workos client is not initialized")
+	}
+
+	var all []usermanagement.OrganizationMembership
+	after := ""
+
+	for {
+		resp, err := w.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
+			OrganizationID: workOSOrgID,
+			Limit:          100,
+			After:          after,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list organization memberships from workos: %w", err)
+		}
+
+		all = append(all, resp.Data...)
+
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		after = resp.ListMetadata.After
+	}
+
+	return all, nil
+}
+
 func (w *WorkOS) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*usermanagement.OrganizationMembership, error) {
 	if w == nil {
 		return nil, errors.New("workos client is not initialized")

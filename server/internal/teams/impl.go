@@ -191,18 +191,17 @@ func (s *Service) ListMembers(ctx context.Context, payload *gen.ListMembersPaylo
 		return nil, err
 	}
 
-	users, err := wos.ListUsersInOrg(ctx, workosOrgID)
+	memberships, err := wos.ListOrgMemberships(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "failed to list organization members from WorkOS").Log(ctx, s.logger,
+		return nil, oops.E(oops.CodeGatewayError, err, "failed to list organization memberships from WorkOS").Log(ctx, s.logger,
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	members := make([]*gen.TeamMember, 0, len(users))
-	for _, u := range users {
+	members := make([]*gen.TeamMember, 0, len(memberships))
+	for _, m := range memberships {
 		// Resolve WorkOS user to Gram user for consistent ID space
-		gramUser, err := s.userRepo.GetUserByWorkosID(ctx, pgtype.Text{String: u.ID, Valid: true})
+		gramUser, err := s.userRepo.GetUserByWorkosID(ctx, pgtype.Text{String: m.UserID, Valid: true})
 		if err != nil {
-			// User exists in WorkOS but not synced to Gram yet — use WorkOS data
 			s.logger.WarnContext(ctx, "WorkOS user not found in Gram DB, skipping",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
@@ -214,14 +213,13 @@ func (s *Service) ListMembers(ctx context.Context, payload *gen.ListMembersPaylo
 		if gramUser.PhotoUrl.Valid && gramUser.PhotoUrl.String != "" {
 			photoURL = &gramUser.PhotoUrl.String
 		}
-		member := &gen.TeamMember{
+		members = append(members, &gen.TeamMember{
 			ID:          gramUser.ID,
 			Email:       gramUser.Email,
 			DisplayName: gramUser.DisplayName,
 			PhotoURL:    photoURL,
-			JoinedAt:    u.CreatedAt,
-		}
-		members = append(members, member)
+			JoinedAt:    m.CreatedAt,
+		})
 	}
 
 	return &gen.ListMembersResult{Members: members}, nil
