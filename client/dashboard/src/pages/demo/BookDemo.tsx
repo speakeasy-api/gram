@@ -1,8 +1,26 @@
 import { Button } from "@/components/ui/button";
+import { useSdkClient } from "@/contexts/Sdk";
+import { LogOutIcon } from "lucide-react";
 
 export default function BookDemo() {
+  const client = useSdkClient();
+
+  const handleLogout = async () => {
+    await client.auth.logout();
+    window.location.href = "/login";
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleLogout}
+        className="absolute right-4 top-4"
+      >
+        <LogOutIcon className="mr-2 h-4 w-4" />
+        Log out
+      </Button>
       <div className="mx-auto max-w-md space-y-6 text-center">
         <h1 className="text-3xl font-bold tracking-tight">
           Book a Demo to Access the Speakeasy MCP Platform
