@@ -78,6 +78,41 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 	require.Contains(t, err.Error(), "create role in workos")
 }
 
+func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	ti.roles.AddRole("org_workos_test", thirdpartyworkos.Role{
+		ID:          "role_existing",
+		Name:        "Custom Builder",
+		Slug:        "org-custom-builder",
+		Description: "Can build selected resources",
+		CreatedAt:   thirdpartyworkos.MockRoleTimestamp(),
+		UpdatedAt:   thirdpartyworkos.MockRoleTimestamp(),
+	})
+	ti.roles.SetCreateRoleConflict(&thirdpartyworkos.APIError{Method: "POST", Path: "/authorization/organizations/org_workos_test/roles", StatusCode: 409, Body: "role already exists"})
+
+	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name:        "Custom Builder",
+		Description: "Can build selected resources",
+		Grants: []*gen.RoleGrant{
+			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "role_existing", role.ID)
+	require.Equal(t, "Custom Builder", role.Name)
+
+	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder").String()
+	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: &principalURN})
+	require.NoError(t, err)
+	require.Len(t, grants.Grants, 1)
+	require.Equal(t, authCtx.ActiveOrganizationID, grants.Grants[0].OrganizationID)
+}
+
 func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 	t.Parallel()
 

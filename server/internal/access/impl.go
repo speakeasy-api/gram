@@ -168,8 +168,23 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		Slug:        roleSlug,
 		Description: payload.Description,
 	})
-	if err != nil {
+	var apiErr *workos.APIError
+	switch {
+	case errors.As(err, &apiErr) && apiErr.StatusCode == 409:
+		wRoles, listErr := s.roles.ListRoles(ctx, workosOrgID)
+		if listErr != nil {
+			return nil, oops.E(oops.CodeGatewayError, listErr, "list roles after create conflict").Log(ctx, s.logger)
+		}
+
+		existingRole, ok := lo.Find(wRoles, func(role workos.Role) bool { return role.Slug == roleSlug })
+		if !ok {
+			return nil, oops.E(oops.CodeGatewayError, err, "create role in workos").Log(ctx, s.logger)
+		}
+
+		wr = &existingRole
+	case err != nil:
 		return nil, oops.E(oops.CodeGatewayError, err, "create role in workos").Log(ctx, s.logger)
+	default:
 	}
 
 	// Stop before assigning members if grant sync fails. That can leave behind a
