@@ -305,11 +305,12 @@ Slack markdown syntax: `*bold*`, `_italic_`, `` `code` ``, ` ```code block``` `,
 
 ### Message structure
 
-The message opens with two lines — no separate header block:
+The message opens with three lines — no separate header block:
 
 ```
 *Gram Health Digest — <DAY> <DATE>*
 <VERDICT_EMOJI> *<One-line overall verdict>*
+@dev-mcp-oncall
 ```
 
 Then append sections in this exact order, each preceded by the Unicode divider line on its own line with a blank line above and below:
@@ -339,7 +340,7 @@ Then append sections in this exact order, each preceded by the Unicode divider l
 
 ### A2. Error spike (always include if a spike was detected; independent of monitors)
 
-```
+````
 ──────────────────────────────────────
 
 
@@ -353,7 +354,7 @@ mcp server not found                   1,288  17.8%
 token exchange failed                    447   6.2%
 not found                                273   3.8%
 ```
-```
+````
 
 > ⚠️ **The error type breakdown MUST be a code block table with aligned columns.** Never use bullet points for this data.
 
@@ -372,7 +373,7 @@ not found                                273   3.8%
 
 ### C. Top endpoints — MUST be a code block table
 
-```
+````
 ──────────────────────────────────────
 
 
@@ -385,7 +386,7 @@ GET  /.well-known/oauth-authorization-server   39,158   0.0%    5ms
 GET  /mcp/{mcpSlug}                            13,211   0.0%    2ms
 POST /rpc/hooks.claude                          1,267   0.0%   80ms
 ```
-```
+````
 
 > ⚠️ **This section MUST use a triple-backtick code block with space-aligned columns. NEVER use bullet points for the endpoint table.**
 
@@ -393,7 +394,7 @@ Column widths: endpoint 48 chars, hits 8 chars, err% 6 chars, p95 8 chars, notes
 
 ### D. Slow endpoints (only if p95 > 2s)
 
-```
+````
 ──────────────────────────────────────
 
 
@@ -404,7 +405,7 @@ GET /rpc/usage.getperiodusage         2,040ms   817ms      6  ⚠️
 GET /rpc/auth.info                      638ms     8ms      6
 ```
 *Global:* p50: Xms · p95: Xms · p99: Xms
-```
+````
 
 > ⚠️ **The slow endpoint table MUST use a code block with aligned columns. Never use bullet points.**
 
