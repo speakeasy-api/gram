@@ -372,7 +372,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 			Email:    user.Email,
 			PhotoURL: nil,
 			RoleID:   roleIDBySlug[member.RoleSlug],
-			JoinedAt: time.Time{}.UTC().Format(time.RFC3339),
+			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		})
 	}
 
@@ -451,7 +451,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		Email:    user.Email,
 		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
 		RoleID:   payload.RoleID,
-		JoinedAt: time.Time{}.UTC().Format(time.RFC3339),
+		JoinedAt: conv.Default(updatedMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}, nil
 }
 

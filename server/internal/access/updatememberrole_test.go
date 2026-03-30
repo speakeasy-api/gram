@@ -3,7 +3,6 @@ package access_test
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -33,7 +32,7 @@ func TestService_UpdateMemberRole(t *testing.T) {
 	require.Equal(t, "ada@example.com", member.Email)
 	require.Equal(t, "role_builder", member.RoleID)
 	require.Nil(t, member.PhotoURL)
-	require.Equal(t, time.Time{}.UTC().Format(time.RFC3339), member.JoinedAt)
+	require.Equal(t, "2024-11-15T15:04:05Z", member.JoinedAt)
 
 	members, err := ti.roles.ListMembers(ctx, "org_workos_test")
 	require.NoError(t, err)

@@ -3,7 +3,6 @@ package access_test
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -36,7 +35,7 @@ func TestService_ListMembers(t *testing.T) {
 	require.Equal(t, "ada@example.com", byID["user_1"].Email)
 	require.Equal(t, "role_admin", byID["user_1"].RoleID)
 	require.Nil(t, byID["user_1"].PhotoURL)
-	require.Equal(t, time.Time{}.UTC().Format(time.RFC3339), byID["user_1"].JoinedAt)
+	require.Equal(t, "2024-11-15T15:04:05Z", byID["user_1"].JoinedAt)
 
 	require.Equal(t, "Grace", byID["user_2"].Name)
 	require.Equal(t, "role_builder", byID["user_2"].RoleID)

@@ -48,6 +48,8 @@ func NewMockRoleProvider() *MockRoleProvider {
 	}
 }
 
+const mockMembershipTimestamp = "2024-11-15T15:04:05Z"
+
 func (m *MockRoleProvider) ListRoles(_ context.Context, orgID string) ([]Role, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -196,7 +198,7 @@ func (m *MockRoleProvider) AddMember(orgID, membershipID, userID, roleSlug strin
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.members[orgID] = append(m.members[orgID], Member{ID: membershipID, UserID: userID, OrganizationID: orgID, RoleSlug: roleSlug})
+	m.members[orgID] = append(m.members[orgID], Member{ID: membershipID, UserID: userID, OrganizationID: orgID, RoleSlug: roleSlug, CreatedAt: mockMembershipTimestamp})
 }
 
 func (m *MockRoleProvider) AddUser(user User) {
