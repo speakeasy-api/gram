@@ -13,7 +13,7 @@ import (
 func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := enterpriseCtx()
 	conn := newTestDB(t)
 	organizationID := "org_load_grants"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
@@ -75,7 +75,7 @@ func TestLoadGrants_rejectsInvalidPrincipal(t *testing.T) {
 func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := enterpriseCtx()
 	conn := newTestDB(t)
 	organizationID := "org_empty_grants"
 

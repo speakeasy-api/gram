@@ -2,14 +2,14 @@ package access
 
 const WildcardResource = "*"
 
-// Grants is the in-memory grant set resolved for a request.
-type Grants struct {
-	rows []grantRow
-}
-
-type grantRow struct {
+type Grant struct {
 	Scope    Scope
 	Resource string
+}
+
+// Grants is the in-memory grant set resolved for a request.
+type Grants struct {
+	rows []Grant
 }
 
 func (g *Grants) hasAccess(scope Scope, resourceID string) bool {

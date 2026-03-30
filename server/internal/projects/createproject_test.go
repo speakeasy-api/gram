@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -16,10 +17,11 @@ import (
 func TestProjectsService_CreateProject_CreatesAuditLog(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
+	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectCreate)
 	require.NoError(t, err)
@@ -44,7 +46,7 @@ func TestProjectsService_CreateProject_CreatesAuditLog(t *testing.T) {
 func TestProjectsService_CreateProject_ForbiddenDoesNotCreateAuditLog(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectCreate)
 	require.NoError(t, err)
 
@@ -66,13 +68,54 @@ func TestProjectsService_CreateProject_ForbiddenDoesNotCreateAuditLog(t *testing
 	require.Equal(t, beforeCount, afterCount)
 }
 
+func TestProjectsService_CreateProject_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t, true)
+	ctx = access.GrantsToContext(ctx, &access.Grants{})
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	result, err := ti.service.CreateProject(ctx, &gen.CreateProjectPayload{
+		ApikeyToken:    nil,
+		SessionToken:   nil,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "forbidden-without-org-admin",
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestProjectsService_CreateProject_SkipsRBACWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t, false)
+	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	result, err := ti.service.CreateProject(ctx, &gen.CreateProjectPayload{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "rbac-disabled-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Project)
+}
+
 func TestProjectsService_CreateProject_AuditLogRecord(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestProjectsService(t)
+	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
+	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	name := "audit-create-project-record-" + uuid.NewString()[:8]
 	result, err := ti.service.CreateProject(ctx, &gen.CreateProjectPayload{
