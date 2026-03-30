@@ -166,7 +166,7 @@ func TestInviteMember(t *testing.T) {
 func TestListInvites(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns invitations from WorkOS", func(t *testing.T) {
+	t.Run("returns only pending invitations from WorkOS", func(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
@@ -191,9 +191,9 @@ func TestListInvites(t *testing.T) {
 			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		require.NoError(t, err)
-		require.Len(t, result.Invites, 2)
+		require.Len(t, result.Invites, 1, "only pending invites should be returned")
 		assert.Equal(t, "inv_1", result.Invites[0].ID)
-		assert.Equal(t, "inv_2", result.Invites[1].ID)
+		assert.Equal(t, string(usermanagement.Pending), result.Invites[0].Status)
 	})
 }
 

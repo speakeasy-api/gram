@@ -289,6 +289,9 @@ func (s *Service) ListInvites(ctx context.Context, payload *gen.ListInvitesPaylo
 
 	invites := make([]*gen.TeamInvite, 0, len(invitations))
 	for _, inv := range invitations {
+		if inv.State != usermanagement.Pending {
+			continue
+		}
 		invites = append(invites, invitationToGenInvite(inv, inviterNames[inv.InviterUserID]))
 	}
 

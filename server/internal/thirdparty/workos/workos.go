@@ -238,6 +238,10 @@ func (w *WorkOS) ListOrgMemberships(ctx context.Context, workOSOrgID string) ([]
 			OrganizationID: workOSOrgID,
 			Limit:          100,
 			After:          after,
+			UserID:         "",
+			Statuses:       nil,
+			Order:          "",
+			Before:         "",
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list organization memberships from workos: %w", err)
