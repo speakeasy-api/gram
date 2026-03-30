@@ -15,6 +15,7 @@ type MockRoleProvider struct {
 	users           map[string]User
 	nextID          int
 	errCreateRole   error
+	errDeleteRole   error
 	errUpdateRole   error
 	errListRoles    error
 	errListMembers  error
@@ -29,6 +30,7 @@ func NewMockRoleProvider() *MockRoleProvider {
 		users:           make(map[string]User),
 		nextID:          0,
 		errCreateRole:   nil,
+		errDeleteRole:   nil,
 		errUpdateRole:   nil,
 		errListRoles:    nil,
 		errListMembers:  nil,
@@ -91,6 +93,9 @@ func (m *MockRoleProvider) UpdateRole(_ context.Context, orgID string, roleSlug 
 func (m *MockRoleProvider) DeleteRole(_ context.Context, orgID string, roleSlug string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.errDeleteRole != nil {
+		return m.errDeleteRole
+	}
 
 	roles := m.roles[orgID]
 	for i, role := range roles {
@@ -197,6 +202,13 @@ func (m *MockRoleProvider) SetUpdateRoleError(err error) {
 	defer m.mu.Unlock()
 
 	m.errUpdateRole = err
+}
+
+func (m *MockRoleProvider) SetDeleteRoleError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.errDeleteRole = err
 }
 
 func (m *MockRoleProvider) SetAfterCreateRole(fn func()) {

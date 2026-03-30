@@ -369,8 +369,55 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	}, nil
 }
 
-func (s *Service) DeleteRole(context.Context, *gen.DeleteRolePayload) error {
-	return oops.E(oops.CodeNotImplemented, nil, "not implemented")
+func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload) error {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	if s.roles == nil {
+		return oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
+	}
+
+	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
+	switch {
+	case errors.Is(err, errWorkOSOrganizationNotLinked):
+		return oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	default:
+	}
+
+	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
+	if err != nil {
+		return oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+	}
+
+	var currentRole *workos.Role
+	for i := range wRoles {
+		if wRoles[i].ID == payload.ID {
+			currentRole = &wRoles[i]
+			break
+		}
+	}
+	if currentRole == nil {
+		return oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
+	}
+	if isSystemRole(currentRole.Slug) {
+		return oops.E(oops.CodeBadRequest, nil, "system roles cannot be deleted").Log(ctx, s.logger)
+	}
+
+	if err := s.roles.DeleteRole(ctx, workosOrgID, currentRole.Slug); err != nil {
+		return oops.E(oops.CodeGatewayError, err, "delete role in workos").Log(ctx, s.logger)
+	}
+
+	if _, err := repo.New(s.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, currentRole.Slug),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete grants for deleted role").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) ListMembers(context.Context, *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
