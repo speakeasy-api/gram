@@ -281,6 +281,23 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 	return items, nil
 }
 
+const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :exec
+UPDATE organization_metadata
+SET whitelisted = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type SetOrganizationWhitelistParams struct {
+	Whitelisted    bool
+	OrganizationID string
+}
+
+func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizationWhitelistParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationWhitelist, arg.Whitelisted, arg.OrganizationID)
+	return err
+}
+
 const uploadProjectLogo = `-- name: UploadProjectLogo :one
 UPDATE projects
 SET logo_asset_id = $1,

@@ -31,6 +31,9 @@ type Service interface {
 	UpsertAllowedOrigin(context.Context, *UpsertAllowedOriginPayload) (res *UpsertAllowedOriginResult, err error)
 	// Delete a project by its ID
 	DeleteProject(context.Context, *DeleteProjectPayload) (err error)
+	// Set organization whitelist status (admin only - requires speakeasy-team API
+	// key)
+	SetOrganizationWhitelist(context.Context, *SetOrganizationWhitelistPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -53,7 +56,7 @@ const ServiceName = "projects"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getProject", "createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject"}
+var MethodNames = [8]string{"getProject", "createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject", "setOrganizationWhitelist"}
 
 type AllowedOrigin struct {
 	// The ID of the allowed origin
@@ -176,6 +179,16 @@ type SetLogoPayload struct {
 	SessionToken     *string
 	// The ID of the asset
 	AssetID string
+}
+
+// SetOrganizationWhitelistPayload is the payload type of the projects service
+// setOrganizationWhitelist method.
+type SetOrganizationWhitelistPayload struct {
+	// The ID of the organization to update
+	OrganizationID string
+	// Whether the organization should be whitelisted
+	Whitelisted bool
+	ApikeyToken *string
 }
 
 // SetProjectLogoResult is the result type of the projects service setLogo

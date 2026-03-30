@@ -73,7 +73,7 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"features (get-product-features|set-product-feature)",
-		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
+		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
@@ -637,6 +637,10 @@ func ParseEndpoint(
 		projectsDeleteProjectApikeyTokenFlag  = projectsDeleteProjectFlags.String("apikey-token", "", "")
 		projectsDeleteProjectSessionTokenFlag = projectsDeleteProjectFlags.String("session-token", "", "")
 
+		projectsSetOrganizationWhitelistFlags           = flag.NewFlagSet("set-organization-whitelist", flag.ExitOnError)
+		projectsSetOrganizationWhitelistBodyFlag        = projectsSetOrganizationWhitelistFlags.String("body", "REQUIRED", "")
+		projectsSetOrganizationWhitelistApikeyTokenFlag = projectsSetOrganizationWhitelistFlags.String("apikey-token", "", "")
+
 		resourcesFlags = flag.NewFlagSet("resources", flag.ContinueOnError)
 
 		resourcesListResourcesFlags                = flag.NewFlagSet("list-resources", flag.ExitOnError)
@@ -1038,6 +1042,7 @@ func ParseEndpoint(
 	projectsListAllowedOriginsFlags.Usage = projectsListAllowedOriginsUsage
 	projectsUpsertAllowedOriginFlags.Usage = projectsUpsertAllowedOriginUsage
 	projectsDeleteProjectFlags.Usage = projectsDeleteProjectUsage
+	projectsSetOrganizationWhitelistFlags.Usage = projectsSetOrganizationWhitelistUsage
 
 	resourcesFlags.Usage = resourcesUsage
 	resourcesListResourcesFlags.Usage = resourcesListResourcesUsage
@@ -1547,6 +1552,9 @@ func ParseEndpoint(
 
 			case "delete-project":
 				epf = projectsDeleteProjectFlags
+
+			case "set-organization-whitelist":
+				epf = projectsSetOrganizationWhitelistFlags
 
 			}
 
@@ -2105,6 +2113,9 @@ func ParseEndpoint(
 			case "delete-project":
 				endpoint = c.DeleteProject()
 				data, err = projectsc.BuildDeleteProjectPayload(*projectsDeleteProjectIDFlag, *projectsDeleteProjectApikeyTokenFlag, *projectsDeleteProjectSessionTokenFlag)
+			case "set-organization-whitelist":
+				endpoint = c.SetOrganizationWhitelist()
+				data, err = projectsc.BuildSetOrganizationWhitelistPayload(*projectsSetOrganizationWhitelistBodyFlag, *projectsSetOrganizationWhitelistApikeyTokenFlag)
 			}
 		case "resources":
 			c := resourcesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4484,6 +4495,7 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-allowed-origins: List allowed origins for a project.`)
 	fmt.Fprintln(os.Stderr, `    upsert-allowed-origin: Upsert an allowed origin for a project.`)
 	fmt.Fprintln(os.Stderr, `    delete-project: Delete a project by its ID`)
+	fmt.Fprintln(os.Stderr, `    set-organization-whitelist: Set organization whitelist status (admin only - requires speakeasy-team API key)`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s projects COMMAND --help\n", os.Args[0])
@@ -4644,6 +4656,26 @@ func projectsDeleteProjectUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects delete-project --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func projectsSetOrganizationWhitelistUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] projects set-organization-whitelist", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set organization whitelist status (admin only - requires speakeasy-team API key)`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects set-organization-whitelist --body '{\n      \"organization_id\": \"abc123\",\n      \"whitelisted\": false\n   }' --apikey-token \"abc123\"")
 }
 
 // resourcesUsage displays the usage of the resources command and its

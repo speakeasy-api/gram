@@ -18,14 +18,15 @@ import (
 
 // Server lists the projects service endpoint HTTP handlers.
 type Server struct {
-	Mounts              []*MountPoint
-	GetProject          http.Handler
-	CreateProject       http.Handler
-	ListProjects        http.Handler
-	SetLogo             http.Handler
-	ListAllowedOrigins  http.Handler
-	UpsertAllowedOrigin http.Handler
-	DeleteProject       http.Handler
+	Mounts                   []*MountPoint
+	GetProject               http.Handler
+	CreateProject            http.Handler
+	ListProjects             http.Handler
+	SetLogo                  http.Handler
+	ListAllowedOrigins       http.Handler
+	UpsertAllowedOrigin      http.Handler
+	DeleteProject            http.Handler
+	SetOrganizationWhitelist http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -62,14 +63,16 @@ func New(
 			{"ListAllowedOrigins", "GET", "/rpc/projects.listAllowedOrigins"},
 			{"UpsertAllowedOrigin", "POST", "/rpc/projects.upsertAllowedOrigin"},
 			{"DeleteProject", "DELETE", "/rpc/projects.delete"},
+			{"SetOrganizationWhitelist", "POST", "/rpc/projects.setOrganizationWhitelist"},
 		},
-		GetProject:          NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
-		CreateProject:       NewCreateProjectHandler(e.CreateProject, mux, decoder, encoder, errhandler, formatter),
-		ListProjects:        NewListProjectsHandler(e.ListProjects, mux, decoder, encoder, errhandler, formatter),
-		SetLogo:             NewSetLogoHandler(e.SetLogo, mux, decoder, encoder, errhandler, formatter),
-		ListAllowedOrigins:  NewListAllowedOriginsHandler(e.ListAllowedOrigins, mux, decoder, encoder, errhandler, formatter),
-		UpsertAllowedOrigin: NewUpsertAllowedOriginHandler(e.UpsertAllowedOrigin, mux, decoder, encoder, errhandler, formatter),
-		DeleteProject:       NewDeleteProjectHandler(e.DeleteProject, mux, decoder, encoder, errhandler, formatter),
+		GetProject:               NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
+		CreateProject:            NewCreateProjectHandler(e.CreateProject, mux, decoder, encoder, errhandler, formatter),
+		ListProjects:             NewListProjectsHandler(e.ListProjects, mux, decoder, encoder, errhandler, formatter),
+		SetLogo:                  NewSetLogoHandler(e.SetLogo, mux, decoder, encoder, errhandler, formatter),
+		ListAllowedOrigins:       NewListAllowedOriginsHandler(e.ListAllowedOrigins, mux, decoder, encoder, errhandler, formatter),
+		UpsertAllowedOrigin:      NewUpsertAllowedOriginHandler(e.UpsertAllowedOrigin, mux, decoder, encoder, errhandler, formatter),
+		DeleteProject:            NewDeleteProjectHandler(e.DeleteProject, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationWhitelist: NewSetOrganizationWhitelistHandler(e.SetOrganizationWhitelist, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -85,6 +88,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListAllowedOrigins = m(s.ListAllowedOrigins)
 	s.UpsertAllowedOrigin = m(s.UpsertAllowedOrigin)
 	s.DeleteProject = m(s.DeleteProject)
+	s.SetOrganizationWhitelist = m(s.SetOrganizationWhitelist)
 }
 
 // MethodNames returns the methods served.
@@ -99,6 +103,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListAllowedOriginsHandler(mux, h.ListAllowedOrigins)
 	MountUpsertAllowedOriginHandler(mux, h.UpsertAllowedOrigin)
 	MountDeleteProjectHandler(mux, h.DeleteProject)
+	MountSetOrganizationWhitelistHandler(mux, h.SetOrganizationWhitelist)
 }
 
 // Mount configures the mux to serve the projects endpoints.
@@ -454,6 +459,60 @@ func NewDeleteProjectHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteProject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetOrganizationWhitelistHandler configures the mux to serve the
+// "projects" service "setOrganizationWhitelist" endpoint.
+func MountSetOrganizationWhitelistHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/projects.setOrganizationWhitelist", f)
+}
+
+// NewSetOrganizationWhitelistHandler creates a HTTP handler which loads the
+// HTTP request and calls the "projects" service "setOrganizationWhitelist"
+// endpoint.
+func NewSetOrganizationWhitelistHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetOrganizationWhitelistRequest(mux, decoder)
+		encodeResponse = EncodeSetOrganizationWhitelistResponse(encoder)
+		encodeError    = EncodeSetOrganizationWhitelistError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setOrganizationWhitelist")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
 		payload, err := decodeRequest(r)
 		if err != nil {
