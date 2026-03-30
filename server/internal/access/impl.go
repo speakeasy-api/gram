@@ -160,6 +160,9 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	}
 
 	roleSlug := slugify(payload.Name)
+	if roleSlug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "role name must contain at least one letter or digit").Log(ctx, s.logger)
+	}
 	wr, err := s.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
 		Name:        payload.Name,
 		Slug:        roleSlug,
@@ -314,9 +317,8 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 // ListScopes exposes the stable set of grantable scopes so clients can build
 // role editing UX without hardcoding permission definitions.
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+	if _, err := s.authContext(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
 	}
 
 	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
@@ -585,10 +587,14 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*RoleGrant {
 		if grant == nil {
 			continue
 		}
+		var resources []string
+		if grant.Resources != nil {
+			resources = append([]string{}, grant.Resources...)
+		}
 
 		out = append(out, &RoleGrant{
 			Scope:     grant.Scope,
-			Resources: append([]string(nil), grant.Resources...),
+			Resources: resources,
 		})
 	}
 
@@ -699,10 +705,19 @@ func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, er
 	return org.WorkosID.String, nil
 }
 
-func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
+func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil {
-		return nil, "", oops.C(oops.CodeUnauthorized)
+		return nil, errors.New("missing auth context")
+	}
+
+	return ac, nil
+}
+
+func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
 	}
 	if s.roles == nil {
 		return nil, "", oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)

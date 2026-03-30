@@ -78,6 +78,22 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 	require.Contains(t, err.Error(), "create role in workos")
 }
 
+func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name:        "!!!",
+		Description: "Can build selected resources",
+		Grants: []*gen.RoleGrant{
+			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "role name must contain at least one letter or digit")
+}
+
 func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 	t.Parallel()
 
