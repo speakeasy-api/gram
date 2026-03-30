@@ -38,5 +38,5 @@ func TestService_ListScopes_Unauthorized(t *testing.T) {
 
 	_, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized access")
+	require.Contains(t, err.Error(), "missing auth context")
 }
