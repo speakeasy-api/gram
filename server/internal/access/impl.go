@@ -84,6 +84,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+// ListRoles treats WorkOS as the source of truth for role records while Gram
+// remains the source of truth for role grants.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -115,6 +117,8 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	return &gen.ListRolesResult{Roles: roles}, nil
 }
 
+// GetRole returns the WorkOS role definition enriched with Gram's local grant
+// state so callers see the complete effective role configuration in one place.
 func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*gen.Role, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -143,7 +147,7 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, role, memberCounts[role.Slug])
 }
 
-// CreateRole is creates a role for a user of a given organization.
+// CreateRole creates a role for a user of a given organization.
 // It is an idempotent operation intentionally ordered so that member assignment happens last.
 // If WorkOS role creation succeeds but local grant sync fails, we return an
 // error with no users assigned to the new role. That leaves a partially
@@ -201,6 +205,8 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, *wr, assignedCount)
 }
 
+// UpdateRole preserves the same split of responsibilities as creation: WorkOS
+// owns role identity and membership, while Gram owns the role's grant set.
 func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload) (*gen.Role, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -270,6 +276,8 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, *updatedRole, memberCounts[currentRole.Slug])
 }
 
+// DeleteRole removes local grants before deleting the WorkOS role so retries can
+// still complete cleanup if the external delete fails.
 func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload) error {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -303,6 +311,8 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	return nil
 }
 
+// ListScopes exposes the stable set of grantable scopes so clients can build
+// role editing UX without hardcoding permission definitions.
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil {
@@ -320,6 +330,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 	}}, nil
 }
 
+// ListMembers follows the original access API contract by returning WorkOS user
+// identifiers while decorating them with the role information the UI needs.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
 	_, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -365,6 +377,8 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	return &gen.ListMembersResult{Members: result}, nil
 }
 
+// UpdateMemberRole is intentionally stricter than member listing: it only
+// mutates access for users Gram knows are connected to the local organization.
 func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
