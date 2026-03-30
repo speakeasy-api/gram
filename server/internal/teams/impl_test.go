@@ -68,40 +68,24 @@ func seedWorkOSIDs(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthCo
 func TestListMembers(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns members mapped to Gram user IDs", func(t *testing.T) {
+	t.Run("returns members from local DB", func(t *testing.T) {
 		t.Parallel()
 
-		mux := http.NewServeMux()
-		// ListOrgMemberships
-		mux.HandleFunc("/user_management/organization_memberships", func(w http.ResponseWriter, r *http.Request) {
-			jsonResp(w, http.StatusOK, usermanagement.ListOrganizationMembershipsResponse{
-				Data: []usermanagement.OrganizationMembership{
-					{ID: "om_1", UserID: testWorkOSUserID, OrganizationID: testWorkOSOrgID, CreatedAt: "2026-01-15T00:00:00Z"},
-				},
-				ListMetadata: common.ListMetadata{},
-			})
-		})
-
-		wos := workosStub(t, mux)
+		// ListMembers uses the local DB, no WorkOS mock needed
+		wos := workosStub(t, http.NewServeMux())
 		ctx, ti := newTestTeamsService(t, wos)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		seedWorkOSIDs(t, ti, authCtx)
 
 		result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{
 			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		// The WorkOS user is resolved to a Gram user — should have at least one member
-		assert.NotEmpty(t, result.Members)
-		// Gram user ID should NOT be the WorkOS ID
-		for _, m := range result.Members {
-			assert.NotEqual(t, testWorkOSUserID, m.ID, "member ID should be Gram user ID, not WorkOS ID")
-		}
-		// JoinedAt should reflect the membership date, not the user account creation date
-		assert.Equal(t, "2026-01-15T00:00:00Z", result.Members[0].JoinedAt)
+		require.NotEmpty(t, result.Members, "should include the test user seeded by InitAuthContext")
+		assert.Equal(t, authCtx.UserID, result.Members[0].ID)
+		assert.NotEmpty(t, result.Members[0].JoinedAt)
 	})
 
 	t.Run("rejects mismatched organization ID", func(t *testing.T) {
@@ -469,21 +453,6 @@ func TestGetInviteInfo(t *testing.T) {
 
 func TestWorkOSNotConfigured(t *testing.T) {
 	t.Parallel()
-
-	t.Run("ListMembers returns error when WorkOS is nil", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, ti := newTestTeamsService(t, nil)
-
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok)
-
-		_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{
-			OrganizationID: authCtx.ActiveOrganizationID,
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not configured")
-	})
 
 	t.Run("InviteMember returns error when WorkOS is nil", func(t *testing.T) {
 		t.Parallel()

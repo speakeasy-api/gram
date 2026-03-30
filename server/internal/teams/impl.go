@@ -3,6 +3,7 @@ package teams
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -181,44 +182,24 @@ func (s *Service) ListMembers(ctx context.Context, payload *gen.ListMembersPaylo
 		return nil, err
 	}
 
-	wos, err := s.requireWorkOS()
+	rows, err := s.orgRepo.ListOrganizationMembers(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
-	}
-
-	workosOrgID, err := s.getOrgWorkOSID(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, err
-	}
-
-	memberships, err := wos.ListOrgMemberships(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "failed to list organization memberships from WorkOS").Log(ctx, s.logger,
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization members").Log(ctx, s.logger,
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	members := make([]*gen.TeamMember, 0, len(memberships))
-	for _, m := range memberships {
-		// Resolve WorkOS user to Gram user for consistent ID space
-		gramUser, err := s.userRepo.GetUserByWorkosID(ctx, pgtype.Text{String: m.UserID, Valid: true})
-		if err != nil {
-			s.logger.WarnContext(ctx, "WorkOS user not found in Gram DB, skipping",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-			)
-			continue
-		}
-
+	members := make([]*gen.TeamMember, 0, len(rows))
+	for _, row := range rows {
 		var photoURL *string
-		if gramUser.PhotoUrl.Valid && gramUser.PhotoUrl.String != "" {
-			photoURL = &gramUser.PhotoUrl.String
+		if row.PhotoUrl.Valid && row.PhotoUrl.String != "" {
+			photoURL = &row.PhotoUrl.String
 		}
 		members = append(members, &gen.TeamMember{
-			ID:          gramUser.ID,
-			Email:       gramUser.Email,
-			DisplayName: gramUser.DisplayName,
+			ID:          row.ID,
+			Email:       row.Email,
+			DisplayName: row.DisplayName,
 			PhotoURL:    photoURL,
-			JoinedAt:    m.CreatedAt,
+			JoinedAt:    row.JoinedAt.Time.Format(time.RFC3339),
 		})
 	}
 

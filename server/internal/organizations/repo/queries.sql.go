@@ -133,6 +133,54 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 	return exists, err
 }
 
+const listOrganizationMembers = `-- name: ListOrganizationMembers :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.photo_url,
+    r.created_at AS joined_at
+FROM organization_user_relationships r
+JOIN users u ON u.id = r.user_id
+WHERE r.organization_id = $1
+  AND r.deleted_at IS NULL
+ORDER BY r.created_at ASC
+`
+
+type ListOrganizationMembersRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	PhotoUrl    pgtype.Text
+	JoinedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ListOrganizationMembers(ctx context.Context, organizationID string) ([]ListOrganizationMembersRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMembers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationMembersRow
+	for rows.Next() {
+		var i ListOrganizationMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.JoinedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
 SELECT id, organization_id, user_id, workos_membership_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships

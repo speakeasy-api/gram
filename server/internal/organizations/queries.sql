@@ -61,6 +61,19 @@ FROM organization_user_relationships
 WHERE organization_id = @organization_id
   AND deleted_at IS NULL;
 
+-- name: ListOrganizationMembers :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.photo_url,
+    r.created_at AS joined_at
+FROM organization_user_relationships r
+JOIN users u ON u.id = r.user_id
+WHERE r.organization_id = @organization_id
+  AND r.deleted_at IS NULL
+ORDER BY r.created_at ASC;
+
 -- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()

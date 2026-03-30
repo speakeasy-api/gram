@@ -129,6 +129,13 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	authctx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context not found")
 
+	// Create organization-user relationship (mirrors what auth/impl.go does on login)
+	_, err = orgQueries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: activeOrg.ID,
+		UserID:         userInfo.UserID,
+	})
+	require.NoError(t, err)
+
 	// Generate unique project slug to avoid conflicts when tests run in parallel
 	projectSlug := fmt.Sprintf("test-%s", uuid.New().String()[:8])
 
