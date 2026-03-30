@@ -26,6 +26,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var errWorkOSOrganizationNotLinked = errors.New("organization is not linked to WorkOS")
@@ -477,8 +478,90 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	return &gen.ListMembersResult{Members: result}, nil
 }
 
-func (s *Service) UpdateMemberRole(context.Context, *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
-	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented")
+func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	if s.roles == nil {
+		return nil, oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
+	}
+
+	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
+	switch {
+	case errors.Is(err, errWorkOSOrganizationNotLinked):
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	default:
+	}
+
+	roles, err := s.roles.ListRoles(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+	}
+
+	roleSlug := ""
+	for _, role := range roles {
+		if role.ID == payload.RoleID {
+			roleSlug = role.Slug
+			break
+		}
+	}
+	if roleSlug == "" {
+		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
+	}
+
+	connectedUser, err := s.connectedUser(ctx, ac.ActiveOrganizationID, payload.UserID)
+	switch {
+	case errors.Is(err, errConnectedUserNotFound):
+		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, s.logger)
+	default:
+	}
+	if !connectedUser.WorkosID.Valid || connectedUser.WorkosID.String == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").Log(ctx, s.logger)
+	}
+
+	members, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+	}
+
+	membershipID := ""
+	for _, member := range members {
+		if member.UserID == connectedUser.WorkosID.String {
+			membershipID = member.ID
+			break
+		}
+	}
+	if membershipID == "" {
+		return nil, oops.E(oops.CodeNotFound, nil, "member not found").Log(ctx, s.logger)
+	}
+
+	updatedMember, err := s.roles.UpdateMemberRole(ctx, membershipID, roleSlug)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "update member role in workos").Log(ctx, s.logger)
+	}
+
+	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "list org users from workos").Log(ctx, s.logger)
+	}
+	user, ok := users[updatedMember.UserID]
+	if !ok {
+		return nil, oops.E(oops.CodeNotFound, nil, "member user not found").Log(ctx, s.logger)
+	}
+
+	return &gen.AccessMember{
+		ID:       connectedUser.ID,
+		Name:     formatUserName(user),
+		Email:    user.Email,
+		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
+		RoleID:   payload.RoleID,
+		JoinedAt: time.Time{}.UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func (s *Service) ListGrants(ctx context.Context, payload *gen.ListGrantsPayload) (*gen.ListGrantsResult, error) {
@@ -763,6 +846,28 @@ func formatUserName(user workos.User) string {
 	default:
 		return user.Email
 	}
+}
+
+var errConnectedUserNotFound = errors.New("connected user not found")
+
+func (s *Service) connectedUser(ctx context.Context, organizationID string, userID string) (usersrepo.User, error) {
+	hasRelationship, err := orgrepo.New(s.db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	if err != nil {
+		return usersrepo.User{}, fmt.Errorf("check organization user relationship: %w", err)
+	}
+	if !hasRelationship {
+		return usersrepo.User{}, errConnectedUserNotFound
+	}
+
+	user, err := usersrepo.New(s.db).GetUser(ctx, userID)
+	if err != nil {
+		return usersrepo.User{}, fmt.Errorf("get user %q: %w", userID, err)
+	}
+
+	return user, nil
 }
 
 func grantFromRow(row repo.PrincipalGrant) *gen.Grant {

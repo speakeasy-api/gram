@@ -9,34 +9,36 @@ import (
 )
 
 type MockRoleProvider struct {
-	mu              sync.Mutex
-	roles           map[string][]Role
-	members         map[string][]Member
-	users           map[string]User
-	nextID          int
-	errCreateRole   error
-	errDeleteRole   error
-	errUpdateRole   error
-	errListRoles    error
-	errListMembers  error
-	errListOrgUsers error
-	afterCreateRole func()
+	mu                  sync.Mutex
+	roles               map[string][]Role
+	members             map[string][]Member
+	users               map[string]User
+	nextID              int
+	errCreateRole       error
+	errDeleteRole       error
+	errUpdateRole       error
+	errListRoles        error
+	errListMembers      error
+	errListOrgUsers     error
+	errUpdateMemberRole error
+	afterCreateRole     func()
 }
 
 func NewMockRoleProvider() *MockRoleProvider {
 	return &MockRoleProvider{
-		mu:              sync.Mutex{},
-		roles:           make(map[string][]Role),
-		members:         make(map[string][]Member),
-		users:           make(map[string]User),
-		nextID:          0,
-		errCreateRole:   nil,
-		errDeleteRole:   nil,
-		errUpdateRole:   nil,
-		errListRoles:    nil,
-		errListMembers:  nil,
-		errListOrgUsers: nil,
-		afterCreateRole: nil,
+		mu:                  sync.Mutex{},
+		roles:               make(map[string][]Role),
+		members:             make(map[string][]Member),
+		users:               make(map[string]User),
+		nextID:              0,
+		errCreateRole:       nil,
+		errDeleteRole:       nil,
+		errUpdateRole:       nil,
+		errListRoles:        nil,
+		errListMembers:      nil,
+		errListOrgUsers:     nil,
+		errUpdateMemberRole: nil,
+		afterCreateRole:     nil,
 	}
 }
 
@@ -124,6 +126,9 @@ func (m *MockRoleProvider) ListMembers(_ context.Context, orgID string) ([]Membe
 func (m *MockRoleProvider) UpdateMemberRole(_ context.Context, membershipID string, roleSlug string) (*Member, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.errUpdateMemberRole != nil {
+		return nil, m.errUpdateMemberRole
+	}
 
 	for orgID, members := range m.members {
 		for i, member := range members {
@@ -235,4 +240,11 @@ func (m *MockRoleProvider) SetListOrgUsersError(err error) {
 	defer m.mu.Unlock()
 
 	m.errListOrgUsers = err
+}
+
+func (m *MockRoleProvider) SetUpdateMemberRoleError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.errUpdateMemberRole = err
 }

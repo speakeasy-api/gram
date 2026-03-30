@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var (
@@ -143,6 +144,32 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
 		Resource:       resource,
+	})
+	require.NoError(t, err)
+}
+
+func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, email string, displayName string, workosUserID string, workosMembershipID string) {
+	t.Helper()
+
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		WorkosID: conv.PtrToPGText(conv.PtrEmpty(workosUserID)),
+		ID:       userID,
+	})
+	require.NoError(t, err)
+
+	err = orgrepo.New(conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
+		OrganizationID:     organizationID,
+		UserID:             userID,
+		WorkosMembershipID: conv.PtrToPGText(conv.PtrEmpty(workosMembershipID)),
 	})
 	require.NoError(t, err)
 }
