@@ -310,7 +310,7 @@ The message opens with three lines — no separate header block:
 ```
 *Gram Health Digest — <DAY> <DATE>*
 <VERDICT_EMOJI> *<One-line overall verdict>*
-@dev-mcp-oncall
+<!subteam^S09EXM6DPCY|dev-mcp-oncall>
 ```
 
 Then append sections in this exact order, each preceded by the Unicode divider line on its own line with a blank line above and below:
