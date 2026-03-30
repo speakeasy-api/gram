@@ -289,15 +289,15 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 		return oops.E(oops.CodeBadRequest, nil, "system roles cannot be deleted").Log(ctx, s.logger)
 	}
 
-	if err := s.roles.DeleteRole(ctx, workosOrgID, currentRole.Slug); err != nil {
-		return oops.E(oops.CodeGatewayError, err, "delete role in workos").Log(ctx, s.logger)
-	}
-
 	if _, err := repo.New(s.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, currentRole.Slug),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete grants for deleted role").Log(ctx, s.logger)
+	}
+
+	if err := s.roles.DeleteRole(ctx, workosOrgID, currentRole.Slug); err != nil {
+		return oops.E(oops.CodeGatewayError, err, "delete role in workos").Log(ctx, s.logger)
 	}
 
 	return nil

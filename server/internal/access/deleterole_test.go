@@ -67,15 +67,28 @@ func TestService_DeleteRole_WorkOSDeleteFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
 	ti.roles.AddRole("org_workos_test", thirdpartyworkos.Role{
 		ID:          "role_custom",
 		Name:        "Custom Builder",
 		Slug:        "custom-builder",
 		Description: "Old description",
 	})
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
 	ti.roles.SetDeleteRoleError(errors.New("workos unavailable"))
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "delete role in workos")
+
+	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder").String()
+	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: &principalURN})
+	require.NoError(t, err)
+	require.Empty(t, grants.Grants)
+
+	roles, err := ti.roles.ListRoles(ctx, "org_workos_test")
+	require.NoError(t, err)
+	require.Len(t, roles, 1)
 }
