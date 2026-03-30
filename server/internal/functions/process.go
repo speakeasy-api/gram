@@ -136,6 +136,8 @@ func (p *ToolExtractor) Do(
 		eventsHandler,
 	)).With(slogArgs...)
 
+	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing function source", slug))
+
 	defer func() {
 		if _, err := eventsHandler.Flush(ctx, p.db); err != nil {
 			p.logger.ErrorContext(
@@ -229,7 +231,7 @@ func (p *ToolExtractor) Do(
 
 	tx := repo.New(dbtx)
 
-	numTools := 0
+	var numTools, numToolsSkipped int
 	for idx, tool := range manifest.V0.Tools {
 		_, err := processManifestToolV0(
 			ctx,
@@ -247,13 +249,14 @@ func (p *ToolExtractor) Do(
 			if task.OnToolSkipped != nil {
 				task.OnToolSkipped(err)
 			}
+			numToolsSkipped++
 			continue
 		}
 
 		numTools += 1
 	}
 
-	numResources := 0
+	var numResources, numResourcesSkipped int
 	for idx, resource := range manifest.V0.Resources {
 		_, err := processManifestResourceV0(
 			ctx,
@@ -271,6 +274,7 @@ func (p *ToolExtractor) Do(
 			if task.OnToolSkipped != nil {
 				task.OnToolSkipped(err)
 			}
+			numResourcesSkipped++
 			continue
 		}
 
@@ -280,6 +284,8 @@ func (p *ToolExtractor) Do(
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error saving tools and resources", slug).Log(ctx, logger)
 	}
+
+	logger.InfoContext(ctx, fmt.Sprintf("[%s] processed function source: %d tools created, %d tools skipped, %d resources created, %d resources skipped", slug, numTools, numToolsSkipped, numResources, numResourcesSkipped))
 
 	return &ToolExtractorResult{
 		ManifestVersion: manifest.Version,
