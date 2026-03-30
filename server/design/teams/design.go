@@ -181,7 +181,7 @@ var TeamInvite = Type("TeamInvite", func() {
 	Attribute("id", String, "The invite ID", func() { Format(FormatUUID) })
 	Attribute("email", String, "The invited email address")
 	Attribute("status", String, func() {
-		Enum("pending", "accepted", "expired", "cancelled")
+		Enum("pending", "accepted", "expired", "revoked")
 	})
 	Attribute("invited_by", String, "Name of the user who sent the invite")
 	Attribute("created_at", String, func() {
@@ -229,7 +229,6 @@ var InviteInfoResult = Type("InviteInfoResult", func() {
 	Attribute("organization_name", String, "Name of the organization")
 	Attribute("email", String, "The email address the invite was sent to")
 	Attribute("status", String, "Current status of the invite", func() {
-		Enum("pending", "accepted", "expired", "cancelled")
+		Enum("pending", "accepted", "expired", "revoked")
 	})
 })
-

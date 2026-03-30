@@ -2574,8 +2574,8 @@ func ValidateGetInviteInfoResponseBody(body *GetInviteInfoResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "pending" || *body.Status == "accepted" || *body.Status == "expired" || *body.Status == "cancelled") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "accepted", "expired", "cancelled"}))
+		if !(*body.Status == "pending" || *body.Status == "accepted" || *body.Status == "expired" || *body.Status == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "accepted", "expired", "revoked"}))
 		}
 	}
 	return
@@ -4307,8 +4307,8 @@ func ValidateTeamInviteResponseBody(body *TeamInviteResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "pending" || *body.Status == "accepted" || *body.Status == "expired" || *body.Status == "cancelled") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "accepted", "expired", "cancelled"}))
+		if !(*body.Status == "pending" || *body.Status == "accepted" || *body.Status == "expired" || *body.Status == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "accepted", "expired", "revoked"}))
 		}
 	}
 	if body.CreatedAt != nil {

@@ -17190,7 +17190,7 @@ components:
                         - pending
                         - accepted
                         - expired
-                        - cancelled
+                        - revoked
             required:
                 - inviter_name
                 - organization_name
@@ -19698,7 +19698,7 @@ components:
                         - pending
                         - accepted
                         - expired
-                        - cancelled
+                        - revoked
             required:
                 - id
                 - email
