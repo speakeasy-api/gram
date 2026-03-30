@@ -13,7 +13,7 @@ export const TeamInviteStatus = {
   Pending: "pending",
   Accepted: "accepted",
   Expired: "expired",
-  Cancelled: "cancelled",
+  Revoked: "revoked",
 } as const;
 export type TeamInviteStatus = ClosedEnum<typeof TeamInviteStatus>;
 

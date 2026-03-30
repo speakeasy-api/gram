@@ -16,7 +16,7 @@ export const InviteInfoResultStatus = {
   Pending: "pending",
   Accepted: "accepted",
   Expired: "expired",
-  Cancelled: "cancelled",
+  Revoked: "revoked",
 } as const;
 /**
  * Current status of the invite
