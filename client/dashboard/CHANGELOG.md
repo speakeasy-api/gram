@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.36.1
+
+### Patch Changes
+
+- 2b7754e: Align built-in MCP detail page header and install section with standard MCP detail page styling
+
 ## 0.36.0
 
 ### Minor Changes

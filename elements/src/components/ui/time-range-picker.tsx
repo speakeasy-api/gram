@@ -561,8 +561,9 @@ function TimeRangePicker({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-64 p-0"
-        align="start"
+        className="w-fit max-w-[500px] p-0"
+        align="end"
+        collisionPadding={16}
         onOpenAutoFocus={(e) => {
           // Prevent popover from stealing focus from the input
           e.preventDefault();
