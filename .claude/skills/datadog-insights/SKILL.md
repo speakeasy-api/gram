@@ -1,4 +1,5 @@
 ---
+name: datadog-insights
 description: Investigate Gram production health and post a digest to Slack
 ---
 
