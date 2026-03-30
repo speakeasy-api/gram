@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: c60b1bcddb550e2d5a78251f51a9b0b4
+  docChecksum: d69be95ec640bae8a503e48d5de5cde8
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.15
-  configChecksum: cb1d1fe16bb6e5bfd65cd66756689471
+  releaseVersion: 0.32.16
+  configChecksum: 599ebcc203b443a8d9ab1be53ae1fe55
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -154,7 +154,7 @@ trackedFiles:
   docs/models/components/createresponsebody.md:
     last_write_checksum: sha1:0c12f06a5d161fb9fa2c04fed3bb05965bd77b3d
   docs/models/components/createroleform.md:
-    last_write_checksum: sha1:d5e669d1dba5cfcfec6e29ff3c5a2db8835f6f53
+    last_write_checksum: sha1:6b116b64b9fb3618d9d78d1476b5d47d99580176
   docs/models/components/createsignedchatattachmenturlform2.md:
     last_write_checksum: sha1:7e2f08850a3c5bb57adcfe6ae7bbe9ac6a91d33e
   docs/models/components/createsignedchatattachmenturlresult.md:
@@ -600,7 +600,7 @@ trackedFiles:
   docs/models/components/updateprompttemplateresult.md:
     last_write_checksum: sha1:2c3026fda1bac0c4bb6819757d917b5cb2be7a9c
   docs/models/components/updateroleform.md:
-    last_write_checksum: sha1:bcc75922267f6ab47b8f86b81cfe4e4f7595882b
+    last_write_checksum: sha1:a2e7d4338d85add91d869f353a5c2ce20f2fb1e7
   docs/models/components/updateslackapprequestbody.md:
     last_write_checksum: sha1:5a464bb3c9d5605bf21fe365b43fbe1fd73f8f4c
   docs/models/components/updatetoolsetrequestbody.md:
@@ -1621,11 +1621,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:784cc2a6c30c2bfbe1faee45ba6e5c0cac6482ad
+    last_write_checksum: sha1:b24defa99aff01c1db3a1e3eac6e648ff7430c60
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:a91626e474cdacef58a1b91dc6d96c97ea13770e
+    last_write_checksum: sha1:1d8a54ffe6430c2fcfe6c6677213c5e7902567c6
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2129,7 +2129,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:5656f13bc9cccfe2919fb51abd8a79bc7db57cae
+    last_write_checksum: sha1:a43e38f4611da73a23a87f550f80c48d7033c41c
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2318,7 +2318,7 @@ trackedFiles:
     last_write_checksum: sha1:69fe2ce5ad8c1c2a848b034b6cd47f7b3012087c
     pristine_git_object: 59d40731a206fedf13bc1e48693dd594593a8b41
   src/models/components/createroleform.ts:
-    last_write_checksum: sha1:9141533fd65431f41fd0bf90a470770c48e5fec1
+    last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createsignedchatattachmenturlform2.ts:
     id: 1cfba9e9372f
     last_write_checksum: sha1:254cd81a5eadc1ce18e8749e84262150a90e9806
@@ -2934,7 +2934,7 @@ trackedFiles:
     last_write_checksum: sha1:5a041b5080adcfc65c1afef00705abcfa4073103
     pristine_git_object: 4d90a023fd313599d92a275675d9aa52574d9ab1
   src/models/components/updateroleform.ts:
-    last_write_checksum: sha1:6361fa29b7d7fc7e741fed9310fb33319d59fbcc
+    last_write_checksum: sha1:72e1a4589c1f3deeadc165d0e00491e2cde9e068
   src/models/components/updateslackapprequestbody.ts:
     last_write_checksum: sha1:e14d54c11f206f273fb529912d6684e14135aec7
   src/models/components/updatetoolsetrequestbody.ts:

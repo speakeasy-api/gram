@@ -15372,7 +15372,7 @@ components:
           type: array
           items:
             type: string
-          description: Optional member IDs to assign on creation.
+          description: Optional member IDs to additionally assign to this role on creation.
         name:
           type: string
           description: Display name for the role.
@@ -20693,7 +20693,7 @@ components:
           type: array
           items:
             type: string
-          description: Optional member IDs to reassign to this role.
+          description: Optional member IDs to additionally assign to this role. Existing assignments are preserved.
         name:
           type: string
           description: Updated display name.

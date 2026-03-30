@@ -20,7 +20,7 @@ export type CreateRoleForm = {
    */
   grants: Array<RoleGrant>;
   /**
-   * Optional member IDs to assign on creation.
+   * Optional member IDs to additionally assign to this role on creation.
    */
   memberIds?: Array<string> | undefined;
   /**

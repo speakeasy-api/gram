@@ -24,7 +24,7 @@ type CreateRoleRequestBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// Scope grants to assign.
 	Grants []*RoleGrantRequestBody `form:"grants" json:"grants" xml:"grants"`
-	// Optional member IDs to assign on creation.
+	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
 }
 
@@ -39,7 +39,8 @@ type UpdateRoleRequestBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Updated scope grants.
 	Grants []*RoleGrantRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
-	// Optional member IDs to reassign to this role.
+	// Optional member IDs to additionally assign to this role. Existing
+	// assignments are preserved.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
 }
 

@@ -95,7 +95,7 @@ type CreateRolePayload struct {
 	Description string
 	// Scope grants to assign.
 	Grants []*RoleGrant
-	// Optional member IDs to assign on creation.
+	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string
 }
 
@@ -276,7 +276,8 @@ type UpdateRolePayload struct {
 	Description *string
 	// Updated scope grants.
 	Grants []*RoleGrant
-	// Optional member IDs to reassign to this role.
+	// Optional member IDs to additionally assign to this role. Existing
+	// assignments are preserved.
 	MemberIds []string
 }
 

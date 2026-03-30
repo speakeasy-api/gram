@@ -415,7 +415,7 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 	Attribute("name", String, "Display name for the role.")
 	Attribute("description", String, "Description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
-	Attribute("member_ids", ArrayOf(String), "Optional member IDs to assign on creation.")
+	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
 })
 
 var UpdateRoleForm = Type("UpdateRoleForm", func() {
@@ -425,7 +425,7 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("name", String, "Updated display name.")
 	Attribute("description", String, "Updated description.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Updated scope grants.")
-	Attribute("member_ids", ArrayOf(String), "Optional member IDs to reassign to this role.")
+	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
 })
 
 var MemberModel = Type("AccessMember", func() {

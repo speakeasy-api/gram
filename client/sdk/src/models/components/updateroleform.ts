@@ -24,7 +24,7 @@ export type UpdateRoleForm = {
    */
   id: string;
   /**
-   * Optional member IDs to reassign to this role.
+   * Optional member IDs to additionally assign to this role. Existing assignments are preserved.
    */
   memberIds?: Array<string> | undefined;
   /**
