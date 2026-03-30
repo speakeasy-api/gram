@@ -25,7 +25,7 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Claude: NewClaudeEndpoint(s),
+		Claude: NewClaudeEndpoint(s, a.APIKeyAuth),
 		Logs:   NewLogsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -38,9 +38,35 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 
 // NewClaudeEndpoint returns an endpoint function that calls the method
 // "claude" of service "hooks".
-func NewClaudeEndpoint(s Service) goa.Endpoint {
+func NewClaudeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ClaudeHookPayload)
+		p := req.(*ClaudePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
 		return s.Claude(ctx, p)
 	}
 }

@@ -248,7 +248,7 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 }
 
 // Claude is the unified endpoint for all Claude Code hook events
-func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
 		attr.SlogEvent("claude_hook"),
 		attr.SlogValueAny(map[string]any{
@@ -279,7 +279,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 	}
 }
 
-func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow sessions to start
 	continueVal := true
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -291,7 +291,7 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHoo
 }
 
 // recordToolEvent records a tool event, either directly to ClickHouse if session is validated, or buffers it
-func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudeHookPayload) {
+func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudePayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
 		s.logger.WarnContext(ctx, "Tool event called without session ID")
 		return
@@ -318,7 +318,7 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 	return metadata, nil
 }
 
-func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow tools
 	allow := "allow"
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -329,7 +329,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookP
 	}, nil
 }
 
-func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,
@@ -337,7 +337,7 @@ func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHook
 	}, nil
 }
 
-func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,
