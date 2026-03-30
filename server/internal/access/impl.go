@@ -30,7 +30,10 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-var errWorkOSOrganizationNotLinked = errors.New("organization is not linked to WorkOS")
+var (
+	errWorkOSOrganizationNotLinked = errors.New("organization is not linked to WorkOS")
+	errConnectedUserNotFound       = errors.New("connected user not found")
+)
 
 type roleProvider interface {
 	ListRoles(ctx context.Context, orgID string) ([]workos.Role, error)
@@ -101,7 +104,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 
 	roles := make([]*gen.Role, 0, len(wRoles))
 	for _, wr := range wRoles {
-		role, err := s.buildRole(ctx, ac.ActiveOrganizationID, wr, memberCounts[wr.Slug])
+		role, err := buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, wr, memberCounts[wr.Slug])
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +139,7 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 		return member.RoleSlug
 	})
 
-	return s.buildRole(ctx, ac.ActiveOrganizationID, role, memberCounts[role.Slug])
+	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, role, memberCounts[role.Slug])
 }
 
 // CreateRole is creates a role for a user of a given organization.
@@ -194,7 +197,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		}
 	}
 
-	return s.buildRole(ctx, ac.ActiveOrganizationID, *wr, assignedCount)
+	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, *wr, assignedCount)
 }
 
 func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload) (*gen.Role, error) {
@@ -263,7 +266,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		return member.RoleSlug
 	})
 
-	return s.buildRole(ctx, ac.ActiveOrganizationID, *updatedRole, memberCounts[currentRole.Slug])
+	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, *updatedRole, memberCounts[currentRole.Slug])
 }
 
 func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload) error {
@@ -300,8 +303,9 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 }
 
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
-	if _, err := s.authContext(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
@@ -382,7 +386,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 	}
 
-	connectedUser, err := s.connectedUser(ctx, ac.ActiveOrganizationID, payload.UserID)
+	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
 		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, s.logger)
@@ -551,27 +555,6 @@ func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.Remove
 	return nil
 }
 
-func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil {
-		return nil, errors.New("missing auth context")
-	}
-
-	return ac, nil
-}
-
-func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, error) {
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, gramOrgID)
-	if err != nil {
-		return "", fmt.Errorf("get organization metadata: %w", err)
-	}
-	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		return "", errWorkOSOrganizationNotLinked
-	}
-
-	return org.WorkosID.String, nil
-}
-
 func isSystemRole(roleSlug string) bool {
 	switch roleSlug {
 	case "admin", "member":
@@ -610,31 +593,8 @@ func formatUserName(user workos.User) string {
 	}
 }
 
-var errConnectedUserNotFound = errors.New("connected user not found")
-
-func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
-	}
-	if s.roles == nil {
-		return nil, "", oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
-	}
-
-	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
-	switch {
-	case errors.Is(err, errWorkOSOrganizationNotLinked):
-		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
-	case err != nil:
-		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
-	default:
-	}
-
-	return ac, workosOrgID, nil
-}
-
-func (s *Service) buildRole(ctx context.Context, organizationID string, role workos.Role, memberCount int) (*gen.Role, error) {
-	grants, err := grantsForRole(ctx, s.logger, s.db, organizationID, role.Slug)
+func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string, role workos.Role, memberCount int) (*gen.Role, error) {
+	grants, err := grantsForRole(ctx, logger, db, organizationID, role.Slug)
 	if err != nil {
 		return nil, err
 	}
@@ -651,8 +611,8 @@ func (s *Service) buildRole(ctx context.Context, organizationID string, role wor
 	}, nil
 }
 
-func (s *Service) connectedUser(ctx context.Context, organizationID string, userID string) (usersrepo.User, error) {
-	hasRelationship, err := orgrepo.New(s.db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
+func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {
+	hasRelationship, err := orgrepo.New(db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
 		UserID:         userID,
 	})
@@ -663,7 +623,7 @@ func (s *Service) connectedUser(ctx context.Context, organizationID string, user
 		return usersrepo.User{}, errConnectedUserNotFound
 	}
 
-	user, err := usersrepo.New(s.db).GetUser(ctx, userID)
+	user, err := usersrepo.New(db).GetUser(ctx, userID)
 	if err != nil {
 		return usersrepo.User{}, fmt.Errorf("get user %q: %w", userID, err)
 	}
@@ -682,4 +642,37 @@ func grantFromRow(row repo.PrincipalGrant) *gen.Grant {
 		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, error) {
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, gramOrgID)
+	if err != nil {
+		return "", fmt.Errorf("get organization metadata: %w", err)
+	}
+	if !org.WorkosID.Valid || org.WorkosID.String == "" {
+		return "", errWorkOSOrganizationNotLinked
+	}
+
+	return org.WorkosID.String, nil
+}
+
+func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, "", oops.C(oops.CodeUnauthorized)
+	}
+	if s.roles == nil {
+		return nil, "", oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
+	}
+
+	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
+	switch {
+	case errors.Is(err, errWorkOSOrganizationNotLinked):
+		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	case err != nil:
+		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	default:
+	}
+
+	return ac, workosOrgID, nil
 }
