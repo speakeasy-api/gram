@@ -318,7 +318,7 @@ export function useGramThreadListAdapter(
             const result = (await response.json()) as { title: string };
             const title = result.title;
 
-            if (title) {
+            if (title && title !== "New Chat") {
               return createAssistantStream((controller) => {
                 controller.appendText(title);
                 controller.close();
