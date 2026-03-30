@@ -19,7 +19,7 @@ func NewDispatcher(logger *slog.Logger) *Dispatcher {
 }
 
 // Dispatch opens the authentication URL in the user's browser,
-// or prints it if the browser cannot be launched.
+// and prints it if the browser cannot be launched.
 func (d *Dispatcher) Dispatch(
 	ctx context.Context,
 	webAppURL string,
