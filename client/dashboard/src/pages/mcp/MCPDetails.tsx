@@ -404,6 +404,24 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
  */
 function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
+  const queryClient = useQueryClient();
+  const updateToolsetMutation = useUpdateToolsetMutation();
+
+  const handleMakePublic = () =>
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: { mcpIsPublic: true },
+        },
+      },
+      {
+        onSuccess: () => {
+          invalidateAllToolset(queryClient);
+          toast.success("Server is now public.");
+        },
+      },
+    );
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
     retry: (_, err) => {
@@ -434,7 +452,17 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
             Your server is private. To share with external users, you must make
-            it public in the server settings.
+            it public.{" "}
+            <button
+              type="button"
+              className="underline hover:opacity-80"
+              disabled={updateToolsetMutation.isPending}
+              onClick={handleMakePublic}
+            >
+              {updateToolsetMutation.isPending
+                ? "Enabling..."
+                : "Make it public"}
+            </button>
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
