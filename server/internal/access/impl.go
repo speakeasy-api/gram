@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -32,8 +31,7 @@ import (
 )
 
 var (
-	errWorkOSOrganizationNotLinked = errors.New("organization is not linked to WorkOS")
-	errConnectedUserNotFound       = errors.New("connected user not found")
+	errConnectedUserNotFound = errors.New("connected user not found")
 )
 
 type roleProvider interface {
@@ -94,16 +92,14 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
 	}
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
-	memberCounts := lo.CountValuesBy(members, func(member workos.Member) string {
-		return member.RoleSlug
-	})
+	memberCounts := countMembersByRoleSlug(members)
 
 	roles := make([]*gen.Role, 0, len(wRoles))
 	for _, wr := range wRoles {
@@ -127,22 +123,20 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
 	}
 
-	role, ok := lo.Find(wRoles, func(role workos.Role) bool { return role.ID == payload.ID })
+	role, ok := findRoleByID(wRoles, payload.ID)
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 	}
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
 
-	memberCounts := lo.CountValuesBy(members, func(member workos.Member) string {
-		return member.RoleSlug
-	})
+	memberCounts := countMembersByRoleSlug(members)
 
 	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, role, memberCounts[role.Slug])
 }
@@ -173,18 +167,25 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	case errors.As(err, &apiErr) && apiErr.StatusCode == 409:
 		wRoles, listErr := s.roles.ListRoles(ctx, workosOrgID)
 		if listErr != nil {
-			return nil, oops.E(oops.CodeGatewayError, listErr, "list roles after create conflict").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, listErr, "list roles after create conflict").Log(ctx, s.logger)
 		}
 
-		existingRole, ok := lo.Find(wRoles, func(role workos.Role) bool { return role.Slug == roleSlug })
+		var existingRole workos.Role
+		ok := false
+		for _, candidate := range wRoles {
+			if candidate.Slug == roleSlug {
+				existingRole = candidate
+				ok = true
+				break
+			}
+		}
 		if !ok {
-			return nil, oops.E(oops.CodeGatewayError, err, "create role in workos").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, s.logger)
 		}
 
 		wr = &existingRole
 	case err != nil:
-		return nil, oops.E(oops.CodeGatewayError, err, "create role in workos").Log(ctx, s.logger)
-	default:
+		return nil, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, s.logger)
 	}
 
 	// Stop before assigning members if grant sync fails. That can leave behind a
@@ -199,12 +200,10 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	if len(payload.MemberIds) > 0 {
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
-			return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 		}
 
-		membershipByUser := lo.SliceToMap(members, func(member workos.Member) (string, string) {
-			return member.UserID, member.ID
-		})
+		membershipByUser := membershipsByUserID(members)
 
 		for _, userID := range payload.MemberIds {
 			membershipID, ok := membershipByUser[userID]
@@ -213,7 +212,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 			}
 
 			if _, err := s.roles.UpdateMemberRole(ctx, membershipID, wr.Slug); err != nil {
-				return nil, oops.E(oops.CodeGatewayError, err, "assign members to created role").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, s.logger)
 			}
 
 			assignedCount++
@@ -233,10 +232,10 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
 	}
 
-	currentRole, ok := lo.Find(wRoles, func(role workos.Role) bool { return role.ID == payload.ID })
+	currentRole, ok := findRoleByID(wRoles, payload.ID)
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 	}
@@ -249,7 +248,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		Description: payload.Description,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "update role in workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update role in workos").Log(ctx, s.logger)
 	}
 
 	// As with role creation, member reassignment happens after local grant sync so
@@ -263,12 +262,10 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if payload.MemberIds != nil {
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
-			return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 		}
 
-		membershipByUser := lo.SliceToMap(members, func(member workos.Member) (string, string) {
-			return member.UserID, member.ID
-		})
+		membershipByUser := membershipsByUserID(members)
 
 		for _, userID := range payload.MemberIds {
 			membershipID, ok := membershipByUser[userID]
@@ -277,19 +274,17 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 			}
 
 			if _, err := s.roles.UpdateMemberRole(ctx, membershipID, currentRole.Slug); err != nil {
-				return nil, oops.E(oops.CodeGatewayError, err, "assign members to updated role").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "assign members to updated role").Log(ctx, s.logger)
 			}
 		}
 	}
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
 
-	memberCounts := lo.CountValuesBy(members, func(member workos.Member) string {
-		return member.RoleSlug
-	})
+	memberCounts := countMembersByRoleSlug(members)
 
 	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, *updatedRole, memberCounts[currentRole.Slug])
 }
@@ -304,10 +299,10 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
 	}
 
-	currentRole, ok := lo.Find(wRoles, func(role workos.Role) bool { return role.ID == payload.ID })
+	currentRole, ok := findRoleByID(wRoles, payload.ID)
 	if !ok {
 		return oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 	}
@@ -323,7 +318,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	}
 
 	if err := s.roles.DeleteRole(ctx, workosOrgID, currentRole.Slug); err != nil {
-		return oops.E(oops.CodeGatewayError, err, "delete role in workos").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "delete role in workos").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -357,7 +352,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 
 	roles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
 	}
 	roleIDBySlug := make(map[string]string, len(roles))
 	for _, role := range roles {
@@ -366,12 +361,12 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
 
 	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list org users from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
 	result := make([]*gen.AccessMember, 0, len(members))
@@ -404,7 +399,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 
 	roles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list roles from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
 	}
 
 	roleSlug := ""
@@ -432,7 +427,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list members from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
 
 	membershipID := ""
@@ -448,12 +443,12 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 
 	updatedMember, err := s.roles.UpdateMemberRole(ctx, membershipID, roleSlug)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "update member role in workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update member role in workos").Log(ctx, s.logger)
 	}
 
 	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list org users from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 	user, ok := users[updatedMember.UserID]
 	if !ok {
@@ -587,13 +582,34 @@ func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.Remove
 	return nil
 }
 
-func isSystemRole(roleSlug string) bool {
-	switch roleSlug {
-	case "admin", "member":
-		return true
-	default:
-		return false
+func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, errors.New("missing auth context")
 	}
+
+	return ac, nil
+}
+
+func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+	}
+	if !org.WorkosID.Valid || org.WorkosID.String == "" {
+		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+	}
+
+	return ac, org.WorkosID.String, nil
+}
+
+func isSystemRole(roleSlug string) bool {
+	return roleSlug == "admin" || roleSlug == "member"
 }
 
 func roleGrantPayloads(grants []*gen.RoleGrant) []*RoleGrant {
@@ -627,6 +643,34 @@ func formatUserName(user workos.User) string {
 	default:
 		return user.Email
 	}
+}
+
+func countMembersByRoleSlug(members []workos.Member) map[string]int {
+	counts := make(map[string]int, len(members))
+	for _, member := range members {
+		counts[member.RoleSlug]++
+	}
+
+	return counts
+}
+
+func membershipsByUserID(members []workos.Member) map[string]string {
+	membershipByUser := make(map[string]string, len(members))
+	for _, member := range members {
+		membershipByUser[member.UserID] = member.ID
+	}
+
+	return membershipByUser
+}
+
+func findRoleByID(roles []workos.Role, id string) (workos.Role, bool) {
+	for _, role := range roles {
+		if role.ID == id {
+			return role, true
+		}
+	}
+
+	return workos.Role{}, false
 }
 
 func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string, role workos.Role, memberCount int) (*gen.Role, error) {
@@ -681,23 +725,7 @@ func grantFromRow(row repo.PrincipalGrant) *gen.Grant {
 }
 
 func slugify(name string) string {
-	var b strings.Builder
-	prevDash := false
-
-	for _, r := range strings.ToLower(name) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			prevDash = false
-		case r == ' ' || r == '-' || r == '_':
-			if b.Len() > 0 && !prevDash {
-				b.WriteByte('-')
-				prevDash = true
-			}
-		}
-	}
-
-	slug := strings.Trim(b.String(), "-")
+	slug := conv.ToSlug(strings.ReplaceAll(name, "_", " "))
 	if slug == "" {
 		return ""
 	}
@@ -706,46 +734,4 @@ func slugify(name string) string {
 	}
 
 	return slug
-}
-
-func (s *Service) workosOrgID(ctx context.Context, gramOrgID string) (string, error) {
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, gramOrgID)
-	if err != nil {
-		return "", fmt.Errorf("get organization metadata: %w", err)
-	}
-	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		return "", errWorkOSOrganizationNotLinked
-	}
-
-	return org.WorkosID.String, nil
-}
-
-func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil {
-		return nil, errors.New("missing auth context")
-	}
-
-	return ac, nil
-}
-
-func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
-	}
-	if s.roles == nil {
-		return nil, "", oops.E(oops.CodeGatewayError, nil, "role provider is not configured").Log(ctx, s.logger)
-	}
-
-	workosOrgID, err := s.workosOrgID(ctx, ac.ActiveOrganizationID)
-	switch {
-	case errors.Is(err, errWorkOSOrganizationNotLinked):
-		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
-	case err != nil:
-		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
-	default:
-	}
-
-	return ac, workosOrgID, nil
 }
