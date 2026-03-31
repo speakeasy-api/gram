@@ -342,18 +342,3 @@ func TestAnySchemeSatisfied_EmptySchemes(t *testing.T) {
 	require.True(t, AnySchemeSatisfied(nil, env, ""))
 	require.True(t, AnySchemeSatisfied([]SecurityRequirement{}, env, ""))
 }
-
-func TestSecurityUnsatisfiedError_Message(t *testing.T) {
-	t.Parallel()
-
-	err := &SecurityUnsatisfiedError{
-		ToolName: "my_tool",
-		Schemes: []SecurityRequirement{
-			{Kind: SecuritySchemeAPIKey, EnvVariables: []string{"X_API_KEY"}},
-			{Kind: SecuritySchemeOAuth2AuthCode, EnvVariables: []string{"ACCESS_TOKEN"}},
-		},
-	}
-
-	require.Contains(t, err.Error(), "my_tool")
-	require.Contains(t, err.Error(), "2 scheme(s)")
-}

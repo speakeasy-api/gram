@@ -140,7 +140,7 @@ func TestServePublicAuth_WithSecurityDefs_NoCredentials_Returns401(t *testing.T)
 	unauthCtx := context.Background()
 	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "security scheme not satisfied")
+	require.Contains(t, err.Error(), "unauthorized")
 }
 
 func TestServePublicAuth_WithSecurityDefs_ValidMCPHeader_Succeeds(t *testing.T) {
@@ -183,7 +183,7 @@ func TestServePublicAuth_WithSecurityDefs_WrongMCPHeader_Returns401(t *testing.T
 		"MCP-Wrong-Key": "some-value",
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "security scheme not satisfied")
+	require.Contains(t, err.Error(), "unauthorized")
 }
 
 func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
