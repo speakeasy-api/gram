@@ -20,8 +20,6 @@ func TestSlugify(t *testing.T) {
 		{name: "already slugged", in: "Already-Slugged", want: "org-already-slugged"},
 		{name: "leading and trailing spaces", in: "  Spaces  ", want: "org-spaces"},
 		{name: "all uppercase", in: "UPPERCASE", want: "org-uppercase"},
-		{name: "special characters stripped", in: "special!@#chars", want: "org-specialchars"},
-		{name: "empty string", in: "", want: ""},
 		{name: "underscores become dashes", in: "hello_world", want: "org-hello-world"},
 		{name: "consecutive separators collapsed", in: "a - - b", want: "org-a-b"},
 		{name: "digits preserved", in: "role2admin", want: "org-role2admin"},
@@ -32,7 +30,25 @@ func TestSlugify(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, slugify(tt.in))
+			got, err := slugify(tt.in)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestSlugifyRejectsEmptyString(t *testing.T) {
+	t.Parallel()
+
+	_, err := slugify("")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "role name must contain at least one letter or digit")
+}
+
+func TestSlugifyRejectsInvalidCharacters(t *testing.T) {
+	t.Parallel()
+
+	_, err := slugify("special!@#chars")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "role name contains invalid characters")
 }

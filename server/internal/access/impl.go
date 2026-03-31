@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -32,6 +33,9 @@ import (
 
 var (
 	errConnectedUserNotFound = errors.New("connected user not found")
+	// Custom role names become stable slugs and user-facing identifiers, so keep
+	// them to a predictable ASCII set instead of silently normalizing symbols.
+	validRoleNamePattern = regexp.MustCompile(`^[A-Za-z0-9 _-]+$`)
 )
 
 type RoleProvider interface {
@@ -153,9 +157,9 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		return nil, err
 	}
 
-	roleSlug := slugify(payload.Name)
-	if roleSlug == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "role name must contain at least one letter or digit").Log(ctx, s.logger)
+	roleSlug, slugErr := slugify(payload.Name)
+	if slugErr != nil {
+		return nil, slugErr
 	}
 	wr, err := s.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
 		Name:        payload.Name,
@@ -241,6 +245,11 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	}
 	if isSystemRole(currentRole.Slug) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "system roles cannot be updated").Log(ctx, s.logger)
+	}
+	if payload.Name != nil {
+		if _, err := slugify(*payload.Name); err != nil {
+			return nil, err
+		}
 	}
 
 	updatedRole, err := s.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
@@ -724,14 +733,17 @@ func grantFromRow(row repo.PrincipalGrant) *gen.Grant {
 	}
 }
 
-func slugify(name string) string {
+func slugify(name string) (string, error) {
 	slug := conv.ToSlug(strings.ReplaceAll(name, "_", " "))
 	if slug == "" {
-		return ""
+		return "", oops.E(oops.CodeBadRequest, nil, "role name must contain at least one letter or digit")
+	}
+	if !validRoleNamePattern.MatchString(name) {
+		return "", oops.E(oops.CodeBadRequest, nil, "role name contains invalid characters")
 	}
 	if !strings.HasPrefix(slug, "org-") {
 		slug = "org-" + slug
 	}
 
-	return slug
+	return slug, nil
 }
