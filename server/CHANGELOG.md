@@ -1,5 +1,17 @@
 # server
 
+## 0.34.0
+
+### Minor Changes
+
+- c9d23f8: Adds an API for role, membership and grants management.
+- e177e45: Improve user-facing deployment logs with source processing details and aggregate summary
+
+### Patch Changes
+
+- 0c07035: fix: revert "feat: allow other security schemes when public OAuth is configured"
+- 7978914: Validate that default_environment_id belongs to the caller's project before storing it in MCP metadata
+
 ## 0.33.0
 
 ### Minor Changes
