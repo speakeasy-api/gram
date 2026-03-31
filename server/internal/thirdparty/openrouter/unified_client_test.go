@@ -15,7 +15,9 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -200,9 +202,14 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryLogger := &mockTelemetryLogger{}
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	// Create client
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		provisioner,
 		captureStrategy,
 		trackingStrategy,
@@ -319,9 +326,14 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryLogger := &mockTelemetryLogger{}
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	// Create client
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		provisioner,
 		captureStrategy,
 		trackingStrategy,
@@ -430,9 +442,14 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryService := &mockTelemetryLogger{}
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	// Create client
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		provisioner,
 		captureStrategy,
 		trackingStrategy,
@@ -528,9 +545,14 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 			telemetryService := &mockTelemetryLogger{}
 
+			tracerProvider := testenv.NewTracerProvider(t)
+			guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+			require.NoError(t, err)
+
 			// Create client
 			client := NewUnifiedClient(
 				slog.Default(),
+				guardianPolicy,
 				provisioner,
 				captureStrategy,
 				trackingStrategy,
@@ -552,7 +574,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			}
 
 			// Call GetCompletion
-			_, err := client.GetCompletion(context.Background(), req)
+			_, err = client.GetCompletion(context.Background(), req)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedError)
 		})
@@ -595,9 +617,14 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryService := &mockTelemetryLogger{}
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	// Create client
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		provisioner,
 		captureStrategy,
 		trackingStrategy,
@@ -758,9 +785,14 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 	server := newMockServer(t)
 	defer server.Close()
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	titleGenerator := &trackingTitleGenerator{}
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
@@ -780,7 +812,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 		APIKeyID:    "",
 	}
 
-	_, err := client.GetCompletion(context.Background(), req)
+	_, err = client.GetCompletion(context.Background(), req)
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
@@ -799,10 +831,15 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	server := newMockServer(t)
 	defer server.Close()
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	titleGenerator := &trackingTitleGenerator{}
 	tracker := newTrackingCaptureStrategy()
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		tracker,
 		&mockUsageTrackingStrategy{},
@@ -829,7 +866,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	}
 
 	// One completion with nil ChatID (simulating title-gen activity's internal call)
-	_, err := client.GetCompletion(context.Background(), CompletionRequest{
+	_, err = client.GetCompletion(context.Background(), CompletionRequest{
 		OrgID:       "test-org",
 		ProjectID:   projectID.String(),
 		Messages:    []or.Message{CreateMessageUser("Generate title")},
@@ -861,9 +898,14 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	server := newMockServer(t)
 	defer server.Close()
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	tracker := newTrackingCaptureStrategy()
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		tracker,
 		&mockUsageTrackingStrategy{},
@@ -885,7 +927,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		UsageSource: billing.ModelUsageSourcePlayground,
 		APIKeyID:    "key-1",
 	}
-	_, err := client.GetCompletion(context.Background(), req1)
+	_, err = client.GetCompletion(context.Background(), req1)
 	require.NoError(t, err)
 
 	// After round 1: DB should have [user(StartOrResumeChat), assistant(CaptureMessage)]
@@ -986,9 +1028,14 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryService := &mockTelemetryLogger{}
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	// Create client
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		provisioner,
 		captureStrategy,
 		trackingStrategy,
@@ -1096,9 +1143,14 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryService := &mockTelemetryLogger{}
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	// Create client
 	client := NewUnifiedClient(
 		slog.Default(),
+		guardianPolicy,
 		provisioner,
 		captureStrategy,
 		trackingStrategy,

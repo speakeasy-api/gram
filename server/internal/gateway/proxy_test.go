@@ -216,7 +216,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			tool := newTestToolDescriptor()
@@ -346,7 +346,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			tool := newTestToolDescriptor()
@@ -707,7 +707,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			tool := newTestToolDescriptor()
@@ -917,7 +917,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			// Create tool configuration
@@ -1284,7 +1284,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			tool := newTestToolDescriptor()
@@ -1368,7 +1368,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	// Create resource descriptor
@@ -1509,7 +1509,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1593,7 +1593,7 @@ func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	descriptor := newTestToolDescriptor()
@@ -1665,7 +1665,7 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	descriptor := newTestToolDescriptor()
@@ -1735,7 +1735,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1829,7 +1829,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1934,7 +1934,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2030,7 +2030,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2125,7 +2125,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2226,7 +2226,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2324,7 +2324,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2438,7 +2438,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2553,7 +2553,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2665,7 +2665,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2777,7 +2777,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2892,7 +2892,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -3011,7 +3011,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()

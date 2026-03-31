@@ -19,12 +19,16 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	tracernoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestLocalRunner_ToolCallAndReadResource(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
+	tracerProvider := tracernoop.NewTracerProvider()
+
 	root, err := os.OpenRoot(t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -35,7 +39,7 @@ func TestLocalRunner_ToolCallAndReadResource(t *testing.T) {
 	require.NoError(t, err)
 
 	codeRoot := t.TempDir()
-	runner := NewLocalRunner(slog.New(slog.DiscardHandler), codeRoot, serverURL, assetStore)
+	runner := NewLocalRunner(logger, tracerProvider, codeRoot, serverURL, assetStore)
 
 	archive := buildLocalRunnerArchive(t, `
 export async function handleToolCall({ name, input }) {

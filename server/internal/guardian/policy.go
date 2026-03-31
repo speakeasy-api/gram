@@ -1,3 +1,23 @@
+// Package guardian provides HTTP client construction with network security
+// policy enforcement, OpenTelemetry instrumentation, and optional retry logic.
+//
+// It addresses three concerns:
+//
+//   - SSRF prevention: outbound connections are checked at the dialer level
+//     against a configurable blocklist of CIDR ranges (all RFC-defined private
+//     and reserved ranges by default). Because the check runs inside
+//     [net.Dialer.ControlContext] after DNS resolution, it cannot be bypassed
+//     by DNS rebinding.
+//
+//   - Safe HTTP transports: [net/http.DefaultTransport] and
+//     [net/http.DefaultClient] are package-level globals that any code can
+//     mutate at runtime, making their behaviour unpredictable. Policy.Client
+//     and Policy.PooledClient avoid this by constructing fresh, isolated
+//     transports for every call via [github.com/hashicorp/go-cleanhttp].
+//
+//   - Observability: every returned [http.Client] has its transport wrapped
+//     with [go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp] so
+//     all outbound HTTP calls are traced without per-call-site boilerplate.
 package guardian
 
 import (
@@ -9,7 +29,12 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-cleanhttp"
+	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
+
+type HTTPClient = http.Client
 
 var (
 	ErrBadHost   = fmt.Errorf("bad host")
@@ -52,14 +77,79 @@ var defaultBlockedCIDRBlocks = []*net.IPNet{
 	mustParseCIDR("2001:20::/28"),  /* ORCHIDv2 - RFC7343 */
 }
 
+type RetryConfig struct {
+	WaitMin     time.Duration // Minimum time to wait
+	WaitMax     time.Duration // Maximum time to wait
+	MaxAttempts int           // Maximum number of retries
+
+	// CheckRetry specifies the policy for handling retries, and is called
+	// after each request. The default policy is [retryablehttp.DefaultRetryPolicy].
+	CheckRetry retryablehttp.CheckRetry
+
+	// Backoff specifies the policy for how long to wait between retries
+	Backoff retryablehttp.Backoff
+
+	// ErrorHandler specifies the custom error handler to use, if any
+	ErrorHandler retryablehttp.ErrorHandler
+
+	// PrepareRetry can prepare the request for retry operation, for example re-sign it
+	PrepareRetry retryablehttp.PrepareRetry
+}
+
+// DefaultRetryConfig returns a [RetryConfig] populated with the defaults from
+// [github.com/hashicorp/go-retryablehttp]. Use it as a starting point when
+// only a few fields need to be overridden.
+func DefaultRetryConfig() *RetryConfig {
+	return &RetryConfig{
+		WaitMin:      1 * time.Second,
+		WaitMax:      30 * time.Second,
+		MaxAttempts:  4,
+		CheckRetry:   retryablehttp.DefaultRetryPolicy,
+		Backoff:      retryablehttp.DefaultBackoff,
+		ErrorHandler: nil,
+		PrepareRetry: nil,
+	}
+}
+
+type htttpClientOptions struct {
+	otelHTTPOptions []otelhttp.Option
+	retryConfig     *RetryConfig
+}
+
+// WithOTelHTTPOptions appends additional [otelhttp.Option] values to the
+// OpenTelemetry transport instrumentation. Use this to configure trace
+// propagation, filters, or span name formatters on a per-client basis.
+func WithOTelHTTPOptions(options ...otelhttp.Option) func(*htttpClientOptions) {
+	return func(o *htttpClientOptions) {
+		o.otelHTTPOptions = options
+	}
+}
+
+// WithDefaultRetryConfig enables retry behaviour using the defaults from
+// [DefaultRetryConfig].
+func WithDefaultRetryConfig() func(*htttpClientOptions) {
+	return func(o *htttpClientOptions) {
+		o.retryConfig = DefaultRetryConfig()
+	}
+}
+
+// WithRetryConfig enables retry behaviour using the provided [RetryConfig].
+func WithRetryConfig(config *RetryConfig) func(*htttpClientOptions) {
+	return func(o *htttpClientOptions) {
+		o.retryConfig = config
+	}
+}
+
 type Policy struct {
+	tracerProvider    trace.TracerProvider
 	blockedCIDRBlocks []*net.IPNet
 }
 
 // NewDefaultPolicy creates a new Policy that blocks common private and reserved
 // IP ranges.
-func NewDefaultPolicy() *Policy {
+func NewDefaultPolicy(tracerProvider trace.TracerProvider) *Policy {
 	return &Policy{
+		tracerProvider:    tracerProvider,
 		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
 	}
 }
@@ -68,7 +158,7 @@ func NewDefaultPolicy() *Policy {
 // It returns an error if any of the CIDR blocks cannot be parsed.
 // Use NewDefaultPolicy for a safe default that blocks common private and
 // reserved IP ranges.
-func NewUnsafePolicy(disallowedCIDRBlocks []string) (*Policy, error) {
+func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks []string) (*Policy, error) {
 	var disallowedBlocks []*net.IPNet
 	for _, cidr := range disallowedCIDRBlocks {
 		block, err := parseCIDR(cidr)
@@ -78,23 +168,69 @@ func NewUnsafePolicy(disallowedCIDRBlocks []string) (*Policy, error) {
 		disallowedBlocks = append(disallowedBlocks, block)
 	}
 
-	return &Policy{blockedCIDRBlocks: disallowedBlocks}, nil
+	return &Policy{
+		tracerProvider:    tracerProvider,
+		blockedCIDRBlocks: disallowedBlocks,
+	}, nil
 }
 
-func (p *Policy) PooledClient() *http.Client {
-	t := cleanhttp.DefaultPooledTransport()
-	t.DialContext = p.Dialer().DialContext
-
-	return &http.Client{Transport: t}
+// PooledClient returns an [http.Client] backed by a pooled transport that
+// keeps idle connections alive for reuse. It is appropriate for long-lived
+// clients that make repeated requests to the same host(s). Do not use it for
+// short-lived or one-off requests as idle connections hold open file
+// descriptors until they time out.
+func (p *Policy) PooledClient(options ...func(*htttpClientOptions)) *HTTPClient {
+	return p.clientWithBaseTransport(cleanhttp.DefaultPooledTransport(), options...)
 }
 
-func (p *Policy) Client() *http.Client {
-	t := cleanhttp.DefaultTransport()
-	t.DialContext = p.Dialer().DialContext
-
-	return &http.Client{Transport: t}
+// Client returns an [http.Client] that opens a new connection for every
+// request (keepalives disabled). Because connections are never held idle,
+// the client cannot leak file descriptors, making it safe for short-lived
+// or one-off requests where connection reuse is unnecessary.
+func (p *Policy) Client(options ...func(*htttpClientOptions)) *HTTPClient {
+	return p.clientWithBaseTransport(cleanhttp.DefaultTransport(), options...)
 }
 
+func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...func(*htttpClientOptions)) *HTTPClient {
+	var opts htttpClientOptions
+	for _, option := range options {
+		option(&opts)
+	}
+
+	transport.DialContext = p.Dialer().DialContext
+
+	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
+	otelOpts = append(otelOpts, opts.otelHTTPOptions...)
+	otelTransport := otelhttp.NewTransport(transport, otelOpts...)
+
+	if opts.retryConfig == nil {
+		return &http.Client{Transport: otelTransport}
+	}
+
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient = &http.Client{
+		Transport: otelTransport,
+	}
+
+	retryClient.RetryWaitMin = opts.retryConfig.WaitMin
+	retryClient.RetryWaitMax = opts.retryConfig.WaitMax
+	retryClient.RetryMax = opts.retryConfig.MaxAttempts
+	retryClient.CheckRetry = opts.retryConfig.CheckRetry
+	retryClient.Backoff = opts.retryConfig.Backoff
+	retryClient.ErrorHandler = opts.retryConfig.ErrorHandler
+	retryClient.PrepareRetry = opts.retryConfig.PrepareRetry
+
+	return retryClient.StandardClient()
+}
+
+// Dialer returns a [net.Dialer] that enforces the policy's CIDR blocklist via
+// [net.Dialer.ControlContext]. The check runs after DNS resolution on the
+// raw IP address, so it cannot be bypassed by hostnames that resolve to
+// blocked ranges. If the resolved IP falls within a blocked CIDR block the
+// dial fails with [ErrBlockedIP]; malformed addresses fail with [ErrBadHost].
+//
+// Client and PooledClient use this dialer internally. Use Dialer directly only
+// when you need to build a custom [http.Transport].
 func (p *Policy) Dialer() *net.Dialer {
 	return &net.Dialer{
 		Timeout:   30 * time.Second,

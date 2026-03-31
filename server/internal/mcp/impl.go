@@ -68,6 +68,7 @@ type Service struct {
 	logger              *slog.Logger
 	tracer              trace.Tracer
 	metrics             *metrics
+	guardianPolicy      *guardian.Policy
 	db                  *pgxpool.Pool
 	authRepo            *auth_repo.Queries
 	toolsetsRepo        *toolsets_repo.Queries
@@ -148,6 +149,7 @@ func NewService(
 		logger:          logger,
 		tracer:          tracer,
 		metrics:         newMetrics(meter, logger),
+		guardianPolicy:  guardianPolicy,
 		db:              db,
 		authRepo:        auth_repo.New(db),
 		toolsetsRepo:    toolsets_repo.New(db),
@@ -851,9 +853,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
+		return handleToolsList(ctx, s.logger, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -1012,6 +1014,7 @@ func (s *Service) HandleToolsList(
 	result, err := handleToolsList(
 		ctx,
 		s.logger,
+		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,
@@ -1080,6 +1083,7 @@ func (s *Service) HandleToolsCall(
 		ctx,
 		s.logger,
 		s.metrics,
+		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,

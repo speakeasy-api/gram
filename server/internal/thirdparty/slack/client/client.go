@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/repo"
 )
 
@@ -22,18 +22,18 @@ const slackServer = "https://slack.com/api"
 type SlackClient struct {
 	clientID     string
 	clientSecret string
-	client       *http.Client
+	client       *guardian.HTTPClient
 	enc          *encryption.Client
 	repo         *repo.Queries
 	enabled      bool
 }
 
-func NewSlackClient(clientID, clientSecret string, db *pgxpool.Pool, enc *encryption.Client) *SlackClient {
+func NewSlackClient(guardianPolicy *guardian.Policy, clientID, clientSecret string, db *pgxpool.Pool, enc *encryption.Client) *SlackClient {
 	enabled := clientID != "" && clientSecret != ""
 	return &SlackClient{
 		clientID:     clientID,
 		clientSecret: clientSecret,
-		client:       cleanhttp.DefaultPooledClient(),
+		client:       guardianPolicy.PooledClient(),
 		enc:          enc,
 		repo:         repo.New(db),
 		enabled:      enabled,

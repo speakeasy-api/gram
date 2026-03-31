@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
@@ -327,6 +326,11 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			if err != nil {
+				return err
+			}
+
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -398,7 +402,7 @@ func newWorkerCommand() *cli.Command {
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -407,25 +411,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
-			}
-
-			// In local development, allow loopback addresses for internal tool-to-tool communication
-			var guardianPolicy *guardian.Policy
-			if c.String("environment") == "local" {
-				guardianPolicy, err = guardian.NewUnsafePolicy([]string{}) // Allow all traffic for local development
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
-				}
-			} else {
-				guardianPolicy = guardian.NewDefaultPolicy()
-			}
-			if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
-				var err error
-				guardianPolicy, err = guardian.NewUnsafePolicy(s)
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
-				}
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -434,7 +420,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, tigrisStore, encryptionClient)
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
@@ -442,7 +428,7 @@ func newWorkerCommand() *cli.Command {
 
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
-			slackClient := slack_client.NewSlackClient("", "", db, encryptionClient)
+			slackClient := slack_client.NewSlackClient(guardianPolicy, "", "", db, encryptionClient)
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -467,6 +453,7 @@ func newWorkerCommand() *cli.Command {
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
+				guardianPolicy,
 				openRouter,
 				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
@@ -476,7 +463,7 @@ func newWorkerCommand() *cli.Command {
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
-			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
+			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
 				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
@@ -495,7 +482,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
+			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
@@ -540,6 +527,7 @@ func newWorkerCommand() *cli.Command {
 			 */
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
+				GuardianPolicy:      guardianPolicy,
 				DB:                  db,
 				EncryptionClient:    encryptionClient,
 				FeatureProvider:     featureFlags,

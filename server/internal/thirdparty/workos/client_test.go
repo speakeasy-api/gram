@@ -17,6 +17,8 @@ import (
 	"github.com/workos/workos-go/v6/pkg/roles"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -455,7 +457,11 @@ func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.Client, *fakeWorkOS)
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 
-	client := workos.NewClient("test-api-key", workos.ClientOpts{
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := workos.NewClient(guardianPolicy, "test-api-key", workos.ClientOpts{
 		Endpoint:   srv.URL,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	})
