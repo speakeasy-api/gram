@@ -655,8 +655,9 @@ func newStartCommand() *cli.Command {
 			mux.Use(func(h http.Handler) http.Handler {
 				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
 			})
-			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
+			mux.Use(middleware.NewRecovery(logger))
+			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
