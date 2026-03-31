@@ -7,6 +7,46 @@
 
 package client
 
+// ListRolesAccessPath returns the URL path to the access service listRoles HTTP endpoint.
+func ListRolesAccessPath() string {
+	return "/rpc/access.listRoles"
+}
+
+// GetRoleAccessPath returns the URL path to the access service getRole HTTP endpoint.
+func GetRoleAccessPath() string {
+	return "/rpc/access.getRole"
+}
+
+// CreateRoleAccessPath returns the URL path to the access service createRole HTTP endpoint.
+func CreateRoleAccessPath() string {
+	return "/rpc/access.createRole"
+}
+
+// UpdateRoleAccessPath returns the URL path to the access service updateRole HTTP endpoint.
+func UpdateRoleAccessPath() string {
+	return "/rpc/access.updateRole"
+}
+
+// DeleteRoleAccessPath returns the URL path to the access service deleteRole HTTP endpoint.
+func DeleteRoleAccessPath() string {
+	return "/rpc/access.deleteRole"
+}
+
+// ListScopesAccessPath returns the URL path to the access service listScopes HTTP endpoint.
+func ListScopesAccessPath() string {
+	return "/rpc/access.listScopes"
+}
+
+// ListMembersAccessPath returns the URL path to the access service listMembers HTTP endpoint.
+func ListMembersAccessPath() string {
+	return "/rpc/access.listMembers"
+}
+
+// UpdateMemberRoleAccessPath returns the URL path to the access service updateMemberRole HTTP endpoint.
+func UpdateMemberRoleAccessPath() string {
+	return "/rpc/access.updateMemberRole"
+}
+
 // ListGrantsAccessPath returns the URL path to the access service listGrants HTTP endpoint.
 func ListGrantsAccessPath() string {
 	return "/rpc/access.listGrants"

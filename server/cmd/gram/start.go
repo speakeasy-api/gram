@@ -662,9 +662,13 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.AdminOverrideMiddleware)
 
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
+			roleClient, err := newAccessRoleProvider(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to create access role provider: %w", err)
+			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager))
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, temporalEnv))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager))

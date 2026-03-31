@@ -15,8 +15,24 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage access permissions for users and roles across your organization.
+// Manage roles, grants, and team member access control.
 type Service interface {
+	// List all roles for the current organization.
+	ListRoles(context.Context, *ListRolesPayload) (res *ListRolesResult, err error)
+	// Get a role by ID.
+	GetRole(context.Context, *GetRolePayload) (res *Role, err error)
+	// Create a new custom role.
+	CreateRole(context.Context, *CreateRolePayload) (res *Role, err error)
+	// Update an existing custom role.
+	UpdateRole(context.Context, *UpdateRolePayload) (res *Role, err error)
+	// Delete a custom role (system roles cannot be deleted).
+	DeleteRole(context.Context, *DeleteRolePayload) (err error)
+	// List all available scopes and their resource types.
+	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
+	// List all team members with their role assignments.
+	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
+	// Change a team member's role assignment.
+	UpdateMemberRole(context.Context, *UpdateMemberRolePayload) (res *AccessMember, err error)
 	// List all permissions in your organization, optionally filtered to a specific
 	// user or role.
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListGrantsResult, err error)
@@ -50,7 +66,56 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants"}
+var MethodNames = [12]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "updateMemberRole", "listGrants", "upsertGrants", "removeGrants", "removePrincipalGrants"}
+
+// AccessMember is the result type of the access service updateMemberRole
+// method.
+type AccessMember struct {
+	// User ID.
+	ID string
+	// Display name.
+	Name string
+	// Email address.
+	Email string
+	// Avatar URL.
+	PhotoURL *string
+	// Currently assigned role ID.
+	RoleID string
+	// When the member joined the organization.
+	JoinedAt string
+}
+
+// CreateRolePayload is the payload type of the access service createRole
+// method.
+type CreateRolePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// Display name for the role.
+	Name string
+	// Description of what this role can do.
+	Description string
+	// Scope grants to assign.
+	Grants []*RoleGrant
+	// Optional member IDs to additionally assign to this role on creation.
+	MemberIds []string
+}
+
+// DeleteRolePayload is the payload type of the access service deleteRole
+// method.
+type DeleteRolePayload struct {
+	// The ID of the role to delete.
+	ID           string
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// GetRolePayload is the payload type of the access service getRole method.
+type GetRolePayload struct {
+	// The ID of the role.
+	ID           string
+	ApikeyToken  *string
+	SessionToken *string
+}
 
 // A permission record giving a user or role the ability to perform an action
 // on a resource.
@@ -102,6 +167,45 @@ type ListGrantsResult struct {
 	Grants []*Grant
 }
 
+// ListMembersPayload is the payload type of the access service listMembers
+// method.
+type ListMembersPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListMembersResult is the result type of the access service listMembers
+// method.
+type ListMembersResult struct {
+	// The members in your organization.
+	Members []*AccessMember
+}
+
+// ListRolesPayload is the payload type of the access service listRoles method.
+type ListRolesPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListRolesResult is the result type of the access service listRoles method.
+type ListRolesResult struct {
+	// The roles in your organization.
+	Roles []*Role
+}
+
+// ListScopesPayload is the payload type of the access service listScopes
+// method.
+type ListScopesPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListScopesResult is the result type of the access service listScopes method.
+type ListScopesResult struct {
+	// The scopes available in access control.
+	Scopes []*ScopeDefinition
+}
+
 // RemoveGrantsPayload is the payload type of the access service removeGrants
 // method.
 type RemoveGrantsPayload struct {
@@ -119,6 +223,70 @@ type RemovePrincipalGrantsPayload struct {
 	PrincipalUrn urn.Principal
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// Role is the result type of the access service getRole method.
+type Role struct {
+	// Unique role identifier.
+	ID string
+	// Display name of the role.
+	Name string
+	// Human-readable description.
+	Description string
+	// Whether this is a built-in system role that cannot be deleted.
+	IsSystem bool
+	// Scope grants assigned to this role.
+	Grants []*RoleGrant
+	// Number of members assigned to this role.
+	MemberCount int
+	CreatedAt   string
+	UpdatedAt   string
+}
+
+type RoleGrant struct {
+	// The scope slug this grant applies to.
+	Scope string
+	// Resource allowlist. Null means unrestricted access. An array means only the
+	// listed resource IDs.
+	Resources []string
+}
+
+type ScopeDefinition struct {
+	// Unique scope identifier.
+	Slug string
+	// What this scope protects.
+	Description string
+	// The type of resource this scope applies to.
+	ResourceType string
+}
+
+// UpdateMemberRolePayload is the payload type of the access service
+// updateMemberRole method.
+type UpdateMemberRolePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The user ID to update.
+	UserID string
+	// The new role ID to assign.
+	RoleID string
+}
+
+// UpdateRolePayload is the payload type of the access service updateRole
+// method.
+type UpdateRolePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The ID of the role to update.
+	ID string
+	// Updated display name.
+	Name *string
+	// Updated description.
+	Description *string
+	// Updated scope grants.
+	Grants []*RoleGrant
+	// Optional member IDs to additionally assign to this role. Existing
+	// assignments are preserved.
+	MemberIds []string
 }
 
 // UpsertGrantsPayload is the payload type of the access service upsertGrants

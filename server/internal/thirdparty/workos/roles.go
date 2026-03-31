@@ -26,6 +26,8 @@ type Role struct {
 	Name        string `json:"name"`
 	Slug        string `json:"slug"`
 	Description string `json:"description"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 // Member represents an active organization membership.
@@ -35,6 +37,7 @@ type Member struct {
 	UserID         string
 	OrganizationID string
 	RoleSlug       string
+	CreatedAt      string
 }
 
 // User represents a WorkOS user with the fields used by Gram.
@@ -130,7 +133,14 @@ func (rc *RoleClient) ListRoles(ctx context.Context, orgID string) ([]Role, erro
 
 	out := make([]Role, len(resp.Data))
 	for i, r := range resp.Data {
-		out[i] = Role{ID: r.ID, Name: r.Name, Slug: r.Slug, Description: r.Description}
+		out[i] = Role{
+			ID:          r.ID,
+			Name:        r.Name,
+			Slug:        r.Slug,
+			Description: r.Description,
+			CreatedAt:   r.CreatedAt,
+			UpdatedAt:   r.UpdatedAt,
+		}
 	}
 	return out, nil
 }
@@ -244,6 +254,7 @@ func (rc *RoleClient) ListMembers(ctx context.Context, orgID string) ([]Member, 
 				UserID:         m.UserID,
 				OrganizationID: m.OrganizationID,
 				RoleSlug:       m.Role.Slug,
+				CreatedAt:      m.CreatedAt,
 			})
 		}
 
@@ -319,7 +330,7 @@ func (rc *RoleClient) UpdateMemberRole(ctx context.Context, membershipID string,
 		return nil, fmt.Errorf("update member role: %w", err)
 	}
 
-	return &Member{ID: m.ID, UserID: m.UserID, OrganizationID: m.OrganizationID, RoleSlug: m.Role.Slug}, nil
+	return &Member{ID: m.ID, UserID: m.UserID, OrganizationID: m.OrganizationID, RoleSlug: m.Role.Slug, CreatedAt: m.CreatedAt}, nil
 }
 
 // do performs a raw HTTP request against the WorkOS REST API.

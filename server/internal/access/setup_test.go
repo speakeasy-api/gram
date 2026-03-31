@@ -14,10 +14,12 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var (
@@ -44,6 +46,7 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	service *access.Service
 	conn    *pgxpool.Pool
+	roles   *MockRoleProvider
 }
 
 func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
@@ -65,12 +68,24 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
 
-	svc := access.NewService(logger, tracerProvider, conn, sessionManager)
+	_, err = orgrepo.New(conn).SetOrgWorkosID(ctx, orgrepo.SetOrgWorkosIDParams{
+		WorkosID:       conv.PtrToPGText(conv.PtrEmpty("org_workos_test")),
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	roles := newMockRoleProvider(t)
+
+	svc := access.NewService(logger, tracerProvider, conn, sessionManager, roles)
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
+		roles:   roles,
 	}
 }
 
@@ -128,6 +143,32 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
 		Resource:       resource,
+	})
+	require.NoError(t, err)
+}
+
+func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, email string, displayName string, workosUserID string, workosMembershipID string) {
+	t.Helper()
+
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		WorkosID: conv.PtrToPGText(conv.PtrEmpty(workosUserID)),
+		ID:       userID,
+	})
+	require.NoError(t, err)
+
+	err = orgrepo.New(conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
+		OrganizationID:     organizationID,
+		UserID:             userID,
+		WorkosMembershipID: conv.PtrToPGText(conv.PtrEmpty(workosMembershipID)),
 	})
 	require.NoError(t, err)
 }

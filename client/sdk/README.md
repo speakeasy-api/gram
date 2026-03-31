@@ -106,7 +106,17 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.access.list();
+  const result = await gram.access.createRole({
+    createRoleForm: {
+      description: "swerve hm receptor how",
+      grants: [
+        {
+          scope: "mcp:connect",
+        },
+      ],
+      name: "<value>",
+    },
+  });
 
   console.log(result);
 }
@@ -124,9 +134,17 @@ run();
 
 ### [Access](docs/sdks/access/README.md)
 
+* [createRole](docs/sdks/access/README.md#createrole) - createRole access
+* [deleteRole](docs/sdks/access/README.md#deleterole) - deleteRole access
+* [getRole](docs/sdks/access/README.md#getrole) - getRole access
 * [list](docs/sdks/access/README.md#list) - listGrants access
+* [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
+* [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
+* [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
 * [remove](docs/sdks/access/README.md#remove) - removeGrants access
 * [removePrincipal](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
+* [updateMemberRole](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
+* [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
 * [upsert](docs/sdks/access/README.md#upsert) - upsertGrants access
 
 ### [Agentworkflows](docs/sdks/agentworkflows/README.md)
@@ -358,9 +376,17 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
+- [`accessDeleteRole`](docs/sdks/access/README.md#deleterole) - deleteRole access
+- [`accessGetRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`accessList`](docs/sdks/access/README.md#list) - listGrants access
+- [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
+- [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
 - [`accessRemove`](docs/sdks/access/README.md#remove) - removeGrants access
 - [`accessRemovePrincipal`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
+- [`accessUpdateMemberRole`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
+- [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`accessUpsert`](docs/sdks/access/README.md#upsert) - upsertGrants access
 - [`agentworkflowsCreateResponse`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`agentworkflowsDeleteResponse`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
@@ -540,6 +566,7 @@ To learn about this feature and how to get started, check
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
+- [`useCreateRoleMutation`](docs/sdks/access/README.md#createrole) - createRole access
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
@@ -548,6 +575,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
+- [`useDeleteRoleMutation`](docs/sdks/access/README.md#deleterole) - deleteRole access
 - [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
@@ -598,6 +626,7 @@ To learn about this feature and how to get started, check
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
+- [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
 - [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
@@ -607,6 +636,7 @@ To learn about this feature and how to get started, check
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
+- [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
@@ -619,6 +649,8 @@ To learn about this feature and how to get started, check
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
+- [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -638,7 +670,9 @@ To learn about this feature and how to get started, check
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdateMemberRoleMutation`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
+- [`useUpdateRoleMutation`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
@@ -730,18 +764,32 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.access.list(undefined, undefined, {
-    retries: {
-      strategy: "backoff",
-      backoff: {
-        initialInterval: 1,
-        maxInterval: 50,
-        exponent: 1.1,
-        maxElapsedTime: 100,
+  const result = await gram.access.createRole(
+    {
+      createRoleForm: {
+        description: "swerve hm receptor how",
+        grants: [
+          {
+            scope: "mcp:connect",
+          },
+        ],
+        name: "<value>",
       },
-      retryConnectionErrors: false,
     },
-  });
+    undefined,
+    {
+      retries: {
+        strategy: "backoff",
+        backoff: {
+          initialInterval: 1,
+          maxInterval: 50,
+          exponent: 1.1,
+          maxElapsedTime: 100,
+        },
+        retryConnectionErrors: false,
+      },
+    },
+  );
 
   console.log(result);
 }
@@ -768,7 +816,17 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.access.list();
+  const result = await gram.access.createRole({
+    createRoleForm: {
+      description: "swerve hm receptor how",
+      grants: [
+        {
+          scope: "mcp:connect",
+        },
+      ],
+      name: "<value>",
+    },
+  });
 
   console.log(result);
 }
@@ -801,7 +859,17 @@ const gram = new Gram();
 
 async function run() {
   try {
-    const result = await gram.access.list();
+    const result = await gram.access.createRole({
+      createRoleForm: {
+        description: "swerve hm receptor how",
+        grants: [
+          {
+            scope: "mcp:connect",
+          },
+        ],
+        name: "<value>",
+      },
+    });
 
     console.log(result);
   } catch (error) {
@@ -865,7 +933,17 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.access.list();
+  const result = await gram.access.createRole({
+    createRoleForm: {
+      description: "swerve hm receptor how",
+      grants: [
+        {
+          scope: "mcp:connect",
+        },
+      ],
+      name: "<value>",
+    },
+  });
 
   console.log(result);
 }
