@@ -584,6 +584,23 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		apiKeyID:         apiKeyID,
 	}
 
+	// Check security schemes before dispatching any RPC — including initialize.
+	// Some MCP clients (e.g. Claude Desktop) require 401 on initialize to trigger
+	// their OAuth flow, so we can't defer this to individual RPC handlers.
+	if err := s.checkToolsetSecurity(ctx, toolset, mcpInputs); err != nil {
+		var secErr *toolconfig.SecurityUnsatisfiedError
+		if errors.As(err, &secErr) {
+			if oauthRequired {
+				w.Header().Set(
+					"WWW-Authenticate",
+					fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+				)
+			}
+			return oops.E(oops.CodeUnauthorized, secErr, "security scheme not satisfied")
+		}
+		return err
+	}
+
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
 	switch {
 	case body == nil && err == nil:
@@ -617,6 +634,80 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	_, writeErr := w.Write(body)
 	if writeErr != nil {
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
+	}
+
+	return nil
+}
+
+// checkToolsetSecurity loads the toolset's security variables and checks if the
+// request environment satisfies at least one scheme. Returns nil if satisfied
+// (or if the toolset has no security requirements).
+func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_repo.Toolset, payload *mcpInputs) error {
+	projectID := mv.ProjectID(payload.projectID)
+	described, err := mv.DescribeToolset(ctx, s.logger, s.db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), &s.toolsetCache)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").Log(ctx, s.logger)
+	}
+
+	schemes := toolconfig.DescribeToolSecurity(described.SecurityVariables)
+	if len(schemes) == 0 {
+		return nil
+	}
+
+	systemEnv, err := s.env.LoadSystemEnv(ctx, payload.projectID, toolset.ID, "", "")
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, s.logger)
+	}
+
+	mergedEnv := toolconfig.NewCaseInsensitiveEnv()
+	for k, v := range systemEnv.All() {
+		mergedEnv.Set(k, v)
+	}
+
+	// Load authenticated user's Gram environment.
+	if payload.environment != "" && payload.authenticated {
+		storedEnvVars, err := s.env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
+		if err != nil && !errors.Is(err, toolconfig.ErrNotFound) {
+			s.logger.WarnContext(ctx, "failed to load user environment for security check", attr.SlogError(err))
+		}
+		for k, v := range storedEnvVars {
+			mergedEnv.Set(k, v)
+		}
+	}
+
+	// Merge MCP request headers.
+	for k, v := range payload.mcpEnvVariables {
+		mergedEnv.Set(k, v)
+	}
+
+	// Map any OAuth tokens to ACCESS_TOKEN env vars on OAuth schemes.
+	var oauthToken string
+	for _, t := range payload.oauthTokenInputs {
+		if t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+	if oauthToken != "" {
+		for _, sv := range described.SecurityVariables {
+			if sv.Type == nil {
+				continue
+			}
+			if *sv.Type == "oauth2" || *sv.Type == "openIdConnect" {
+				for _, envVar := range sv.EnvVariables {
+					if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+						mergedEnv.Set(envVar, oauthToken)
+					}
+				}
+			}
+		}
+	}
+
+	if !toolconfig.AnySchemeSatisfied(schemes, mergedEnv, oauthToken) {
+		return &toolconfig.SecurityUnsatisfiedError{
+			ToolName: "mcp",
+			Schemes:  schemes,
+		}
 	}
 
 	return nil
