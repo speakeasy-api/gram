@@ -670,7 +670,8 @@ func findRoleByID(roles []workos.Role, id string) (workos.Role, bool) {
 		}
 	}
 
-	return workos.Role{}, false
+	var zero workos.Role
+	return zero, false
 }
 
 func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string, role workos.Role, memberCount int) (*gen.Role, error) {
