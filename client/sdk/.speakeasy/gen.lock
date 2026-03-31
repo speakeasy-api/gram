@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: cd8c9da81bd9ce76bed079a8d752be13
+  docChecksum: 2d2deb416acd0a1fbf303283b43daaf1
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.13
-  configChecksum: cce6718803e2cd6ab96e10b4bed857c5
+  releaseVersion: 0.32.14
+  configChecksum: d647df3f9b28a59703fac68028177d3c
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -1627,11 +1627,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:bf4375b0b8f1c58babf82b6e75c96d67cde19e0d
+    last_write_checksum: sha1:be3f47c00c6ba88b8c83cbb1499e031485ea2b4e
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:9ac0b684fd46821d53f87d79245dd04f03946ac8
+    last_write_checksum: sha1:b09a642de1338cdabb2f55a1704835cdd1d320ba
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2137,7 +2137,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:7b20c9e526b8be2ad4e2de1c7dbbdd5b25c51bdd
+    last_write_checksum: sha1:a49ef253b05c2d9e5ee8fee796be50d95e3f40c4
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2521,7 +2521,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:bf3a2f2e922ddfeebb5ea45275dd5a40bf5aa219
+    last_write_checksum: sha1:afc5def06f50340b6dff047caef47fb979036eb1
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3259,7 +3259,7 @@ trackedFiles:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:20bcbee500484fd0ae3283375aee9db27b53fc6a
+    last_write_checksum: sha1:cde9551f45fcd15d0706d67938d28ba55cb07e3e
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3805,7 +3805,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:c8b00aa5eecc4c4951d8590f5855643952f5eacb
+    last_write_checksum: sha1:91682f89cb03dcfc9d3bd482191c3dadd78f1434
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6007,6 +6007,88 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createRole:
+    speakeasy-default-create-role:
+      requestBody:
+        application/json: {"description": "swerve hm receptor how", "grants": [{"scope": "mcp:connect"}], "name": "<value>"}
+      responses:
+        "201":
+          application/json: {"created_at": "2024-08-15T08:14:35.208Z", "description": "mmm co-producer instead achieve through decision carefully ah", "grants": [], "id": "<id>", "is_system": false, "member_count": 747343, "name": "<value>", "updated_at": "2024-02-02T13:39:51.749Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteRole:
+    speakeasy-default-delete-role:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getRole:
+    speakeasy-default-get-role:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "200":
+          application/json: {"created_at": "2025-10-07T09:59:16.294Z", "description": "smuggle geez qua writ management molasses acidic below before", "grants": [], "id": "<id>", "is_system": false, "member_count": 890621, "name": "<value>", "updated_at": "2025-06-04T08:43:57.466Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listMembers:
+    speakeasy-default-list-members:
+      responses:
+        "200":
+          application/json: {"members": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listRoles:
+    speakeasy-default-list-roles:
+      responses:
+        "200":
+          application/json: {"roles": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listScopes:
+    speakeasy-default-list-scopes:
+      responses:
+        "200":
+          application/json: {"scopes": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateMemberRole:
+    speakeasy-default-update-member-role:
+      requestBody:
+        application/json: {"role_id": "<id>", "user_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"email": "Connie_Bayer@hotmail.com", "id": "<id>", "joined_at": "2024-12-28T07:55:09.816Z", "name": "<value>", "role_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateRole:
+    speakeasy-default-update-role:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-02-14T14:12:28.351Z", "description": "but gum finally anenst midst for", "grants": [], "id": "<id>", "is_system": false, "member_count": 901499, "name": "<value>", "updated_at": "2026-10-28T06:53:51.501Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
