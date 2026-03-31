@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -53,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -401,6 +403,20 @@ func newBillingProvider(
 		return stub, stub, nil
 	default:
 		return nil, nil, fmt.Errorf("billing provider is not configured")
+	}
+}
+
+func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, c *cli.Context) (access.RoleProvider, error) {
+	apiKey := c.String("workos-api-key")
+
+	switch {
+	case apiKey != "":
+		return workos.NewRoleClient(apiKey), nil
+	case c.String("environment") == "local":
+		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
+		return workos.NewStubRoleClient(), nil
+	default:
+		return nil, errors.New("WorkOS API key not provided")
 	}
 }
 

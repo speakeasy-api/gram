@@ -34,7 +34,7 @@ var (
 	errConnectedUserNotFound = errors.New("connected user not found")
 )
 
-type roleProvider interface {
+type RoleProvider interface {
 	ListRoles(ctx context.Context, orgID string) ([]workos.Role, error)
 	CreateRole(ctx context.Context, orgID string, opts workos.CreateRoleOpts) (*workos.Role, error)
 	UpdateRole(ctx context.Context, orgID string, roleSlug string, opts workos.UpdateRoleOpts) (*workos.Role, error)
@@ -50,13 +50,13 @@ type Service struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
-	roles  roleProvider
+	roles  RoleProvider
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles roleProvider) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
@@ -419,7 +419,6 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, s.logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, s.logger)
-	default:
 	}
 	if !connectedUser.WorkosID.Valid || connectedUser.WorkosID.String == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").Log(ctx, s.logger)

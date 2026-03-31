@@ -662,9 +662,9 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.AdminOverrideMiddleware)
 
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
-			roleClient := workos.NewRoleClient(c.String("workos-api-key"))
-			if roleClient == nil {
-				return fmt.Errorf("workos-api-key must be set")
+			roleClient, err := newAccessRoleProvider(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to create access role provider: %w", err)
 			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
