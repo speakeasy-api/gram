@@ -71,7 +71,7 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	svc := projects.NewService(logger, conn, sessionManager)
+	svc := projects.NewService(logger, tracerProvider, conn, sessionManager)
 
 	return ctx, &testInstance{
 		service:        svc,

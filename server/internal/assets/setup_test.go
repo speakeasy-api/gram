@@ -75,7 +75,7 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, storage, "test-jwt-secret")
+	svc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, storage, "test-jwt-secret")
 	repository := repo.New(conn)
 
 	return ctx, &testInstance{

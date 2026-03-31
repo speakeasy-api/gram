@@ -73,7 +73,7 @@ func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
 			return nil
 		},
 	}
-	svc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)
+	svc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -48,11 +47,11 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
 		logger:   logger,
 		db:       db,
 		repo:     repo.New(db),

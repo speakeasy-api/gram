@@ -67,7 +67,7 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 
 	enc := testenv.NewEncryptionClient(t)
 
-	svc := environments.NewService(logger, conn, sessionManager, enc)
+	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc)
 
 	return ctx, &testInstance{
 		service:        svc,

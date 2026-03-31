@@ -63,6 +63,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -70,7 +71,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	billingClient := billing.NewStubClient(logger, testenv.NewTracerProvider(t))
+	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
@@ -105,7 +106,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	svc := telemetry.NewService(logger, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
+	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
 	return ctx, &testInstance{
 		service:            svc,

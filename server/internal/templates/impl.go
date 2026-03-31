@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -56,16 +55,16 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService) *Service {
 	logger = logger.With(attr.SlogComponent("templates"))
 
 	return &Service{
-		tracer:     otel.Tracer("github.com/speakeasy-api/gram/server/internal/templates"),
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/templates"),
 		logger:     logger,
 		db:         db,
 		auth:       auth.New(logger, db, sessions),
 		repo:       repo.New(db),
-		variations: variations.NewService(logger, db, sessions),
+		variations: variations.NewService(logger, tracerProvider, db, sessions),
 		toolsets:   toolsets,
 	}
 }
