@@ -27,6 +27,50 @@ func (q *Queries) DeleteHooksServerNameOverride(ctx context.Context, arg DeleteH
 	return err
 }
 
+const insertClaudeCodeMessage = `-- name: InsertClaudeCodeMessage :exec
+INSERT INTO chat_messages (
+    chat_id
+  , project_id
+  , role
+  , content
+  , model
+  , source
+  , user_id
+  , created_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    'ClaudeCode',
+    $6,
+    NOW()
+)
+`
+
+type InsertClaudeCodeMessageParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Role      string
+	Content   string
+	Model     pgtype.Text
+	UserID    pgtype.Text
+}
+
+func (q *Queries) InsertClaudeCodeMessage(ctx context.Context, arg InsertClaudeCodeMessageParams) error {
+	_, err := q.db.Exec(ctx, insertClaudeCodeMessage,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
+		arg.Model,
+		arg.UserID,
+	)
+	return err
+}
+
 const listHooksServerNameOverrides = `-- name: ListHooksServerNameOverrides :many
 SELECT id, raw_server_name, display_name, created_at, updated_at
 FROM hooks_server_name_overrides
@@ -66,6 +110,66 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
+UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
+`
+
+type UpdateClaudeCodeSessionTimestampParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) UpdateClaudeCodeSessionTimestamp(ctx context.Context, arg UpdateClaudeCodeSessionTimestampParams) error {
+	_, err := q.db.Exec(ctx, updateClaudeCodeSessionTimestamp, arg.ID, arg.ProjectID)
+	return err
+}
+
+const upsertClaudeCodeSession = `-- name: UpsertClaudeCodeSession :one
+INSERT INTO chats (
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , title
+  , source
+  , created_at
+  , updated_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    'ClaudeCode',
+    NOW(),
+    NOW()
+)
+ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+RETURNING id
+`
+
+type UpsertClaudeCodeSessionParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	Title          pgtype.Text
+}
+
+func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeCodeSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertClaudeCodeSession,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Title,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertHooksServerNameOverride = `-- name: UpsertHooksServerNameOverride :one

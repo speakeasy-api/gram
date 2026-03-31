@@ -142,8 +142,22 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	return attrs
 }
 
-// flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse
+// isConversationEvent returns true if the event is a conversation capture event (not a tool call).
+func isConversationEvent(eventName string) bool {
+	switch eventName {
+	case "UserPromptSubmit", "Stop", "SessionStart", "SessionEnd":
+		return true
+	default:
+		return false
+	}
+}
+
+// flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
+// Conversation events (UserPromptSubmit, Stop, SessionStart) are also written to PostgreSQL.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
+	// Ensure session exists in PG (if session capture enabled)
+	s.ensureSessionInPG(ctx, sessionID, metadata)
+
 	// Use LRANGE to get all payloads from the list atomically
 	var payloads []gen.ClaudeHookPayload
 	key := hookPendingCacheKey(sessionID)
@@ -157,12 +171,17 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 		return
 	}
 
-	// Write all payloads to ClickHouse
 	for i := range payloads {
-		s.writeHookToClickHouseWithMetadata(ctx, &payloads[i], metadata)
+		if isConversationEvent(payloads[i].HookEventName) {
+			// Write conversation events to PostgreSQL
+			s.writeConversationToPG(ctx, &payloads[i], metadata)
+		} else {
+			// Write tool call events to ClickHouse
+			s.writeHookToClickHouseWithMetadata(ctx, &payloads[i], metadata)
+		}
 	}
 
-	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks to ClickHouse", len(payloads)))
+	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks", len(payloads)))
 
 	// Delete the list after successful processing
 	if err := s.cache.Delete(ctx, key); err != nil {

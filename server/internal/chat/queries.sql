@@ -6,6 +6,7 @@ INSERT INTO chats (
   , user_id
   , external_user_id
   , title
+  , source
   , created_at
   , updated_at
 )
@@ -16,6 +17,7 @@ VALUES (
     @user_id,
     @external_user_id,
     @title,
+    @source,
     NOW(),
     NOW()
 )
@@ -204,6 +206,7 @@ SELECT COUNT(DISTINCT c.id) as total
 FROM chats c
 WHERE c.project_id = @project_id
   AND c.deleted IS FALSE
+  AND (@source = '' OR c.source = @source)
   AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
   AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
   AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
@@ -234,6 +237,7 @@ WITH limited_chats AS (
     c.title,
     c.user_id,
     c.external_user_id,
+    c.source,
     c.created_at,
     c.updated_at,
     (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
@@ -244,6 +248,7 @@ WITH limited_chats AS (
   FROM chats c
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
+    AND (@source = '' OR c.source = @source)
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
     AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
     AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
@@ -282,6 +287,7 @@ SELECT
     lc.title,
     lc.user_id,
     lc.external_user_id,
+    lc.source,
     lc.created_at,
     lc.updated_at,
     lc.num_messages,

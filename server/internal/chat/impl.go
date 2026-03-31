@@ -254,6 +254,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			ID:             chat.ID.String(),
 			UserID:         &chat.UserID.String,
 			ExternalUserID: nil,
+			Source:         conv.FromPGText[string](chat.Source),
 			Title:          chat.Title.String,
 			NumMessages:    int(chat.NumMessages),
 			CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -315,8 +316,14 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	}
 
 	// Get total count (before pagination)
+	source := ""
+	if payload.Source != nil {
+		source = *payload.Source
+	}
+
 	totalCount, err := s.repo.CountChatsWithResolutions(ctx, repo.CountChatsWithResolutionsParams{
 		ProjectID:        *authCtx.ProjectID,
+		Source:           source,
 		Search:           search,
 		ExternalUserID:   externalUserID,
 		FromTime:         fromTime,
@@ -330,6 +337,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	// Query database - returns denormalized rows (one row per chat+resolution combination)
 	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
 		ProjectID:        *authCtx.ProjectID,
+		Source:           source,
 		Search:           search,
 		ExternalUserID:   externalUserID,
 		FromTime:         fromTime,
@@ -358,6 +366,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 				Title:          row.Title.String,
 				UserID:         conv.FromPGText[string](row.UserID),
 				ExternalUserID: conv.FromPGText[string](row.ExternalUserID),
+				Source:         conv.FromPGText[string](row.Source),
 				NumMessages:    int(row.NumMessages),
 				CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),

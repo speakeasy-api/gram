@@ -8,6 +8,24 @@ import {
 } from "@/components/ui/select";
 import { useState, useEffect } from "react";
 
+const sourceOptions = [
+  {
+    value: "all",
+    label: "All Sources",
+    description: "Show chats from all sources",
+  },
+  {
+    value: "ClaudeCode",
+    label: "Claude Code",
+    description: "Sessions captured from Claude Code hooks",
+  },
+  {
+    value: "Elements",
+    label: "Elements",
+    description: "Chats from the Elements embedded interface",
+  },
+];
+
 const resolutionStatusOptions = [
   {
     value: "all",
@@ -41,6 +59,8 @@ interface ChatLogsFiltersProps {
   onSearchQueryChange: (value: string) => void;
   resolutionStatus: string;
   onResolutionStatusChange: (value: string) => void;
+  source: string;
+  onSourceChange: (value: string) => void;
   disabled?: boolean;
 }
 
@@ -49,6 +69,8 @@ export function ChatLogsFilters({
   onSearchQueryChange,
   resolutionStatus,
   onResolutionStatusChange,
+  source,
+  onSourceChange,
   disabled,
 }: ChatLogsFiltersProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -98,6 +120,30 @@ export function ChatLogsFilters({
         </SelectTrigger>
         <SelectContent className="w-[280px]">
           {resolutionStatusOptions.map((option) => (
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              description={option.description}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={source || "all"}
+        onValueChange={(value) => onSourceChange(value === "all" ? "" : value)}
+        disabled={disabled}
+      >
+        <SelectTrigger
+          className="w-[150px] !h-10 border-border"
+          disabled={disabled}
+        >
+          <SelectValue placeholder="All Sources" />
+        </SelectTrigger>
+        <SelectContent className="w-[280px]">
+          {sourceOptions.map((option) => (
             <SelectItem
               key={option.value}
               value={option.value}

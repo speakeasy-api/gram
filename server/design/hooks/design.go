@@ -11,16 +11,35 @@ var ClaudeHookPayload = Type("ClaudeHookPayload", func() {
 	Description("Unified payload for all Claude Code hook events")
 	Required("hook_event_name")
 	Attribute("hook_event_name", String, "The type of hook event", func() {
-		Enum("SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure")
+		Enum("SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure",
+			"UserPromptSubmit", "Stop", "SessionEnd", "Notification")
 	})
+	// Tool-related fields (PreToolUse, PostToolUse, PostToolUseFailure)
 	Attribute("tool_name", String, "The name of the tool (for tool-related events)")
 	Attribute("tool_use_id", String, "The unique ID for this tool use")
 	Attribute("tool_input", Any, "The input to the tool")
 	Attribute("tool_response", Any, "The response from the tool (PostToolUse only)")
 	Attribute("error", Any, "The error from the tool (PostToolUseFailure only)")
 	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption (PostToolUseFailure only)")
+	// Common fields
 	Attribute("session_id", String, "The Claude Code session ID")
+	Attribute("cwd", String, "The working directory when the event fired")
+	Attribute("transcript_path", String, "Path to the conversation transcript file")
 	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+	// SessionStart fields
+	Attribute("source", String, "How the session started: startup, resume, clear, compact (SessionStart only)")
+	Attribute("model", String, "The model identifier (SessionStart, Stop)")
+	// UserPromptSubmit fields
+	Attribute("prompt", String, "The user's prompt text (UserPromptSubmit only)")
+	// Stop fields
+	Attribute("last_assistant_message", String, "Claude's final response text (Stop only)")
+	Attribute("stop_hook_active", Boolean, "Whether a stop hook continuation is active (Stop only)")
+	// SessionEnd fields
+	Attribute("reason", String, "Why the session ended (SessionEnd only)")
+	// Notification fields
+	Attribute("notification_type", String, "Type of notification: permission_prompt, idle_prompt, auth_success, elicitation_dialog (Notification only)")
+	Attribute("message", String, "Notification message text (Notification only)")
+	Attribute("title", String, "Notification title (Notification only)")
 })
 
 // Unified Claude Code hook result with proper hook response structure
@@ -28,6 +47,7 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Description("Unified result for all Claude Code hook events with proper response structure")
 	Attribute("continue", Boolean, "Whether to continue (SessionStart only)")
 	Attribute("stopReason", String, "Reason if blocked (SessionStart only)")
+	Attribute("suppressOutput", Boolean, "Whether to suppress the hook's output")
 	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
 })
 

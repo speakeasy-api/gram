@@ -69,6 +69,8 @@ type Chat struct {
 	ExternalUserID *string
 	// The number of messages in the chat
 	NumMessages int
+	// The source of the chat: Elements, Playground, ClaudeCode
+	Source *string
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -109,6 +111,8 @@ type ChatOverview struct {
 	ExternalUserID *string
 	// The number of messages in the chat
 	NumMessages int
+	// The source of the chat: Elements, Playground, ClaudeCode
+	Source *string
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -129,6 +133,8 @@ type ChatOverviewWithResolutions struct {
 	ExternalUserID *string
 	// The number of messages in the chat
 	NumMessages int
+	// The source of the chat: Elements, Playground, ClaudeCode
+	Source *string
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -221,6 +227,8 @@ type ListChatsWithResolutionsPayload struct {
 	SortBy string
 	// Sort order
 	SortOrder string
+	// Filter by chat source: Elements, ClaudeCode
+	Source *string
 }
 
 // ListChatsWithResolutionsResult is the result type of the chat service

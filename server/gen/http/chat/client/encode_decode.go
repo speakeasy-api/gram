@@ -1026,6 +1026,9 @@ func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.E
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))
 		values.Add("sort_by", p.SortBy)
 		values.Add("sort_order", p.SortOrder)
+		if p.Source != nil {
+			values.Add("source", *p.Source)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1481,6 +1484,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		NumMessages:    *v.NumMessages,
+		Source:         v.Source,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
@@ -1517,6 +1521,7 @@ func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResol
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		NumMessages:    *v.NumMessages,
+		Source:         v.Source,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}

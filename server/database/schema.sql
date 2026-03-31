@@ -768,6 +768,7 @@ CREATE TABLE IF NOT EXISTS chats (
   user_id TEXT,
   external_user_id TEXT,
   title TEXT,
+  source TEXT, -- Elements, Playground, ClaudeCode
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -44,6 +45,7 @@ type Service struct {
 	cache            cache.Cache
 	temporalEnv      *tenv.Environment
 	repo             *repo.Queries
+	productFeatures  ProductFeaturesClient
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -64,6 +66,11 @@ type HookSpecificOutput struct {
 	PermissionDecisionReason *string `json:"permissionDecisionReason,omitempty"`
 }
 
+// ProductFeaturesClient checks whether product features are enabled for an org.
+type ProductFeaturesClient interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+}
+
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
@@ -76,6 +83,7 @@ func NewService(
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
+	pfClient ProductFeaturesClient,
 ) *Service {
 	return &Service{
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -86,6 +94,7 @@ func NewService(
 		cache:            cacheAdapter,
 		temporalEnv:      temporalEnv,
 		repo:             repo.New(db),
+		productFeatures:  pfClient,
 	}
 }
 
@@ -269,6 +278,14 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 		return s.handlePostToolUse(ctx, payload)
 	case "PostToolUseFailure":
 		return s.handlePostToolUseFailure(ctx, payload)
+	case "UserPromptSubmit":
+		return s.handleUserPromptSubmit(ctx, payload)
+	case "Stop":
+		return s.handleStop(ctx, payload)
+	case "SessionEnd":
+		return s.handleSessionEnd(ctx, payload)
+	case "Notification":
+		return s.handleNotification(ctx, payload)
 	default:
 		s.logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -280,7 +297,10 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 }
 
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	// For now, always allow sessions to start
+	// Record session start for conversation capture
+	s.recordConversationEvent(ctx, payload)
+
+	// Always allow sessions to start
 	continueVal := true
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		Continue: &continueVal,
