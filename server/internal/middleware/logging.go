@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -49,6 +50,8 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
+			ctx = wide.Start(ctx, attr.SlogWideEvent())
+
 			requestID := conv.TruncateString(r.Header.Get("X-Request-ID"), 64)
 
 			spanCtx := trace.SpanContextFromContext(ctx)
@@ -82,10 +85,13 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 
 			rw := newResponseWriter(w)
 			r = r.WithContext(ctx)
-			attrs := []any{
+			attrs := []slog.Attr{
 				attr.SlogHTTPRequestMethod(r.Method),
 				attr.SlogURLOriginal(r.URL.String()),
 				attr.SlogHostName(r.Host),
+			}
+			if r.Pattern != "" {
+				attrs = append(attrs, attr.SlogHTTPRoute(r.Pattern))
 			}
 			if requestContext.ReqID != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestID(requestContext.ReqID))
@@ -100,7 +106,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				attrs = append(attrs, attr.SlogHTTPReferrerHost(requestContext.RefererHost))
 			}
 
-			logger.InfoContext(ctx, "request", attrs...)
+			logger.LogAttrs(ctx, slog.LevelInfo, "request", attrs...)
 
 			next.ServeHTTP(rw, r)
 
@@ -125,7 +131,8 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				attrs = append(attrs, attr.SlogHTTPResponseFiltered(true))
 			}
 
-			logger.InfoContext(ctx, "response", attrs...)
+			wide.Push(ctx, attrs...)
+			logger.LogAttrs(ctx, slog.LevelInfo, "response", wide.Emit(ctx)...)
 		})
 	}
 }

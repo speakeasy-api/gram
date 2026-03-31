@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -418,6 +419,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	authToken = strings.TrimPrefix(authToken, "Bearer ")
 	authToken = strings.TrimPrefix(authToken, "bearer ")
 	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
+
+	wide.Push(
+		ctx,
+		attr.SlogRequestMCPSlug(mcpSlug),
+		attr.SlogRequestMCPAuthorizationHeaderSet(authToken != ""),
+		attr.SlogRequestMCPChatSessionHeaderSet(chatSessionJwt != ""),
+	)
 
 	var tokenInputs []oauthTokenInputs
 
