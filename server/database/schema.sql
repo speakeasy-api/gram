@@ -1536,3 +1536,26 @@ ON audit_logs (organization_id, seq DESC);
 
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
 ON audit_logs (organization_id, project_id, seq DESC);
+
+-- Internal catalog: servers published by org members for discovery within the org
+CREATE TABLE IF NOT EXISTS private_catalog_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  published_by TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  description TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT private_catalog_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT private_catalog_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS private_catalog_servers_organization_id_slug_key
+ON private_catalog_servers (organization_id, slug)
+WHERE deleted IS FALSE;
