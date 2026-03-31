@@ -33,6 +33,15 @@ function checkExistingConfig(): { exists: boolean; hasProvider: boolean } {
   return { exists: true, hasProvider };
 }
 
+async function fallbackToLocal() {
+  const args = ["GRAM_FUNCTIONS_PROVIDER=local"];
+  await $`mise set --file mise.local.toml ${args}`;
+  outro(
+    "Defaulted to stubbed local provider. To start this onboarding again, run `mise run zero:fly --restart`.",
+  );
+  process.exit(0);
+}
+
 function randomAppName() {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   const bytes = crypto.getRandomValues(new Uint8Array(6));
@@ -70,23 +79,21 @@ async function run() {
     🎈 A Fly.io organization-scoped token (https://fly.io/tokens/create or \`fly tokens create org --name <name>\`)
     🎈 A Fly.io app hosting the the Gram Functions runner images
     🐅 A Tigris bucket associated with the Fly.io organization
-    🐅 A Tigris access key and secret with permissions to access the bucket (https://console.tigris.dev)
+    🐅 A Tigris Access Key ID and Secret Access Key with permissions to access the bucket (https://console.tigris.dev)
 `.slice(1, -1),
     "Pre-requisites",
   );
-  const proceed = await confirm({ message: "Are you ready to proceed?" });
+  const proceed = await confirm({
+    message: "Set up Fly.io and Tigris",
+    active: "Start",
+    inactive: "Skip",
+  });
   if (isCancel(proceed)) {
     cancel("Operation cancelled.");
     process.exit(0);
   }
   if (!proceed) {
-    const args = ["GRAM_FUNCTIONS_PROVIDER=local"];
-    await $`mise set --file mise.local.toml ${args}`;
-
-    outro(
-      "Defaulted to stubbed local provider. To start this onboarding again, run `mise run zero:fly --restart`.",
-    );
-    process.exit(0);
+    await fallbackToLocal();
   }
 
   const initialToken =
@@ -98,11 +105,9 @@ async function run() {
   let token = await password({
     message: tokenMessage,
     validate: (value) => {
-      if (!value && initialToken) {
-        return;
-      }
-      if (!value?.startsWith("FlyV1 ")) {
-        return "Invalid Fly.io token. It should start with 'FlyV1 ...'.";
+      if (!value) return;
+      if (!value.startsWith("FlyV1 ")) {
+        return "Invalid Fly.io token. It should start with 'FlyV1 ...'. Leave blank to skip.";
       }
     },
   });
@@ -112,6 +117,9 @@ async function run() {
   }
   if (!token && initialToken) {
     token = initialToken;
+  }
+  if (!token) {
+    await fallbackToLocal();
   }
 
   const initialOrg = process.env["GRAM_FUNCTIONS_FLYIO_ORG"] || undefined;
@@ -152,11 +160,12 @@ async function run() {
   const initialTigrisKey =
     process.env["GRAM_FUNCTIONS_TIGRIS_KEY"] || undefined;
   const tigrisKey = await text({
-    message: `🐅 Enter your Tigris access key for ${bucket}`,
+    message: `🐅 Enter your Tigris Access Key ID for ${bucket} (leave blank to skip)`,
     initialValue: initialTigrisKey,
     validate: (value) => {
-      if (!value?.startsWith("tid_")) {
-        return "Invalid Tigris access key. It should start with 'tid_'.";
+      if (!value) return;
+      if (!value.startsWith("tid_")) {
+        return "Invalid Tigris Access Key ID. It should start with 'tid_'. Leave blank to skip.";
       }
     },
   });
@@ -164,21 +173,22 @@ async function run() {
     cancel("Operation cancelled.");
     process.exit(0);
   }
+  if (!tigrisKey) {
+    await fallbackToLocal();
+  }
 
   const initialTigrisSecret =
     process.env["GRAM_FUNCTIONS_TIGRIS_SECRET"] || undefined;
-  let tigrisSecretMessage = `🐅 Enter your Tigris secret key for ${bucket}`;
+  let tigrisSecretMessage = `🐅 Enter your Tigris Secret Access Key for ${bucket}`;
   if (initialTigrisSecret) {
     tigrisSecretMessage += " (leave blank to keep existing)";
   }
   let tigrisSecret = await password({
     message: tigrisSecretMessage,
     validate: (value) => {
-      if (!value && initialToken) {
-        return;
-      }
-      if (!value?.startsWith("tsec_")) {
-        return "Invalid Tigris secret key. It should start with 'tsec_'.";
+      if (!value) return;
+      if (!value.startsWith("tsec_")) {
+        return "Invalid Tigris Secret Access Key. It should start with 'tsec_'. Leave blank to skip.";
       }
     },
   });
@@ -188,6 +198,9 @@ async function run() {
   }
   if (!tigrisSecret && initialTigrisSecret) {
     tigrisSecret = initialTigrisSecret;
+  }
+  if (!tigrisSecret) {
+    await fallbackToLocal();
   }
 
   const args = [

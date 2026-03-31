@@ -204,6 +204,7 @@ export * from "./servernameoverride.js";
 export * from "./servervariable.js";
 export * from "./serviceinfo.js";
 export * from "./setmcpmetadatarequestbody.js";
+export * from "./setorganizationwhitelistrequestbody.js";
 export * from "./setproductfeaturerequestbody.js";
 export * from "./setprojectlogoresult.js";
 export * from "./setsourceenvironmentlinkrequestbody.js";

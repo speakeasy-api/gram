@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -1292,4 +1293,72 @@ func TestCreateDeployment_WithFunctions_AuthInputSaved(t *testing.T) {
 	})
 	require.True(t, ok, "simple_api_call tool not found")
 	require.Nil(t, simpleTool.AuthInput, "simple_api_call should have no authInput")
+}
+
+func TestCreateDeployment_FunctionsDeploymentLogs(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-functions-deployment-logs",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "todo-functions",
+				Slug:    "todo-functions",
+				Runtime: "nodejs:24",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+	require.Equal(t, "completed", dep.Deployment.Status)
+
+	// Fetch deployment logs and verify new log messages
+	logs, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{
+		DeploymentID:     dep.Deployment.ID,
+		Cursor:           nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err, "get deployment logs")
+
+	var messages []string
+	for _, event := range logs.Events {
+		messages = append(messages, event.Message)
+	}
+
+	// Verify aggregate deployment summary log
+	require.Contains(t, messages, "Processing deployment: 0 OpenAPI sources, 1 function sources, 0 external MCP servers")
+
+	// Verify functions start/end logs
+	var foundFunctionsStart, foundFunctionsEnd bool
+	for _, msg := range messages {
+		if strings.Contains(msg, "[todo-functions] processing function source") {
+			foundFunctionsStart = true
+		}
+		if strings.Contains(msg, "[todo-functions] processed function source") {
+			foundFunctionsEnd = true
+			require.Contains(t, msg, "4 tools created")
+			require.Contains(t, msg, "0 tools skipped")
+			require.Contains(t, msg, "0 resources created")
+			require.Contains(t, msg, "0 resources skipped")
+		}
+	}
+	require.True(t, foundFunctionsStart, "expected log for processing function source")
+	require.True(t, foundFunctionsEnd, "expected log for processed function source")
 }

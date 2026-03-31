@@ -287,6 +287,7 @@ run();
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
 * [listAllowedOrigins](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
+* [setOrganizationWhitelist](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 * [upsertAllowedOrigin](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 
 ### [Resources](docs/sdks/resources/README.md)
@@ -471,6 +472,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`projectsRead`](docs/sdks/projects/README.md#read) - getProject projects
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`projectsSetOrganizationWhitelist`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
@@ -636,6 +638,7 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
+- [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains

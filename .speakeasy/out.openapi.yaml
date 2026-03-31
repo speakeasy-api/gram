@@ -9294,6 +9294,88 @@ paths:
       x-speakeasy-name-override: setLogo
       x-speakeasy-react-hook:
         name: setProjectLogo
+  /rpc/projects.setOrganizationWhitelist:
+    post:
+      description: Set organization whitelist status (admin only - requires speakeasy-team API key)
+      operationId: setOrganizationWhitelist
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOrganizationWhitelistRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setOrganizationWhitelist projects
+      tags:
+        - projects
+      x-speakeasy-name-override: setOrganizationWhitelist
   /rpc/projects.upsertAllowedOrigin:
     post:
       description: Upsert an allowed origin for a project.
@@ -19724,6 +19806,18 @@ components:
           maxLength: 40
       required:
         - toolset_slug
+    SetOrganizationWhitelistRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The ID of the organization to update
+        whitelisted:
+          type: boolean
+          description: Whether the organization should be whitelisted
+      required:
+        - organization_id
+        - whitelisted
     SetProductFeatureRequestBody:
       type: object
       properties:

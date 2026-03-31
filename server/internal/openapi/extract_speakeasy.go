@@ -111,6 +111,8 @@ func (p *ToolExtractor) doSpeakeasy(
 ) (*ToolExtractorResult, error) {
 	docInfo := task.DocInfo
 
+	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing OpenAPI source", docInfo.Name))
+
 	doc, err := parseSpeakeasy(ctx, tracer, bytes.NewReader(data))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document.\n%s", err.Error()).Log(ctx, logger)
@@ -308,6 +310,7 @@ func (p *ToolExtractor) doSpeakeasy(
 		close(resultChan)
 	}()
 
+	var toolCount, toolSkippedCount int
 	for result := range resultChan {
 		for _, event := range result.deploymentEvents {
 			if err := tx.LogDeploymentEvent(ctx, *event); err != nil {
@@ -317,6 +320,7 @@ func (p *ToolExtractor) doSpeakeasy(
 		}
 
 		if result.err != nil {
+			toolSkippedCount++
 			continue
 		}
 
@@ -352,13 +356,18 @@ func (p *ToolExtractor) doSpeakeasy(
 				writeErr = err
 			}
 			writeErrCount++
+			continue
 		}
+
+		toolCount++
 	}
 
 	if writeErrCount > 0 {
 		err := oops.Permanent(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
 	}
+
+	logger.InfoContext(ctx, fmt.Sprintf("[%s] processed OpenAPI source: %d tools created, %d tools skipped", docInfo.Name, toolCount, toolSkippedCount))
 
 	return &ToolExtractorResult{
 		DocumentVersion:         doc.OpenAPI,
@@ -509,6 +518,12 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 		line, col := server.GetRootNodeLine(), server.GetRootNodeColumn()
 
 		if server.GetVariables().Len() == 0 {
+			if server.URL == "" {
+				message := fmt.Sprintf("%s: skipping empty server url [%d:%d]", docInfo.Name, line, col)
+				logger.WarnContext(ctx, message)
+				continue
+			}
+
 			u, err := url.Parse(server.URL)
 			if err != nil {
 				_ = oops.E(oops.CodeUnauthorized, err, "%s: %s: skipping server due to malformed url [%d:%d]: %s", docInfo.Name, server.URL, line, col, err.Error()).Log(ctx, logger)
