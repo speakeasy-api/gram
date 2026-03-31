@@ -1086,6 +1086,287 @@ func TestService_ServeAuthenticated(t *testing.T) {
 		require.NotNil(t, response["error"])
 	})
 
+	t.Run("handles completion/complete request", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+		require.NotNil(t, authCtx.ProjectSlug)
+
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Completion Test MCP",
+			Slug:                   "completion-test-mcp",
+			Description:            conv.ToPGText("A test MCP for completion/complete"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
+			McpSlug:                conv.ToPGText("completion-test-mcp"),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		apiKey := ti.createTestAPIKey(ctx, t)
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "completion/complete",
+				"params": map[string]any{
+					"ref":      map[string]any{"type": "ref/prompt", "name": "test"},
+					"argument": map[string]any{"name": "arg", "value": "val"},
+				},
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+*authCtx.ProjectSlug+"/"+toolset.Slug+"/production", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("project", *authCtx.ProjectSlug)
+		rctx.URLParams.Add("toolset", toolset.Slug)
+		rctx.URLParams.Add("environment", "production")
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err = ti.service.ServeAuthenticated(w, req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		require.Equal(t, "2.0", response["jsonrpc"])
+
+		result, ok := response["result"].(map[string]any)
+		require.True(t, ok)
+		completion, ok := result["completion"].(map[string]any)
+		require.True(t, ok)
+		require.NotNil(t, completion["values"])
+		require.Equal(t, false, completion["hasMore"])
+	})
+
+	t.Run("handles logging/setLevel request", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+		require.NotNil(t, authCtx.ProjectSlug)
+
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Logging Test MCP",
+			Slug:                   "logging-test-mcp",
+			Description:            conv.ToPGText("A test MCP for logging/setLevel"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
+			McpSlug:                conv.ToPGText("logging-test-mcp"),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		apiKey := ti.createTestAPIKey(ctx, t)
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "logging/setLevel",
+				"params":  map[string]any{"level": "debug"},
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+*authCtx.ProjectSlug+"/"+toolset.Slug+"/production", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("project", *authCtx.ProjectSlug)
+		rctx.URLParams.Add("toolset", toolset.Slug)
+		rctx.URLParams.Add("environment", "production")
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err = ti.service.ServeAuthenticated(w, req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		require.Equal(t, "2.0", response["jsonrpc"])
+		require.NotNil(t, response["id"])
+	})
+
+	t.Run("handles resources/subscribe request", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+		require.NotNil(t, authCtx.ProjectSlug)
+
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Subscribe Test MCP",
+			Slug:                   "subscribe-test-mcp",
+			Description:            conv.ToPGText("A test MCP for resources/subscribe"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
+			McpSlug:                conv.ToPGText("subscribe-test-mcp"),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		apiKey := ti.createTestAPIKey(ctx, t)
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "resources/subscribe",
+				"params":  map[string]any{"uri": "file:///test.txt"},
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+*authCtx.ProjectSlug+"/"+toolset.Slug+"/production", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("project", *authCtx.ProjectSlug)
+		rctx.URLParams.Add("toolset", toolset.Slug)
+		rctx.URLParams.Add("environment", "production")
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err = ti.service.ServeAuthenticated(w, req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		require.Equal(t, "2.0", response["jsonrpc"])
+	})
+
+	t.Run("mixed batch with notification and call", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+		require.NotNil(t, authCtx.ProjectSlug)
+
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Mixed Batch Test MCP",
+			Slug:                   "mixed-batch-test-mcp",
+			Description:            conv.ToPGText("A test MCP for mixed batches"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
+			McpSlug:                conv.ToPGText("mixed-batch-test-mcp"),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		apiKey := ti.createTestAPIKey(ctx, t)
+
+		// Notification followed by a regular call
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"method":  "notifications/initialized",
+			},
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "ping",
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+*authCtx.ProjectSlug+"/"+toolset.Slug+"/production", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("project", *authCtx.ProjectSlug)
+		rctx.URLParams.Add("toolset", toolset.Slug)
+		rctx.URLParams.Add("environment", "production")
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err = ti.service.ServeAuthenticated(w, req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// Only the ping response should be returned (notification is skipped)
+		var response map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		require.Equal(t, "2.0", response["jsonrpc"])
+		require.NotNil(t, response["id"])
+	})
+
+	t.Run("handles DELETE session with valid session ID", func(t *testing.T) {
+		t.Parallel()
+
+		_, ti := newTestMCPService(t)
+
+		req := httptest.NewRequest(http.MethodDelete, "/mcp/test-slug", nil)
+		req.Header.Set("Mcp-Session-Id", "test-session-id")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", "test-slug")
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err := ti.service.HandleDeleteSession(w, req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("DELETE session returns error without session ID header", func(t *testing.T) {
+		t.Parallel()
+
+		_, ti := newTestMCPService(t)
+
+		req := httptest.NewRequest(http.MethodDelete, "/mcp/test-slug", nil)
+		// No Mcp-Session-Id header
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", "test-slug")
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err := ti.service.HandleDeleteSession(w, req)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Mcp-Session-Id header is required")
+	})
+
 	t.Run("handles multiple requests in batch", func(t *testing.T) {
 		t.Parallel()
 

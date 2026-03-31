@@ -237,8 +237,12 @@ func (e *rpcError) MarshalJSON() ([]byte, error) {
 		},
 	}
 
+	// JSON-RPC 2.0 requires "id" to always be present in error responses.
+	// When the ID is unknown (zero-value), it must be set to null.
 	if (e.ID.format == 1 && e.ID.Number != 0) || (e.ID.format != 1 && e.ID.String != "") {
 		payload["id"] = e.ID
+	} else {
+		payload["id"] = nil
 	}
 
 	bs, err := json.Marshal(payload)
