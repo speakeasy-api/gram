@@ -14,6 +14,10 @@ export const HookEventName = {
   PreToolUse: "PreToolUse",
   PostToolUse: "PostToolUse",
   PostToolUseFailure: "PostToolUseFailure",
+  UserPromptSubmit: "UserPromptSubmit",
+  Stop: "Stop",
+  SessionEnd: "SessionEnd",
+  Notification: "Notification",
 } as const;
 /**
  * The type of hook event
@@ -29,6 +33,10 @@ export type ClaudeHookPayload = {
    */
   additionalData?: { [k: string]: any } | undefined;
   /**
+   * The working directory when the event fired
+   */
+  cwd?: string | undefined;
+  /**
    * The error from the tool (PostToolUseFailure only)
    */
   error?: any | undefined;
@@ -41,9 +49,45 @@ export type ClaudeHookPayload = {
    */
   isInterrupt?: boolean | undefined;
   /**
+   * Claude's final response text (Stop only)
+   */
+  lastAssistantMessage?: string | undefined;
+  /**
+   * Notification message text (Notification only)
+   */
+  message?: string | undefined;
+  /**
+   * The model identifier (SessionStart, Stop)
+   */
+  model?: string | undefined;
+  /**
+   * Type of notification: permission_prompt, idle_prompt, auth_success, elicitation_dialog (Notification only)
+   */
+  notificationType?: string | undefined;
+  /**
+   * The user's prompt text (UserPromptSubmit only)
+   */
+  prompt?: string | undefined;
+  /**
+   * Why the session ended (SessionEnd only)
+   */
+  reason?: string | undefined;
+  /**
    * The Claude Code session ID
    */
   sessionId?: string | undefined;
+  /**
+   * How the session started: startup, resume, clear, compact (SessionStart only)
+   */
+  source?: string | undefined;
+  /**
+   * Whether a stop hook continuation is active (Stop only)
+   */
+  stopHookActive?: boolean | undefined;
+  /**
+   * Notification title (Notification only)
+   */
+  title?: string | undefined;
   /**
    * The input to the tool
    */
@@ -60,6 +104,10 @@ export type ClaudeHookPayload = {
    * The unique ID for this tool use
    */
   toolUseId?: string | undefined;
+  /**
+   * Path to the conversation transcript file
+   */
+  transcriptPath?: string | undefined;
 };
 
 /** @internal */
@@ -69,14 +117,25 @@ export const HookEventName$outboundSchema: z.ZodMiniEnum<typeof HookEventName> =
 /** @internal */
 export type ClaudeHookPayload$Outbound = {
   additional_data?: { [k: string]: any } | undefined;
+  cwd?: string | undefined;
   error?: any | undefined;
   hook_event_name: string;
   is_interrupt?: boolean | undefined;
+  last_assistant_message?: string | undefined;
+  message?: string | undefined;
+  model?: string | undefined;
+  notification_type?: string | undefined;
+  prompt?: string | undefined;
+  reason?: string | undefined;
   session_id?: string | undefined;
+  source?: string | undefined;
+  stop_hook_active?: boolean | undefined;
+  title?: string | undefined;
   tool_input?: any | undefined;
   tool_name?: string | undefined;
   tool_response?: any | undefined;
   tool_use_id?: string | undefined;
+  transcript_path?: string | undefined;
 };
 
 /** @internal */
@@ -86,25 +145,40 @@ export const ClaudeHookPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     additionalData: z.optional(z.record(z.string(), z.any())),
+    cwd: z.optional(z.string()),
     error: z.optional(z.any()),
     hookEventName: HookEventName$outboundSchema,
     isInterrupt: z.optional(z.boolean()),
+    lastAssistantMessage: z.optional(z.string()),
+    message: z.optional(z.string()),
+    model: z.optional(z.string()),
+    notificationType: z.optional(z.string()),
+    prompt: z.optional(z.string()),
+    reason: z.optional(z.string()),
     sessionId: z.optional(z.string()),
+    source: z.optional(z.string()),
+    stopHookActive: z.optional(z.boolean()),
+    title: z.optional(z.string()),
     toolInput: z.optional(z.any()),
     toolName: z.optional(z.string()),
     toolResponse: z.optional(z.any()),
     toolUseId: z.optional(z.string()),
+    transcriptPath: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       additionalData: "additional_data",
       hookEventName: "hook_event_name",
       isInterrupt: "is_interrupt",
+      lastAssistantMessage: "last_assistant_message",
+      notificationType: "notification_type",
       sessionId: "session_id",
+      stopHookActive: "stop_hook_active",
       toolInput: "tool_input",
       toolName: "tool_name",
       toolResponse: "tool_response",
       toolUseId: "tool_use_id",
+      transcriptPath: "transcript_path",
     });
   }),
 );

@@ -123,6 +123,7 @@ export function setListChatsWithResolutionsData(
       offset?: number | undefined;
       sortBy?: operations.SortBy | undefined;
       sortOrder?: operations.SortOrder | undefined;
+      source?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
@@ -148,6 +149,7 @@ export function invalidateListChatsWithResolutions(
       offset?: number | undefined;
       sortBy?: operations.SortBy | undefined;
       sortOrder?: operations.SortOrder | undefined;
+      source?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
