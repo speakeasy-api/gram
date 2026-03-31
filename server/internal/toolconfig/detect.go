@@ -1,7 +1,6 @@
 package toolconfig
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
@@ -25,16 +24,6 @@ type SecurityRequirement struct {
 	Key          string
 	Kind         SecuritySchemeKind
 	EnvVariables []string
-}
-
-// SecurityUnsatisfiedError is returned when no security scheme is satisfied for a tool request.
-type SecurityUnsatisfiedError struct {
-	ToolName string
-	Schemes  []SecurityRequirement
-}
-
-func (e *SecurityUnsatisfiedError) Error() string {
-	return fmt.Sprintf("no security scheme satisfied for tool %q (%d scheme(s) checked)", e.ToolName, len(e.Schemes))
 }
 
 // DescribeToolSecurity converts a toolset's SecurityVariables into SecurityRequirements,
