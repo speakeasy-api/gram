@@ -262,3 +262,61 @@ func (ti *testInstance) getSessionToken(ctx context.Context, t *testing.T) strin
 	require.NotNil(t, authCtx.SessionID, "session ID must be set in auth context")
 	return *authCtx.SessionID
 }
+
+// addToolWithSecurity creates a deployment, an HTTP tool definition with an apiKey
+// security scheme, and a toolset_version linking them. This makes DescribeToolset
+// return SecurityVariables so the security check in ServePublic is exercised.
+// Returns the env var name used for the apiKey scheme.
+func (ti *testInstance) addToolWithSecurity(ctx context.Context, t *testing.T, toolsetID uuid.UUID, projectID uuid.UUID, orgID string) string {
+	t.Helper()
+
+	envVarName := "TEST_API_KEY"
+
+	// Create deployment
+	var deploymentID uuid.UUID
+	err := ti.conn.QueryRow(ctx, `
+		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, projectID, orgID, "test-user", uuid.New().String()).Scan(&deploymentID)
+	require.NoError(t, err)
+
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO deployment_statuses (deployment_id, status)
+		VALUES ($1, 'completed')
+	`, deploymentID)
+	require.NoError(t, err)
+
+	// Create HTTP tool definition with security referencing "test_api_key" scheme
+	toolURN := "tools:http:test-api:" + uuid.New().String()[:8]
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_tool_definitions (
+			project_id, deployment_id, tool_urn, name, untruncated_name,
+			summary, description, tags, http_method, path,
+			schema_version, schema, server_env_var, security,
+			header_settings, query_settings, path_settings
+		) VALUES (
+			$1, $2, $3, 'test_tool', '', 'Test tool', 'A test tool with security',
+			'{}', 'GET', '/test', '3.0.0', '{}', 'TEST_SERVER_URL',
+			$4, '{}', '{}', '{}'
+		)
+	`, projectID, deploymentID, toolURN, `[{"test_api_key": []}]`)
+	require.NoError(t, err)
+
+	// Create matching http_security row
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_security (
+			key, deployment_id, project_id, type, name, in_placement, env_variables
+		) VALUES ($1, $2, $3, 'apiKey', 'X-Api-Key', 'header', $4)
+	`, "test_api_key", deploymentID, projectID, []string{envVarName})
+	require.NoError(t, err)
+
+	// Create toolset_version linking the tool
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
+		VALUES ($1, 1, $2, '{}')
+	`, toolsetID, []string{toolURN})
+	require.NoError(t, err)
+
+	return envVarName
+}

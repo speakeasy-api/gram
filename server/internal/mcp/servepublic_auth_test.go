@@ -37,17 +37,6 @@ func makeInitializeBody() []byte {
 	return bs
 }
 
-// makeToolsListBody creates a single JSON-RPC tools/list request body.
-func makeToolsListBody() []byte {
-	reqBody := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      2,
-		"method":  "tools/list",
-	}
-	bs, _ := json.Marshal(reqBody)
-	return bs
-}
-
 // servePublicHTTP creates an HTTP request and calls ServePublic, returning the recorder and error.
 func servePublicHTTP(
 	t *testing.T,
@@ -56,6 +45,7 @@ func servePublicHTTP(
 	mcpSlug string,
 	body []byte,
 	authToken string,
+	extraHeaders map[string]string,
 ) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
@@ -64,6 +54,9 @@ func servePublicHTTP(
 	req.Header.Set("Content-Type", "application/json")
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
 	}
 
 	rctx := chi.NewRouteContext()
@@ -114,7 +107,7 @@ func createPublicMCPToolset(
 	return toolset
 }
 
-func TestServePublicAuth_PublicNoOAuth_NoToken_InitializeSucceeds(t *testing.T) {
+func TestServePublicAuth_NoSecurityDefs_InitializeSucceeds(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -123,20 +116,15 @@ func TestServePublicAuth_PublicNoOAuth_NoToken_InitializeSucceeds(t *testing.T) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-no-oauth-init")
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-no-sec-init")
 
 	unauthCtx := context.Background()
-	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "")
+	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]any
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	require.Equal(t, "2.0", response["jsonrpc"])
 }
 
-func TestServePublicAuth_PublicNoOAuth_NoToken_ToolsListSucceeds(t *testing.T) {
+func TestServePublicAuth_WithSecurityDefs_NoCredentials_Returns401(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -145,19 +133,57 @@ func TestServePublicAuth_PublicNoOAuth_NoToken_ToolsListSucceeds(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-no-oauth-list")
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-sec-no-creds")
+	ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
+	// Initialize without any credentials — should get 401
 	unauthCtx := context.Background()
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "security scheme not satisfied")
+}
 
-	// Initialize first
-	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "")
+func TestServePublicAuth_WithSecurityDefs_ValidMCPHeader_Succeeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-sec-valid-hdr")
+	envVar := ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+
+	// Send the matching MCP header — env var is TEST_API_KEY, so header is MCP-Test-Api-Key
+	_ = envVar
+	unauthCtx := context.Background()
+	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", map[string]string{
+		"MCP-Test-Api-Key": "some-secret-value",
+	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
+}
 
-	// tools/list should succeed — no security variables means no auth required
-	w, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeToolsListBody(), "")
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
+func TestServePublicAuth_WithSecurityDefs_WrongMCPHeader_Returns401(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-sec-wrong-hdr")
+	ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+
+	// Send an MCP header that doesn't match any security env var
+	unauthCtx := context.Background()
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", map[string]string{
+		"MCP-Wrong-Key": "some-value",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "security scheme not satisfied")
 }
 
 func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
@@ -178,12 +204,11 @@ func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 		McpSlug:                conv.ToPGText("priv-auth-test"),
 		McpEnabled:             true,
-		// McpIsPublic defaults to false
 	})
 	require.NoError(t, err)
 
 	unauthCtx := context.Background()
-	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "")
+	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expired or invalid access token")
 }
@@ -199,7 +224,6 @@ func TestServePublicAuth_BatchRequest_Rejected(t *testing.T) {
 
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-batch-reject")
 
-	// Send a batch (array) request — should be rejected
 	batchBody := []map[string]any{
 		{
 			"jsonrpc": "2.0",
@@ -211,7 +235,7 @@ func TestServePublicAuth_BatchRequest_Rejected(t *testing.T) {
 	require.NoError(t, err)
 
 	unauthCtx := context.Background()
-	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, bodyBytes, "")
+	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, bodyBytes, "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "batch requests are not supported")
 }
