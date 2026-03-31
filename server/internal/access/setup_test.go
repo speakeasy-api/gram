@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -47,7 +46,7 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	service *access.Service
 	conn    *pgxpool.Pool
-	roles   *thirdpartyworkos.MockRoleProvider
+	roles   *MockRoleProvider
 }
 
 func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
@@ -79,7 +78,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	})
 	require.NoError(t, err)
 
-	roles := thirdpartyworkos.NewMockRoleProvider()
+	roles := newMockRoleProvider(t)
 
 	svc := access.NewService(logger, tracerProvider, conn, sessionManager, roles)
 

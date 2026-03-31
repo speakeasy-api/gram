@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -21,21 +22,15 @@ func TestService_DeleteRole(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.roles.AddRole("org_workos_test", thirdpartyworkos.Role{
-		ID:          "role_custom",
-		Name:        "Custom Builder",
-		Slug:        "custom-builder",
-		Description: "Old description",
-	})
+	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
+	}, nil).Once()
+	ti.roles.On("DeleteRole", mock.Anything, "org_workos_test", "custom-builder").Return(nil).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeMCPConnect, access.WildcardResource)
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.NoError(t, err)
-
-	roles, err := ti.roles.ListRoles(ctx, "org_workos_test")
-	require.NoError(t, err)
-	require.Empty(t, roles)
 
 	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: new(urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder").String())})
 	require.NoError(t, err)
@@ -46,6 +41,7 @@ func TestService_DeleteRole_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_missing"})
 	require.Error(t, err)
@@ -56,7 +52,9 @@ func TestService_DeleteRole_SystemRole(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.AddSystemRole("org_workos_test", "role_admin", "Admin", "admin")
+	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+		mockSystemRole("role_admin", "Admin", "admin"),
+	}, nil).Once()
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_admin"})
 	require.Error(t, err)
@@ -70,14 +68,11 @@ func TestService_DeleteRole_WorkOSDeleteFailure(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	ti.roles.AddRole("org_workos_test", thirdpartyworkos.Role{
-		ID:          "role_custom",
-		Name:        "Custom Builder",
-		Slug:        "custom-builder",
-		Description: "Old description",
-	})
+	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
+	}, nil).Once()
+	ti.roles.On("DeleteRole", mock.Anything, "org_workos_test", "custom-builder").Return(errors.New("workos unavailable")).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
-	ti.roles.SetDeleteRoleError(errors.New("workos unavailable"))
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.Error(t, err)
@@ -88,7 +83,4 @@ func TestService_DeleteRole_WorkOSDeleteFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, grants.Grants)
 
-	roles, err := ti.roles.ListRoles(ctx, "org_workos_test")
-	require.NoError(t, err)
-	require.Len(t, roles, 1)
 }

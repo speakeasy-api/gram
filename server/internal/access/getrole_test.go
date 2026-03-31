@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -21,16 +22,15 @@ func TestService_GetRole(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.roles.AddSystemRole("org_workos_test", "role_admin", "Admin", "admin")
-	ti.roles.AddRole("org_workos_test", thirdpartyworkos.Role{
-		ID:          "role_custom",
-		Name:        "Custom Builder",
-		Slug:        "custom-builder",
-		Description: "Can build selected resources",
-	})
-	ti.roles.AddMember("org_workos_test", "membership_1", "user_1", "custom-builder")
-	ti.roles.AddMember("org_workos_test", "membership_2", "user_2", "custom-builder")
-	ti.roles.AddMember("org_workos_test", "membership_3", "user_3", "admin")
+	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+		mockSystemRole("role_admin", "Admin", "admin"),
+		mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"),
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
+		mockMember("org_workos_test", "membership_1", "user_1", "custom-builder"),
+		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
+		mockMember("org_workos_test", "membership_3", "user_3", "admin"),
+	}, nil).Once()
 
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeMCPConnect, access.WildcardResource)
@@ -42,8 +42,8 @@ func TestService_GetRole(t *testing.T) {
 	require.Equal(t, "Can build selected resources", role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 2, role.MemberCount)
-	require.Equal(t, thirdpartyworkos.MockRoleTimestamp(), role.CreatedAt)
-	require.Equal(t, thirdpartyworkos.MockRoleTimestamp(), role.UpdatedAt)
+	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
+	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
 	grantsByScope := make(map[string]*gen.RoleGrant, len(role.Grants))
@@ -58,6 +58,7 @@ func TestService_GetRole_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_missing"})
 	require.Error(t, err)
@@ -98,7 +99,7 @@ func TestService_GetRole_WorkOSListRolesFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.SetListRolesError(errors.New("workos unavailable"))
+	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role(nil), errors.New("workos unavailable")).Once()
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
 	require.Error(t, err)
