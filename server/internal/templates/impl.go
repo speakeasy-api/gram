@@ -405,6 +405,13 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 		return oops.E(oops.CodeUnexpected, err, "failed to save template deletion").Log(ctx, logger)
 	}
 
+	// Invalidate cache for any toolsets that contain this template as a tool
+	if auditEntry.id != uuid.Nil {
+		if err := s.toolsets.InvalidateCacheByTool(ctx, *auditEntry.toolURN, projectID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to invalidate toolset cache").Log(ctx, s.logger)
+		}
+	}
+
 	return nil
 }
 

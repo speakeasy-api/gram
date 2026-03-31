@@ -45,6 +45,7 @@ type testInstance struct {
 	service        *templates.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	toolsetsSvc    *toolsetsServiceStub
 }
 
 func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
@@ -79,6 +80,7 @@ func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		toolsetsSvc:    toolsetsSvc,
 	}
 }
 
