@@ -43,7 +43,7 @@ func NewReapFlyApps(
 	keepCount int64,
 ) *ReapFlyApps {
 	return &ReapFlyApps{
-		logger:    logger.With(attr.SlogComponent("flyio-reaper")),
+		logger:    logger.With(attr.SlogComponent("flyio_reaper")),
 		metrics:   newMetrics(newMeter(meterProvider), logger),
 		db:        db,
 		deployer:  deployer,

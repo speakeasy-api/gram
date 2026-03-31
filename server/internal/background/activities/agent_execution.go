@@ -29,7 +29,7 @@ type RecordAgentExecution struct {
 
 func NewRecordAgentExecution(logger *slog.Logger, db *pgxpool.Pool) *RecordAgentExecution {
 	return &RecordAgentExecution{
-		logger: logger.With(attr.SlogComponent("record-agent-execution-activity")),
+		logger: logger.With(attr.SlogComponent("record_agent_execution")),
 		repo:   repo.New(db),
 	}
 }

@@ -32,7 +32,7 @@ type ExecuteModelCall struct {
 
 func NewExecuteModelCall(logger *slog.Logger, agentsService *agents.Service) *ExecuteModelCall {
 	return &ExecuteModelCall{
-		logger:        logger.With(attr.SlogComponent("execute-model-call-activity")),
+		logger:        logger.With(attr.SlogComponent("execute_model_call")),
 		agentsService: agentsService,
 	}
 }

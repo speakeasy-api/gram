@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -376,12 +377,14 @@ func newStartCommand() *cli.Command {
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "server"
 			logger := PullLogger(c.Context).With(
+				attr.SlogComponent("server"),
 				attr.SlogServiceName(serviceName),
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
+			slog.SetDefault(logger)
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -509,7 +512,15 @@ func newStartCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
+				openRouter = openrouter.New(
+					logger,
+					db,
+					c.String("environment"),
+					c.String("openrouter-provisioning-key"),
+					&background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv},
+					productFeatures,
+					billingTracker,
+				)
 			}
 
 			serverURL, err := url.Parse(c.String("server-url"))
@@ -605,9 +616,9 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
-			authAuth := auth.New(logger, db, sessionManager)
+			authorizer := auth.New(logger, db, sessionManager)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
-			externalOAuthService := oauth.NewExternalOAuthService(logger, db, cache.NewRedisCacheAdapter(redisClient), authAuth, encryptionClient, externalMcpOAuthConfig)
+			externalOAuthService := oauth.NewExternalOAuthService(logger, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
 
 			mcpService := mcp.NewService(
 				logger,
@@ -641,6 +652,13 @@ func newStartCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 
+			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
+			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
+			roleClient, err := newAccessRoleProvider(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to create access role provider: %w", err)
+			}
+
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -662,16 +680,10 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
-			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
-			roleClient, err := newAccessRoleProvider(ctx, logger, c)
-			if err != nil {
-				return fmt.Errorf("failed to create access role provider: %w", err)
-			}
-
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, temporalEnv))
-			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
+			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authorizer, temporalEnv))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager))
 			auth.Attach(mux, auth.NewService(
 				logger,
@@ -700,7 +712,6 @@ func newStartCommand() *cli.Command {
 			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, billingTracker, telemSvc, productFeatures, serverURL))
-			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
 			mcp.Attach(mux, mcpService, mcpMetadataService)

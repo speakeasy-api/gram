@@ -15,7 +15,7 @@ import (
 )
 
 func NewRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
-	logger = logger.With(attr.SlogComponent("recovery"))
+	logger = logger.With(attr.SlogComponent("recovery_middleware"))
 
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {

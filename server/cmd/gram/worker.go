@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 
@@ -287,12 +288,14 @@ func newWorkerCommand() *cli.Command {
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "worker"
 			logger := PullLogger(c.Context).With(
+				attr.SlogComponent("worker"),
 				attr.SlogServiceName(serviceName),
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
+			slog.SetDefault(logger)
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()

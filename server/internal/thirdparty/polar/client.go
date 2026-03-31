@@ -79,7 +79,7 @@ var _ billing.Repository = (*Client)(nil)
 
 func NewClient(polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
 	return &Client{
-		logger:             logger.With(attr.SlogComponent("polar-usage")),
+		logger:             logger.With(attr.SlogComponent("polar_usage")),
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/polar"),
 		polar:              polarClient,
 		httpClient:         &http.Client{Timeout: 30 * time.Second},

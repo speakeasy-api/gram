@@ -45,7 +45,7 @@ type TemporalClient interface {
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient) *Service {
-	logger = logger.With(attr.SlogComponent("customdomains"))
+	logger = logger.With(attr.SlogComponent("custom_domains"))
 
 	return &Service{
 		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/customdomains"),

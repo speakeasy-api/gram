@@ -71,6 +71,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent("clickhouse"))
 	nilFunc := func(context.Context) error { return nil }
 
 	host := c.String("clickhouse-host")
@@ -175,7 +176,7 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 			Name:    "pgx",
 			Options: []trace.TracerOption{},
 		},
-		o11y.NewPGXLogger(logger, consoleLogLevel),
+		o11y.NewPGXLogger(logger.With(attr.SlogComponent("pgx")), consoleLogLevel),
 	)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolcfg)
@@ -380,6 +381,7 @@ func newBillingProvider(
 	posthogClient *posthog.Posthog,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
+	logger = logger.With(attr.SlogComponent("billing"))
 	switch {
 	case c.String("polar-api-key") != "":
 		catalog := &polar.Catalog{
@@ -421,6 +423,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, c *cli.Cont
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent("tigris"))
 	nilShutdown := func(context.Context) error { return nil }
 
 	switch provider := c.String("functions-provider"); provider {
@@ -571,6 +574,8 @@ type mcpRegistryClientOptions struct {
 }
 
 func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
+	logger = logger.With(attr.SlogComponent("mcp_registry_client"))
+
 	pulseURL, err := url.Parse("https://api.pulsemcp.com")
 	if err != nil {
 		return nil, fmt.Errorf("parse pulse registry url: %w", err)

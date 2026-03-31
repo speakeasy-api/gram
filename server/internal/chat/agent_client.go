@@ -104,7 +104,7 @@ func NewAgenticChatClient(
 	toolsetLoader MCPClient,
 ) *Client {
 	return &Client{
-		logger:           logger,
+		logger:           logger.With(attr.SlogComponent("agentic_chat_client")),
 		completionClient: completionClient,
 		db:               db,
 		env:              env,

@@ -117,13 +117,13 @@ func NewFlyRunner(
 			Tokens:    o.FlyTokens,
 		},
 		Logger: &flyLogger{
-			logger:      logger.With(attr.SlogComponent("flyio-client")),
+			logger:      logger.With(attr.SlogComponent("flyio_client")),
 			contextFunc: context.Background,
 		},
 	})
 
 	return &FlyRunner{
-		logger:          logger.With(attr.SlogComponent("flyio-orchestrator")),
+		logger:          logger.With(attr.SlogComponent("flyio_orchestrator")),
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
 		serverURL:       serverURL,
 		db:              db,
@@ -462,7 +462,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		UserAgent: f.ua,
 		Tokens:    f.tokens,
 		Logger: &flyLogger{
-			logger: logger.With(attr.SlogComponent("flyio-flaps")),
+			logger: logger.With(attr.SlogComponent("flyio_flaps")),
 			contextFunc: func() context.Context {
 				return ctx
 			},
