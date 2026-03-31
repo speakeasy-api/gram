@@ -12,6 +12,13 @@ paths:
             operationId: createRole
             parameters:
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -86,6 +93,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: createRole access
             tags:
@@ -105,6 +113,13 @@ paths:
                   required: true
                   schema:
                     description: The ID of the role to delete.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -171,6 +186,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: deleteRole access
             tags:
@@ -190,6 +206,13 @@ paths:
                   required: true
                   schema:
                     description: The ID of the role.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -260,6 +283,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: getRole access
             tags:
@@ -369,6 +393,13 @@ paths:
             operationId: listMembers
             parameters:
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -437,6 +468,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listMembers access
             tags:
@@ -449,6 +481,13 @@ paths:
             description: List all roles for the current organization.
             operationId: listRoles
             parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -518,6 +557,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listRoles access
             tags:
@@ -530,6 +570,13 @@ paths:
             description: List all available scopes and their resource types.
             operationId: listScopes
             parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -599,6 +646,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listScopes access
             tags:
@@ -794,6 +842,13 @@ paths:
             operationId: updateMemberRole
             parameters:
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -868,6 +923,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: updateMemberRole access
             tags:
@@ -880,6 +936,13 @@ paths:
             description: Update an existing custom role.
             operationId: updateRole
             parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -955,6 +1018,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: updateRole access
             tags:

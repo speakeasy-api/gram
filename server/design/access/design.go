@@ -14,8 +14,13 @@ var _ = Service("access", func() {
 
 	Method("listRoles", func() {
 		Description("List all roles for the current organization.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -23,6 +28,7 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			GET("/rpc/access.listRoles")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -34,10 +40,15 @@ var _ = Service("access", func() {
 
 	Method("getRole", func() {
 		Description("Get a role by ID.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the role.")
 			Required("id")
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -46,6 +57,7 @@ var _ = Service("access", func() {
 		HTTP(func() {
 			GET("/rpc/access.getRole")
 			Param("id")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -57,9 +69,14 @@ var _ = Service("access", func() {
 
 	Method("createRole", func() {
 		Description("Create a new custom role.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Extend(CreateRoleForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -67,6 +84,7 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			POST("/rpc/access.createRole")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusCreated)
 		})
@@ -78,9 +96,14 @@ var _ = Service("access", func() {
 
 	Method("updateRole", func() {
 		Description("Update an existing custom role.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Extend(UpdateRoleForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -88,6 +111,7 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			PUT("/rpc/access.updateRole")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -99,16 +123,22 @@ var _ = Service("access", func() {
 
 	Method("deleteRole", func() {
 		Description("Delete a custom role (system roles cannot be deleted).")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the role to delete.")
 			Required("id")
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
 		HTTP(func() {
 			DELETE("/rpc/access.deleteRole")
 			Param("id")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusNoContent)
 		})
@@ -120,8 +150,13 @@ var _ = Service("access", func() {
 
 	Method("listScopes", func() {
 		Description("List all available scopes and their resource types.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -129,6 +164,7 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			GET("/rpc/access.listScopes")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -140,8 +176,13 @@ var _ = Service("access", func() {
 
 	Method("listMembers", func() {
 		Description("List all team members with their role assignments.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -149,6 +190,7 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			GET("/rpc/access.listMembers")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -160,9 +202,14 @@ var _ = Service("access", func() {
 
 	Method("updateMemberRole", func() {
 		Description("Change a team member's role assignment.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Extend(UpdateMemberRoleForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -170,6 +217,7 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			PUT("/rpc/access.updateMemberRole")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})

@@ -4335,24 +4335,26 @@ func NewRemovePrincipalGrantsGatewayErrorResponseBody(res *goa.ServiceError) *Re
 }
 
 // NewListRolesPayload builds a access service listRoles endpoint payload.
-func NewListRolesPayload(sessionToken *string) *access.ListRolesPayload {
+func NewListRolesPayload(apikeyToken *string, sessionToken *string) *access.ListRolesPayload {
 	v := &access.ListRolesPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewGetRolePayload builds a access service getRole endpoint payload.
-func NewGetRolePayload(id string, sessionToken *string) *access.GetRolePayload {
+func NewGetRolePayload(id string, apikeyToken *string, sessionToken *string) *access.GetRolePayload {
 	v := &access.GetRolePayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewCreateRolePayload builds a access service createRole endpoint payload.
-func NewCreateRolePayload(body *CreateRoleRequestBody, sessionToken *string) *access.CreateRolePayload {
+func NewCreateRolePayload(body *CreateRoleRequestBody, apikeyToken *string, sessionToken *string) *access.CreateRolePayload {
 	v := &access.CreateRolePayload{
 		Name:        *body.Name,
 		Description: *body.Description,
@@ -4371,13 +4373,14 @@ func NewCreateRolePayload(body *CreateRoleRequestBody, sessionToken *string) *ac
 			v.MemberIds[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewUpdateRolePayload builds a access service updateRole endpoint payload.
-func NewUpdateRolePayload(body *UpdateRoleRequestBody, sessionToken *string) *access.UpdateRolePayload {
+func NewUpdateRolePayload(body *UpdateRoleRequestBody, apikeyToken *string, sessionToken *string) *access.UpdateRolePayload {
 	v := &access.UpdateRolePayload{
 		ID:          *body.ID,
 		Name:        body.Name,
@@ -4399,31 +4402,35 @@ func NewUpdateRolePayload(body *UpdateRoleRequestBody, sessionToken *string) *ac
 			v.MemberIds[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewDeleteRolePayload builds a access service deleteRole endpoint payload.
-func NewDeleteRolePayload(id string, sessionToken *string) *access.DeleteRolePayload {
+func NewDeleteRolePayload(id string, apikeyToken *string, sessionToken *string) *access.DeleteRolePayload {
 	v := &access.DeleteRolePayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewListScopesPayload builds a access service listScopes endpoint payload.
-func NewListScopesPayload(sessionToken *string) *access.ListScopesPayload {
+func NewListScopesPayload(apikeyToken *string, sessionToken *string) *access.ListScopesPayload {
 	v := &access.ListScopesPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewListMembersPayload builds a access service listMembers endpoint payload.
-func NewListMembersPayload(sessionToken *string) *access.ListMembersPayload {
+func NewListMembersPayload(apikeyToken *string, sessionToken *string) *access.ListMembersPayload {
 	v := &access.ListMembersPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -4431,11 +4438,12 @@ func NewListMembersPayload(sessionToken *string) *access.ListMembersPayload {
 
 // NewUpdateMemberRolePayload builds a access service updateMemberRole endpoint
 // payload.
-func NewUpdateMemberRolePayload(body *UpdateMemberRoleRequestBody, sessionToken *string) *access.UpdateMemberRolePayload {
+func NewUpdateMemberRolePayload(body *UpdateMemberRoleRequestBody, apikeyToken *string, sessionToken *string) *access.UpdateMemberRolePayload {
 	v := &access.UpdateMemberRolePayload{
 		UserID: *body.UserID,
 		RoleID: *body.RoleID,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v

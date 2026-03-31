@@ -41,6 +41,10 @@ func EncodeListRolesRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if !ok {
 			return goahttp.ErrInvalidType("access", "listRoles", "*access.ListRolesPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -270,6 +274,10 @@ func EncodeGetRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 		p, ok := v.(*access.GetRolePayload)
 		if !ok {
 			return goahttp.ErrInvalidType("access", "getRole", "*access.GetRolePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -503,6 +511,10 @@ func EncodeCreateRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		p, ok := v.(*access.CreateRolePayload)
 		if !ok {
 			return goahttp.ErrInvalidType("access", "createRole", "*access.CreateRolePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -738,6 +750,10 @@ func EncodeUpdateRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		if !ok {
 			return goahttp.ErrInvalidType("access", "updateRole", "*access.UpdateRolePayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -972,6 +988,10 @@ func EncodeDeleteRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		if !ok {
 			return goahttp.ErrInvalidType("access", "deleteRole", "*access.DeleteRolePayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -1191,6 +1211,10 @@ func EncodeListScopesRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		p, ok := v.(*access.ListScopesPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("access", "listScopes", "*access.ListScopesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -1422,6 +1446,10 @@ func EncodeListMembersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if !ok {
 			return goahttp.ErrInvalidType("access", "listMembers", "*access.ListMembersPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -1651,6 +1679,10 @@ func EncodeUpdateMemberRoleRequest(encoder func(*http.Request) goahttp.Encoder) 
 		p, ok := v.(*access.UpdateMemberRolePayload)
 		if !ok {
 			return goahttp.ErrInvalidType("access", "updateMemberRole", "*access.UpdateMemberRolePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

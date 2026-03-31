@@ -73,15 +73,27 @@ func NewListRolesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		p := req.(*ListRolesPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -96,15 +108,27 @@ func NewGetRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 		p := req.(*GetRolePayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -119,15 +143,27 @@ func NewCreateRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		p := req.(*CreateRolePayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -142,15 +178,27 @@ func NewUpdateRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		p := req.(*UpdateRolePayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -165,15 +213,27 @@ func NewDeleteRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		p := req.(*DeleteRolePayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -188,15 +248,27 @@ func NewListScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		p := req.(*ListScopesPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -211,15 +283,27 @@ func NewListMembersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		p := req.(*ListMembersPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -234,15 +318,27 @@ func NewUpdateMemberRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		p := req.(*UpdateMemberRolePayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}

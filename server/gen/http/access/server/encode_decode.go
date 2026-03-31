@@ -37,13 +37,25 @@ func DecodeListRolesRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 	return func(r *http.Request) (*access.ListRolesPayload, error) {
 		var payload *access.ListRolesPayload
 		var (
+			apikeyToken  *string
 			sessionToken *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListRolesPayload(sessionToken)
+		payload = NewListRolesPayload(apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -231,12 +243,17 @@ func DecodeGetRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 		var payload *access.GetRolePayload
 		var (
 			id           string
+			apikeyToken  *string
 			sessionToken *string
 			err          error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -245,7 +262,14 @@ func DecodeGetRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetRolePayload(id, sessionToken)
+		payload = NewGetRolePayload(id, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -452,13 +476,25 @@ func DecodeCreateRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		}
 
 		var (
+			apikeyToken  *string
 			sessionToken *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewCreateRolePayload(&body, sessionToken)
+		payload = NewCreateRolePayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -665,13 +701,25 @@ func DecodeUpdateRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		}
 
 		var (
+			apikeyToken  *string
 			sessionToken *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpdateRolePayload(&body, sessionToken)
+		payload = NewUpdateRolePayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -856,12 +904,17 @@ func DecodeDeleteRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		var payload *access.DeleteRolePayload
 		var (
 			id           string
+			apikeyToken  *string
 			sessionToken *string
 			err          error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -870,7 +923,14 @@ func DecodeDeleteRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeleteRolePayload(id, sessionToken)
+		payload = NewDeleteRolePayload(id, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1057,13 +1117,25 @@ func DecodeListScopesRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*access.ListScopesPayload, error) {
 		var payload *access.ListScopesPayload
 		var (
+			apikeyToken  *string
 			sessionToken *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListScopesPayload(sessionToken)
+		payload = NewListScopesPayload(apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1250,13 +1322,25 @@ func DecodeListMembersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*access.ListMembersPayload, error) {
 		var payload *access.ListMembersPayload
 		var (
+			apikeyToken  *string
 			sessionToken *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListMembersPayload(sessionToken)
+		payload = NewListMembersPayload(apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1463,13 +1547,25 @@ func DecodeUpdateMemberRoleRequest(mux goahttp.Muxer, decoder func(*http.Request
 		}
 
 		var (
+			apikeyToken  *string
 			sessionToken *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpdateMemberRolePayload(&body, sessionToken)
+		payload = NewUpdateMemberRolePayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

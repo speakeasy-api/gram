@@ -17,7 +17,13 @@ import (
 
 // BuildListRolesPayload builds the payload for the access listRoles endpoint
 // from CLI flags.
-func BuildListRolesPayload(accessListRolesSessionToken string) (*access.ListRolesPayload, error) {
+func BuildListRolesPayload(accessListRolesApikeyToken string, accessListRolesSessionToken string) (*access.ListRolesPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListRolesApikeyToken != "" {
+			apikeyToken = &accessListRolesApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if accessListRolesSessionToken != "" {
@@ -25,6 +31,7 @@ func BuildListRolesPayload(accessListRolesSessionToken string) (*access.ListRole
 		}
 	}
 	v := &access.ListRolesPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -32,10 +39,16 @@ func BuildListRolesPayload(accessListRolesSessionToken string) (*access.ListRole
 
 // BuildGetRolePayload builds the payload for the access getRole endpoint from
 // CLI flags.
-func BuildGetRolePayload(accessGetRoleID string, accessGetRoleSessionToken string) (*access.GetRolePayload, error) {
+func BuildGetRolePayload(accessGetRoleID string, accessGetRoleApikeyToken string, accessGetRoleSessionToken string) (*access.GetRolePayload, error) {
 	var id string
 	{
 		id = accessGetRoleID
+	}
+	var apikeyToken *string
+	{
+		if accessGetRoleApikeyToken != "" {
+			apikeyToken = &accessGetRoleApikeyToken
+		}
 	}
 	var sessionToken *string
 	{
@@ -45,6 +58,7 @@ func BuildGetRolePayload(accessGetRoleID string, accessGetRoleSessionToken strin
 	}
 	v := &access.GetRolePayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -52,7 +66,7 @@ func BuildGetRolePayload(accessGetRoleID string, accessGetRoleSessionToken strin
 
 // BuildCreateRolePayload builds the payload for the access createRole endpoint
 // from CLI flags.
-func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleSessionToken string) (*access.CreateRolePayload, error) {
+func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleApikeyToken string, accessCreateRoleSessionToken string) (*access.CreateRolePayload, error) {
 	var err error
 	var body CreateRoleRequestBody
 	{
@@ -72,6 +86,12 @@ func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleSession
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessCreateRoleApikeyToken != "" {
+			apikeyToken = &accessCreateRoleApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -102,6 +122,7 @@ func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleSession
 			v.MemberIds[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -109,7 +130,7 @@ func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleSession
 
 // BuildUpdateRolePayload builds the payload for the access updateRole endpoint
 // from CLI flags.
-func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleSessionToken string) (*access.UpdateRolePayload, error) {
+func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyToken string, accessUpdateRoleSessionToken string) (*access.UpdateRolePayload, error) {
 	var err error
 	var body UpdateRoleRequestBody
 	{
@@ -126,6 +147,12 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleSession
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessUpdateRoleApikeyToken != "" {
+			apikeyToken = &accessUpdateRoleApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -155,6 +182,7 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleSession
 			v.MemberIds[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -162,10 +190,16 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleSession
 
 // BuildDeleteRolePayload builds the payload for the access deleteRole endpoint
 // from CLI flags.
-func BuildDeleteRolePayload(accessDeleteRoleID string, accessDeleteRoleSessionToken string) (*access.DeleteRolePayload, error) {
+func BuildDeleteRolePayload(accessDeleteRoleID string, accessDeleteRoleApikeyToken string, accessDeleteRoleSessionToken string) (*access.DeleteRolePayload, error) {
 	var id string
 	{
 		id = accessDeleteRoleID
+	}
+	var apikeyToken *string
+	{
+		if accessDeleteRoleApikeyToken != "" {
+			apikeyToken = &accessDeleteRoleApikeyToken
+		}
 	}
 	var sessionToken *string
 	{
@@ -175,6 +209,7 @@ func BuildDeleteRolePayload(accessDeleteRoleID string, accessDeleteRoleSessionTo
 	}
 	v := &access.DeleteRolePayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -182,7 +217,13 @@ func BuildDeleteRolePayload(accessDeleteRoleID string, accessDeleteRoleSessionTo
 
 // BuildListScopesPayload builds the payload for the access listScopes endpoint
 // from CLI flags.
-func BuildListScopesPayload(accessListScopesSessionToken string) (*access.ListScopesPayload, error) {
+func BuildListScopesPayload(accessListScopesApikeyToken string, accessListScopesSessionToken string) (*access.ListScopesPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListScopesApikeyToken != "" {
+			apikeyToken = &accessListScopesApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if accessListScopesSessionToken != "" {
@@ -190,6 +231,7 @@ func BuildListScopesPayload(accessListScopesSessionToken string) (*access.ListSc
 		}
 	}
 	v := &access.ListScopesPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -197,7 +239,13 @@ func BuildListScopesPayload(accessListScopesSessionToken string) (*access.ListSc
 
 // BuildListMembersPayload builds the payload for the access listMembers
 // endpoint from CLI flags.
-func BuildListMembersPayload(accessListMembersSessionToken string) (*access.ListMembersPayload, error) {
+func BuildListMembersPayload(accessListMembersApikeyToken string, accessListMembersSessionToken string) (*access.ListMembersPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListMembersApikeyToken != "" {
+			apikeyToken = &accessListMembersApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if accessListMembersSessionToken != "" {
@@ -205,6 +253,7 @@ func BuildListMembersPayload(accessListMembersSessionToken string) (*access.List
 		}
 	}
 	v := &access.ListMembersPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -212,13 +261,19 @@ func BuildListMembersPayload(accessListMembersSessionToken string) (*access.List
 
 // BuildUpdateMemberRolePayload builds the payload for the access
 // updateMemberRole endpoint from CLI flags.
-func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdateMemberRoleSessionToken string) (*access.UpdateMemberRolePayload, error) {
+func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdateMemberRoleApikeyToken string, accessUpdateMemberRoleSessionToken string) (*access.UpdateMemberRolePayload, error) {
 	var err error
 	var body UpdateMemberRoleRequestBody
 	{
 		err = json.Unmarshal([]byte(accessUpdateMemberRoleBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessUpdateMemberRoleApikeyToken != "" {
+			apikeyToken = &accessUpdateMemberRoleApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -231,6 +286,7 @@ func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdat
 		UserID: body.UserID,
 		RoleID: body.RoleID,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

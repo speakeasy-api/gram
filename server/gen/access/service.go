@@ -88,6 +88,7 @@ type AccessMember struct {
 // CreateRolePayload is the payload type of the access service createRole
 // method.
 type CreateRolePayload struct {
+	ApikeyToken  *string
 	SessionToken *string
 	// Display name for the role.
 	Name string
@@ -104,6 +105,7 @@ type CreateRolePayload struct {
 type DeleteRolePayload struct {
 	// The ID of the role to delete.
 	ID           string
+	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -111,6 +113,7 @@ type DeleteRolePayload struct {
 type GetRolePayload struct {
 	// The ID of the role.
 	ID           string
+	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -167,6 +170,7 @@ type ListGrantsResult struct {
 // ListMembersPayload is the payload type of the access service listMembers
 // method.
 type ListMembersPayload struct {
+	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -179,6 +183,7 @@ type ListMembersResult struct {
 
 // ListRolesPayload is the payload type of the access service listRoles method.
 type ListRolesPayload struct {
+	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -191,6 +196,7 @@ type ListRolesResult struct {
 // ListScopesPayload is the payload type of the access service listScopes
 // method.
 type ListScopesPayload struct {
+	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -257,6 +263,7 @@ type ScopeDefinition struct {
 // UpdateMemberRolePayload is the payload type of the access service
 // updateMemberRole method.
 type UpdateMemberRolePayload struct {
+	ApikeyToken  *string
 	SessionToken *string
 	// The user ID to update.
 	UserID string
@@ -267,6 +274,7 @@ type UpdateMemberRolePayload struct {
 // UpdateRolePayload is the payload type of the access service updateRole
 // method.
 type UpdateRolePayload struct {
+	ApikeyToken  *string
 	SessionToken *string
 	// The ID of the role to update.
 	ID string
