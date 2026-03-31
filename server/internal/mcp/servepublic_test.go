@@ -1049,8 +1049,9 @@ func TestService_ServePublic_CustomOAuthProxy(t *testing.T) {
 		ctx, ti := newTestMCPServiceWithOAuth(t, mockOAuth)
 		mcpSlug := setupCustomOAuthToolset(t, ctx, ti)
 
-		// Token refresh failure is now best-effort — initialize still succeeds.
-		// Security enforcement happens at tools/list and tools/call time.
+		// Token refresh failure is best-effort — initialize still succeeds because
+		// this test toolset has no security definitions (no deployed tools with
+		// http_security rows). A toolset WITH security definitions would return 401.
 		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(initializeBody()))
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Content-Type", "application/json")
