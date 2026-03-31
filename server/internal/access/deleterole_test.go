@@ -32,9 +32,8 @@ func TestService_DeleteRole(t *testing.T) {
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.NoError(t, err)
 
-	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: new(urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder").String())})
-	require.NoError(t, err)
-	require.Empty(t, grants.Grants)
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	require.Empty(t, grants)
 }
 
 func TestService_DeleteRole_NotFound(t *testing.T) {
@@ -78,9 +77,7 @@ func TestService_DeleteRole_WorkOSDeleteFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "delete role in workos")
 
-	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder").String()
-	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: &principalURN})
-	require.NoError(t, err)
-	require.Empty(t, grants.Grants)
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	require.Empty(t, grants)
 
 }

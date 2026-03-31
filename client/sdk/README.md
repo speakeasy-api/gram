@@ -137,15 +137,11 @@ run();
 * [createRole](docs/sdks/access/README.md#createrole) - createRole access
 * [deleteRole](docs/sdks/access/README.md#deleterole) - deleteRole access
 * [getRole](docs/sdks/access/README.md#getrole) - getRole access
-* [list](docs/sdks/access/README.md#list) - listGrants access
 * [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
-* [remove](docs/sdks/access/README.md#remove) - removeGrants access
-* [removePrincipal](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 * [updateMemberRole](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
-* [upsert](docs/sdks/access/README.md#upsert) - upsertGrants access
 
 ### [Agentworkflows](docs/sdks/agentworkflows/README.md)
 
@@ -379,15 +375,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
 - [`accessDeleteRole`](docs/sdks/access/README.md#deleterole) - deleteRole access
 - [`accessGetRole`](docs/sdks/access/README.md#getrole) - getRole access
-- [`accessList`](docs/sdks/access/README.md#list) - listGrants access
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
-- [`accessRemove`](docs/sdks/access/README.md#remove) - removeGrants access
-- [`accessRemovePrincipal`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 - [`accessUpdateMemberRole`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
-- [`accessUpsert`](docs/sdks/access/README.md#upsert) - upsertGrants access
 - [`agentworkflowsCreateResponse`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
 - [`agentworkflowsDeleteResponse`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
 - [`agentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
@@ -601,7 +593,6 @@ To learn about this feature and how to get started, check
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
-- [`useGrants`](docs/sdks/access/README.md#list) - listGrants access
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 - [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`useHooksServerNamesDeleteServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
@@ -643,9 +634,7 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
-- [`useRemoveGrantsMutation`](docs/sdks/access/README.md#remove) - removeGrants access
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
-- [`useRemovePrincipalGrantsMutation`](docs/sdks/access/README.md#removeprincipal) - removePrincipalGrants access
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
@@ -682,7 +671,6 @@ To learn about this feature and how to get started, check
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
-- [`useUpsertGrantsMutation`](docs/sdks/access/README.md#upsert) - upsertGrants access
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
 
 </details>

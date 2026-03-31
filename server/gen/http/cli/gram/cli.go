@@ -53,7 +53,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|update-member-role|list-grants|upsert-grants|remove-grants|remove-principal-grants)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|update-member-role)",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
@@ -147,26 +147,6 @@ func ParseEndpoint(
 		accessUpdateMemberRoleBodyFlag         = accessUpdateMemberRoleFlags.String("body", "REQUIRED", "")
 		accessUpdateMemberRoleApikeyTokenFlag  = accessUpdateMemberRoleFlags.String("apikey-token", "", "")
 		accessUpdateMemberRoleSessionTokenFlag = accessUpdateMemberRoleFlags.String("session-token", "", "")
-
-		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
-		accessListGrantsPrincipalUrnFlag = accessListGrantsFlags.String("principal-urn", "", "")
-		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
-		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
-
-		accessUpsertGrantsFlags            = flag.NewFlagSet("upsert-grants", flag.ExitOnError)
-		accessUpsertGrantsBodyFlag         = accessUpsertGrantsFlags.String("body", "REQUIRED", "")
-		accessUpsertGrantsApikeyTokenFlag  = accessUpsertGrantsFlags.String("apikey-token", "", "")
-		accessUpsertGrantsSessionTokenFlag = accessUpsertGrantsFlags.String("session-token", "", "")
-
-		accessRemoveGrantsFlags            = flag.NewFlagSet("remove-grants", flag.ExitOnError)
-		accessRemoveGrantsBodyFlag         = accessRemoveGrantsFlags.String("body", "REQUIRED", "")
-		accessRemoveGrantsApikeyTokenFlag  = accessRemoveGrantsFlags.String("apikey-token", "", "")
-		accessRemoveGrantsSessionTokenFlag = accessRemoveGrantsFlags.String("session-token", "", "")
-
-		accessRemovePrincipalGrantsFlags            = flag.NewFlagSet("remove-principal-grants", flag.ExitOnError)
-		accessRemovePrincipalGrantsBodyFlag         = accessRemovePrincipalGrantsFlags.String("body", "REQUIRED", "")
-		accessRemovePrincipalGrantsApikeyTokenFlag  = accessRemovePrincipalGrantsFlags.String("apikey-token", "", "")
-		accessRemovePrincipalGrantsSessionTokenFlag = accessRemovePrincipalGrantsFlags.String("session-token", "", "")
 
 		agentworkflowsFlags = flag.NewFlagSet("agentworkflows", flag.ContinueOnError)
 
@@ -957,10 +937,6 @@ func ParseEndpoint(
 	accessListScopesFlags.Usage = accessListScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
-	accessListGrantsFlags.Usage = accessListGrantsUsage
-	accessUpsertGrantsFlags.Usage = accessUpsertGrantsUsage
-	accessRemoveGrantsFlags.Usage = accessRemoveGrantsUsage
-	accessRemovePrincipalGrantsFlags.Usage = accessRemovePrincipalGrantsUsage
 
 	agentworkflowsFlags.Usage = agentworkflowsUsage
 	agentworkflowsCreateResponseFlags.Usage = agentworkflowsCreateResponseUsage
@@ -1271,18 +1247,6 @@ func ParseEndpoint(
 
 			case "update-member-role":
 				epf = accessUpdateMemberRoleFlags
-
-			case "list-grants":
-				epf = accessListGrantsFlags
-
-			case "upsert-grants":
-				epf = accessUpsertGrantsFlags
-
-			case "remove-grants":
-				epf = accessRemoveGrantsFlags
-
-			case "remove-principal-grants":
-				epf = accessRemovePrincipalGrantsFlags
 
 			}
 
@@ -1844,18 +1808,6 @@ func ParseEndpoint(
 			case "update-member-role":
 				endpoint = c.UpdateMemberRole()
 				data, err = accessc.BuildUpdateMemberRolePayload(*accessUpdateMemberRoleBodyFlag, *accessUpdateMemberRoleApikeyTokenFlag, *accessUpdateMemberRoleSessionTokenFlag)
-			case "list-grants":
-				endpoint = c.ListGrants()
-				data, err = accessc.BuildListGrantsPayload(*accessListGrantsPrincipalUrnFlag, *accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
-			case "upsert-grants":
-				endpoint = c.UpsertGrants()
-				data, err = accessc.BuildUpsertGrantsPayload(*accessUpsertGrantsBodyFlag, *accessUpsertGrantsApikeyTokenFlag, *accessUpsertGrantsSessionTokenFlag)
-			case "remove-grants":
-				endpoint = c.RemoveGrants()
-				data, err = accessc.BuildRemoveGrantsPayload(*accessRemoveGrantsBodyFlag, *accessRemoveGrantsApikeyTokenFlag, *accessRemoveGrantsSessionTokenFlag)
-			case "remove-principal-grants":
-				endpoint = c.RemovePrincipalGrants()
-				data, err = accessc.BuildRemovePrincipalGrantsPayload(*accessRemovePrincipalGrantsBodyFlag, *accessRemovePrincipalGrantsApikeyTokenFlag, *accessRemovePrincipalGrantsSessionTokenFlag)
 			}
 		case "agentworkflows":
 			c := agentworkflowsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2410,7 +2362,7 @@ func aboutOpenapiUsage() {
 
 // accessUsage displays the usage of the access command and its subcommands.
 func accessUsage() {
-	fmt.Fprintln(os.Stderr, `Manage roles, grants, and team member access control.`)
+	fmt.Fprintln(os.Stderr, `Manage roles and team member access control.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-roles: List all roles for the current organization.`)
@@ -2421,10 +2373,6 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
-	fmt.Fprintln(os.Stderr, `    list-grants: List all permissions in your organization, optionally filtered to a specific user or role.`)
-	fmt.Fprintln(os.Stderr, `    upsert-grants: Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.`)
-	fmt.Fprintln(os.Stderr, `    remove-grants: Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).`)
-	fmt.Fprintln(os.Stderr, `    remove-principal-grants: Revoke all permissions for a specific user or role.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
@@ -2597,94 +2545,6 @@ func accessUpdateMemberRoleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-role --body '{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListGrantsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -principal-urn STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all permissions in your organization, optionally filtered to a specific user or role.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --principal-urn \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessUpsertGrantsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access upsert-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access upsert-grants --body '{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessRemoveGrantsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access remove-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-grants --body '{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessRemovePrincipalGrantsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access remove-principal-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke all permissions for a specific user or role.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-principal-grants --body '{\n      \"principal_urn\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // agentworkflowsUsage displays the usage of the agentworkflows command and its
