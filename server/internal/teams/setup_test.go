@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/teams"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -39,9 +38,8 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *teams.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
+	service *teams.Service
+	conn    *pgxpool.Pool
 }
 
 func newTestTeamsService(t *testing.T, wos *workos.WorkOS) (context.Context, *testInstance) {
@@ -71,8 +69,7 @@ func newTestTeamsService(t *testing.T, wos *workos.WorkOS) (context.Context, *te
 	svc := teams.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
+		service: svc,
+		conn:    conn,
 	}
 }

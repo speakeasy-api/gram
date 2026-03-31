@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	testWorkOSOrgID  = "org_workos_test"
-	testWorkOSUserID = "user_workos_test"
+	testWorkOSOrgID     = "org_workos_test"
+	testWorkOSUserID    = "user_workos_test"
+	testWorkOSInviterID = "user_workos_inviter"
 )
 
 // workosStub builds a mock WorkOS httptest server and returns a *workos.WorkOS backed by it.
@@ -44,25 +45,6 @@ func jsonResp(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// seedInviterUser creates a user in the local DB with the given WorkOS ID and display name,
-// so that resolveInviterName can look them up without calling the WorkOS API.
-func seedInviterUser(t *testing.T, ti *testInstance, workosUserID, displayName string) {
-	t.Helper()
-	ctx := context.Background()
-	userID := "inviter-" + workosUserID
-	_, err := userRepo.New(ti.conn).UpsertUser(ctx, userRepo.UpsertUserParams{
-		ID:          userID,
-		Email:       userID + "@example.com",
-		DisplayName: displayName,
-	})
-	require.NoError(t, err)
-	err = userRepo.New(ti.conn).SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
-		WorkosID: pgtype.Text{String: workosUserID, Valid: true},
-		ID:       userID,
-	})
-	require.NoError(t, err)
-}
-
 // seedWorkOSIDs sets workos_id on the test user and organization so the service
 // can resolve Gram IDs to WorkOS IDs.
 func seedWorkOSIDs(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext) {
@@ -75,14 +57,36 @@ func seedWorkOSIDs(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthCo
 	)
 	require.NoError(t, err)
 
-	err = userRepo.New(ti.conn).SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+	queries := userRepo.New(ti.conn)
+	err = queries.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
 		WorkosID: pgtype.Text{String: testWorkOSUserID, Valid: true},
 		ID:       authCtx.UserID,
 	})
 	require.NoError(t, err)
 }
 
-// --- ListMembers ---
+// seedInviterUser creates a user in the local DB with the given WorkOS ID and display name,
+// so that resolveInviterName can look them up via GetUserByWorkosID.
+func seedInviterUser(t *testing.T, ti *testInstance, workosUserID, displayName string) {
+	t.Helper()
+	ctx := context.Background()
+
+	queries := userRepo.New(ti.conn)
+
+	gramUserID := "inviter-" + workosUserID
+	_, err := queries.UpsertUser(ctx, userRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       gramUserID + "@example.com",
+		DisplayName: displayName,
+	})
+	require.NoError(t, err)
+
+	err = queries.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+		WorkosID: pgtype.Text{String: workosUserID, Valid: true},
+		ID:       gramUserID,
+	})
+	require.NoError(t, err)
+}
 
 func TestListMembers(t *testing.T) {
 	t.Parallel()
@@ -99,7 +103,6 @@ func TestListMembers(t *testing.T) {
 			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		require.NoError(t, err)
-		require.NotNil(t, result)
 		require.NotEmpty(t, result.Members, "should include the test user seeded by InitAuthContext")
 		assert.Equal(t, authCtx.UserID, result.Members[0].ID)
 		assert.NotEmpty(t, result.Members[0].JoinedAt)
@@ -118,12 +121,10 @@ func TestListMembers(t *testing.T) {
 	})
 }
 
-// --- InviteMember ---
-
 func TestInviteMember(t *testing.T) {
 	t.Parallel()
 
-	t.Run("sends invitation via WorkOS", func(t *testing.T) {
+	t.Run("sends invitation and resolves inviter name", func(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
@@ -133,7 +134,7 @@ func TestInviteMember(t *testing.T) {
 				return
 			}
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
-				ID:             "inv_new",
+				ID:             "inv_01",
 				Email:          "newuser@example.com",
 				State:          usermanagement.Pending,
 				OrganizationID: testWorkOSOrgID,
@@ -156,10 +157,11 @@ func TestInviteMember(t *testing.T) {
 			Email:          "newuser@example.com",
 		})
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.Equal(t, "inv_new", result.Invite.ID)
+		assert.Equal(t, "inv_01", result.Invite.ID)
 		assert.Equal(t, "newuser@example.com", result.Invite.Email)
 		assert.Equal(t, string(usermanagement.Pending), result.Invite.Status)
+		// InvitedBy is resolved from the local DB via the test user's display name
+		assert.NotEmpty(t, result.Invite.InvitedBy)
 	})
 
 	t.Run("rejects mismatched organization ID", func(t *testing.T) {
@@ -174,22 +176,37 @@ func TestInviteMember(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match")
 	})
-}
 
-// --- ListInvites ---
+	t.Run("returns error when WorkOS is not configured", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestTeamsService(t, nil)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+
+		_, err := ti.service.InviteMember(ctx, &gen.InviteMemberPayload{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Email:          "someone@example.com",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+}
 
 func TestListInvites(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns only pending invitations from WorkOS", func(t *testing.T) {
+	t.Run("filters to only pending invitations", func(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
 		mux.HandleFunc("/user_management/invitations", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, usermanagement.ListInvitationsResponse{
 				Data: []usermanagement.Invitation{
-					{ID: "inv_1", Email: "a@example.com", State: usermanagement.Pending, CreatedAt: "2026-03-26T00:00:00Z", ExpiresAt: "2026-04-02T00:00:00Z"},
-					{ID: "inv_2", Email: "b@example.com", State: usermanagement.Accepted, CreatedAt: "2026-03-25T00:00:00Z", ExpiresAt: "2026-04-01T00:00:00Z"},
+					{ID: "inv_01", Email: "a@example.com", State: usermanagement.Pending, InviterUserID: testWorkOSInviterID, CreatedAt: "2026-03-26T00:00:00Z", ExpiresAt: "2026-04-02T00:00:00Z"},
+					{ID: "inv_02", Email: "b@example.com", State: usermanagement.Accepted, CreatedAt: "2026-03-25T00:00:00Z", ExpiresAt: "2026-04-01T00:00:00Z"},
+					{ID: "inv_03", Email: "c@example.com", State: usermanagement.Revoked, CreatedAt: "2026-03-24T00:00:00Z", ExpiresAt: "2026-03-31T00:00:00Z"},
 				},
 				ListMetadata: common.ListMetadata{},
 			})
@@ -201,18 +218,18 @@ func TestListInvites(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		seedWorkOSIDs(t, ti, authCtx)
+		seedInviterUser(t, ti, testWorkOSInviterID, "Alice Inviter")
 
 		result, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{
 			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Invites, 1, "only pending invites should be returned")
-		assert.Equal(t, "inv_1", result.Invites[0].ID)
+		assert.Equal(t, "inv_01", result.Invites[0].ID)
 		assert.Equal(t, string(usermanagement.Pending), result.Invites[0].Status)
+		assert.Equal(t, "Alice Inviter", result.Invites[0].InvitedBy)
 	})
 }
-
-// --- CancelInvite ---
 
 func TestCancelInvite(t *testing.T) {
 	t.Parallel()
@@ -221,19 +238,17 @@ func TestCancelInvite(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
-		// GetInvitation to verify ownership
-		mux.HandleFunc("/user_management/invitations/inv_abc", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/user_management/invitations/inv_01", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
-				ID:             "inv_abc",
+				ID:             "inv_01",
 				Email:          "target@example.com",
 				State:          usermanagement.Pending,
 				OrganizationID: testWorkOSOrgID,
 			})
 		})
-		// RevokeInvitation
-		mux.HandleFunc("/user_management/invitations/inv_abc/revoke", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/user_management/invitations/inv_01/revoke", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
-				ID:    "inv_abc",
+				ID:    "inv_01",
 				State: usermanagement.Revoked,
 			})
 		})
@@ -246,22 +261,21 @@ func TestCancelInvite(t *testing.T) {
 		seedWorkOSIDs(t, ti, authCtx)
 
 		err := ti.service.CancelInvite(ctx, &gen.CancelInvitePayload{
-			InviteID: "inv_abc",
+			InviteID: "inv_01",
 		})
 		require.NoError(t, err)
 	})
 
-	t.Run("IDOR: rejects invite belonging to another org", func(t *testing.T) {
+	t.Run("rejects invite belonging to another org", func(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
-		// GetInvitation returns invite for a different org
-		mux.HandleFunc("/user_management/invitations/inv_other", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/user_management/invitations/inv_02", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
-				ID:             "inv_other",
+				ID:             "inv_02",
 				Email:          "victim@example.com",
 				State:          usermanagement.Pending,
-				OrganizationID: "org_attacker_does_not_own",
+				OrganizationID: "org_different",
 			})
 		})
 
@@ -273,14 +287,12 @@ func TestCancelInvite(t *testing.T) {
 		seedWorkOSIDs(t, ti, authCtx)
 
 		err := ti.service.CancelInvite(ctx, &gen.CancelInvitePayload{
-			InviteID: "inv_other",
+			InviteID: "inv_02",
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
 	})
 }
-
-// --- ResendInvite ---
 
 func TestResendInvite(t *testing.T) {
 	t.Parallel()
@@ -289,22 +301,20 @@ func TestResendInvite(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
-		// GetInvitation (ownership check)
-		mux.HandleFunc("/user_management/invitations/inv_resend", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/user_management/invitations/inv_01", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
-				ID:             "inv_resend",
+				ID:             "inv_01",
 				Email:          "resend@example.com",
 				State:          usermanagement.Pending,
 				OrganizationID: testWorkOSOrgID,
 			})
 		})
-		// ResendInvitation
-		mux.HandleFunc("/user_management/invitations/inv_resend/resend", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/user_management/invitations/inv_01/resend", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
-				ID:             "inv_resend",
+				ID:             "inv_01",
 				Email:          "resend@example.com",
 				State:          usermanagement.Pending,
-				InviterUserID:  "wos_inviter_123",
+				InviterUserID:  testWorkOSInviterID,
 				OrganizationID: testWorkOSOrgID,
 				ExpiresAt:      "2026-04-02T00:00:00Z",
 				CreatedAt:      "2026-03-26T00:00:00Z",
@@ -318,25 +328,24 @@ func TestResendInvite(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		seedWorkOSIDs(t, ti, authCtx)
-		seedInviterUser(t, ti, "wos_inviter_123", "Jane Doe")
+		seedInviterUser(t, ti, testWorkOSInviterID, "Jane Doe")
 
 		result, err := ti.service.ResendInvite(ctx, &gen.ResendInvitePayload{
-			InviteID: "inv_resend",
+			InviteID: "inv_01",
 		})
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.Equal(t, "inv_resend", result.Invite.ID)
+		assert.Equal(t, "inv_01", result.Invite.ID)
 		assert.Equal(t, "Jane Doe", result.Invite.InvitedBy, "inviter name should be resolved from local DB")
 	})
 
-	t.Run("IDOR: rejects invite belonging to another org", func(t *testing.T) {
+	t.Run("rejects invite belonging to another org", func(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
-		mux.HandleFunc("/user_management/invitations/inv_foreign", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/user_management/invitations/inv_02", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
-				ID:             "inv_foreign",
-				OrganizationID: "org_somebody_else",
+				ID:             "inv_02",
+				OrganizationID: "org_different",
 			})
 		})
 
@@ -348,14 +357,12 @@ func TestResendInvite(t *testing.T) {
 		seedWorkOSIDs(t, ti, authCtx)
 
 		_, err := ti.service.ResendInvite(ctx, &gen.ResendInvitePayload{
-			InviteID: "inv_foreign",
+			InviteID: "inv_02",
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
 	})
 }
-
-// --- RemoveMember ---
 
 func TestRemoveMember(t *testing.T) {
 	t.Parallel()
@@ -383,14 +390,12 @@ func TestRemoveMember(t *testing.T) {
 
 		err := ti.service.RemoveMember(ctx, &gen.RemoveMemberPayload{
 			OrganizationID: "wrong-org-id",
-			UserID:         "some-other-user",
+			UserID:         "other-user",
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match")
 	})
 }
-
-// --- GetInviteInfo ---
 
 func TestGetInviteInfo(t *testing.T) {
 	t.Parallel()
@@ -399,32 +404,34 @@ func TestGetInviteInfo(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
-		// FindInvitationByToken
-		mux.HandleFunc("/user_management/invitations/by_token/tok_test", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/user_management/invitations/by_token/tok_valid", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, usermanagement.Invitation{
-				ID:             "inv_info",
+				ID:             "inv_01",
 				Email:          "invited@example.com",
 				State:          usermanagement.Pending,
-				Token:          "tok_test",
+				Token:          "tok_valid",
 				OrganizationID: testWorkOSOrgID,
-				InviterUserID:  "wos_inviter_456",
+				InviterUserID:  testWorkOSInviterID,
 			})
 		})
+
 		wos := workosStub(t, mux)
 		ctx, ti := newTestTeamsService(t, wos)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
+		// Seed org WorkOS ID so org name can be resolved, and inviter user for display name.
 		seedWorkOSIDs(t, ti, authCtx)
-		seedInviterUser(t, ti, "wos_inviter_456", "The Boss")
+		seedInviterUser(t, ti, testWorkOSInviterID, "The Boss")
 
 		result, err := ti.service.GetInviteInfo(ctx, &gen.GetInviteInfoPayload{
-			Token: "tok_test",
+			Token: "tok_valid",
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "The Boss", result.InviterName)
 		assert.Equal(t, "invited@example.com", result.Email)
 		assert.Equal(t, string(usermanagement.Pending), result.Status)
+		assert.NotEmpty(t, result.OrganizationName)
 	})
 
 	t.Run("returns error for invalid token", func(t *testing.T) {
@@ -442,27 +449,5 @@ func TestGetInviteInfo(t *testing.T) {
 			Token: "tok_invalid",
 		})
 		require.Error(t, err)
-	})
-}
-
-// --- WorkOS not configured ---
-
-func TestWorkOSNotConfigured(t *testing.T) {
-	t.Parallel()
-
-	t.Run("InviteMember returns error when WorkOS is nil", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, ti := newTestTeamsService(t, nil)
-
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok)
-
-		_, err := ti.service.InviteMember(ctx, &gen.InviteMemberPayload{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Email:          "someone@example.com",
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not configured")
 	})
 }
