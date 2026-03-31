@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
 type Catalog struct {
@@ -65,7 +66,7 @@ type Client struct {
 	logger             *slog.Logger
 	tracer             trace.Tracer
 	polar              *polargo.Polar
-	httpClient         *http.Client
+	httpClient         *guardian.HTTPClient
 	bearerToken        string
 	catalog            *Catalog
 	customerStateCache cache.TypedCacheObject[PolarCustomerState]
@@ -77,12 +78,15 @@ type Client struct {
 var _ billing.Tracker = (*Client)(nil)
 var _ billing.Repository = (*Client)(nil)
 
-func NewClient(polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
+func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
+	client := guardianPolicy.PooledClient()
+	client.Timeout = 30 * time.Second
+
 	return &Client{
 		logger:             logger.With(attr.SlogComponent("polar_usage")),
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/polar"),
 		polar:              polarClient,
-		httpClient:         &http.Client{Timeout: 30 * time.Second},
+		httpClient:         client,
 		bearerToken:        bearerToken,
 		catalog:            catalog,
 		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),

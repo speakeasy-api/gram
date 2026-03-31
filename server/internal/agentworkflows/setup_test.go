@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -60,6 +61,8 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "agentsapitest")
 	require.NoError(t, err)
@@ -69,7 +72,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -97,7 +100,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 		env,
 		enc,
 		cacheImpl,
-		nil, // guardian policy - nil is acceptable for testing
+		guardianPolicy,
 		funcs,
 		nil, // openrouter provisioner - nil is acceptable for testing
 		nil, // chat client - nil is acceptable for testing
@@ -123,7 +126,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 		env,
 		enc,
 		cacheImpl,
-		nil, // guardian policy
+		guardianPolicy,
 		funcs,
 		nil, // openrouter provisioner
 		nil, // chat client

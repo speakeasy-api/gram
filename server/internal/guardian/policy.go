@@ -9,7 +9,12 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-cleanhttp"
+	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
+
+type HTTPClient = http.Client
 
 var (
 	ErrBadHost   = fmt.Errorf("bad host")
@@ -52,14 +57,57 @@ var defaultBlockedCIDRBlocks = []*net.IPNet{
 	mustParseCIDR("2001:20::/28"),  /* ORCHIDv2 - RFC7343 */
 }
 
+type RetryConfig struct {
+	RetryWaitMin time.Duration
+	RetryWaitMax time.Duration
+	RetryMax     int
+	CheckRetry   retryablehttp.CheckRetry
+	Backoff      retryablehttp.Backoff
+	ErrorHandler retryablehttp.ErrorHandler
+	PrepareRetry retryablehttp.PrepareRetry
+}
+
+var defaultRetryClient = retryablehttp.NewClient()
+
+func DefaultRetryConfig() *RetryConfig {
+	return &RetryConfig{
+		RetryWaitMin: defaultRetryClient.RetryWaitMin,
+		RetryWaitMax: defaultRetryClient.RetryWaitMax,
+		RetryMax:     defaultRetryClient.RetryMax,
+		CheckRetry:   defaultRetryClient.CheckRetry,
+		Backoff:      defaultRetryClient.Backoff,
+		ErrorHandler: defaultRetryClient.ErrorHandler,
+		PrepareRetry: defaultRetryClient.PrepareRetry,
+	}
+}
+
+type htttpClientOptions struct {
+	otelHTTPOptions []otelhttp.Option
+	retryConfig     *RetryConfig
+}
+
+func WithOTelHTTPOptions(options ...otelhttp.Option) func(*htttpClientOptions) {
+	return func(o *htttpClientOptions) {
+		o.otelHTTPOptions = options
+	}
+}
+
+func WithRetryConfig(config *RetryConfig) func(*htttpClientOptions) {
+	return func(o *htttpClientOptions) {
+		o.retryConfig = config
+	}
+}
+
 type Policy struct {
+	tracerProvider    trace.TracerProvider
 	blockedCIDRBlocks []*net.IPNet
 }
 
 // NewDefaultPolicy creates a new Policy that blocks common private and reserved
 // IP ranges.
-func NewDefaultPolicy() *Policy {
+func NewDefaultPolicy(tracerProvider trace.TracerProvider) *Policy {
 	return &Policy{
+		tracerProvider:    tracerProvider,
 		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
 	}
 }
@@ -68,7 +116,7 @@ func NewDefaultPolicy() *Policy {
 // It returns an error if any of the CIDR blocks cannot be parsed.
 // Use NewDefaultPolicy for a safe default that blocks common private and
 // reserved IP ranges.
-func NewUnsafePolicy(disallowedCIDRBlocks []string) (*Policy, error) {
+func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks []string) (*Policy, error) {
 	var disallowedBlocks []*net.IPNet
 	for _, cidr := range disallowedCIDRBlocks {
 		block, err := parseCIDR(cidr)
@@ -78,21 +126,50 @@ func NewUnsafePolicy(disallowedCIDRBlocks []string) (*Policy, error) {
 		disallowedBlocks = append(disallowedBlocks, block)
 	}
 
-	return &Policy{blockedCIDRBlocks: disallowedBlocks}, nil
+	return &Policy{
+		tracerProvider:    tracerProvider,
+		blockedCIDRBlocks: disallowedBlocks,
+	}, nil
 }
 
-func (p *Policy) PooledClient() *http.Client {
-	t := cleanhttp.DefaultPooledTransport()
-	t.DialContext = p.Dialer().DialContext
-
-	return &http.Client{Transport: t}
+func (p *Policy) PooledClient(options ...func(*htttpClientOptions)) *HTTPClient {
+	return p.clientWithBaseTransport(cleanhttp.DefaultPooledTransport(), options...)
 }
 
-func (p *Policy) Client() *http.Client {
-	t := cleanhttp.DefaultTransport()
-	t.DialContext = p.Dialer().DialContext
+func (p *Policy) Client(options ...func(*htttpClientOptions)) *HTTPClient {
+	return p.clientWithBaseTransport(cleanhttp.DefaultTransport(), options...)
+}
 
-	return &http.Client{Transport: t}
+func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...func(*htttpClientOptions)) *HTTPClient {
+	var opts htttpClientOptions
+	for _, option := range options {
+		option(&opts)
+	}
+
+	transport.DialContext = p.Dialer().DialContext
+
+	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
+	otelOpts = append(otelOpts, opts.otelHTTPOptions...)
+	otelTransport := otelhttp.NewTransport(transport, otelOpts...)
+
+	if opts.retryConfig == nil {
+		return &http.Client{Transport: otelTransport}
+	}
+
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient = &http.Client{
+		Transport: otelTransport,
+	}
+
+	retryClient.RetryWaitMin = opts.retryConfig.RetryWaitMin
+	retryClient.RetryWaitMax = opts.retryConfig.RetryWaitMax
+	retryClient.RetryMax = opts.retryConfig.RetryMax
+	retryClient.CheckRetry = opts.retryConfig.CheckRetry
+	retryClient.Backoff = opts.retryConfig.Backoff
+	retryClient.ErrorHandler = opts.retryConfig.ErrorHandler
+	retryClient.PrepareRetry = opts.retryConfig.PrepareRetry
+
+	return retryClient.StandardClient()
 }
 
 func (p *Policy) Dialer() *net.Dialer {

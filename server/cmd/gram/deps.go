@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -68,6 +69,27 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 		cfgLoader = altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc("config-file"))
 	}
 	return cfgLoader(c)
+}
+
+func newGuardianPolicy(c *cli.Context, tracerProvider trace.TracerProvider) (policy *guardian.Policy, err error) {
+	// In local development, allow loopback addresses for internal tool-to-tool communication
+	if c.String("environment") == "local" {
+		policy, err = guardian.NewUnsafePolicy(tracerProvider, []string{}) // Allow all traffic for local development
+		if err != nil {
+			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+		}
+	} else {
+		policy = guardian.NewDefaultPolicy(tracerProvider)
+	}
+	if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
+		var err error
+		policy, err = guardian.NewUnsafePolicy(tracerProvider, s)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+		}
+	}
+
+	return policy, nil
 }
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
@@ -377,6 +399,7 @@ func newBillingProvider(
 	ctx context.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
 	c *cli.Context,
@@ -395,7 +418,7 @@ func newBillingProvider(
 		}
 		polarAPIKey := c.String("polar-api-key")
 		polarsdk := polargo.New(polargo.WithSecurity(polarAPIKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
-		pclient := polar.NewClient(polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
+		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
 		tracker := tracking.New(pclient, posthogClient, logger)
 		return pclient, tracker, nil
 	case c.String("environment") == "local":
@@ -484,6 +507,7 @@ func newFunctionOrchestrator(
 	c *cli.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	assetStore assets.BlobStore,
 	tigrisStore *assets.TigrisStore,
@@ -544,6 +568,7 @@ func newFunctionOrchestrator(
 		return functions.NewFlyRunner(
 			logger,
 			tracerProvider,
+			guardianPolicy,
 			serverURL,
 			db,
 			assetStore,
@@ -571,7 +596,7 @@ type mcpRegistryClientOptions struct {
 	cacheImpl     cache.Cache
 }
 
-func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
+func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianProxy *guardian.Policy, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
 	pulseURL, err := url.Parse("https://api.pulsemcp.com")
 	if err != nil {
 		return nil, fmt.Errorf("parse pulse registry url: %w", err)
@@ -579,7 +604,7 @@ func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvid
 
 	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
 
-	return externalmcp.NewRegistryClient(logger, tracerProvider, backend, opts.cacheImpl), nil
+	return externalmcp.NewRegistryClient(logger, tracerProvider, guardianProxy, backend, opts.cacheImpl), nil
 }
 
 func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {

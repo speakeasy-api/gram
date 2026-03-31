@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -51,12 +52,13 @@ const (
 )
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	auth      *auth.Auth
-	storage   BlobStore
-	jwtSecret string
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	guardianPolicy *guardian.Policy
+	db             *pgxpool.Pool
+	auth           *auth.Auth
+	storage        BlobStore
+	jwtSecret      string
 
 	chatSessions *chatsessions.Manager
 	projects     *projectsRepo.Queries
@@ -66,19 +68,20 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore, jwtSecret string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore, jwtSecret string) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessions),
-		storage:      storage,
-		jwtSecret:    jwtSecret,
-		chatSessions: chatSessions,
-		projects:     projectsRepo.New(db),
-		repo:         repo.New(db),
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
+		logger:         logger,
+		guardianPolicy: guardianPolicy,
+		db:             db,
+		auth:           auth.New(logger, db, sessions),
+		storage:        storage,
+		jwtSecret:      jwtSecret,
+		chatSessions:   chatSessions,
+		projects:       projectsRepo.New(db),
+		repo:           repo.New(db),
 	}
 }
 
@@ -800,9 +803,8 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create request: %w", err), "error fetching URL")
 	}
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	client := s.guardianPolicy.Client()
+	client.Timeout = 30 * time.Second
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("fetch url: %w", err), "error fetching URL")

@@ -64,6 +64,21 @@ linters:
         linters:
           - exhaustruct
           - gosec
+      # The guardian package is the only package that is allowed to use
+      # http.Client directly since it is used to construct the safe HTTP clients
+      # that are used throughout the codebase. This is tracked by GG002.
+      - path: internal/guardian/policy\.go
+        linters:
+          - forbidigo
+        text: GG002
+      # The gateway package contains an HTTP reverse proxy that needs finer
+      # grained control over the HTTP client it uses, so we allow direct use of
+      # http.Client there as well. It is manually decorating the client with
+      # SSRF protection from the guardian module and OTel instrumentation.
+      - path: internal/gateway/proxy\.go
+        linters:
+          - forbidigo
+        text: GG002
   settings:
     gosec:
       excludes:
@@ -82,10 +97,13 @@ linters:
       forbid:
         - pattern: ^os\.Getenv$
           pkg: ^os$
-          msg: "Direct environment variable access is forbidden because it makes testing harder. Access to environment variables is only allowed in the cmd/."
+          msg: "GG001: Direct environment variable access is forbidden because it makes testing harder. Access to environment variables is only allowed in the cmd/."
+        - pattern: ^http\.Client$
+          pkg: ^net/http$
+          msg: "GG002: Use `(*github.com/speakeasy-api/gram/server/internal/guardian.Policy).Client(...)` (or .PooledClient(...)) and the HTTPClient from the same package."
         - pattern: ^otel\.Tracer$
           pkg: ^go\.opentelemetry\.io/otel$
-          msg: "GG003: pass a trace.TracerProvider to functions instead of using otel.Tracer directly."
+          msg: "GG003: Pass a trace.TracerProvider to functions instead of using otel.Tracer directly."
     sloglint:
       no-mixed-args: true
       attr-only: true

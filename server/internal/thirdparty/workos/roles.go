@@ -15,6 +15,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -68,7 +69,7 @@ func (e *APIError) Error() string {
 type RoleClient struct {
 	apiKey     string
 	endpoint   string // base URL for raw HTTP calls; defaults to workosBaseURL
-	httpClient *http.Client
+	httpClient *guardian.HTTPClient
 	orgs       *organizations.Client
 	um         *usermanagement.Client
 }
@@ -79,7 +80,7 @@ type RoleClientOpts struct {
 	// Endpoint overrides the WorkOS base URL for both raw HTTP and SDK calls.
 	Endpoint string
 	// HTTPClient overrides the default retryable HTTP client.
-	HTTPClient *http.Client
+	HTTPClient *guardian.HTTPClient
 }
 
 func NewRoleClient(apiKey string, opts ...RoleClientOpts) *RoleClient {

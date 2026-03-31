@@ -542,7 +542,7 @@ func (tp *ToolProxy) doHTTP(
 		}
 	}
 
-	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, descriptor, plan, tp.cache, env, serverURL, attrRecorder)
+	shouldContinue := processSecurity(ctx, logger, tp.policy, req, w, &responseStatusCode, descriptor, plan, tp.cache, env, serverURL, attrRecorder)
 	if !shouldContinue {
 		return nil
 	}

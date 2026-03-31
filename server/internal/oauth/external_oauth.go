@@ -36,6 +36,7 @@ import (
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -118,7 +119,7 @@ type ExternalOAuthService struct {
 	allowedRedirectHosts []string
 	auth                 *auth.Auth
 	enc                  *encryption.Client
-	httpClient           *http.Client
+	httpClient           *guardian.HTTPClient
 	successPageTmpl      *template.Template
 	successScriptHash    string
 	successScriptData    []byte

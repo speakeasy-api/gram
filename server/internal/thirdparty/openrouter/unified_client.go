@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-cleanhttp"
 	"go.opentelemetry.io/otel/trace"
 
 	or_base "github.com/OpenRouterTeam/go-sdk"
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -46,7 +46,7 @@ const (
 // It applies pluggable strategies for message capture and usage tracking.
 type ChatClient struct {
 	logger                 *slog.Logger
-	httpClient             *http.Client
+	httpClient             *guardian.HTTPClient
 	provisioner            Provisioner
 	messageCaptureStrategy MessageCaptureStrategy
 	usageTrackingStrategy  UsageTrackingStrategy
@@ -58,6 +58,7 @@ type ChatClient struct {
 // NewUnifiedClient creates a new UnifiedClient with the given strategies.
 func NewUnifiedClient(
 	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	provisioner Provisioner,
 	captureStrategy MessageCaptureStrategy,
 	trackingStrategy UsageTrackingStrategy,
@@ -67,7 +68,7 @@ func NewUnifiedClient(
 ) *ChatClient {
 	return &ChatClient{
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
-		httpClient:             cleanhttp.DefaultPooledClient(),
+		httpClient:             guardianPolicy.PooledClient(),
 		provisioner:            provisioner,
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,

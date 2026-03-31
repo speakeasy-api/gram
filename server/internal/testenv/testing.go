@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -87,9 +88,13 @@ func NewMCPRegistryClient(t *testing.T, logger *slog.Logger, tracerProvider trac
 	pulseURL, err := url.Parse("https://api.pulsemcp.com")
 	require.NoError(t, err, "expected pulse URL to parse")
 
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err, "expected guardian policy to initialize without error")
+
 	client := externalmcp.NewRegistryClient(
 		NewLogger(t),
 		tracerProvider,
+		guardianPolicy,
 		externalmcp.NewPulseBackend(pulseURL, "test-tenant-id", conv.NewSecret([]byte("test-api-key"))),
 		nil,
 	)

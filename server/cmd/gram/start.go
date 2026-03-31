@@ -51,7 +51,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
@@ -401,6 +400,11 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			if err != nil {
+				return err
+			}
+
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -455,7 +459,7 @@ func newStartCommand() *cli.Command {
 
 			workosClient := workos.New(logger, c.String("workos-api-key"))
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -463,6 +467,7 @@ func newStartCommand() *cli.Command {
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
+				guardianPolicy,
 				db,
 				redisClient,
 				cache.SuffixNone,
@@ -514,6 +519,8 @@ func newStartCommand() *cli.Command {
 			} else {
 				openRouter = openrouter.New(
 					logger,
+					tracerProvider,
+					guardianPolicy,
 					db,
 					c.String("environment"),
 					c.String("openrouter-provisioning-key"),
@@ -558,38 +565,20 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse site url: %w", err)
 			}
 
-			// In local development, allow loopback addresses for internal tool-to-tool communication
-			var guardianPolicy *guardian.Policy
-			if c.String("environment") == "local" {
-				guardianPolicy, err = guardian.NewUnsafePolicy([]string{}) // Allow all traffic for local development
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
-				}
-			} else {
-				guardianPolicy = guardian.NewDefaultPolicy()
-			}
-			blockedCIDRs := c.StringSlice("disallowed-cidr-blocks")
-			if blockedCIDRs != nil {
-				guardianPolicy, err = guardian.NewUnsafePolicy(blockedCIDRs)
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
-				}
-			}
-
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
 			if err != nil {
 				return fmt.Errorf("failed to create tigris asset store: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, tigrisStore, encryptionClient)
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
-			slackClient := slack_client.NewSlackClient("", "", db, encryptionClient)
+			slackClient := slack_client.NewSlackClient(guardianPolicy, "", "", db, encryptionClient)
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -598,6 +587,7 @@ func newStartCommand() *cli.Command {
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
+				guardianPolicy,
 				openRouter,
 				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
@@ -607,7 +597,7 @@ func newStartCommand() *cli.Command {
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
-			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
+			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
 				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
@@ -703,7 +693,7 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc))
-			assets.Attach(mux, assets.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, assetStorage, c.String("jwt-signing-key")))
+			assets.Attach(mux, assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String("jwt-signing-key")))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient))
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager))

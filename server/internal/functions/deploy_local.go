@@ -7,23 +7,19 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/hashicorp/go-retryablehttp"
-
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type LocalRunner struct {
-	codeRoot       *os.Root
-	toolcallClient *http.Client
+	codeRoot *os.Root
 }
 
 var _ Orchestrator = (*LocalRunner)(nil)
 
 func NewLocalRunner(codeRoot *os.Root) *LocalRunner {
 	return &LocalRunner{
-		codeRoot:       codeRoot,
-		toolcallClient: retryablehttp.NewClient().StandardClient(),
+		codeRoot: codeRoot,
 	}
 }
 

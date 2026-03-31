@@ -13,11 +13,12 @@ import (
 	"slices"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -93,19 +94,21 @@ type OpenRouter struct {
 	logger          *slog.Logger
 	repo            *repo.Queries
 	orgRepo         *orgRepo.Queries
-	orClient        *http.Client
+	orClient        *guardian.HTTPClient
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
+	orClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(guardian.DefaultRetryConfig()))
+
 	return &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
 		logger:          logger.With(attr.SlogComponent("openrouter")),
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
-		orClient:        retryablehttp.NewClient().StandardClient(),
+		orClient:        orClient,
 		refresher:       refresher,
 		featureClient:   featureClient,
 	}

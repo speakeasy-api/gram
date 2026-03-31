@@ -4,19 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"time"
 
-	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -33,7 +31,7 @@ type Manager struct {
 	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
 	speakeasyServerAddress string
 	speakeasySecretKey     string
-	speakeasyClient        *http.Client
+	speakeasyClient        *guardian.HTTPClient
 	orgRepo                *orgRepo.Queries
 	userRepo               *userRepo.Queries
 	pylon                  *pylon.Pylon
@@ -45,6 +43,7 @@ type Manager struct {
 func NewManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	suffix cache.Suffix,
@@ -56,13 +55,8 @@ func NewManager(
 	workos *workos.WorkOS,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
-	speakeasyClient := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: otelhttp.NewTransport(
-			cleanhttp.DefaultPooledTransport(),
-			otelhttp.WithTracerProvider(tracerProvider),
-		),
-	}
+	speakeasyClient := guardianPolicy.PooledClient()
+	speakeasyClient.Timeout = 10 * time.Second
 
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),
