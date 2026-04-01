@@ -166,6 +166,9 @@ const (
 	OpenAPIVersionKey              = attribute.Key("gram.openapi.version")
 	OpenRouterKeyLimitKey          = attribute.Key("gram.openrouter.key.limit")
 	OrganizationAccountTypeKey     = attribute.Key("gram.org.account_type")
+	AccessMemberIDKey              = attribute.Key("gram.access.member.id")
+	AccessRoleIDKey                = attribute.Key("gram.access.role.id")
+	AccessRoleSlugKey              = attribute.Key("gram.access.role.slug")
 	OrganizationIDKey              = attribute.Key("gram.org.id")
 	OrganizationSlugKey            = attribute.Key("gram.org.slug")
 	OutcomeKey                     = attribute.Key("gram.outcome")
@@ -724,6 +727,15 @@ func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(Ope
 
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
+
+func AccessMemberID(v string) attribute.KeyValue { return AccessMemberIDKey.String(v) }
+func SlogAccessMemberID(v string) slog.Attr      { return slog.String(string(AccessMemberIDKey), v) }
+
+func AccessRoleID(v string) attribute.KeyValue { return AccessRoleIDKey.String(v) }
+func SlogAccessRoleID(v string) slog.Attr      { return slog.String(string(AccessRoleIDKey), v) }
+
+func AccessRoleSlug(v string) attribute.KeyValue { return AccessRoleSlugKey.String(v) }
+func SlogAccessRoleSlug(v string) slog.Attr      { return slog.String(string(AccessRoleSlugKey), v) }
 
 func OrganizationID(v string) attribute.KeyValue { return OrganizationIDKey.String(v) }
 func SlogOrganizationID(v string) slog.Attr      { return slog.String(string(OrganizationIDKey), v) }

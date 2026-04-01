@@ -11,6 +11,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -143,6 +145,65 @@ func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "role name must contain at least one letter or digit")
+}
+
+func TestService_CreateRole_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleCreate)
+	require.NoError(t, err)
+
+	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
+		Name:        "Audit Builder",
+		Slug:        "org-audit-builder",
+		Description: "Tracks audit writes",
+	}).Return(&thirdpartyworkos.Role{
+		ID:          "role_audit",
+		Name:        "Audit Builder",
+		Slug:        "org-audit-builder",
+		Description: "Tracks audit writes",
+		CreatedAt:   mockRoleTimestamp,
+		UpdatedAt:   mockRoleTimestamp,
+	}, nil).Once()
+
+	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name:        "Audit Builder",
+		Description: "Tracks audit writes",
+		Grants: []*gen.RoleGrant{{
+			Scope:     string(access.ScopeBuildRead),
+			Resources: []string{"project-1"},
+		}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, role)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessRoleCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionAccessRoleCreate), record.Action)
+	require.Equal(t, "access_role", record.SubjectType)
+	require.Equal(t, "Audit Builder", record.SubjectDisplay)
+	require.Equal(t, "org-audit-builder", record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.NotNil(t, record.AfterSnapshot)
+
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "Audit Builder", afterSnapshot["Name"])
+	grants, ok := afterSnapshot["Grants"].([]any)
+	require.True(t, ok)
+	require.Len(t, grants, 1)
+	grant, ok := grants[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, string(access.ScopeBuildRead), grant["Scope"])
+	resources, ok := grant["Resources"].([]any)
+	require.True(t, ok)
+	require.Len(t, resources, 1)
+	require.Equal(t, "project-1", resources[0])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
