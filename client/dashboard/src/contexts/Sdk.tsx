@@ -56,16 +56,6 @@ if (import.meta.hot) {
   import.meta.hot.data.queryClient = queryClient;
 }
 
-// Set staleTime defaults so prefetched data isn't immediately refetched when hooks mount.
-// These match the staleTime values used by the consuming hooks.
-const ONE_HOUR = 1000 * 60 * 60;
-queryClient.setQueryDefaults(["@gram/client", "deployments", "latest"], {
-  staleTime: ONE_HOUR,
-});
-queryClient.setQueryDefaults(["@gram/client", "toolsets", "list"], {
-  staleTime: ONE_HOUR,
-});
-
 export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   const { projectSlug } = useSlugs();
   const telemetry = useTelemetry();
