@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -44,11 +43,11 @@ type TemporalClient interface {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient) *Service {
 	logger = logger.With(attr.SlogComponent("custom_domains"))
 
 	return &Service{
-		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/customdomains"),
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/customdomains"),
 		logger:         logger,
 		db:             db,
 		auth:           auth.New(logger, db, sessions),

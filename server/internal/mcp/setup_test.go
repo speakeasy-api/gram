@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace"
 
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -68,6 +69,7 @@ type testInstance struct {
 	serverURL      *url.URL
 	siteURL        *url.URL
 	logger         *slog.Logger
+	tracerProvider trace.TracerProvider
 	cacheAdapter   cache.Cache
 }
 
@@ -110,7 +112,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chatClient := openrouter.NewUnifiedClient(logger, devProvisioner, nil, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	featClient := productfeatures.NewClient(logger, conn, redisClient)
+	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	chConn, err := infra.NewClickhouseClient(t)
@@ -118,6 +120,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	telemService := telemetry.NewService(
 		logger,
+		tracerProvider,
 		conn,
 		chConn,
 		sessionManager,
@@ -141,6 +144,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		serverURL:      serverURL,
 		siteURL:        siteURL,
 		logger:         logger,
+		tracerProvider: tracerProvider,
 		cacheAdapter:   cacheAdapter,
 	}
 }
@@ -203,7 +207,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, devProvisioner, nil, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
-	featClient := productfeatures.NewClient(logger, conn, redisClient)
+	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -218,6 +222,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 
 	telemService := telemetry.NewService(
 		logger,
+		tracerProvider,
 		conn,
 		chConn,
 		sessionManager,
@@ -235,6 +240,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 		serverURL:      serverURL,
 		siteURL:        siteURL,
 		logger:         logger,
+		tracerProvider: tracerProvider,
 		cacheAdapter:   cacheAdapter,
 	}
 }
@@ -242,7 +248,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 // createTestAPIKey creates an API key for the test context project
 func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	keysService := keys.NewService(ti.logger, ti.conn, ti.sessionManager, "local")
+	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local")
 
 	key, err := keysService.CreateKey(ctx, &keys_gen.CreateKeyPayload{
 		Name:   "test-key",

@@ -105,7 +105,7 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 
 	svc := functions.NewService(logger, tracerProvider, conn, enc, tigrisStore)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), mcpRegistryClient)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
+	assetsSvc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
 
 	return ctx, &testInstance{
 		service:        svc,
