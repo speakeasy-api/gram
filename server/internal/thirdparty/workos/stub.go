@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type StubRoleClient struct {
+type StubClient struct {
 	mut   sync.Mutex
 	orgs  map[string]*stubOrgState
 	next  int
@@ -20,10 +20,12 @@ type stubOrgState struct {
 	roleOrder   []string
 	memberships map[string]Member
 	users       map[string]User
+	invites     map[string]Invitation
+	inviteOrder []string
 }
 
-func NewStubRoleClient() *StubRoleClient {
-	return &StubRoleClient{
+func NewStubClient() *StubClient {
+	return &StubClient{
 		mut:   sync.Mutex{},
 		orgs:  make(map[string]*stubOrgState),
 		next:  1,
@@ -31,7 +33,7 @@ func NewStubRoleClient() *StubRoleClient {
 	}
 }
 
-func (s *StubRoleClient) ListRoles(_ context.Context, orgID string) ([]Role, error) {
+func (s *StubClient) ListRoles(_ context.Context, orgID string) ([]Role, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -44,7 +46,7 @@ func (s *StubRoleClient) ListRoles(_ context.Context, orgID string) ([]Role, err
 	return roles, nil
 }
 
-func (s *StubRoleClient) CreateRole(_ context.Context, orgID string, opts CreateRoleOpts) (*Role, error) {
+func (s *StubClient) CreateRole(_ context.Context, orgID string, opts CreateRoleOpts) (*Role, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -61,7 +63,7 @@ func (s *StubRoleClient) CreateRole(_ context.Context, orgID string, opts Create
 	return &role, nil
 }
 
-func (s *StubRoleClient) UpdateRole(_ context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*Role, error) {
+func (s *StubClient) UpdateRole(_ context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*Role, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -82,7 +84,7 @@ func (s *StubRoleClient) UpdateRole(_ context.Context, orgID string, roleSlug st
 	return &role, nil
 }
 
-func (s *StubRoleClient) DeleteRole(_ context.Context, orgID string, roleSlug string) error {
+func (s *StubClient) DeleteRole(_ context.Context, orgID string, roleSlug string) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -107,7 +109,7 @@ func (s *StubRoleClient) DeleteRole(_ context.Context, orgID string, roleSlug st
 	return nil
 }
 
-func (s *StubRoleClient) ListMembers(_ context.Context, orgID string) ([]Member, error) {
+func (s *StubClient) ListMembers(_ context.Context, orgID string) ([]Member, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -120,7 +122,7 @@ func (s *StubRoleClient) ListMembers(_ context.Context, orgID string) ([]Member,
 	return members, nil
 }
 
-func (s *StubRoleClient) UpdateMemberRole(_ context.Context, membershipID string, roleSlug string) (*Member, error) {
+func (s *StubClient) UpdateMemberRole(_ context.Context, membershipID string, roleSlug string) (*Member, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -140,7 +142,7 @@ func (s *StubRoleClient) UpdateMemberRole(_ context.Context, membershipID string
 	return nil, fmt.Errorf("membership %q not found", membershipID)
 }
 
-func (s *StubRoleClient) GetUser(_ context.Context, userID string) (*User, error) {
+func (s *StubClient) GetUser(_ context.Context, userID string) (*User, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -154,7 +156,140 @@ func (s *StubRoleClient) GetUser(_ context.Context, userID string) (*User, error
 	return nil, nil
 }
 
-func (s *StubRoleClient) ListOrgUsers(_ context.Context, orgID string) (map[string]User, error) {
+func (s *StubClient) ListUsersInOrg(_ context.Context, orgID string) ([]User, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(orgID)
+	users := make([]User, 0, len(state.users))
+	for _, user := range state.users {
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
+func (s *StubClient) SendInvitation(_ context.Context, opts SendInvitationOpts) (*Invitation, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(opts.OrganizationID)
+	now := s.nowFn().UTC().Format(time.RFC3339)
+	invite := Invitation{
+		ID:             s.nextInviteID(),
+		Email:          opts.Email,
+		State:          InvitationStatePending,
+		Token:          fmt.Sprintf("token_%d", s.next),
+		OrganizationID: opts.OrganizationID,
+		InviterUserID:  opts.InviterUserID,
+		ExpiresAt:      now,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	state.invites[invite.ID] = invite
+	state.inviteOrder = append(state.inviteOrder, invite.ID)
+
+	return &invite, nil
+}
+
+func (s *StubClient) ListInvitations(_ context.Context, orgID string) ([]Invitation, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(orgID)
+	invites := make([]Invitation, 0, len(state.inviteOrder))
+	for _, inviteID := range state.inviteOrder {
+		invites = append(invites, state.invites[inviteID])
+	}
+
+	return invites, nil
+}
+
+func (s *StubClient) RevokeInvitation(_ context.Context, invitationID string) (*Invitation, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	for _, state := range s.orgs {
+		invite, ok := state.invites[invitationID]
+		if !ok {
+			continue
+		}
+		now := s.nowFn().UTC().Format(time.RFC3339)
+		invite.State = InvitationStateRevoked
+		invite.RevokedAt = now
+		invite.UpdatedAt = now
+		state.invites[invitationID] = invite
+		return &invite, nil
+	}
+
+	return nil, fmt.Errorf("invitation %q not found", invitationID)
+}
+
+func (s *StubClient) ResendInvitation(_ context.Context, invitationID string) (*Invitation, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	for _, state := range s.orgs {
+		invite, ok := state.invites[invitationID]
+		if !ok {
+			continue
+		}
+		invite.UpdatedAt = s.nowFn().UTC().Format(time.RFC3339)
+		state.invites[invitationID] = invite
+		return &invite, nil
+	}
+
+	return nil, fmt.Errorf("invitation %q not found", invitationID)
+}
+
+func (s *StubClient) FindInvitationByToken(_ context.Context, token string) (*Invitation, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	for _, state := range s.orgs {
+		for _, invite := range state.invites {
+			if invite.Token == token {
+				return &invite, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *StubClient) GetInvitation(_ context.Context, invitationID string) (*Invitation, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	for _, state := range s.orgs {
+		invite, ok := state.invites[invitationID]
+		if ok {
+			return &invite, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *StubClient) DeleteOrganizationMembership(_ context.Context, membershipID string) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	for _, state := range s.orgs {
+		if _, ok := state.memberships[membershipID]; ok {
+			delete(state.memberships, membershipID)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("membership %q not found", membershipID)
+}
+
+func (s *StubClient) ListOrgMemberships(_ context.Context, orgID string) ([]Member, error) {
+	return s.ListMembers(context.Background(), orgID)
+}
+
+func (s *StubClient) ListOrgUsers(_ context.Context, orgID string) (map[string]User, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -165,7 +300,7 @@ func (s *StubRoleClient) ListOrgUsers(_ context.Context, orgID string) (map[stri
 	return users, nil
 }
 
-func (s *StubRoleClient) orgState(orgID string) *stubOrgState {
+func (s *StubClient) orgState(orgID string) *stubOrgState {
 	state, ok := s.orgs[orgID]
 	if ok {
 		return state
@@ -179,14 +314,22 @@ func (s *StubRoleClient) orgState(orgID string) *stubOrgState {
 		roleOrder:   []string{"admin", "member"},
 		memberships: make(map[string]Member),
 		users:       make(map[string]User),
+		invites:     make(map[string]Invitation),
+		inviteOrder: make([]string, 0),
 	}
 	s.orgs[orgID] = state
 
 	return state
 }
 
-func (s *StubRoleClient) nextRoleID() string {
+func (s *StubClient) nextRoleID() string {
 	id := fmt.Sprintf("stub_role_%d", s.next)
+	s.next++
+	return id
+}
+
+func (s *StubClient) nextInviteID() string {
+	id := fmt.Sprintf("stub_invite_%d", s.next)
 	s.next++
 	return id
 }

@@ -411,10 +411,10 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, c *cli.Cont
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
-		return workos.NewRoleClient(apiKey), nil
+		return workos.NewClient(apiKey)
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
-		return workos.NewStubRoleClient(), nil
+		return workos.NewStubClient(), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
