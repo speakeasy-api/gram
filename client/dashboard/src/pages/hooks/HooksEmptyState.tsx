@@ -129,7 +129,7 @@ function ClaudeInstallModal({ open, onOpenChange }: ClaudeInstallModalProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="max-w-4xl">
         <Dialog.Header>
-          <Dialog.Title>Install Gram Hooks in Claude Code</Dialog.Title>
+          <Dialog.Title>Install Gram Plugins for Claude Code</Dialog.Title>
         </Dialog.Header>
 
         <div className="space-y-6">
@@ -137,7 +137,7 @@ function ClaudeInstallModal({ open, onOpenChange }: ClaudeInstallModalProps) {
           <div>
             <h3 className="text-sm font-semibold mb-2">Test Yourself</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Try Gram Hooks in your Claude Code instance:
+              Add the Gram marketplace and install the plugins you need:
             </p>
             <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm space-y-2">
               <div className="flex items-center justify-between">
@@ -145,6 +145,15 @@ function ClaudeInstallModal({ open, onOpenChange }: ClaudeInstallModalProps) {
               </div>
               <div className="flex items-center justify-between">
                 <code>claude plugin install gram-hooks@gram</code>
+                <span className="text-muted-foreground text-xs ml-2">
+                  # observability
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <code>claude plugin install gram-skills@gram</code>
+                <span className="text-muted-foreground text-xs ml-2">
+                  # deployment workflows
+                </span>
               </div>
             </div>
           </div>
@@ -155,7 +164,7 @@ function ClaudeInstallModal({ open, onOpenChange }: ClaudeInstallModalProps) {
               Distribute to Your Team
             </h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Require your team to use Gram Hooks by configuring their Claude
+              Require your team to use Gram plugins by configuring their Claude
               Code settings:
             </p>
 
@@ -183,7 +192,7 @@ function ClaudeInstallModal({ open, onOpenChange }: ClaudeInstallModalProps) {
                   <code>
                     {`{
   "plugins": {
-    "required": ["gram-hooks@gram"]
+    "required": ["gram-hooks@gram", "gram-skills@gram"]
   }
 }`}
                   </code>

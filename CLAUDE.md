@@ -111,6 +111,8 @@ Activate a skill when your task falls within its scope.
 | `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |
 | `datadog-insights`            | Running the full Gram production health digest and posting it to Slack     |
 
+> **User-facing skills**: The `skills/` directory contains a Claude Code plugin with guided workflows for Gram end-users (deploying APIs, functions, installing MCP servers). See `skills/README.md`.
+
 # Plan Mode
 
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.

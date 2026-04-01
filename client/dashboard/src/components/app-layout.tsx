@@ -1,8 +1,12 @@
+import {
+  ConnectAgentModal,
+  useConnectAgentModal,
+} from "@/components/connect-agent-modal";
 import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { Modal, ModalProvider } from "@speakeasy-api/moonshine";
 import { ShieldAlert } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
@@ -87,6 +91,23 @@ const AppLayoutContent = ({
 }: {
   isImpersonating: boolean;
 }) => {
+  const connectAgent = useConnectAgentModal();
+  const [connectAgentOpen, setConnectAgentOpen] = useState(false);
+
+  // Open the modal whenever a new trigger appears
+  useEffect(() => {
+    if (connectAgent.shouldShow) {
+      setConnectAgentOpen(true);
+    }
+  }, [connectAgent.shouldShow, connectAgent.toolsetSlug]);
+
+  const handleConnectAgentClose = (open: boolean) => {
+    setConnectAgentOpen(open);
+    if (!open) {
+      connectAgent.dismiss();
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen w-full">
       {isImpersonating && <ImpersonationBanner />}
@@ -102,6 +123,11 @@ const AppLayoutContent = ({
           />
         </SidebarInset>
       </div>
+      <ConnectAgentModal
+        open={connectAgentOpen}
+        onOpenChange={handleConnectAgentClose}
+        toolsetSlug={connectAgent.toolsetSlug}
+      />
     </div>
   );
 };

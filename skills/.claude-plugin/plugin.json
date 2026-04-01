@@ -1,0 +1,21 @@
+{
+  "name": "gram-skills",
+  "description": "Agent skills for deploying APIs, functions, and MCP servers with the Gram CLI",
+  "version": "1.0.0",
+  "author": {
+    "name": "Gram",
+    "url": "https://getgram.ai"
+  },
+  "homepage": "https://getgram.ai",
+  "repository": "https://github.com/gram-ai/gram",
+  "license": "Apache-2.0",
+  "keywords": [
+    "gram",
+    "mcp",
+    "openapi",
+    "deployment",
+    "serverless",
+    "functions"
+  ],
+  "skills": "../skills/"
+}

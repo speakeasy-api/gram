@@ -12,6 +12,11 @@
       "name": "gram-hooks",
       "source": "./hooks/plugin-claude",
       "description": "Forward Claude Code hooks to Gram for analytics, monitoring, and compliance"
+    },
+    {
+      "name": "gram-skills",
+      "source": "./skills",
+      "description": "Agent skills for deploying APIs, functions, and MCP servers with the Gram CLI"
     }
   ]
 }

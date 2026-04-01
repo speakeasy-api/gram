@@ -1,4 +1,5 @@
 import { CodeBlock } from "@/components/code";
+import { triggerConnectAgentModal } from "@/components/connect-agent-modal";
 import { Expandable } from "@/components/expandable";
 import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
@@ -973,6 +974,8 @@ const McpStep = ({
       await invalidateAllToolset(queryClient);
       await invalidateAllListToolsets(queryClient);
       await invalidateAllLatestDeployment(queryClient);
+
+      triggerConnectAgentModal(mcpSlug);
 
       toast.success("MCP server created successfully");
       routes.home.goTo();
