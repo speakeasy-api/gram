@@ -29,10 +29,18 @@ type LogAccessRoleCreateEvent struct {
 	RoleID   string
 	RoleName string
 	RoleSlug string
+
+	RoleSnapshotAfter *accessgen.Role
 }
 
 func LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleCreateEvent) error {
 	action := ActionAccessRoleCreate
+
+	afterSnapshot, err := marshalAuditPayload(event.RoleSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -50,7 +58,7 @@ func LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessRol
 		SubjectSlug:        conv.ToPGTextEmpty(event.RoleSlug),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 
