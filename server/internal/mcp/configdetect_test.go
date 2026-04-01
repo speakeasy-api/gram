@@ -1,9 +1,10 @@
-package toolconfig
+package mcp
 
 import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,9 +21,9 @@ func TestDescribeToolSecurity_APIKey(t *testing.T) {
 		},
 	}
 
-	schemes := DescribeToolSecurity(secVars)
+	schemes := describeToolSecurity(secVars)
 	require.Len(t, schemes, 1)
-	require.Equal(t, SecuritySchemeAPIKey, schemes[0].Kind)
+	require.Equal(t, securitySchemeAPIKey, schemes[0].Kind)
 	require.Equal(t, "sv-1", schemes[0].Key)
 	require.Equal(t, []string{"X_API_KEY"}, schemes[0].EnvVariables)
 }
@@ -41,9 +42,9 @@ func TestDescribeToolSecurity_Bearer(t *testing.T) {
 		},
 	}
 
-	schemes := DescribeToolSecurity(secVars)
+	schemes := describeToolSecurity(secVars)
 	require.Len(t, schemes, 1)
-	require.Equal(t, SecuritySchemeHTTPBearer, schemes[0].Kind)
+	require.Equal(t, securitySchemeHTTPBearer, schemes[0].Kind)
 }
 
 func TestDescribeToolSecurity_OAuth2AuthCode(t *testing.T) {
@@ -60,9 +61,9 @@ func TestDescribeToolSecurity_OAuth2AuthCode(t *testing.T) {
 		},
 	}
 
-	schemes := DescribeToolSecurity(secVars)
+	schemes := describeToolSecurity(secVars)
 	require.Len(t, schemes, 1)
-	require.Equal(t, SecuritySchemeOAuth2AuthCode, schemes[0].Kind)
+	require.Equal(t, securitySchemeOAuth2AuthCode, schemes[0].Kind)
 }
 
 func TestDescribeToolSecurity_ClientCredentials(t *testing.T) {
@@ -79,9 +80,9 @@ func TestDescribeToolSecurity_ClientCredentials(t *testing.T) {
 		},
 	}
 
-	schemes := DescribeToolSecurity(secVars)
+	schemes := describeToolSecurity(secVars)
 	require.Len(t, schemes, 1)
-	require.Equal(t, SecuritySchemeOAuth2ClientCredentials, schemes[0].Kind)
+	require.Equal(t, securitySchemeOAuth2ClientCredentials, schemes[0].Kind)
 }
 
 func TestDescribeToolSecurity_OpenIDConnect(t *testing.T) {
@@ -97,9 +98,9 @@ func TestDescribeToolSecurity_OpenIDConnect(t *testing.T) {
 		},
 	}
 
-	schemes := DescribeToolSecurity(secVars)
+	schemes := describeToolSecurity(secVars)
 	require.Len(t, schemes, 1)
-	require.Equal(t, SecuritySchemeOpenIDConnect, schemes[0].Kind)
+	require.Equal(t, securitySchemeOpenIDConnect, schemes[0].Kind)
 }
 
 func TestDescribeToolSecurity_MultipleSchemes(t *testing.T) {
@@ -124,17 +125,17 @@ func TestDescribeToolSecurity_MultipleSchemes(t *testing.T) {
 		},
 	}
 
-	schemes := DescribeToolSecurity(secVars)
+	schemes := describeToolSecurity(secVars)
 	require.Len(t, schemes, 2)
-	require.Equal(t, SecuritySchemeAPIKey, schemes[0].Kind)
-	require.Equal(t, SecuritySchemeOAuth2AuthCode, schemes[1].Kind)
+	require.Equal(t, securitySchemeAPIKey, schemes[0].Kind)
+	require.Equal(t, securitySchemeOAuth2AuthCode, schemes[1].Kind)
 }
 
 func TestDescribeToolSecurity_Empty(t *testing.T) {
 	t.Parallel()
 
-	require.Empty(t, DescribeToolSecurity(nil))
-	require.Empty(t, DescribeToolSecurity([]*types.SecurityVariable{}))
+	require.Empty(t, describeToolSecurity(nil))
+	require.Empty(t, describeToolSecurity([]*types.SecurityVariable{}))
 }
 
 func TestDescribeToolSecurity_NilType(t *testing.T) {
@@ -150,195 +151,195 @@ func TestDescribeToolSecurity_NilType(t *testing.T) {
 		},
 	}
 
-	schemes := DescribeToolSecurity(secVars)
+	schemes := describeToolSecurity(secVars)
 	require.Len(t, schemes, 1)
-	require.Equal(t, SecuritySchemeAPIKey, schemes[0].Kind) // defaults to APIKey
+	require.Equal(t, securitySchemeAPIKey, schemes[0].Kind)
 }
 
 func TestSchemeSatisfied_APIKeyPresent(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 	env.Set("x_api_key", "my-secret")
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeAPIKey,
+	scheme := securityRequirement{
+		Kind:         securitySchemeAPIKey,
 		EnvVariables: []string{"X_API_KEY"},
 	}
 
-	require.True(t, SchemeSatisfied(scheme, env, ""))
+	require.True(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestSchemeSatisfied_APIKeyMissing(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeAPIKey,
+	scheme := securityRequirement{
+		Kind:         securitySchemeAPIKey,
 		EnvVariables: []string{"X_API_KEY"},
 	}
 
-	require.False(t, SchemeSatisfied(scheme, env, ""))
+	require.False(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestSchemeSatisfied_BearerPresent(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 	env.Set("bearer_token", "tok123")
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeHTTPBearer,
+	scheme := securityRequirement{
+		Kind:         securitySchemeHTTPBearer,
 		EnvVariables: []string{"BEARER_TOKEN"},
 	}
 
-	require.True(t, SchemeSatisfied(scheme, env, ""))
+	require.True(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestSchemeSatisfied_BasicBothPresent(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 	env.Set("username", "user")
 	env.Set("password", "pass")
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeHTTPBasic,
+	scheme := securityRequirement{
+		Kind:         securitySchemeHTTPBasic,
 		EnvVariables: []string{"USERNAME", "PASSWORD"},
 	}
 
-	require.True(t, SchemeSatisfied(scheme, env, ""))
+	require.True(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestSchemeSatisfied_BasicMissingPassword(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 	env.Set("username", "user")
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeHTTPBasic,
+	scheme := securityRequirement{
+		Kind:         securitySchemeHTTPBasic,
 		EnvVariables: []string{"USERNAME", "PASSWORD"},
 	}
 
-	require.False(t, SchemeSatisfied(scheme, env, ""))
+	require.False(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestSchemeSatisfied_OAuth2WithAccessToken(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 	env.Set("github_access_token", "ghp_xxx")
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeOAuth2AuthCode,
+	scheme := securityRequirement{
+		Kind:         securitySchemeOAuth2AuthCode,
 		EnvVariables: []string{"GITHUB_ACCESS_TOKEN"},
 	}
 
-	require.True(t, SchemeSatisfied(scheme, env, ""))
+	require.True(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestSchemeSatisfied_OAuth2WithOAuthTokenFallback(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeOAuth2AuthCode,
+	scheme := securityRequirement{
+		Kind:         securitySchemeOAuth2AuthCode,
 		EnvVariables: []string{"GITHUB_ACCESS_TOKEN"},
 	}
 
-	require.True(t, SchemeSatisfied(scheme, env, "some-oauth-token"))
+	require.True(t, schemeSatisfied(scheme, env, "some-oauth-token"))
 }
 
 func TestSchemeSatisfied_OAuth2NoEnvVarsWithOAuthToken(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeOAuth2AuthCode,
+	scheme := securityRequirement{
+		Kind:         securitySchemeOAuth2AuthCode,
 		EnvVariables: []string{},
 	}
 
-	require.True(t, SchemeSatisfied(scheme, env, "some-oauth-token"))
+	require.True(t, schemeSatisfied(scheme, env, "some-oauth-token"))
 }
 
 func TestSchemeSatisfied_OAuth2NoEnvVarsNoOAuthToken(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeOAuth2AuthCode,
+	scheme := securityRequirement{
+		Kind:         securitySchemeOAuth2AuthCode,
 		EnvVariables: []string{},
 	}
 
-	require.False(t, SchemeSatisfied(scheme, env, ""))
+	require.False(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestSchemeSatisfied_ClientCredentialsBothPresent(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 	env.Set("my_client_id", "id123")
 	env.Set("my_client_secret", "secret456")
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeOAuth2ClientCredentials,
+	scheme := securityRequirement{
+		Kind:         securitySchemeOAuth2ClientCredentials,
 		EnvVariables: []string{"MY_CLIENT_ID", "MY_CLIENT_SECRET"},
 	}
 
-	require.True(t, SchemeSatisfied(scheme, env, ""))
+	require.True(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestSchemeSatisfied_ClientCredentialsMissingSecret(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 	env.Set("my_client_id", "id123")
 
-	scheme := SecurityRequirement{
-		Kind:         SecuritySchemeOAuth2ClientCredentials,
+	scheme := securityRequirement{
+		Kind:         securitySchemeOAuth2ClientCredentials,
 		EnvVariables: []string{"MY_CLIENT_ID", "MY_CLIENT_SECRET"},
 	}
 
-	require.False(t, SchemeSatisfied(scheme, env, ""))
+	require.False(t, schemeSatisfied(scheme, env, ""))
 }
 
 func TestAnySchemeSatisfied_OneOfTwoMet(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 	env.Set("x_api_key", "my-key")
 
-	schemes := []SecurityRequirement{
-		{Kind: SecuritySchemeAPIKey, EnvVariables: []string{"X_API_KEY"}},
-		{Kind: SecuritySchemeOAuth2AuthCode, EnvVariables: []string{"ACCESS_TOKEN"}},
+	schemes := []securityRequirement{
+		{Kind: securitySchemeAPIKey, EnvVariables: []string{"X_API_KEY"}},
+		{Kind: securitySchemeOAuth2AuthCode, EnvVariables: []string{"ACCESS_TOKEN"}},
 	}
 
-	require.True(t, AnySchemeSatisfied(schemes, env, ""))
+	require.True(t, anySchemeSatisfied(schemes, env, ""))
 }
 
 func TestAnySchemeSatisfied_NoneMet(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 
-	schemes := []SecurityRequirement{
-		{Kind: SecuritySchemeAPIKey, EnvVariables: []string{"X_API_KEY"}},
-		{Kind: SecuritySchemeOAuth2AuthCode, EnvVariables: []string{"ACCESS_TOKEN"}},
+	schemes := []securityRequirement{
+		{Kind: securitySchemeAPIKey, EnvVariables: []string{"X_API_KEY"}},
+		{Kind: securitySchemeOAuth2AuthCode, EnvVariables: []string{"ACCESS_TOKEN"}},
 	}
 
-	require.False(t, AnySchemeSatisfied(schemes, env, ""))
+	require.False(t, anySchemeSatisfied(schemes, env, ""))
 }
 
 func TestAnySchemeSatisfied_EmptySchemes(t *testing.T) {
 	t.Parallel()
 
-	env := NewCaseInsensitiveEnv()
+	env := toolconfig.NewCaseInsensitiveEnv()
 
-	require.True(t, AnySchemeSatisfied(nil, env, ""))
-	require.True(t, AnySchemeSatisfied([]SecurityRequirement{}, env, ""))
+	require.True(t, anySchemeSatisfied(nil, env, ""))
+	require.True(t, anySchemeSatisfied([]securityRequirement{}, env, ""))
 }
