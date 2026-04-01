@@ -338,7 +338,7 @@ export class Gram<
    *
    * @example
    * ```ts
-   * gram.uiResource({
+   * gram.experimental_uiResource({
    *   name: "bar-chart",
    *   description: "Interactive bar chart",
    *   title: "Bar Chart",
@@ -354,7 +354,7 @@ export class Gram<
    * });
    * ```
    */
-  uiResource(
+  experimental_uiResource(
     def: {
       name: string;
       description: string;

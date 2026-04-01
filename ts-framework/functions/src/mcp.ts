@@ -199,6 +199,8 @@ export function fromGram(
   const imageLike = /^image\//i;
   const audioLike = /^audio\//i;
 
+  // fromGram snapshots the current manifest once; later Gram mutations are not
+  // reflected in the MCP server handlers created here.
   const manifest = g.manifest();
   const hasResources =
     manifest.resources != null && manifest.resources.length > 0;

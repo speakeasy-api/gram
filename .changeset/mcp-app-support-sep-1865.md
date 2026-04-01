@@ -1,7 +1,7 @@
 ---
-"dashboard": patch
+"dashboard": minor
 "server": patch
-"@gram-ai/functions": patch
+"@gram-ai/functions": minor
 ---
 
 Add MCP App support across the playground, local functions runner, and the functions SDK.

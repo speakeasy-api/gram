@@ -679,8 +679,8 @@ test("resource() adds resources to manifest", () => {
   ]);
 });
 
-test("uiResource() sets mimeType to text/html;profile=mcp-app", () => {
-  const g = new Gram().uiResource({
+test("experimental_uiResource() sets mimeType to text/html;profile=mcp-app", () => {
+  const g = new Gram().experimental_uiResource({
     name: "bar-chart",
     uri: "ui://charts/bar-chart",
     description: "Interactive bar chart",
@@ -698,8 +698,8 @@ test("uiResource() sets mimeType to text/html;profile=mcp-app", () => {
   ]);
 });
 
-test("uiResource() auto-generates uri from name when omitted", () => {
-  const g = new Gram().uiResource({
+test("experimental_uiResource() auto-generates uri from name when omitted", () => {
+  const g = new Gram().experimental_uiResource({
     name: "bar-chart",
     description: "Interactive bar chart",
     content: "<html><body>chart</body></html>",
@@ -709,8 +709,8 @@ test("uiResource() auto-generates uri from name when omitted", () => {
   expect(manifest.resources?.[0]?.uri).toBe("ui://bar-chart");
 });
 
-test("uiResource() with body/styles wraps in scaffold with Gram.onData", async () => {
-  const g = new Gram().uiResource({
+test("experimental_uiResource() with body/styles wraps in scaffold with Gram.onData", async () => {
+  const g = new Gram().experimental_uiResource({
     name: "chart",
     description: "A chart",
     body: '<div id="chart"></div>',
@@ -736,8 +736,8 @@ test("uiResource() with body/styles wraps in scaffold with Gram.onData", async (
   expect(html).toContain('addEventListener("message"');
 });
 
-test("uiResource() with body but no styles still works", async () => {
-  const g = new Gram().uiResource({
+test("experimental_uiResource() with body but no styles still works", async () => {
+  const g = new Gram().experimental_uiResource({
     name: "simple",
     description: "Simple UI",
     body: "<p>hello</p>",
@@ -766,7 +766,7 @@ test("handleResourceRead() returns static content", async () => {
 });
 
 test("handleResourceRead() supports lazy function content", async () => {
-  const g = new Gram().uiResource({
+  const g = new Gram().experimental_uiResource({
     name: "dynamic",
     uri: "ui://dynamic",
     description: "Dynamic resource",
@@ -790,7 +790,7 @@ test("handleResourceRead() throws on unknown URI", async () => {
 
 test("tool meta flows through to manifest", () => {
   const g = new Gram()
-    .uiResource({
+    .experimental_uiResource({
       name: "chart",
       uri: "ui://charts/bar",
       description: "Bar chart",
@@ -832,7 +832,7 @@ test("extend() merges resources from another Gram instance", () => {
     content: "content1",
   });
 
-  const g2 = new Gram().uiResource({
+  const g2 = new Gram().experimental_uiResource({
     name: "r2",
     uri: "ui://r2",
     description: "Resource 2",

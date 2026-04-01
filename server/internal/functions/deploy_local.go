@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -605,68 +606,62 @@ func (l *LocalRunner) functionDir(functionID uuid.UUID) string {
 }
 
 func invCheckLocalDeploy(req RunnerDeployRequest) error {
-	switch {
-	case req.ProjectID == uuid.Nil:
-		return errors.New("project id cannot be nil")
-	case req.DeploymentID == uuid.Nil:
-		return errors.New("deployment id cannot be nil")
-	case req.FunctionID == uuid.Nil:
-		return errors.New("function id cannot be nil")
-	case req.AccessID == uuid.Nil:
-		return errors.New("access id cannot be nil")
-	case !IsSupportedRuntime(string(req.Runtime)):
-		return fmt.Errorf("unsupported runtime: %s", req.Runtime)
-	case len(req.Assets) == 0:
-		return errors.New("deployment assets cannot be empty")
-	case req.Assets[0].AssetURL == nil:
-		return errors.New("deployment asset url cannot be nil")
-	case req.BearerSecret == "":
-		return errors.New("bearer secret cannot be empty")
-	default:
-		return nil
+	if err := inv.Check(
+		"local function deploy request",
+		"project id cannot be nil", req.ProjectID != uuid.Nil,
+		"deployment id cannot be nil", req.DeploymentID != uuid.Nil,
+		"function id cannot be nil", req.FunctionID != uuid.Nil,
+		"access id cannot be nil", req.AccessID != uuid.Nil,
+		"runtime must be supported", func() error {
+			if IsSupportedRuntime(string(req.Runtime)) {
+				return nil
+			}
+			return fmt.Errorf("unsupported runtime: %s", req.Runtime)
+		},
+		"deployment assets cannot be empty", len(req.Assets) > 0,
+		"deployment asset url cannot be nil", func() bool {
+			return len(req.Assets) > 0 && req.Assets[0].AssetURL != nil
+		},
+		"bearer secret cannot be empty", req.BearerSecret != "",
+	); err != nil {
+		return fmt.Errorf("check local function deploy request: %w", err)
 	}
+
+	return nil
 }
 
 func invCheckLocalToolCall(req RunnerToolCallRequest) error {
-	switch {
-	case req.OrganizationID == "":
-		return errors.New("organization id cannot be empty")
-	case req.OrganizationSlug == "":
-		return errors.New("organization slug cannot be empty")
-	case req.ProjectID == uuid.Nil:
-		return errors.New("project id cannot be nil")
-	case req.DeploymentID == uuid.Nil:
-		return errors.New("deployment id cannot be nil")
-	case req.FunctionsID == uuid.Nil:
-		return errors.New("functions id cannot be nil")
-	case req.ToolURN.IsZero():
-		return errors.New("tool urn cannot be empty")
-	case req.ToolName == "":
-		return errors.New("tool name cannot be empty")
-	default:
-		return nil
+	if err := inv.Check(
+		"local function tool call request",
+		"organization id cannot be empty", req.OrganizationID != "",
+		"organization slug cannot be empty", req.OrganizationSlug != "",
+		"project id cannot be nil", req.ProjectID != uuid.Nil,
+		"deployment id cannot be nil", req.DeploymentID != uuid.Nil,
+		"functions id cannot be nil", req.FunctionsID != uuid.Nil,
+		"tool urn cannot be empty", !req.ToolURN.IsZero(),
+		"tool name cannot be empty", req.ToolName != "",
+	); err != nil {
+		return fmt.Errorf("check local function tool call request: %w", err)
 	}
+
+	return nil
 }
 
 func invCheckLocalReadResource(req RunnerResourceReadRequest) error {
-	switch {
-	case req.OrganizationID == "":
-		return errors.New("organization id cannot be empty")
-	case req.OrganizationSlug == "":
-		return errors.New("organization slug cannot be empty")
-	case req.ProjectID == uuid.Nil:
-		return errors.New("project id cannot be nil")
-	case req.DeploymentID == uuid.Nil:
-		return errors.New("deployment id cannot be nil")
-	case req.FunctionsID == uuid.Nil:
-		return errors.New("functions id cannot be nil")
-	case req.ResourceURN.IsZero():
-		return errors.New("resource urn cannot be empty")
-	case req.ResourceURI == "":
-		return errors.New("resource uri cannot be empty")
-	default:
-		return nil
+	if err := inv.Check(
+		"local function read resource request",
+		"organization id cannot be empty", req.OrganizationID != "",
+		"organization slug cannot be empty", req.OrganizationSlug != "",
+		"project id cannot be nil", req.ProjectID != uuid.Nil,
+		"deployment id cannot be nil", req.DeploymentID != uuid.Nil,
+		"functions id cannot be nil", req.FunctionsID != uuid.Nil,
+		"resource urn cannot be empty", !req.ResourceURN.IsZero(),
+		"resource uri cannot be empty", req.ResourceURI != "",
+	); err != nil {
+		return fmt.Errorf("check local function read resource request: %w", err)
 	}
+
+	return nil
 }
 
 func localRuntimeLanguage(runtime Runtime) (string, error) {
