@@ -920,7 +920,6 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 			offset            int
 			sortBy            string
 			sortOrder         string
-			source            *string
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
@@ -1002,10 +1001,6 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		if !(sortOrder == "asc" || sortOrder == "desc") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_order", sortOrder, []any{"asc", "desc"}))
 		}
-		sourceRaw := qp.Get("source")
-		if sourceRaw != "" {
-			source = &sourceRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1021,7 +1016,7 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsWithResolutionsPayload(search, externalUserID, resolutionStatus, from, to, limit, offset, sortBy, sortOrder, source, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsWithResolutionsPayload(search, externalUserID, resolutionStatus, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

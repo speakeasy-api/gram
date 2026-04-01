@@ -204,6 +204,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				ID:             chat.ID.String(),
 				UserID:         nil,
 				ExternalUserID: &chat.ExternalUserID.String,
+				Source:         conv.FromPGText[string](chat.Source),
 				Title:          chat.Title.String,
 				NumMessages:    int(chat.NumMessages),
 				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -226,6 +227,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				ID:             chat.ID.String(),
 				UserID:         &chat.UserID.String,
 				ExternalUserID: nil,
+				Source:         conv.FromPGText[string](chat.Source),
 				Title:          chat.Title.String,
 				NumMessages:    int(chat.NumMessages),
 				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -316,14 +318,8 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	}
 
 	// Get total count (before pagination)
-	source := ""
-	if payload.Source != nil {
-		source = *payload.Source
-	}
-
 	totalCount, err := s.repo.CountChatsWithResolutions(ctx, repo.CountChatsWithResolutionsParams{
 		ProjectID:        *authCtx.ProjectID,
-		Source:           source,
 		Search:           search,
 		ExternalUserID:   externalUserID,
 		FromTime:         fromTime,
@@ -337,7 +333,6 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	// Query database - returns denormalized rows (one row per chat+resolution combination)
 	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
 		ProjectID:        *authCtx.ProjectID,
-		Source:           source,
 		Search:           search,
 		ExternalUserID:   externalUserID,
 		FromTime:         fromTime,
@@ -473,11 +468,22 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
+	// Infer source from the most recent message with a source
+	var source *string
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Source.Valid && messages[i].Source.String != "" {
+			s := messages[i].Source.String
+			source = &s
+			break
+		}
+	}
+
 	return &gen.Chat{
 		ID:             chat.ID.String(),
 		Title:          chat.Title.String,
 		UserID:         &chat.UserID.String,
 		ExternalUserID: &chat.ExternalUserID.String,
+		Source:         source,
 		NumMessages:    len(messages),
 		CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),

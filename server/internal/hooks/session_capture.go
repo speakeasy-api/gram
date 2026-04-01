@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -10,9 +11,10 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // sessionIDToUUID converts a Claude Code session_id string to a deterministic UUID.
@@ -30,8 +32,6 @@ func sessionIDToUUID(sessionID string) uuid.UUID {
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	s.recordConversationEvent(ctx, payload)
-
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,
@@ -40,9 +40,9 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.Claud
 }
 
 // handleStop captures the assistant's final response text.
+// Note: If the Stop event includes tool calls, those are handled separately by PreToolUse events,
+// so we skip creating duplicate messages here.
 func (s *Service) handleStop(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	s.recordConversationEvent(ctx, payload)
-
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,
@@ -52,14 +52,6 @@ func (s *Service) handleStop(ctx context.Context, payload *gen.ClaudeHookPayload
 
 // handleSessionEnd finalizes the session by updating the timestamp.
 func (s *Service) handleSessionEnd(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	if payload.SessionID != nil && *payload.SessionID != "" {
-		sessionID := *payload.SessionID
-		metadata, err := s.getSessionMetadata(ctx, sessionID)
-		if err == nil {
-			s.finalizeSession(ctx, &metadata)
-		}
-	}
-
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,
@@ -85,7 +77,7 @@ func (s *Service) recordConversationEvent(ctx context.Context, payload *gen.Clau
 	sessionID := *payload.SessionID
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
-		s.writeConversationToPG(ctx, payload, &metadata)
+		s.persistConversationEvent(ctx, payload, &metadata)
 	} else {
 		// Session not validated yet — buffer alongside tool calls
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
@@ -94,21 +86,21 @@ func (s *Service) recordConversationEvent(ctx context.Context, payload *gen.Clau
 	}
 }
 
-// writeConversationToPG writes a conversation event (user prompt or assistant response) to PostgreSQL.
-func (s *Service) writeConversationToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+// persistConversationEvent writes a conversation event (user prompt or assistant response) to PostgreSQL.
+func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
 	if s.productFeatures == nil {
 		return
 	}
 
-	// Check if session capture is enabled for this org
-	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
-	if err != nil {
-		s.logger.WarnContext(ctx, "check session_capture feature flag", attr.SlogError(err))
-		return
-	}
-	if !enabled {
-		return
-	}
+	// TODO Check if session capture is enabled for this org
+	// enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
+	// if err != nil {
+	// 	s.logger.WarnContext(ctx, "check session_capture feature flag", attr.SlogError(err))
+	// 	return
+	// }
+	// if !enabled {
+	// 	return
+	// }
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
@@ -117,6 +109,7 @@ func (s *Service) writeConversationToPG(ctx context.Context, payload *gen.Claude
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
+	chatRepoQueries := chatRepo.New(s.db)
 
 	// Ensure the session (chat) exists
 	_, err = s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
@@ -143,11 +136,6 @@ func (s *Service) writeConversationToPG(ctx context.Context, payload *gen.Claude
 		role = "assistant"
 		content = conv.PtrValOr(payload.LastAssistantMessage, "")
 		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
-	case "SessionStart":
-		role = "system"
-		source := conv.PtrValOr(payload.Source, "startup")
-		content = fmt.Sprintf("Session started (%s)", source)
-		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
 	default:
 		return
 	}
@@ -156,73 +144,188 @@ func (s *Service) writeConversationToPG(ctx context.Context, payload *gen.Claude
 		return
 	}
 
-	err = s.repo.InsertClaudeCodeMessage(ctx, repo.InsertClaudeCodeMessageParams{
-		ChatID:    chatID,
-		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
-		Role:      role,
-		Content:   content,
-		Model:     model,
-		UserID:    conv.ToPGTextEmpty(metadata.UserEmail),
-	})
+	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             role,
+		Content:          content,
+		Model:            model,
+		UserID:           conv.ToPGTextEmpty(metadata.UserEmail),
+		Source:           conv.ToPGText("ClaudeCode"),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(""),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+	}})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "insert claude code message", attr.SlogError(err))
-	}
-}
-
-// ensureSessionInPG creates the session (chat) in PG if session capture is enabled.
-// Called at flush time when OTEL metadata arrives.
-func (s *Service) ensureSessionInPG(ctx context.Context, sessionID string, metadata *SessionMetadata) {
-	if s.productFeatures == nil {
 		return
 	}
 
-	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
-	if err != nil || !enabled {
+	// Schedule chat title generation for assistant messages
+	if role == "assistant" && s.chatTitleGenerator != nil {
+		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+			context.WithoutCancel(ctx),
+			chatID.String(),
+			metadata.GramOrgID,
+			projectID.String(),
+		); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
+		}
+	}
+}
+
+// writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.
+func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+	if s.productFeatures == nil {
 		return
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
+		s.logger.ErrorContext(ctx, "invalid project ID", attr.SlogError(err))
 		return
 	}
 
-	chatID := sessionIDToUUID(sessionID)
+	chatID := sessionIDToUUID(*payload.SessionID)
+	chatRepoQueries := chatRepo.New(s.db)
 
+	// Ensure the session exists
 	_, err = s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: metadata.GramOrgID,
 		UserID:         conv.ToPGTextEmpty(metadata.UserEmail),
-		Title:          conv.ToPGText("Claude Code Session"),
+		Title:          conv.ToPGText(activities.DefaultClaudeChatTitle),
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "ensure session in PG", attr.SlogError(err))
-	}
-}
-
-// finalizeSession updates the session timestamp on SessionEnd.
-func (s *Service) finalizeSession(ctx context.Context, metadata *SessionMetadata) {
-	if s.productFeatures == nil {
+		s.logger.ErrorContext(ctx, "upsert claude code session", attr.SlogError(err))
 		return
 	}
 
-	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
-	if err != nil || !enabled {
+	// Build tool_calls JSONB array from the PreToolUse payload
+	toolCalls := []map[string]any{{
+		"id":   conv.PtrValOr(payload.ToolUseID, ""),
+		"type": "function",
+		"function": map[string]any{
+			"name":      conv.PtrValOr(payload.ToolName, ""),
+			"arguments": marshalToJSON(payload.ToolInput),
+		},
+	}}
+
+	toolCallsJSON, err := json.Marshal(toolCalls)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "marshal tool_calls", attr.SlogError(err))
+		return
+	}
+
+	// Insert assistant message with tool_calls
+	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             "assistant",
+		Content:          "", // Tool call requests typically have empty content
+		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
+		UserID:           conv.ToPGTextEmpty(metadata.UserEmail),
+		Source:           conv.ToPGText("ClaudeCode"),
+		ToolCalls:        toolCallsJSON,
+		FinishReason:     conv.ToPGText("tool_calls"),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(""),
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+	}})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "insert tool call request message", attr.SlogError(err))
+	}
+}
+
+// writeToolCallResultToPG writes a tool result message to PostgreSQL.
+func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+	if s.productFeatures == nil {
 		return
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
+		s.logger.ErrorContext(ctx, "invalid project ID", attr.SlogError(err))
 		return
 	}
 
-	chatID := sessionIDToUUID(metadata.SessionID)
+	chatID := sessionIDToUUID(*payload.SessionID)
+	chatRepoQueries := chatRepo.New(s.db)
 
-	err = s.repo.UpdateClaudeCodeSessionTimestamp(ctx, repo.UpdateClaudeCodeSessionTimestampParams{
-		ID:        chatID,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		s.logger.ErrorContext(ctx, "finalize session", attr.SlogError(err))
+	// Build content from tool response or error
+	var content string
+	var isError bool
+	if payload.HookEventName == "PostToolUse" && payload.ToolResponse != nil {
+		content = marshalToJSON(payload.ToolResponse)
+		isError = false
+	} else if payload.HookEventName == "PostToolUseFailure" && payload.Error != nil {
+		content = marshalToJSON(payload.Error)
+		isError = true
+	} else {
+		return // No content to store
 	}
+
+	// Insert tool result message
+	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             "tool",
+		Content:          content,
+		UserID:           conv.ToPGTextEmpty(metadata.UserEmail),
+		Source:           conv.ToPGText("ClaudeCode"),
+		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolUseID, "")),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		Model:            conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(""),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+	}})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "insert tool result message", attr.SlogError(err))
+	}
+
+	// If this was an error, we could optionally set tool_outcome based on isError
+	_ = isError
+}
+
+// marshalToJSON converts any value to a JSON string.
+func marshalToJSON(v any) string {
+	if v == nil {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	return string(b)
 }

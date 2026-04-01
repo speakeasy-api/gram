@@ -30,8 +30,8 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 	return nil
 }
 
-// writeHookToClickHouseWithMetadata writes a hook event to ClickHouse with full session context
-func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+// persistToolCallEvent writes a hook event to ClickHouse with full session context
+func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
 	toolName, ok := attrs[attr.ToolNameKey].(string) //  Make sure this comes from here so that we get the parsed tool name
 	if !ok {
@@ -66,6 +66,13 @@ func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload
 		s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
 			attr.SlogEvent("hook_written"),
 		)
+	}
+
+	if payload.HookEventName == "PreToolUse" {
+		s.writeToolCallRequestToPG(ctx, payload, metadata)
+	}
+	if payload.HookEventName == "PostToolUse" || payload.HookEventName == "PostToolUseFailure" {
+		s.writeToolCallResultToPG(ctx, payload, metadata)
 	}
 }
 
@@ -121,6 +128,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	if payload.ToolUseID != nil {
 		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
 	}
+
 	// Stringify ToolInput and ToolResponse to prevent JSON path explosion in ClickHouse
 	// When these are stored as nested objects, ClickHouse auto-unflattens dotted keys
 	// which creates an explosion of attribute keys in the attributes JSON column
@@ -145,7 +153,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 // isConversationEvent returns true if the event is a conversation capture event (not a tool call).
 func isConversationEvent(eventName string) bool {
 	switch eventName {
-	case "UserPromptSubmit", "Stop", "SessionStart", "SessionEnd":
+	case "UserPromptSubmit", "Stop":
 		return true
 	default:
 		return false
@@ -155,9 +163,6 @@ func isConversationEvent(eventName string) bool {
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
 // Conversation events (UserPromptSubmit, Stop, SessionStart) are also written to PostgreSQL.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
-	// Ensure session exists in PG (if session capture enabled)
-	s.ensureSessionInPG(ctx, sessionID, metadata)
-
 	// Use LRANGE to get all payloads from the list atomically
 	var payloads []gen.ClaudeHookPayload
 	key := hookPendingCacheKey(sessionID)
@@ -172,13 +177,7 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 	}
 
 	for i := range payloads {
-		if isConversationEvent(payloads[i].HookEventName) {
-			// Write conversation events to PostgreSQL
-			s.writeConversationToPG(ctx, &payloads[i], metadata)
-		} else {
-			// Write tool call events to ClickHouse
-			s.writeHookToClickHouseWithMetadata(ctx, &payloads[i], metadata)
-		}
+		s.persistHook(ctx, &payloads[i], metadata)
 	}
 
 	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks", len(payloads)))

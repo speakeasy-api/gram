@@ -104,7 +104,7 @@ type InsertTelemetryLogParams struct {
 //
 //nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLogParams) error {
-	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(true))
 
 	query, args, err := sq.Insert("telemetry_logs").
 		Columns(

@@ -83,7 +83,6 @@ type Chat struct {
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	Title          pgtype.Text
-	Source         pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

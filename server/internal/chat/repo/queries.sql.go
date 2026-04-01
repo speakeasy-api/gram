@@ -44,26 +44,25 @@ SELECT COUNT(DISTINCT c.id) as total
 FROM chats c
 WHERE c.project_id = $1
   AND c.deleted IS FALSE
-  AND ($2 = '' OR c.source = $2)
-  AND ($3 = '' OR c.external_user_id = $3)
-  AND ($4::timestamptz IS NULL OR c.created_at >= $4)
-  AND ($5::timestamptz IS NULL OR c.created_at <= $5)
+  AND ($2 = '' OR c.external_user_id = $2)
+  AND ($3::timestamptz IS NULL OR c.created_at >= $3)
+  AND ($4::timestamptz IS NULL OR c.created_at <= $4)
   AND (
-    $6 = ''
-    OR c.id::text ILIKE '%' || $6 || '%'
-    OR c.external_user_id ILIKE '%' || $6 || '%'
-    OR c.title ILIKE '%' || $6 || '%'
+    $5 = ''
+    OR c.id::text ILIKE '%' || $5 || '%'
+    OR c.external_user_id ILIKE '%' || $5 || '%'
+    OR c.title ILIKE '%' || $5 || '%'
   )
   AND (
-    $7 = ''
+    $6 = ''
     OR (
-      $7 = 'unresolved' AND NOT EXISTS (
+      $6 = 'unresolved' AND NOT EXISTS (
         SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
       )
     )
     OR (
-      $7 != 'unresolved' AND EXISTS (
-        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $7
+      $6 != 'unresolved' AND EXISTS (
+        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $6
       )
     )
   )
@@ -71,7 +70,6 @@ WHERE c.project_id = $1
 
 type CountChatsWithResolutionsParams struct {
 	ProjectID        uuid.UUID
-	Source           interface{}
 	ExternalUserID   interface{}
 	FromTime         pgtype.Timestamptz
 	ToTime           pgtype.Timestamptz
@@ -82,7 +80,6 @@ type CountChatsWithResolutionsParams struct {
 func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChatsWithResolutions,
 		arg.ProjectID,
-		arg.Source,
 		arg.ExternalUserID,
 		arg.FromTime,
 		arg.ToTime,
@@ -152,7 +149,7 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, title, source, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
+SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
@@ -165,7 +162,6 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.UserID,
 		&i.ExternalUserID,
 		&i.Title,
-		&i.Source,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -176,7 +172,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 
 const getChatWithResolutions = `-- name: GetChatWithResolutions :one
 SELECT
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.source, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -216,7 +212,6 @@ type GetChatWithResolutionsRow struct {
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	Title          pgtype.Text
-	Source         pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
@@ -235,7 +230,6 @@ func (q *Queries) GetChatWithResolutions(ctx context.Context, id uuid.UUID) (Get
 		&i.UserID,
 		&i.ExternalUserID,
 		&i.Title,
-		&i.Source,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -422,7 +416,7 @@ func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedback
 
 const listAllChats = `-- name: ListAllChats :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.source, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -435,6 +429,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = $1
 ORDER BY c.updated_at DESC
@@ -447,13 +442,13 @@ type ListAllChatsRow struct {
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	Title          pgtype.Text
-	Source         pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
 	NumMessages    int32
 	TotalTokens    int32
+	Source         pgtype.Text
 }
 
 func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]ListAllChatsRow, error) {
@@ -472,13 +467,13 @@ func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]List
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
-			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.NumMessages,
 			&i.TotalTokens,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -586,7 +581,7 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 
 const listChatsForExternalUser = `-- name: ListChatsForExternalUser :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.source, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -599,6 +594,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = $1 AND c.external_user_id = $2
 ORDER BY c.updated_at DESC
@@ -616,13 +612,13 @@ type ListChatsForExternalUserRow struct {
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	Title          pgtype.Text
-	Source         pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
 	NumMessages    int32
 	TotalTokens    int32
+	Source         pgtype.Text
 }
 
 func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsForExternalUserParams) ([]ListChatsForExternalUserRow, error) {
@@ -641,13 +637,13 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
-			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.NumMessages,
 			&i.TotalTokens,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -661,7 +657,7 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 
 const listChatsForUser = `-- name: ListChatsForUser :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.source, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -674,6 +670,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = $1 AND c.user_id = $2
 ORDER BY c.updated_at DESC
@@ -691,13 +688,13 @@ type ListChatsForUserRow struct {
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	Title          pgtype.Text
-	Source         pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
 	NumMessages    int32
 	TotalTokens    int32
+	Source         pgtype.Text
 }
 
 func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserParams) ([]ListChatsForUserRow, error) {
@@ -716,13 +713,13 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
-			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.NumMessages,
 			&i.TotalTokens,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -741,10 +738,10 @@ WITH limited_chats AS (
     c.title,
     c.user_id,
     c.external_user_id,
-    c.source,
     c.created_at,
     c.updated_at,
     (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source,
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
@@ -752,26 +749,25 @@ WITH limited_chats AS (
   FROM chats c
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
-    AND ($4 = '' OR c.source = $4)
-    AND ($5 = '' OR c.external_user_id = $5)
-    AND ($6::timestamptz IS NULL OR c.created_at >= $6)
-    AND ($7::timestamptz IS NULL OR c.created_at <= $7)
+    AND ($4 = '' OR c.external_user_id = $4)
+    AND ($5::timestamptz IS NULL OR c.created_at >= $5)
+    AND ($6::timestamptz IS NULL OR c.created_at <= $6)
     AND (
-      $8 = ''
-      OR c.id::text ILIKE '%' || $8 || '%'
-      OR c.external_user_id ILIKE '%' || $8 || '%'
-      OR c.title ILIKE '%' || $8 || '%'
+      $7 = ''
+      OR c.id::text ILIKE '%' || $7 || '%'
+      OR c.external_user_id ILIKE '%' || $7 || '%'
+      OR c.title ILIKE '%' || $7 || '%'
     )
     AND (
-      $9 = ''
+      $8 = ''
       OR (
-        $9 = 'unresolved' AND NOT EXISTS (
+        $8 = 'unresolved' AND NOT EXISTS (
           SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
         )
       )
       OR (
-        $9 != 'unresolved' AND EXISTS (
-          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $9
+        $8 != 'unresolved' AND EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $8
         )
       )
     )
@@ -783,8 +779,8 @@ WITH limited_chats AS (
     CASE WHEN $1 = 'score' AND $2 = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
     c.created_at DESC
-  LIMIT $11
-  OFFSET $10
+  LIMIT $10
+  OFFSET $9
 )
 SELECT
     lc.id as chat_id,
@@ -827,7 +823,6 @@ type ListChatsWithResolutionsParams struct {
 	SortBy           interface{}
 	SortOrder        interface{}
 	ProjectID        uuid.UUID
-	Source           interface{}
 	ExternalUserID   interface{}
 	FromTime         pgtype.Timestamptz
 	ToTime           pgtype.Timestamptz
@@ -861,7 +856,6 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 		arg.SortBy,
 		arg.SortOrder,
 		arg.ProjectID,
-		arg.Source,
 		arg.ExternalUserID,
 		arg.FromTime,
 		arg.ToTime,
@@ -981,7 +975,6 @@ INSERT INTO chats (
   , user_id
   , external_user_id
   , title
-  , source
   , created_at
   , updated_at
 )
@@ -992,7 +985,6 @@ VALUES (
     $4,
     $5,
     $6,
-    $7,
     NOW(),
     NOW()
 )
@@ -1007,7 +999,6 @@ type UpsertChatParams struct {
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	Title          pgtype.Text
-	Source         pgtype.Text
 }
 
 // Use no-op update (id = EXCLUDED.id) to ensure RETURNING always returns a row,
@@ -1020,7 +1011,6 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 		arg.UserID,
 		arg.ExternalUserID,
 		arg.Title,
-		arg.Source,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

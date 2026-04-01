@@ -63,6 +63,16 @@ function getSeverityBadgeVariant(
   }
 }
 
+interface ToolCall {
+  id?: string;
+  type?: string;
+  name?: string;
+  function?: {
+    name?: string;
+    arguments?: string | object;
+  };
+}
+
 function formatTimestamp(nanos: string): string {
   const ms = Number(BigInt(nanos) / 1_000_000n);
   return format(new Date(ms), "HH:mm:ss.SSS");
@@ -511,67 +521,146 @@ export function ChatDetailPanel({
                       </div>
                     )}
 
-                    {/* Message */}
-                    <div className="flex items-start gap-3">
-                      {message.role === "user" && (
-                        <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <Icon name="user" className="size-4 text-primary" />
-                        </div>
-                      )}
-                      {message.role === "assistant" && (
-                        <div className="size-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                          <Icon name="bot" className="size-4" />
-                        </div>
-                      )}
-                      {message.role === "tool" && (
-                        <div className="size-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                          <Icon
-                            name="zap"
-                            className="size-4 text-primary-foreground"
-                          />
-                        </div>
-                      )}
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-semibold capitalize">
-                            {message.role === "tool"
-                              ? "Tool Result"
-                              : message.role}
-                          </span>
-                          {message.toolCallId && (
-                            <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
-                              {message.toolCallId}
-                            </code>
-                          )}
-                          <span className="text-xs text-muted-foreground">
-                            {message.createdAt &&
-                              format(new Date(message.createdAt), "HH:mm:ss")}
-                          </span>
-                        </div>
-                        <div
-                          className={cn(
-                            "rounded-lg text-sm overflow-hidden",
-                            message.role === "user" && "bg-primary/5 p-3",
-                            message.role === "assistant" && "bg-muted/50 p-3",
-                            message.role === "tool" && "bg-background border",
-                          )}
-                        >
-                          {message.role === "tool" ? (
-                            <CodeBlock
-                              content={message.content}
-                              maxHeight={300}
+                    {/* Message - render tool calls as separate entries */}
+                    {message.toolCalls ? (
+                      (() => {
+                        try {
+                          const parsedToolCalls = JSON.parse(
+                            message.toolCalls,
+                          ) as ToolCall[];
+                          return Array.isArray(parsedToolCalls) ? (
+                            parsedToolCalls.map((tc, idx: number) => (
+                              <div
+                                key={tc.id || idx}
+                                className="flex items-start gap-3"
+                              >
+                                <div className="size-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                                  <Icon
+                                    name="zap"
+                                    className="size-4 text-primary-foreground"
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm font-semibold">
+                                      Tool Call
+                                    </span>
+                                    {tc.id && (
+                                      <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                                        {tc.id}
+                                      </code>
+                                    )}
+                                    <span className="text-xs text-muted-foreground">
+                                      {message.createdAt &&
+                                        format(
+                                          new Date(message.createdAt),
+                                          "HH:mm:ss",
+                                        )}
+                                    </span>
+                                  </div>
+                                  <div className="rounded-lg text-sm overflow-hidden bg-background border">
+                                    <div className="p-3 border-b bg-muted/30">
+                                      <div className="flex items-center gap-2">
+                                        <Icon
+                                          name="zap"
+                                          className="size-4 text-primary"
+                                        />
+                                        <span className="font-semibold">
+                                          {tc.function?.name ||
+                                            tc.name ||
+                                            "Tool Call"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {tc.function?.arguments && (
+                                      <CodeBlock
+                                        content={
+                                          typeof tc.function.arguments ===
+                                          "string"
+                                            ? tc.function.arguments
+                                            : JSON.stringify(
+                                                tc.function.arguments,
+                                                null,
+                                                2,
+                                              )
+                                        }
+                                        maxHeight={300}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : null;
+                        } catch {
+                          return null;
+                        }
+                      })()
+                    ) : (
+                      <div className="flex items-start gap-3">
+                        {message.role === "user" && (
+                          <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Icon name="user" className="size-4 text-primary" />
+                          </div>
+                        )}
+                        {message.role === "assistant" && (
+                          <div className="size-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            <Icon name="bot" className="size-4" />
+                          </div>
+                        )}
+                        {message.role === "tool" && (
+                          <div className="size-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                            <Icon
+                              name="zap"
+                              className="size-4 text-primary-foreground"
                             />
-                          ) : (
-                            <div className="whitespace-pre-wrap">
-                              {typeof message.content === "string"
-                                ? message.content
-                                : JSON.stringify(message.content)}
-                            </div>
-                          )}
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold capitalize">
+                              {message.role === "tool"
+                                ? "Tool Result"
+                                : message.role}
+                            </span>
+                            {message.toolCallId && (
+                              <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                                {message.toolCallId}
+                              </code>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {message.createdAt &&
+                                format(
+                                  new Date(message.createdAt),
+                                  "HH:mm:ss",
+                                )}
+                            </span>
+                          </div>
+                          <div
+                            className={cn(
+                              "rounded-lg text-sm overflow-hidden",
+                              message.role === "user" && "bg-primary/5 p-3",
+                              message.role === "assistant" && "bg-muted/50 p-3",
+                              message.role === "tool" && "bg-background border",
+                            )}
+                          >
+                            {message.role === "tool" ? (
+                              <CodeBlock
+                                content={message.content}
+                                maxHeight={300}
+                              />
+                            ) : (
+                              <div className="whitespace-pre-wrap">
+                                {typeof message.content === "string"
+                                  ? message.content
+                                  : JSON.stringify(message.content)}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}

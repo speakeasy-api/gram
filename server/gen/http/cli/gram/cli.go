@@ -334,7 +334,6 @@ func ParseEndpoint(
 		chatListChatsWithResolutionsOffsetFlag            = chatListChatsWithResolutionsFlags.String("offset", "", "")
 		chatListChatsWithResolutionsSortByFlag            = chatListChatsWithResolutionsFlags.String("sort-by", "created_at", "")
 		chatListChatsWithResolutionsSortOrderFlag         = chatListChatsWithResolutionsFlags.String("sort-order", "desc", "")
-		chatListChatsWithResolutionsSourceFlag            = chatListChatsWithResolutionsFlags.String("source", "", "")
 		chatListChatsWithResolutionsSessionTokenFlag      = chatListChatsWithResolutionsFlags.String("session-token", "", "")
 		chatListChatsWithResolutionsProjectSlugInputFlag  = chatListChatsWithResolutionsFlags.String("project-slug-input", "", "")
 		chatListChatsWithResolutionsChatSessionsTokenFlag = chatListChatsWithResolutionsFlags.String("chat-sessions-token", "", "")
@@ -1972,7 +1971,7 @@ func ParseEndpoint(
 				data, err = chatc.BuildCreditUsagePayload(*chatCreditUsageSessionTokenFlag)
 			case "list-chats-with-resolutions":
 				endpoint = c.ListChatsWithResolutions()
-				data, err = chatc.BuildListChatsWithResolutionsPayload(*chatListChatsWithResolutionsSearchFlag, *chatListChatsWithResolutionsExternalUserIDFlag, *chatListChatsWithResolutionsResolutionStatusFlag, *chatListChatsWithResolutionsFromFlag, *chatListChatsWithResolutionsToFlag, *chatListChatsWithResolutionsLimitFlag, *chatListChatsWithResolutionsOffsetFlag, *chatListChatsWithResolutionsSortByFlag, *chatListChatsWithResolutionsSortOrderFlag, *chatListChatsWithResolutionsSourceFlag, *chatListChatsWithResolutionsSessionTokenFlag, *chatListChatsWithResolutionsProjectSlugInputFlag, *chatListChatsWithResolutionsChatSessionsTokenFlag)
+				data, err = chatc.BuildListChatsWithResolutionsPayload(*chatListChatsWithResolutionsSearchFlag, *chatListChatsWithResolutionsExternalUserIDFlag, *chatListChatsWithResolutionsResolutionStatusFlag, *chatListChatsWithResolutionsFromFlag, *chatListChatsWithResolutionsToFlag, *chatListChatsWithResolutionsLimitFlag, *chatListChatsWithResolutionsOffsetFlag, *chatListChatsWithResolutionsSortByFlag, *chatListChatsWithResolutionsSortOrderFlag, *chatListChatsWithResolutionsSessionTokenFlag, *chatListChatsWithResolutionsProjectSlugInputFlag, *chatListChatsWithResolutionsChatSessionsTokenFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -3392,7 +3391,6 @@ func chatListChatsWithResolutionsUsage() {
 	fmt.Fprint(os.Stderr, " -offset INT")
 	fmt.Fprint(os.Stderr, " -sort-by STRING")
 	fmt.Fprint(os.Stderr, " -sort-order STRING")
-	fmt.Fprint(os.Stderr, " -source STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
@@ -3412,14 +3410,13 @@ func chatListChatsWithResolutionsUsage() {
 	fmt.Fprintln(os.Stderr, `    -offset INT: `)
 	fmt.Fprintln(os.Stderr, `    -sort-by STRING: `)
 	fmt.Fprintln(os.Stderr, `    -sort-order STRING: `)
-	fmt.Fprintln(os.Stderr, `    -source STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats-with-resolutions --search \"abc123\" --external-user-id \"abc123\" --resolution-status \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --source \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats-with-resolutions --search \"abc123\" --external-user-id \"abc123\" --resolution-status \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {

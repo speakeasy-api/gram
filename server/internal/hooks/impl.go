@@ -32,20 +32,24 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	srv "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	db               *pgxpool.Pool
-	telemetryService *telemetry.Service
-	auth             *auth.Auth
-	cache            cache.Cache
-	temporalEnv      *tenv.Environment
-	repo             *repo.Queries
-	productFeatures  ProductFeaturesClient
+	tracer             trace.Tracer
+	logger             *slog.Logger
+	db                 *pgxpool.Pool
+	telemetryService   *telemetry.Service
+	auth               *auth.Auth
+	cache              cache.Cache
+	temporalEnv        *tenv.Environment
+	repo               *repo.Queries
+	productFeatures    ProductFeaturesClient
+	environment        string
+	chatTitleGenerator ChatTitleGenerator
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -71,6 +75,11 @@ type ProductFeaturesClient interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
+// ChatTitleGenerator schedules async chat title generation.
+type ChatTitleGenerator interface {
+	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
+}
+
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
@@ -84,17 +93,21 @@ func NewService(
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	pfClient ProductFeaturesClient,
+	environment string,
+	chatTitleGenerator ChatTitleGenerator,
 ) *Service {
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
-		logger:           logger.With(attr.SlogComponent("hooks")),
-		db:               db,
-		telemetryService: telemetryService,
-		auth:             auth.New(logger, db, sessionsMgr),
-		cache:            cacheAdapter,
-		temporalEnv:      temporalEnv,
-		repo:             repo.New(db),
-		productFeatures:  pfClient,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
+		logger:             logger.With(attr.SlogComponent("hooks")),
+		db:                 db,
+		telemetryService:   telemetryService,
+		auth:               auth.New(logger, db, sessionsMgr),
+		cache:              cacheAdapter,
+		temporalEnv:        temporalEnv,
+		repo:               repo.New(db),
+		productFeatures:    pfClient,
+		environment:        environment,
+		chatTitleGenerator: chatTitleGenerator,
 	}
 }
 
@@ -266,10 +279,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 		}),
 	)
 
-	// Record tool events to ClickHouse (skip conversation events — those are handled by their specific handlers writing to PG)
-	if !isConversationEvent(payload.HookEventName) {
-		s.recordToolEvent(ctx, payload)
-	}
+	s.recordHook(ctx, payload)
 
 	// Route to appropriate handler based on hook type
 	switch payload.HookEventName {
@@ -300,9 +310,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 }
 
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	// Record session start for conversation capture
-	s.recordConversationEvent(ctx, payload)
-
 	// Always allow sessions to start
 	continueVal := true
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -313,8 +320,7 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHoo
 	}, nil
 }
 
-// recordToolEvent records a tool event, either directly to ClickHouse if session is validated, or buffers it
-func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudeHookPayload) {
+func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudeHookPayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
 		s.logger.WarnContext(ctx, "Tool event called without session ID")
 		return
@@ -323,7 +329,7 @@ func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudeHookPa
 	sessionID := *payload.SessionID
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
-		s.writeHookToClickHouseWithMetadata(ctx, payload, &metadata)
+		s.persistHook(ctx, payload, &metadata)
 	} else {
 		// Session not validated yet - buffer in Redis
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
@@ -332,7 +338,35 @@ func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudeHookPa
 	}
 }
 
+func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+	if isConversationEvent(payload.HookEventName) {
+		s.persistConversationEvent(ctx, payload, metadata)
+	} else {
+		s.persistToolCallEvent(ctx, payload, metadata)
+	}
+}
+
 func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (SessionMetadata, error) {
+	// For local development, use hardcoded test values
+	// Avoids needing to set up OTEL export for local development
+	if s.environment == "local" {
+		config := mockidp.DefaultConfig()
+		projectsRepo := projectsRepo.New(s.db)
+		projects, err := projectsRepo.ListProjectsByOrganization(ctx, config.Organization.ID)
+		if err != nil || len(projects) == 0 {
+			return SessionMetadata{}, fmt.Errorf("get project: %w", err)
+		}
+		projectID := projects[0].ID.String()
+		return SessionMetadata{
+			SessionID:   sessionID,
+			ServiceName: "claude-code",
+			UserEmail:   config.User.Email,
+			ClaudeOrgID: config.Organization.ID,
+			GramOrgID:   config.Organization.ID,
+			ProjectID:   projectID,
+		}, nil
+	}
+
 	var metadata SessionMetadata
 	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
 	if err != nil {

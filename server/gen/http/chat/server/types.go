@@ -52,7 +52,8 @@ type LoadChatResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
-	// The source of the chat: Elements, Playground, ClaudeCode
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
 	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -1199,7 +1200,8 @@ type ChatOverviewResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
-	// The source of the chat: Elements, Playground, ClaudeCode
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
 	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -1246,7 +1248,8 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
-	// The source of the chat: Elements, Playground, ClaudeCode
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
 	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -2261,7 +2264,7 @@ func NewCreditUsagePayload(sessionToken *string) *chat.CreditUsagePayload {
 
 // NewListChatsWithResolutionsPayload builds a chat service
 // listChatsWithResolutions endpoint payload.
-func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, resolutionStatus *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, source *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
+func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, resolutionStatus *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
 	v := &chat.ListChatsWithResolutionsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
@@ -2272,7 +2275,6 @@ func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, 
 	v.Offset = offset
 	v.SortBy = sortBy
 	v.SortOrder = sortOrder
-	v.Source = source
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

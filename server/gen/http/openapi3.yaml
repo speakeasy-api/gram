@@ -3565,13 +3565,6 @@ paths:
                         - desc
                     type: string
                 - allowEmptyValue: true
-                  description: 'Filter by chat source: Elements, ClaudeCode'
-                  in: query
-                  name: source
-                  schema:
-                    description: 'Filter by chat source: Elements, ClaudeCode'
-                    type: string
-                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -14734,7 +14727,7 @@ components:
                     format: int64
                 source:
                     type: string
-                    description: 'The source of the chat: Elements, Playground, ClaudeCode'
+                    description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
                 title:
                     type: string
                     description: The title of the chat
@@ -14810,7 +14803,7 @@ components:
                     format: int64
                 source:
                     type: string
-                    description: 'The source of the chat: Elements, Playground, ClaudeCode'
+                    description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
                 title:
                     type: string
                     description: The title of the chat
@@ -14851,7 +14844,7 @@ components:
                     description: List of resolutions for this chat
                 source:
                     type: string
-                    description: 'The source of the chat: Elements, Playground, ClaudeCode'
+                    description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
                 title:
                     type: string
                     description: The title of the chat

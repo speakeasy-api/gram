@@ -6,7 +6,6 @@ INSERT INTO chats (
   , user_id
   , external_user_id
   , title
-  , source
   , created_at
   , updated_at
 )
@@ -17,7 +16,6 @@ VALUES (
     @user_id,
     @external_user_id,
     @title,
-    @source,
     NOW(),
     NOW()
 )
@@ -89,6 +87,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = @project_id
 ORDER BY c.updated_at DESC;
@@ -108,6 +107,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = @project_id AND c.external_user_id = @external_user_id
 ORDER BY c.updated_at DESC;
@@ -128,6 +128,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = @project_id AND c.user_id = @user_id
 ORDER BY c.updated_at DESC;
@@ -206,7 +207,6 @@ SELECT COUNT(DISTINCT c.id) as total
 FROM chats c
 WHERE c.project_id = @project_id
   AND c.deleted IS FALSE
-  AND (@source = '' OR c.source = @source)
   AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
   AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
   AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
@@ -237,10 +237,10 @@ WITH limited_chats AS (
     c.title,
     c.user_id,
     c.external_user_id,
-    c.source,
     c.created_at,
     c.updated_at,
     (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source,
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
@@ -248,7 +248,6 @@ WITH limited_chats AS (
   FROM chats c
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
-    AND (@source = '' OR c.source = @source)
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
     AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
     AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)

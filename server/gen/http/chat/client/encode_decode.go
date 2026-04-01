@@ -1026,9 +1026,6 @@ func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.E
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))
 		values.Add("sort_by", p.SortBy)
 		values.Add("sort_order", p.SortOrder)
-		if p.Source != nil {
-			values.Add("source", *p.Source)
-		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

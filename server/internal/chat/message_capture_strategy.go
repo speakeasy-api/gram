@@ -63,7 +63,6 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		UserID:         conv.ToPGText(userID),
 		ExternalUserID: conv.ToPGText(externalUserID),
 		Title:          conv.ToPGText("New Chat"),
-		Source:         conv.ToPGTextEmpty(""),
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))

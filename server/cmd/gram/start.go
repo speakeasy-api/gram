@@ -669,7 +669,7 @@ func newStartCommand() *cli.Command {
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, temporalEnv, productFeatures))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, temporalEnv, productFeatures, c.String("environment"), &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager))
 			auth.Attach(mux, auth.NewService(
