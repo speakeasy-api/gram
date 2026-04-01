@@ -92,7 +92,13 @@ async function seed() {
   if (!serverURL) {
     throw new Error("GRAM_SERVER_URL is not set");
   }
-  assertSeedSupportsMcpApps(serverURL);
+  const functionsProvider = process.env["GRAM_FUNCTIONS_PROVIDER"] ?? "local";
+  const shouldSeedFunctions = functionsProvider === "local";
+  if (!shouldSeedFunctions) {
+    log.info(
+      `Skipping seeded MCP app function assets because GRAM_FUNCTIONS_PROVIDER is '${functionsProvider}', not 'local'.`,
+    );
+  }
 
   const gram = new GramCore({ serverURL });
 
@@ -143,6 +149,10 @@ async function seed() {
   const projectToolUrns: Record<string, string[]> = {};
 
   for (const { name, slug, assets, mcpPublic } of SEED_PROJECTS) {
+    const seedAssets = shouldSeedFunctions
+      ? assets
+      : assets.filter((asset) => asset.type !== "functions");
+
     const {
       created,
       id,
@@ -158,18 +168,23 @@ async function seed() {
     let verb = created ? "Created" : "Found existing";
     log.info(`${verb} project '${projectSlug}' (project_id = ${id})`);
 
+    if (seedAssets.length === 0) {
+      log.info(`No seed assets selected for '${projectSlug}', skipping.`);
+      continue;
+    }
+
     const deploymentId = await deployAssets({
       gram,
       sessionId,
       projectSlug,
       projectName: name,
-      assets,
+      assets: seedAssets,
     });
     log.info(
       `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
     );
 
-    for (const asset of assets) {
+    for (const asset of seedAssets) {
       const toolset = await upsertToolset({
         gram,
         serverURL,
@@ -228,42 +243,6 @@ async function seed() {
   }
 
   success = true;
-}
-
-function assertSeedSupportsMcpApps(serverURL: string): void {
-  const needsFunctions = SEED_PROJECTS.some((project) =>
-    project.assets.some((asset) => asset.type === "functions"),
-  );
-  if (!needsFunctions) {
-    return;
-  }
-
-  const provider = process.env["GRAM_FUNCTIONS_PROVIDER"] ?? "local";
-  if (provider !== "local" && provider !== "flyio") {
-    abort(
-      `Seeding includes an MCP app function asset, but the active functions provider \`${provider}\` is not supported by this seed flow.`,
-    );
-  }
-
-  if (provider === "local") {
-    return;
-  }
-
-  const host = new URL(serverURL).hostname;
-  if (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host.endsWith(".local")
-  ) {
-    abort(
-      [
-        `Seeding includes an MCP app function asset, but \`GRAM_FUNCTIONS_PROVIDER=flyio\` cannot work against the local server URL \`${serverURL}\`.`,
-        "Fly-hosted runners need a publicly reachable Gram server to call back into.",
-        "Point `GRAM_SERVER_URL` at a public tunnel or switch your dev setup to a reachable host before seeding the MCP app.",
-      ].join(" "),
-    );
-  }
 }
 
 async function initAPIKey(init: {
