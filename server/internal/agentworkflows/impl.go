@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	commonv1 "go.temporal.io/api/common/v1"
@@ -65,7 +64,7 @@ func NewService(
 	authService *auth.Auth,
 	temporalEnv *temporal.Environment,
 ) *Service {
-	logger = logger.With(attr.SlogComponent("agents-api"))
+	logger = logger.With(attr.SlogComponent("agents_api"))
 
 	agentsService := agentspkg.NewService(
 		logger,
@@ -82,7 +81,7 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/agentworkflows"),
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agentworkflows"),
 		logger:        logger,
 		agentsService: agentsService,
 		db:            db,

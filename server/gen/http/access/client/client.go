@@ -49,22 +49,6 @@ type Client struct {
 	// updateMemberRole endpoint.
 	UpdateMemberRoleDoer goahttp.Doer
 
-	// ListGrants Doer is the HTTP client used to make requests to the listGrants
-	// endpoint.
-	ListGrantsDoer goahttp.Doer
-
-	// UpsertGrants Doer is the HTTP client used to make requests to the
-	// upsertGrants endpoint.
-	UpsertGrantsDoer goahttp.Doer
-
-	// RemoveGrants Doer is the HTTP client used to make requests to the
-	// removeGrants endpoint.
-	RemoveGrantsDoer goahttp.Doer
-
-	// RemovePrincipalGrants Doer is the HTTP client used to make requests to the
-	// removePrincipalGrants endpoint.
-	RemovePrincipalGrantsDoer goahttp.Doer
-
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -85,23 +69,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRolesDoer:             doer,
-		GetRoleDoer:               doer,
-		CreateRoleDoer:            doer,
-		UpdateRoleDoer:            doer,
-		DeleteRoleDoer:            doer,
-		ListScopesDoer:            doer,
-		ListMembersDoer:           doer,
-		UpdateMemberRoleDoer:      doer,
-		ListGrantsDoer:            doer,
-		UpsertGrantsDoer:          doer,
-		RemoveGrantsDoer:          doer,
-		RemovePrincipalGrantsDoer: doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ListRolesDoer:        doer,
+		GetRoleDoer:          doer,
+		CreateRoleDoer:       doer,
+		UpdateRoleDoer:       doer,
+		DeleteRoleDoer:       doer,
+		ListScopesDoer:       doer,
+		ListMembersDoer:      doer,
+		UpdateMemberRoleDoer: doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
 	}
 }
 
@@ -292,102 +272,6 @@ func (c *Client) UpdateMemberRole() goa.Endpoint {
 		resp, err := c.UpdateMemberRoleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "updateMemberRole", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ListGrants returns an endpoint that makes HTTP requests to the access
-// service listGrants server.
-func (c *Client) ListGrants() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListGrantsRequest(c.encoder)
-		decodeResponse = DecodeListGrantsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListGrantsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListGrantsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "listGrants", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// UpsertGrants returns an endpoint that makes HTTP requests to the access
-// service upsertGrants server.
-func (c *Client) UpsertGrants() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeUpsertGrantsRequest(c.encoder)
-		decodeResponse = DecodeUpsertGrantsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpsertGrantsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.UpsertGrantsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "upsertGrants", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// RemoveGrants returns an endpoint that makes HTTP requests to the access
-// service removeGrants server.
-func (c *Client) RemoveGrants() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeRemoveGrantsRequest(c.encoder)
-		decodeResponse = DecodeRemoveGrantsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRemoveGrantsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.RemoveGrantsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "removeGrants", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// RemovePrincipalGrants returns an endpoint that makes HTTP requests to the
-// access service removePrincipalGrants server.
-func (c *Client) RemovePrincipalGrants() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeRemovePrincipalGrantsRequest(c.encoder)
-		decodeResponse = DecodeRemovePrincipalGrantsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRemovePrincipalGrantsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.RemovePrincipalGrantsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "removePrincipalGrants", err)
 		}
 		return decodeResponse(resp)
 	}

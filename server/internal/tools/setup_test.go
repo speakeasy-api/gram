@@ -103,12 +103,12 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
-	toolsSvc := tools.NewService(logger, conn, sessionManager)
+	toolsSvc := tools.NewService(logger, tracerProvider, conn, sessionManager)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
-	packagesSvc := packages.NewService(logger, conn, sessionManager)
-	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
-	templatesSvc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)
+	assetsSvc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
+	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager)
+	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
+	templatesSvc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc)
 
 	return ctx, &testInstance{
 		service:        toolsSvc,

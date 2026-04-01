@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.36.3
+
+### Patch Changes
+
+- 3831ca8: Improve initial page load performance by prefetching key queries in parallel with auth, adding preconnect hints, and switching font-display to swap.
+- 19fcd09: when searching mcp logs show available attribute keys
+
+## 0.36.2
+
+### Patch Changes
+
+- b0f341b: Fix Pylon chat widget overlapping playground send button by hiding the default launcher and adding toggle support to the Get Support button.
+- c54bf04: Clean up defunct observability seed tool logic
+
 ## 0.36.1
 
 ### Patch Changes

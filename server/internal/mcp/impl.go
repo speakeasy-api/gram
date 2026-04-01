@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -185,7 +186,6 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP)
 
 	// OAuth 2.1 Authorization Server Metadata
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
@@ -413,51 +413,48 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		oAuthProxyProvider = &providers[0]
 	}
 
-	// Switch handling auth based on both MCP configuration and request context.
+	// Token extraction — best effort for public MCPs with OAuth.
+	// We collect tokens if present but don't return 401 here. Per-tool security
+	// checks in the RPC handlers will enforce auth requirements and return
+	// SecurityUnsatisfiedError which gets translated to HTTP 401 + WWW-Authenticate.
 	//
-	// Possible MCP configurations, for reference:
-	// - "External OAuth" - User-provided OAuth server separate from Gram
-	// - "External MCP OAuth" - OAuth provided by a 3rd party MCP server
-	//   (usually via catalog)
-	// - "OAuth Proxy" - Gram acts as the OAuth2.1 DCR server between MCP client
-	//   & non-DCR OAuth Server
+	// Private MCPs still enforce identity auth at this level since that's user
+	// identity, not per-tool security.
+	oauthRequired := toolset.ExternalOauthServerID.Valid || (oAuthProxyProvider != nil)
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
-		// External OAuth server flow - only accept Authorization header
-		if authToken == "" {
-			s.logger.WarnContext(ctx, "No authorization token provided")
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-		}
-
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        authToken,
-		})
-	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-		// Custom OAuth provider flow - only accept Authorization header
-		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
-		if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
-			s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-			oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
-			if err != nil {
-				s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
-			}
-		}
-		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
-		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-
-		for _, externalSecret := range oauthToken.ExternalSecrets {
+		// External OAuth server flow — collect token if present
+		if authToken != "" {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: externalSecret.SecurityKeys,
-				Token:        externalSecret.Token,
+				securityKeys: []string{},
+				Token:        authToken,
 			})
 		}
+	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+		// Custom OAuth provider flow — validate and collect tokens if present
+		if authToken != "" {
+			oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
+			if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
+				s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+				oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+				if err != nil {
+					s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+				}
+			}
+			if err != nil {
+				s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
+			} else {
+				s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+				for _, externalSecret := range oauthToken.ExternalSecrets {
+					tokenInputs = append(tokenInputs, oauthTokenInputs{
+						securityKeys: externalSecret.SecurityKeys,
+						Token:        externalSecret.Token,
+					})
+				}
+			}
+		}
 	case !toolset.McpIsPublic:
-		// Private MCP - always allow chatSessionJwt fallback since private servers require user authentication
+		// Private MCP — identity auth is required at HTTP level
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 		token := authToken
 		if token == "" {
@@ -478,7 +475,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
-		// Public MCP without OAuth - allow chatSessionJwt fallback
+		// Public MCP without OAuth — allow chatSessionJwt fallback
 		token := authToken
 		if token == "" {
 			token = chatSessionJwt
@@ -537,17 +534,25 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	var batch batchedRawRequest
-	err = json.NewDecoder(r.Body).Decode(&batch)
+	// Decode the raw body first to check for batch requests
+	bodyBytes, err := io.ReadAll(r.Body)
 	switch {
-	case errors.Is(err, io.EOF):
+	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
 		return nil
 	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
 	}
 
-	if len(batch) == 0 {
-		return respondWithNoContent(true, w)
+	// Reject batch (array) requests — batch is deprecated in the MCP spec
+	if err := inv.Check("mcp request",
+		"not a batch request", len(bodyBytes) == 0 || bodyBytes[0] != '[',
+	); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "batch requests are not supported").Log(ctx, s.logger)
+	}
+
+	var req rawRequest
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
@@ -579,12 +584,37 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		apiKeyID:         apiKeyID,
 	}
 
-	body, err := s.handleBatch(ctx, mcpInputs, batch)
+	// Check security schemes before dispatching any RPC — including initialize.
+	// Some MCP clients (e.g. Claude Desktop) require 401 on initialize to trigger
+	// their OAuth flow, so we can't defer this to individual RPC handlers.
+	satisfied, err := s.checkToolsetSecurity(ctx, toolset, mcpInputs)
+	if err != nil {
+		return err
+	}
+	if !satisfied {
+		if oauthRequired {
+			w.Header().Set(
+				"WWW-Authenticate",
+				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+			)
+		}
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	body, err := s.handleRequest(ctx, mcpInputs, &req)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		return NewErrorFromCause(batch[0].ID, err)
+		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
+		if merr != nil {
+			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bs)
+		return nil
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -595,6 +625,73 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return nil
+}
+
+// checkToolsetSecurity loads the toolset's security variables and checks if the
+// request environment satisfies at least one scheme. Returns true if satisfied
+// (or if the toolset has no security requirements).
+func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_repo.Toolset, payload *mcpInputs) (bool, error) {
+	projectID := mv.ProjectID(payload.projectID)
+	described, err := mv.DescribeToolset(ctx, s.logger, s.db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), &s.toolsetCache)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").Log(ctx, s.logger)
+	}
+
+	schemes := describeToolSecurity(described.SecurityVariables)
+	if len(schemes) == 0 {
+		return true, nil
+	}
+
+	systemEnv, err := s.env.LoadSystemEnv(ctx, payload.projectID, toolset.ID, "", "")
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, s.logger)
+	}
+
+	mergedEnv := toolconfig.NewCaseInsensitiveEnv()
+	for k, v := range systemEnv.All() {
+		mergedEnv.Set(k, v)
+	}
+
+	// Load authenticated user's Gram environment.
+	if payload.environment != "" && payload.authenticated {
+		storedEnvVars, err := s.env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
+		if err != nil && !errors.Is(err, toolconfig.ErrNotFound) {
+			s.logger.WarnContext(ctx, "failed to load user environment for security check", attr.SlogError(err))
+		}
+		for k, v := range storedEnvVars {
+			mergedEnv.Set(k, v)
+		}
+	}
+
+	// Merge MCP request headers.
+	for k, v := range payload.mcpEnvVariables {
+		mergedEnv.Set(k, v)
+	}
+
+	// Map any OAuth tokens to ACCESS_TOKEN env vars on OAuth schemes.
+	var oauthToken string
+	for _, t := range payload.oauthTokenInputs {
+		if t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+	if oauthToken != "" {
+		for _, sv := range described.SecurityVariables {
+			if sv.Type == nil {
+				continue
+			}
+			if *sv.Type == "oauth2" || *sv.Type == "openIdConnect" {
+				for _, envVar := range sv.EnvVariables {
+					if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+						mergedEnv.Set(envVar, oauthToken)
+					}
+				}
+			}
+		}
+	}
+
+	return anySchemeSatisfied(schemes, mergedEnv, oauthToken), nil
 }
 
 func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
@@ -638,118 +735,6 @@ func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUI
 	return result
 }
 
-func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	var err error
-
-	projectSlug := chi.URLParam(r, "project")
-	if projectSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "a project slug must be provided")
-	}
-
-	toolsetSlug := chi.URLParam(r, "toolset")
-	if toolsetSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "a toolset slug must be provided")
-	}
-
-	environmentSlug := chi.URLParam(r, "environment")
-	if environmentSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an environment slug must be provided")
-	}
-
-	sc := security.APIKeyScheme{
-		Name:           constants.KeySecurityScheme,
-		Scopes:         []string{"consumer"},
-		RequiredScopes: []string{},
-	}
-	token := r.Header.Get("Authorization")
-	token = strings.TrimPrefix(token, "Bearer ")
-	token = strings.TrimPrefix(token, "bearer ")
-	ctx, err = s.auth.Authorize(ctx, token, &sc)
-	if err != nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	// Authorize with project
-	sc = security.APIKeyScheme{
-		Name:           constants.ProjectSlugSecuritySchema,
-		Scopes:         []string{},
-		RequiredScopes: []string{},
-	}
-	ctx, err = s.auth.Authorize(ctx, projectSlug, &sc)
-	if err != nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
-
-	// authorization check
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	var batch batchedRawRequest
-	err = json.NewDecoder(r.Body).Decode(&batch)
-	switch {
-	case errors.Is(err, io.EOF):
-		return nil
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
-	}
-
-	if len(batch) == 0 {
-		return respondWithNoContent(true, w)
-	}
-
-	sessionID := parseMcpSessionID(r.Header)
-	w.Header().Set("Mcp-Session-Id", sessionID)
-
-	toolset, err := s.toolsetsRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
-		Slug:      toolsetSlug,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
-	}
-
-	// Load header display names for remapping
-	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
-
-	mcpInputs := &mcpInputs{
-		projectID:        *authCtx.ProjectID,
-		toolset:          toolsetSlug,
-		environment:      environmentSlug,
-		mcpEnvVariables:  parseMcpEnvVariables(r, headerDisplayNames),
-		authenticated:    true,
-		oauthTokenInputs: []oauthTokenInputs{},
-		sessionID:        sessionID,
-		chatID:           r.Header.Get("Gram-Chat-ID"),
-		mode:             resolveToolMode(r, toolset),
-		userID:           authCtx.UserID,
-		externalUserID:   authCtx.ExternalUserID,
-		apiKeyID:         authCtx.APIKeyID,
-	}
-
-	body, err := s.handleBatch(ctx, mcpInputs, batch)
-	switch {
-	case body == nil && err == nil:
-		return respondWithNoContent(true, w)
-	case err != nil:
-		return NewErrorFromCause(batch[0].ID, err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
-	}
-	return nil
-}
-
 // TODO: this is for demo. There probably needs to still be annotation per toolset on if it allows dynamic tool calling
 // Realistically you would need to embed and vectorize ahead of time
 func resolveToolMode(r *http.Request, toolset toolsets_repo.Toolset) ToolMode {
@@ -764,37 +749,6 @@ func resolveToolMode(r *http.Request, toolset toolsets_repo.Toolset) ToolMode {
 	}
 
 	return ToolModeStatic
-}
-
-func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch batchedRawRequest) (json.RawMessage, error) {
-	results := make([]json.RawMessage, 0, len(batch))
-	for _, req := range batch {
-		result, err := s.handleRequest(ctx, payload, req)
-		switch {
-		case result == nil && err == nil:
-			return nil, nil
-		case err != nil:
-			bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
-			if merr != nil {
-				return nil, oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
-			}
-
-			result = bs
-		}
-
-		results = append(results, result)
-	}
-
-	if len(results) == 1 {
-		return results[0], nil
-	} else {
-		m, err := json.Marshal(results)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize results").Log(ctx, s.logger)
-		}
-
-		return m, nil
-	}
 }
 
 // parseMcpEnvVariables: Map potential user provided mcp variables into inputs

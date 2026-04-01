@@ -21,14 +21,16 @@ import (
 )
 
 // fakeWorkOS is a lightweight HTTP handler that mimics the WorkOS API endpoints
-// used by RoleClient. It stores state in memory.
+// used by Client. It stores state in memory.
 type fakeWorkOS struct {
 	mu             sync.Mutex
 	roles          map[string][]roles.Role // orgID → roles
 	memberships    []usermanagement.OrganizationMembership
 	users          map[string]common.User // userID → user
 	orgUsers       map[string][]string    // orgID → []userID
-	memberPageSize int                    // if > 0, paginates ListMembers responses
+	invitations    []usermanagement.Invitation
+	memberPageSize int // if > 0, paginates ListMembers responses
+	invitePageSize int // if > 0, paginates ListInvitations responses
 	nextRoleID     int
 }
 
@@ -89,6 +91,34 @@ func (f *fakeWorkOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// SDK: GET /user_management/users (list)
 	case r.Method == http.MethodGet && path == "/user_management/users":
 		f.handleListUsers(w, r)
+
+	// SDK: POST /user_management/invitations
+	case r.Method == http.MethodPost && path == "/user_management/invitations":
+		f.handleSendInvitation(w, r)
+
+	// SDK: GET /user_management/invitations
+	case r.Method == http.MethodGet && path == "/user_management/invitations":
+		f.handleListInvitations(w, r)
+
+	// SDK: GET /user_management/invitations/by_token/{token}
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/user_management/invitations/by_token/"):
+		f.handleFindInvitationByToken(w, strings.TrimPrefix(path, "/user_management/invitations/by_token/"))
+
+	// SDK: POST /user_management/invitations/{id}/revoke
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/user_management/invitations/") && strings.HasSuffix(path, "/revoke"):
+		f.handleRevokeInvitation(w, extractSegment(path, "/user_management/invitations/", "/revoke"))
+
+	// SDK: POST /user_management/invitations/{id}/resend
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/user_management/invitations/") && strings.HasSuffix(path, "/resend"):
+		f.handleResendInvitation(w, extractSegment(path, "/user_management/invitations/", "/resend"))
+
+	// SDK: GET /user_management/invitations/{id}
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/user_management/invitations/") && !strings.Contains(strings.TrimPrefix(path, "/user_management/invitations/"), "/"):
+		f.handleGetInvitation(w, strings.TrimPrefix(path, "/user_management/invitations/"))
+
+	// SDK: DELETE /user_management/organization_memberships/{id}
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/user_management/organization_memberships/"):
+		f.handleDeleteMembership(w, strings.TrimPrefix(path, "/user_management/organization_memberships/"))
 
 	default:
 		http.NotFound(w, r)
@@ -172,12 +202,13 @@ func (f *fakeWorkOS) handleDeleteRole(w http.ResponseWriter, orgID, slug string)
 
 func (f *fakeWorkOS) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	orgID := r.URL.Query().Get("organization_id")
+	userID := r.URL.Query().Get("user_id")
 	afterCursor := r.URL.Query().Get("after")
 
 	f.mu.Lock()
 	var filtered []usermanagement.OrganizationMembership
 	for _, m := range f.memberships {
-		if m.OrganizationID == orgID {
+		if m.OrganizationID == orgID && (userID == "" || m.UserID == userID) {
 			filtered = append(filtered, m)
 		}
 	}
@@ -244,12 +275,21 @@ func (f *fakeWorkOS) handleGetUser(w http.ResponseWriter, userID string) {
 
 func (f *fakeWorkOS) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	orgID := r.URL.Query().Get("organization_id")
+	email := r.URL.Query().Get("email")
 
 	f.mu.Lock()
 	var all []common.User
-	for _, userID := range f.orgUsers[orgID] {
-		if u, ok := f.users[userID]; ok {
-			all = append(all, u)
+	if orgID == "" {
+		for _, u := range f.users {
+			if email == "" || u.Email == email {
+				all = append(all, u)
+			}
+		}
+	} else {
+		for _, userID := range f.orgUsers[orgID] {
+			if u, ok := f.users[userID]; ok {
+				all = append(all, u)
+			}
 		}
 	}
 	f.mu.Unlock()
@@ -258,6 +298,139 @@ func (f *fakeWorkOS) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		"data":          all,
 		"list_metadata": common.ListMetadata{},
 	})
+}
+
+func (f *fakeWorkOS) handleSendInvitation(w http.ResponseWriter, r *http.Request) {
+	var opts workos.SendInvitationOpts
+	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	invite := usermanagement.Invitation{
+		ID:                  fmt.Sprintf("inv_%d", len(f.invitations)+1),
+		Email:               opts.Email,
+		State:               usermanagement.Pending,
+		Token:               fmt.Sprintf("token_%d", len(f.invitations)+1),
+		AcceptInvitationUrl: fmt.Sprintf("https://example.com/invite/%d", len(f.invitations)+1),
+		OrganizationID:      opts.OrganizationID,
+		InviterUserID:       opts.InviterUserID,
+		ExpiresAt:           "2026-04-02T00:00:00Z",
+		CreatedAt:           "2026-03-26T00:00:00Z",
+		UpdatedAt:           "2026-03-26T00:00:00Z",
+	}
+	f.invitations = append(f.invitations, invite)
+
+	writeJSON(w, invite)
+}
+
+func (f *fakeWorkOS) handleListInvitations(w http.ResponseWriter, r *http.Request) {
+	orgID := r.URL.Query().Get("organization_id")
+	afterCursor := r.URL.Query().Get("after")
+
+	f.mu.Lock()
+	var filtered []usermanagement.Invitation
+	for _, inv := range f.invitations {
+		if inv.OrganizationID == orgID {
+			filtered = append(filtered, inv)
+		}
+	}
+	pageSize := f.invitePageSize
+	f.mu.Unlock()
+
+	start := 0
+	if afterCursor != "" {
+		for i, inv := range filtered {
+			if inv.ID == afterCursor {
+				start = i + 1
+				break
+			}
+		}
+	}
+	page := filtered[start:]
+
+	var nextCursor string
+	if pageSize > 0 && len(page) > pageSize {
+		page = page[:pageSize]
+		nextCursor = page[len(page)-1].ID
+	}
+
+	writeJSON(w, map[string]any{
+		"data":          page,
+		"list_metadata": common.ListMetadata{Before: "", After: nextCursor},
+	})
+}
+
+func (f *fakeWorkOS) handleGetInvitation(w http.ResponseWriter, invitationID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, inv := range f.invitations {
+		if inv.ID == invitationID {
+			writeJSON(w, inv)
+			return
+		}
+	}
+	http.Error(w, "invitation not found", http.StatusNotFound)
+}
+
+func (f *fakeWorkOS) handleFindInvitationByToken(w http.ResponseWriter, token string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, inv := range f.invitations {
+		if inv.Token == token {
+			writeJSON(w, inv)
+			return
+		}
+	}
+	http.Error(w, "invitation not found", http.StatusNotFound)
+}
+
+func (f *fakeWorkOS) handleRevokeInvitation(w http.ResponseWriter, invitationID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for i, inv := range f.invitations {
+		if inv.ID == invitationID {
+			f.invitations[i].State = usermanagement.Revoked
+			f.invitations[i].RevokedAt = "2026-03-27T00:00:00Z"
+			writeJSON(w, f.invitations[i])
+			return
+		}
+	}
+	http.Error(w, "invitation not found", http.StatusNotFound)
+}
+
+func (f *fakeWorkOS) handleResendInvitation(w http.ResponseWriter, invitationID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for i, inv := range f.invitations {
+		if inv.ID == invitationID {
+			f.invitations[i].UpdatedAt = "2026-03-27T00:00:00Z"
+			writeJSON(w, f.invitations[i])
+			return
+		}
+	}
+	http.Error(w, "invitation not found", http.StatusNotFound)
+}
+
+func (f *fakeWorkOS) handleDeleteMembership(w http.ResponseWriter, membershipID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for i, m := range f.memberships {
+		if m.ID == membershipID {
+			f.memberships = append(f.memberships[:i], f.memberships[i+1:]...)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+	http.Error(w, "membership not found", http.StatusNotFound)
 }
 
 // --- helpers ---
@@ -277,15 +450,16 @@ func writeJSON(w http.ResponseWriter, v any) {
 
 // --- test setup ---
 
-func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.RoleClient, *fakeWorkOS) {
+func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.Client, *fakeWorkOS) {
 	t.Helper()
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 
-	client := workos.NewRoleClient("test-api-key", workos.RoleClientOpts{
+	client, err := workos.NewClient("test-api-key", workos.ClientOpts{
 		Endpoint:   srv.URL,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	})
+	require.NoError(t, err)
 	return client, fake
 }
 
@@ -433,6 +607,21 @@ func TestRoleClient_ListMembers_Pagination(t *testing.T) {
 	require.Equal(t, "user_3", members[2].UserID)
 }
 
+func TestRoleClient_ListUsersInOrg(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.users["user_1"] = common.User{ID: "user_1", FirstName: "Alice", Email: "alice@example.com"}
+	fake.users["user_2"] = common.User{ID: "user_2", FirstName: "Bob", Email: "bob@example.com"}
+	fake.orgUsers["org_1"] = []string{"user_1", "user_2"}
+	client, _ := newTestClient(t, fake)
+
+	users, err := client.ListUsersInOrg(context.Background(), "org_1")
+	require.NoError(t, err)
+	require.Len(t, users, 2)
+	require.Equal(t, "Alice", users[0].FirstName)
+	require.Equal(t, "Bob", users[1].FirstName)
+}
+
 func TestRoleClient_UpdateMemberRole(t *testing.T) {
 	t.Parallel()
 	fake := newFakeWorkOS()
@@ -467,6 +656,156 @@ func TestRoleClient_GetUser(t *testing.T) {
 	require.Equal(t, "jane@example.com", user.Email)
 }
 
+func TestRoleClient_GetUserByEmail(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.users["user_1"] = common.User{
+		ID:        "user_1",
+		FirstName: "Jane",
+		LastName:  "Doe",
+		Email:     "jane@example.com",
+	}
+	client, _ := newTestClient(t, fake)
+
+	user, err := client.GetUserByEmail(context.Background(), "jane@example.com")
+	require.NoError(t, err)
+	require.Equal(t, "user_1", user.ID)
+	require.Equal(t, "Jane", user.FirstName)
+}
+
+func TestRoleClient_GetOrgMembership(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{
+		{
+			ID:             "mem_1",
+			UserID:         "user_1",
+			OrganizationID: "org_1",
+			Role:           common.RoleResponse{Slug: "admin"},
+			Status:         usermanagement.Active,
+		},
+		{
+			ID:             "mem_2",
+			UserID:         "user_2",
+			OrganizationID: "org_1",
+			Role:           common.RoleResponse{Slug: "member"},
+			Status:         usermanagement.Active,
+		},
+	}
+	client, _ := newTestClient(t, fake)
+
+	membership, err := client.GetOrgMembership(context.Background(), "user_1", "org_1")
+	require.NoError(t, err)
+	require.Equal(t, "mem_1", membership.ID)
+	require.Equal(t, "admin", membership.RoleSlug)
+}
+
+func TestRoleClient_SendInvitation(t *testing.T) {
+	t.Parallel()
+	client, _ := newTestClient(t, newFakeWorkOS())
+
+	invite, err := client.SendInvitation(context.Background(), workos.SendInvitationOpts{
+		Email:          "invitee@example.com",
+		OrganizationID: "org_1",
+		InviterUserID:  "user_1",
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "invitee@example.com", invite.Email)
+	require.Equal(t, workos.InvitationStatePending, invite.State)
+	require.Equal(t, "org_1", invite.OrganizationID)
+}
+
+func TestRoleClient_ListInvitations(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.invitations = []usermanagement.Invitation{
+		{ID: "inv_1", Email: "alice@example.com", State: usermanagement.Pending, OrganizationID: "org_1", Token: "tok_1"},
+		{ID: "inv_2", Email: "bob@example.com", State: usermanagement.Accepted, OrganizationID: "org_1", Token: "tok_2"},
+	}
+	client, _ := newTestClient(t, fake)
+
+	invites, err := client.ListInvitations(context.Background(), "org_1")
+	require.NoError(t, err)
+	require.Len(t, invites, 2)
+	require.Equal(t, workos.InvitationStatePending, invites[0].State)
+	require.Equal(t, workos.InvitationStateAccepted, invites[1].State)
+}
+
+func TestRoleClient_RevokeInvitation(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.invitations = []usermanagement.Invitation{{ID: "inv_1", Email: "alice@example.com", State: usermanagement.Pending, OrganizationID: "org_1", Token: "tok_1"}}
+	client, _ := newTestClient(t, fake)
+
+	invite, err := client.RevokeInvitation(context.Background(), "inv_1")
+	require.NoError(t, err)
+	require.Equal(t, workos.InvitationStateRevoked, invite.State)
+	require.NotEmpty(t, invite.RevokedAt)
+}
+
+func TestRoleClient_ResendInvitation(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.invitations = []usermanagement.Invitation{{ID: "inv_1", Email: "alice@example.com", State: usermanagement.Pending, OrganizationID: "org_1", Token: "tok_1", UpdatedAt: "2026-03-26T00:00:00Z"}}
+	client, _ := newTestClient(t, fake)
+
+	invite, err := client.ResendInvitation(context.Background(), "inv_1")
+	require.NoError(t, err)
+	require.Equal(t, "2026-03-27T00:00:00Z", invite.UpdatedAt)
+}
+
+func TestRoleClient_FindInvitationByToken(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.invitations = []usermanagement.Invitation{{ID: "inv_1", Email: "alice@example.com", State: usermanagement.Pending, OrganizationID: "org_1", Token: "tok_1"}}
+	client, _ := newTestClient(t, fake)
+
+	invite, err := client.FindInvitationByToken(context.Background(), "tok_1")
+	require.NoError(t, err)
+	require.Equal(t, "inv_1", invite.ID)
+	require.Equal(t, "tok_1", invite.Token)
+}
+
+func TestRoleClient_GetInvitation(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.invitations = []usermanagement.Invitation{{ID: "inv_1", Email: "alice@example.com", State: usermanagement.Pending, OrganizationID: "org_1", Token: "tok_1"}}
+	client, _ := newTestClient(t, fake)
+
+	invite, err := client.GetInvitation(context.Background(), "inv_1")
+	require.NoError(t, err)
+	require.Equal(t, "alice@example.com", invite.Email)
+}
+
+func TestRoleClient_DeleteOrganizationMembership(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{{ID: "mem_1", UserID: "user_1", OrganizationID: "org_1", Status: usermanagement.Active}}
+	client, _ := newTestClient(t, fake)
+
+	err := client.DeleteOrganizationMembership(context.Background(), "mem_1")
+	require.NoError(t, err)
+	require.Empty(t, fake.memberships)
+}
+
+func TestRoleClient_ListOrgMemberships(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{
+		{ID: "mem_1", UserID: "user_1", OrganizationID: "org_1", OrganizationName: "Org One", Role: common.RoleResponse{Slug: "admin"}, Status: usermanagement.Active, CreatedAt: "2026-03-26T00:00:00Z", UpdatedAt: "2026-03-26T00:00:00Z"},
+		{ID: "mem_2", UserID: "user_2", OrganizationID: "org_1", OrganizationName: "Org One", Role: common.RoleResponse{Slug: "member"}, Status: usermanagement.Inactive, CreatedAt: "2026-03-27T00:00:00Z", UpdatedAt: "2026-03-27T00:00:00Z"},
+	}
+	client, _ := newTestClient(t, fake)
+
+	memberships, err := client.ListOrgMemberships(context.Background(), "org_1")
+	require.NoError(t, err)
+	require.Len(t, memberships, 2)
+	require.Equal(t, "Org One", memberships[0].Organization)
+	require.Equal(t, "active", memberships[0].Status)
+	require.Equal(t, "inactive", memberships[1].Status)
+}
+
 func TestRoleClient_GetUser_NotFound(t *testing.T) {
 	t.Parallel()
 	client, _ := newTestClient(t, newFakeWorkOS())
@@ -497,7 +836,7 @@ func TestRoleClient_ListOrgUsers(t *testing.T) {
 func TestRoleClient_NilClient(t *testing.T) {
 	t.Parallel()
 
-	var rc *workos.RoleClient
+	var rc *workos.Client
 	_, err := rc.ListRoles(context.Background(), "org_1")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not initialized")

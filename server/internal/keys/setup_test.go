@@ -67,7 +67,7 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := keys.NewService(logger, conn, sessionManager, "local")
+	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local")
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 
 	return ctx, &testInstance{

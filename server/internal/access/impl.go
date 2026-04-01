@@ -18,12 +18,12 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -93,6 +93,10 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
@@ -124,6 +128,11 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 	if err != nil {
 		return nil, err
 	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleID(payload.ID),
+	)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
@@ -161,6 +170,17 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	if slugErr != nil {
 		return nil, slugErr
 	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogAccessRoleSlug(roleSlug),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleSlug(roleSlug),
+	)
+
 	wr, err := s.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
 		Name:        payload.Name,
 		Slug:        roleSlug,
@@ -171,7 +191,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	case errors.As(err, &apiErr) && apiErr.StatusCode == 409:
 		wRoles, listErr := s.roles.ListRoles(ctx, workosOrgID)
 		if listErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, listErr, "list roles after create conflict").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, listErr, "list roles after create conflict").Log(ctx, logger)
 		}
 
 		var existingRole workos.Role
@@ -184,27 +204,32 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 			}
 		}
 		if !ok {
-			return nil, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, logger)
 		}
 
 		wr = &existingRole
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, logger)
 	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleID(wr.ID),
+	)
 
 	// Stop before assigning members if grant sync fails. That can leave behind a
 	// newly created WorkOS role with no local grants, but it avoids assigning users
 	// to a role whose effective permissions are incomplete or unknown. Returning an
 	// error makes the setup retryable without creating accidental access.
 	if err := syncGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID, wr.Slug, roleGrantPayloads(payload.Grants)); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, logger)
 	}
 
 	assignedCount := 0
 	if len(payload.MemberIds) > 0 {
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 		}
 
 		membershipByUser := membershipsByUserID(members)
@@ -216,14 +241,32 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 			}
 
 			if _, err := s.roles.UpdateMemberRole(ctx, membershipID, wr.Slug); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, logger)
 			}
 
 			assignedCount++
 		}
 	}
 
-	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, *wr, assignedCount)
+	createdRole, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, *wr, assignedCount)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := audit.LogAccessRoleCreate(ctx, s.db, audit.LogAccessRoleCreateEvent{
+		OrganizationID:    ac.ActiveOrganizationID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:  ac.Email,
+		ActorSlug:         nil,
+		RoleID:            wr.ID,
+		RoleName:          createdRole.Name,
+		RoleSlug:          wr.Slug,
+		RoleSnapshotAfter: createdRole,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log access role creation").Log(ctx, logger)
+	}
+
+	return createdRole, nil
 }
 
 // UpdateRole preserves the same split of responsibilities as creation: WorkOS
@@ -233,18 +276,34 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, err
 	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogAccessRoleID(payload.ID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleID(payload.ID),
+	)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
 	}
 
 	currentRole, ok := findRoleByID(wRoles, payload.ID)
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
 	}
+	logger = logger.With(attr.SlogAccessRoleSlug(currentRole.Slug))
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleSlug(currentRole.Slug),
+	)
 	if isSystemRole(currentRole.Slug) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "system roles cannot be updated").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "system roles cannot be updated").Log(ctx, logger)
 	}
 	if payload.Name != nil {
 		if _, err := slugify(*payload.Name); err != nil {
@@ -252,29 +311,34 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		}
 	}
 
+	membersBefore, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
+	}
+	memberCountsBefore := countMembersByRoleSlug(membersBefore)
+	existingRole, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, currentRole, memberCountsBefore[currentRole.Slug])
+	if err != nil {
+		return nil, err
+	}
+
 	updatedRole, err := s.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
 		Name:        payload.Name,
 		Description: payload.Description,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update role in workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update role in workos").Log(ctx, logger)
 	}
 
 	// As with role creation, member reassignment happens after local grant sync so
 	// a failed sync never leaves users attached to a role with incomplete access.
 	if payload.Grants != nil {
 		if err := syncGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID, currentRole.Slug, roleGrantPayloads(payload.Grants)); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, logger)
 		}
 	}
 
 	if payload.MemberIds != nil {
-		members, err := s.roles.ListMembers(ctx, workosOrgID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
-		}
-
-		membershipByUser := membershipsByUserID(members)
+		membershipByUser := membershipsByUserID(membersBefore)
 
 		for _, userID := range payload.MemberIds {
 			membershipID, ok := membershipByUser[userID]
@@ -283,19 +347,37 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 			}
 
 			if _, err := s.roles.UpdateMemberRole(ctx, membershipID, currentRole.Slug); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "assign members to updated role").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "assign members to updated role").Log(ctx, logger)
 			}
 		}
 	}
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 	}
 
 	memberCounts := countMembersByRoleSlug(members)
+	updatedRoleView, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, *updatedRole, memberCounts[updatedRole.Slug])
+	if err != nil {
+		return nil, err
+	}
 
-	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, *updatedRole, memberCounts[currentRole.Slug])
+	if err := audit.LogAccessRoleUpdate(ctx, s.db, audit.LogAccessRoleUpdateEvent{
+		OrganizationID:     ac.ActiveOrganizationID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:   ac.Email,
+		ActorSlug:          nil,
+		RoleID:             updatedRole.ID,
+		RoleName:           updatedRoleView.Name,
+		RoleSlug:           updatedRole.Slug,
+		RoleSnapshotBefore: existingRole,
+		RoleSnapshotAfter:  updatedRoleView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log access role update").Log(ctx, logger)
+	}
+
+	return updatedRoleView, nil
 }
 
 // DeleteRole removes local grants before deleting the WorkOS role so retries can
@@ -305,29 +387,57 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	if err != nil {
 		return err
 	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogAccessRoleID(payload.ID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleID(payload.ID),
+	)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
 	}
 
 	currentRole, ok := findRoleByID(wRoles, payload.ID)
 	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
 	}
+	logger = logger.With(attr.SlogAccessRoleSlug(currentRole.Slug))
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleSlug(currentRole.Slug),
+	)
 	if isSystemRole(currentRole.Slug) {
-		return oops.E(oops.CodeBadRequest, nil, "system roles cannot be deleted").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "system roles cannot be deleted").Log(ctx, logger)
 	}
 
 	if _, err := repo.New(s.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, currentRole.Slug),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete grants for deleted role").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "delete grants for deleted role").Log(ctx, logger)
 	}
 
 	if err := s.roles.DeleteRole(ctx, workosOrgID, currentRole.Slug); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete role in workos").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "delete role in workos").Log(ctx, logger)
+	}
+
+	if err := audit.LogAccessRoleDelete(ctx, s.db, audit.LogAccessRoleDeleteEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		RoleID:           currentRole.ID,
+		RoleName:         currentRole.Name,
+		RoleSlug:         currentRole.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log access role deletion").Log(ctx, logger)
 	}
 
 	return nil
@@ -336,9 +446,14 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 // ListScopes exposes the stable set of grantable scopes so clients can build
 // role editing UX without hardcoding permission definitions.
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
-	if _, err := s.authContext(ctx); err != nil {
+	ac, err := s.authContext(ctx)
+	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
 	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
 
 	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
 		{Slug: string(ScopeOrgRead), Description: "Read organization metadata and members.", ResourceType: "org"},
@@ -355,9 +470,14 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 // identifiers while decorating them with the role information the UI needs.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
 	_, workosOrgID, err := s.roleOrgContext(ctx)
+	ac, _ := s.authContext(ctx)
 	if err != nil {
 		return nil, err
 	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
 
 	roles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
@@ -405,10 +525,22 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	if err != nil {
 		return nil, err
 	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogAccessMemberID(payload.UserID),
+		attr.SlogAccessRoleID(payload.RoleID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessMemberID(payload.UserID),
+		attr.AccessRoleID(payload.RoleID),
+	)
 
 	roles, err := s.roles.ListRoles(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
 	}
 
 	roleSlug := ""
@@ -419,175 +551,95 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		}
 	}
 	if roleSlug == "" {
-		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
 	}
+	logger = logger.With(attr.SlogAccessRoleSlug(roleSlug))
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleSlug(roleSlug),
+	)
 
 	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
 	}
 	if !connectedUser.WorkosID.Valid || connectedUser.WorkosID.String == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").Log(ctx, logger)
 	}
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
+	}
+
+	roleIDBySlug := make(map[string]string, len(roles))
+	for _, role := range roles {
+		roleIDBySlug[role.Slug] = role.ID
 	}
 
 	membershipID := ""
+	var existingMember workos.Member
 	for _, member := range members {
 		if member.UserID == connectedUser.WorkosID.String {
 			membershipID = member.ID
+			existingMember = member
 			break
 		}
 	}
 	if membershipID == "" {
-		return nil, oops.E(oops.CodeNotFound, nil, "member not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "member not found").Log(ctx, logger)
 	}
 
 	updatedMember, err := s.roles.UpdateMemberRole(ctx, membershipID, roleSlug)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update member role in workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update member role in workos").Log(ctx, logger)
 	}
 
 	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, logger)
 	}
 	user, ok := users[updatedMember.UserID]
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "member user not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "member user not found").Log(ctx, logger)
 	}
 
-	return &gen.AccessMember{
+	beforeMember := &gen.AccessMember{
+		ID:       connectedUser.ID,
+		Name:     formatUserName(user),
+		Email:    user.Email,
+		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
+		RoleID:   roleIDBySlug[existingMember.RoleSlug],
+		JoinedAt: conv.Default(existingMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+	}
+	afterMember := &gen.AccessMember{
 		ID:       connectedUser.ID,
 		Name:     formatUserName(user),
 		Email:    user.Email,
 		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
 		RoleID:   payload.RoleID,
 		JoinedAt: conv.Default(updatedMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-	}, nil
-}
-
-func (s *Service) ListGrants(ctx context.Context, payload *gen.ListGrantsPayload) (*gen.ListGrantsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	rows, err := repo.New(s.db).ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		PrincipalUrn:   conv.PtrValOr(payload.PrincipalUrn, ""),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list principal grants").Log(ctx, s.logger)
+	if err := audit.LogAccessMemberRoleUpdate(ctx, s.db, audit.LogAccessMemberRoleUpdateEvent{
+		OrganizationID:       ac.ActiveOrganizationID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:     ac.Email,
+		ActorSlug:            nil,
+		MemberID:             connectedUser.ID,
+		MemberName:           afterMember.Name,
+		MemberEmail:          afterMember.Email,
+		MemberSnapshotBefore: beforeMember,
+		MemberSnapshotAfter:  afterMember,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log access member role update").Log(ctx, logger)
 	}
 
-	grants := make([]*gen.Grant, len(rows))
-	for i, row := range rows {
-		grants[i] = grantFromRow(row)
-	}
-
-	return &gen.ListGrantsResult{Grants: grants}, nil
-}
-
-func (s *Service) UpsertGrants(ctx context.Context, payload *gen.UpsertGrantsPayload) (*gen.UpsertGrantsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to access grants").Log(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	tr := repo.New(dbtx)
-
-	grants := make([]*gen.Grant, 0, len(payload.Grants))
-
-	for _, form := range payload.Grants {
-		if form == nil {
-			continue
-		}
-
-		row, err := tr.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PrincipalUrn:   form.PrincipalUrn,
-			Scope:          form.Scope,
-			Resource:       form.Resource,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to add or update grant").Log(ctx, s.logger)
-		}
-
-		grants = append(grants, grantFromRow(row))
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated grants").Log(ctx, s.logger)
-	}
-
-	return &gen.UpsertGrantsResult{Grants: grants}, nil
-}
-
-func (s *Service) RemoveGrants(ctx context.Context, payload *gen.RemoveGrantsPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access grants").Log(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	tr := repo.New(dbtx)
-
-	for _, entry := range payload.Grants {
-		if entry == nil {
-			continue
-		}
-
-		_, err = tr.DeletePrincipalGrantByTuple(ctx, repo.DeletePrincipalGrantByTupleParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PrincipalUrn:   entry.PrincipalUrn,
-			Scope:          entry.Scope,
-			Resource:       entry.Resource,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to remove grant").Log(ctx, s.logger)
-		}
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to save grant removals").Log(ctx, s.logger)
-	}
-
-	return nil
-}
-
-func (s *Service) RemovePrincipalGrants(ctx context.Context, payload *gen.RemovePrincipalGrantsPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	_, err := repo.New(s.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		PrincipalUrn:   payload.PrincipalUrn,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to remove principal grants").Log(ctx, s.logger)
-	}
-
-	return nil
+	return afterMember, nil
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -612,6 +664,10 @@ func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContex
 	if !org.WorkosID.Valid || org.WorkosID.String == "" {
 		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
 	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
 
 	return ac, org.WorkosID.String, nil
 }
@@ -718,19 +774,6 @@ func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string,
 	}
 
 	return user, nil
-}
-
-func grantFromRow(row repo.PrincipalGrant) *gen.Grant {
-	return &gen.Grant{
-		ID:             row.ID.String(),
-		OrganizationID: row.OrganizationID,
-		PrincipalUrn:   row.PrincipalUrn.String(),
-		PrincipalType:  row.PrincipalType,
-		Scope:          row.Scope,
-		Resource:       row.Resource,
-		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
-	}
 }
 
 func slugify(name string) (string, error) {

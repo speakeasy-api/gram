@@ -71,6 +71,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent("clickhouse"))
 	nilFunc := func(context.Context) error { return nil }
 
 	host := c.String("clickhouse-host")
@@ -175,7 +176,7 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 			Name:    "pgx",
 			Options: []trace.TracerOption{},
 		},
-		o11y.NewPGXLogger(logger, consoleLogLevel),
+		o11y.NewPGXLogger(logger.With(attr.SlogComponent("pgx")), consoleLogLevel),
 	)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolcfg)
@@ -411,10 +412,14 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, c *cli.Cont
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
-		return workos.NewRoleClient(apiKey), nil
+		provider, err := workos.NewClient(apiKey)
+		if err != nil {
+			return nil, fmt.Errorf("create WorkOS client: %w", err)
+		}
+		return provider, nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
-		return workos.NewStubRoleClient(), nil
+		return workos.NewStubClient(), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}

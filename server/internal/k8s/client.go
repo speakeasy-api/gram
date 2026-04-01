@@ -36,7 +36,7 @@ func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string) (
 		return &KubernetesClients{
 			Clientset:     nil,
 			DynamicClient: nil,
-			logger:        logger,
+			logger:        logger.With(attr.SlogComponent("k8s_client")),
 			enabled:       false,
 			namespace:     "",
 		}, nil

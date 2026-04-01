@@ -37,7 +37,7 @@ export type ChatOverviewWithResolutions = {
    */
   resolutions: Array<ChatResolution>;
   /**
-   * The source of the chat: Elements, Playground, ClaudeCode
+   * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
   source?: string | undefined;
   /**

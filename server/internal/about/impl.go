@@ -12,6 +12,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/about"
 	srv "github.com/speakeasy-api/gram/server/gen/http/about/server"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 )
 
@@ -24,7 +25,7 @@ var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider) *Service {
 	return &Service{
-		logger: logger,
+		logger: logger.With(attr.SlogComponent("about")),
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/about"),
 	}
 }

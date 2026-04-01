@@ -1,5 +1,25 @@
 # server
 
+## 0.34.1
+
+### Patch Changes
+
+- 9f179d5: Ensure `DeleteProject` returns idempotent success for non-existent project.
+- a1c64a1: Fix toolset cache not being invalidated when a template is deleted.
+- a64842e: Removes grants api endpoints (replaced by roles management).
+
+## 0.34.0
+
+### Minor Changes
+
+- c9d23f8: Adds an API for role, membership and grants management.
+- e177e45: Improve user-facing deployment logs with source processing details and aggregate summary
+
+### Patch Changes
+
+- 0c07035: fix: revert "feat: allow other security schemes when public OAuth is configured"
+- 7978914: Validate that default_environment_id belongs to the caller's project before storing it in MCP metadata
+
 ## 0.33.0
 
 ### Minor Changes

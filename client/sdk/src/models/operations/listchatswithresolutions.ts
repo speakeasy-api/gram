@@ -83,10 +83,6 @@ export type ListChatsWithResolutionsRequest = {
    */
   sortOrder?: SortOrder | undefined;
   /**
-   * Filter by chat source: Elements, ClaudeCode
-   */
-  source?: string | undefined;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -226,7 +222,6 @@ export type ListChatsWithResolutionsRequest$Outbound = {
   offset: number;
   sort_by: string;
   sort_order: string;
-  source?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -247,7 +242,6 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodMiniType<
     offset: z._default(z.int(), 0),
     sortBy: z._default(SortBy$outboundSchema, "created_at"),
     sortOrder: z._default(SortOrder$outboundSchema, "desc"),
-    source: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),

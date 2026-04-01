@@ -12,8 +12,10 @@ import (
 type Key = attribute.Key
 
 const (
+	ErrorIDKey                        = attribute.Key("error.id")
 	ErrorMessageKey                   = attribute.Key("error.message")
-	ExceptionStacktraceKey            = semconv.ExceptionStacktraceKey
+	ErrorStackKey                     = attribute.Key("error.stack")
+	ErrorKindKey                      = attribute.Key("error.kind")
 	ExternalUserIDKey                 = attribute.Key("gram.external_user.id")
 	APIKeyIDKey                       = attribute.Key("gram.api_key.id")
 	ContainerIDKey                    = semconv.ContainerIDKey
@@ -123,7 +125,6 @@ const (
 	EnvironmentSlugKey             = attribute.Key("gram.environment.slug")
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
 	EventSourceKey                 = attribute.Key("gram.event.source")
-	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
 	FunctionIDKey                  = attribute.Key("gram.function.id")
@@ -165,6 +166,9 @@ const (
 	OpenAPIVersionKey              = attribute.Key("gram.openapi.version")
 	OpenRouterKeyLimitKey          = attribute.Key("gram.openrouter.key.limit")
 	OrganizationAccountTypeKey     = attribute.Key("gram.org.account_type")
+	AccessMemberIDKey              = attribute.Key("gram.access.member.id")
+	AccessRoleIDKey                = attribute.Key("gram.access.role.id")
+	AccessRoleSlugKey              = attribute.Key("gram.access.role.slug")
 	OrganizationIDKey              = attribute.Key("gram.org.id")
 	OrganizationSlugKey            = attribute.Key("gram.org.slug")
 	OutcomeKey                     = attribute.Key("gram.outcome")
@@ -265,13 +269,14 @@ const (
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
 func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageKey), v.Error()) }
 
+func ErrorStack(v string) attribute.KeyValue { return ErrorStackKey.String(v) }
+func SlogErrorStack(v string) slog.Attr      { return slog.String(string(ErrorStackKey), v) }
+
+func ErrorKind(v string) attribute.KeyValue { return ErrorKindKey.String(v) }
+func SlogErrorKind(v string) slog.Attr      { return slog.String(string(ErrorKindKey), v) }
+
 func ErrorMessage(v string) attribute.KeyValue { return ErrorMessageKey.String(v) }
 func SlogErrorMessage(v string) slog.Attr      { return slog.String(string(ErrorMessageKey), v) }
-
-func ExceptionStacktrace(v string) attribute.KeyValue { return ExceptionStacktraceKey.String(v) }
-func SlogExceptionStacktrace(v string) slog.Attr {
-	return slog.String(string(ExceptionStacktraceKey), v)
-}
 
 func ContainerID(v string) attribute.KeyValue { return ContainerIDKey.String(v) }
 func SlogContainerID(v string) slog.Attr      { return slog.String(string(ContainerIDKey), v) }
@@ -722,6 +727,15 @@ func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(Ope
 
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
+
+func AccessMemberID(v string) attribute.KeyValue { return AccessMemberIDKey.String(v) }
+func SlogAccessMemberID(v string) slog.Attr      { return slog.String(string(AccessMemberIDKey), v) }
+
+func AccessRoleID(v string) attribute.KeyValue { return AccessRoleIDKey.String(v) }
+func SlogAccessRoleID(v string) slog.Attr      { return slog.String(string(AccessRoleIDKey), v) }
+
+func AccessRoleSlug(v string) attribute.KeyValue { return AccessRoleSlugKey.String(v) }
+func SlogAccessRoleSlug(v string) slog.Attr      { return slog.String(string(AccessRoleSlugKey), v) }
 
 func OrganizationID(v string) attribute.KeyValue { return OrganizationIDKey.String(v) }
 func SlogOrganizationID(v string) slog.Attr      { return slog.String(string(OrganizationIDKey), v) }

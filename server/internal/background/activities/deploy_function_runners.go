@@ -45,7 +45,7 @@ func NewDeployFunctionRunners(
 	enc *encryption.Client,
 ) *DeployFunctionRunners {
 	return &DeployFunctionRunners{
-		logger:         logger.With(attr.SlogComponent("deploy-function-runner")),
+		logger:         logger.With(attr.SlogComponent("deploy_function_runner")),
 		db:             db,
 		deployer:       deployer,
 		defaultVersion: defaultVersion,

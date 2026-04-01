@@ -26,7 +26,7 @@ export type ChatOverview = {
    */
   numMessages: number;
   /**
-   * The source of the chat: Elements, Playground, ClaudeCode
+   * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
   source?: string | undefined;
   /**

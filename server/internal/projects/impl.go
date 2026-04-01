@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -48,11 +48,11 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
 		logger:   logger,
 		db:       db,
 		repo:     repo.New(db),
@@ -373,8 +373,11 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	}
 
 	project, err := s.repo.GetProjectByID(ctx, projectID)
-	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "cannot delete the default project").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "error retrieving project").Log(ctx, s.logger)
 	}
 
 	// The first project (ordered by id ASC) is the default project
