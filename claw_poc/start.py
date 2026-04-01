@@ -182,11 +182,24 @@ root_openclaw.symlink_to(OPENCLAW_HOME)
 # Write sandbox resolv.conf (DNS via public resolver, forwarded through host)
 SANDBOX_RESOLV.write_text("nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
 
-# Fix ownership
+# --- Security: lock down policy files (mirrors DefenseClaw architecture) ---
+# Policy files are owned by root and immutable from inside the sandbox.
+# The openshell-sandbox binary loads them at startup on the host side —
+# the sandbox process cannot modify them to weaken its own restrictions.
+# Even if the sandbox user overwrote the YAML on disk, the running proxy
+# would not reload it (policy is loaded once at startup).
+for policy_file in [POLICY_REGO, POLICY_DATA, SANDBOX_RESOLV]:
+    os.chown(policy_file, 0, 0)       # root:root
+    os.chmod(policy_file, 0o644)       # readable by all, writable only by root
+os.chmod(POLICY_DATA.parent, 0o755)    # /etc/defenseclaw/ traversable but not writable
+
+# Grant sandbox user ownership of its home (OpenClaw config, skills, workspace)
+# but NOT the policy directory
 run(f"chown -R sandbox:sandbox {SANDBOX_HOME}")
 
 log(f"  Sandbox user: sandbox")
-log(f"  OpenClaw home: {OPENCLAW_HOME}")
+log(f"  OpenClaw home: {OPENCLAW_HOME} (owned by sandbox)")
+log(f"  Policy dir: {POLICY_DATA.parent} (owned by root, read-only to sandbox)")
 log(f"  DNS: 8.8.8.8 (forwarded through host-side veth)")
 
 # ---------------------------------------------------------------
