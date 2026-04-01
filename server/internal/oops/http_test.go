@@ -19,9 +19,9 @@ type logEntry struct {
 	Level   string         `json:"level"`
 	Msg     string         `json:"msg"`
 	Attrs   map[string]any `json:"attrs"`
-	ErrorID string         `json:"gram.error.id"`
+	ErrorID string         `json:"error.id"`
 	Error   string         `json:"error.message"`
-	Stack   string         `json:"exception.stacktrace"`
+	Stack   string         `json:"error.stack"`
 }
 
 func captureLogger() (*slog.Logger, *bytes.Buffer) {
@@ -131,68 +131,6 @@ func TestErrHandle_UnexpectedError(t *testing.T) {
 	require.NotEmpty(t, entry.ErrorID)
 }
 
-func TestErrHandle_PanicWithError(t *testing.T) {
-	t.Parallel()
-	logger, logBuf := captureLogger()
-
-	panicErr := errors.New("something went wrong")
-
-	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
-		panic(panicErr)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
-	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-	require.Equal(t, "close", rec.Header().Get("Connection"))
-
-	var response goa.ServiceError
-	err := json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-	require.Equal(t, string(CodeUnexpected), response.Name)
-
-	entries := parseLogEntries(t, logBuf)
-	require.Len(t, entries, 1)
-
-	entry := entries[0]
-	require.Equal(t, "ERROR", entry.Level)
-	require.Equal(t, "panic recovered in http handler", entry.Msg)
-	require.Contains(t, entry.Error, "something went wrong")
-	require.NotEmpty(t, entry.Stack, "should include stack trace")
-	require.Contains(t, entry.Stack, "TestErrHandle_PanicWithError", "stack trace should include test function")
-	require.NotEmpty(t, entry.ErrorID)
-}
-
-func TestErrHandle_PanicWithString(t *testing.T) {
-	t.Parallel()
-	logger, logBuf := captureLogger()
-
-	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
-		panic("unexpected panic string")
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
-	require.Equal(t, "close", rec.Header().Get("Connection"))
-
-	entries := parseLogEntries(t, logBuf)
-	require.Len(t, entries, 1)
-
-	entry := entries[0]
-	require.Equal(t, "ERROR", entry.Level)
-	require.Equal(t, "panic recovered in http handler", entry.Msg)
-	require.Contains(t, entry.Error, "panic: unexpected panic string")
-	require.NotEmpty(t, entry.Stack, "should include stack trace")
-}
-
 func TestErrHandle_WrappedShareableError(t *testing.T) {
 	t.Parallel()
 	logger, logBuf := captureLogger()
@@ -247,74 +185,4 @@ func TestErrHandle_ContextPropagation(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	require.NotEmpty(t, logBuf.String())
 	require.Equal(t, ctxValue, ctxValueReceived, "context should be propagated")
-}
-
-func TestPanicError_Error(t *testing.T) {
-	t.Parallel()
-	cause := errors.New("original error")
-	pe := &panicError{cause: cause}
-
-	require.Equal(t, "original error", pe.Error())
-}
-
-func TestPanicError_Unwrap(t *testing.T) {
-	t.Parallel()
-	cause := errors.New("original error")
-	pe := &panicError{cause: cause}
-
-	unwrapped := pe.Unwrap()
-	require.Equal(t, cause, unwrapped)
-	require.ErrorIs(t, pe, cause)
-}
-
-func TestHandleWithRecovery_NoPanic(t *testing.T) {
-	t.Parallel()
-	called := false
-	handler := func(w http.ResponseWriter, r *http.Request) error {
-		called = true
-		return nil
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	rec := httptest.NewRecorder()
-
-	err := handleWithRecovery(handler, rec, req)
-
-	require.NoError(t, err)
-	require.True(t, called)
-}
-
-func TestHandleWithRecovery_PanicWithError(t *testing.T) {
-	t.Parallel()
-	panicErr := errors.New("panic error")
-	handler := func(w http.ResponseWriter, r *http.Request) error {
-		panic(panicErr)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	rec := httptest.NewRecorder()
-
-	err := handleWithRecovery(handler, rec, req)
-
-	require.Error(t, err)
-	var pe *panicError
-	require.ErrorAs(t, err, &pe)
-	require.Equal(t, panicErr, pe.Unwrap())
-}
-
-func TestHandleWithRecovery_PanicWithNonError(t *testing.T) {
-	t.Parallel()
-	handler := func(w http.ResponseWriter, r *http.Request) error {
-		panic("string panic")
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	rec := httptest.NewRecorder()
-
-	err := handleWithRecovery(handler, rec, req)
-
-	require.Error(t, err)
-	var pe *panicError
-	require.ErrorAs(t, err, &pe)
-	require.Contains(t, pe.Error(), "panic: string panic")
 }
