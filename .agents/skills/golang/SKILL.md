@@ -194,7 +194,7 @@ type Service struct {
 
 func NewService(cfg Config) *Service {
     if cfg.APIKey == "" {
-        return &Service{}
+        return nil
     }
 
     return &Service{client: vendor.New(cfg.APIKey)}
