@@ -153,3 +153,34 @@ func TestProjectsService_DeleteProject(t *testing.T) {
 		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	})
 }
+
+func TestProjectsService_DeleteProject_AlreadyDeletedDoesNotCreateAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	project := createProjectForDeletion(t, ctx, ti, "double-delete-"+uuid.NewString()[:8])
+
+	// First delete should succeed
+	err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
+		ID: project.ID.String(),
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
+	require.NoError(t, err)
+
+	// Second delete should not return a misleading error; the soft-deleted
+	// project is invisible to the access check so we expect CodeForbidden.
+	err = ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
+		ID: project.ID.String(),
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	// No additional audit log should be created
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}

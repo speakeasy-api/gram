@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -372,8 +373,11 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	}
 
 	project, err := s.repo.GetProjectByID(ctx, projectID)
-	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "cannot delete the default project").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "error retrieving project").Log(ctx, s.logger)
 	}
 
 	// The first project (ordered by id ASC) is the default project
