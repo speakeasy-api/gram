@@ -679,7 +679,7 @@ test("resource() adds resources to manifest", () => {
   ]);
 });
 
-test("uiResource() sets mimeType to text/html+mcp", () => {
+test("uiResource() sets mimeType to text/html;profile=mcp-app", () => {
   const g = new Gram().uiResource({
     name: "bar-chart",
     uri: "ui://charts/bar-chart",
@@ -693,7 +693,7 @@ test("uiResource() sets mimeType to text/html+mcp", () => {
       name: "bar-chart",
       uri: "ui://charts/bar-chart",
       description: "Interactive bar chart",
-      mimeType: "text/html+mcp",
+      mimeType: "text/html;profile=mcp-app",
     },
   ]);
 });
@@ -775,7 +775,9 @@ test("handleResourceRead() supports lazy function content", async () => {
 
   const response = await g.handleResourceRead({ uri: "ui://dynamic" });
   expect(response.status).toBe(200);
-  expect(response.headers.get("Content-Type")).toBe("text/html+mcp");
+  expect(response.headers.get("Content-Type")).toBe(
+    "text/html;profile=mcp-app",
+  );
   expect(await response.text()).toBe("<html>dynamic</html>");
 });
 
@@ -849,7 +851,7 @@ test("extend() merges resources from another Gram instance", () => {
       name: "r2",
       uri: "ui://r2",
       description: "Resource 2",
-      mimeType: "text/html+mcp",
+      mimeType: "text/html;profile=mcp-app",
     },
   ]);
 });

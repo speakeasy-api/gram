@@ -328,7 +328,8 @@ export class Gram<
   }
 
   /**
-   * Registers a UI resource (MCP Apps / SEP-1865) with `text/html+mcp` MIME type.
+   * Registers a UI resource (MCP Apps / SEP-1865) with
+   * `text/html;profile=mcp-app` MIME type.
    *
    * Accepts either raw `content` (full HTML string) or `body` + optional `styles`
    * which are wrapped in an HTML scaffold with a `Gram.onData(cb)` helper injected.

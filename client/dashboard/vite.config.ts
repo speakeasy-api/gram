@@ -14,14 +14,6 @@ if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
   cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
 }
 
-function createLocalProxy(serverUrl: string) {
-  return {
-    target: serverUrl,
-    changeOrigin: true,
-    secure: false,
-  };
-}
-
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -95,13 +87,13 @@ export default defineConfig(({ command }) => {
       // (Eg: gram_session) to the server.
       proxy: serverUrl
         ? {
-            "/rpc": createLocalProxy(serverUrl),
-            "/chat": createLocalProxy(serverUrl),
-            "/mcp": createLocalProxy(serverUrl),
-            "/oauth": createLocalProxy(serverUrl),
-            "/oauth-external": createLocalProxy(serverUrl),
-            "/.well-known": createLocalProxy(serverUrl),
-            "/v1": createLocalProxy(serverUrl),
+            "/rpc": serverUrl,
+            "/chat": serverUrl,
+            "/mcp": serverUrl,
+            "/oauth": serverUrl,
+            "/oauth-external": serverUrl,
+            "/.well-known": serverUrl,
+            "/v1": serverUrl,
           }
         : undefined,
     },
