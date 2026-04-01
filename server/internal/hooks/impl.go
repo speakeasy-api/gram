@@ -266,7 +266,10 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 		}),
 	)
 
-	s.recordToolEvent(ctx, payload)
+	// Record tool events to ClickHouse (skip conversation events — those are handled by their specific handlers writing to PG)
+	if !isConversationEvent(payload.HookEventName) {
+		s.recordToolEvent(ctx, payload)
+	}
 
 	// Route to appropriate handler based on hook type
 	switch payload.HookEventName {
