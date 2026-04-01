@@ -46,6 +46,26 @@ def docker_exec(cmd, timeout=120):
     )
 
 
+def sandbox_curl(url, timeout=30):
+    """Run curl inside the OpenShell sandbox namespace to test network policy.
+
+    Uses nsenter to enter the gateway's network namespace, where all traffic
+    goes through the OpenShell CONNECT proxy (OPA policy enforced).
+    Returns (success: bool, output: str).
+    """
+    cmd = (
+        f"docker exec {CONTAINER_NAME} "
+        f'bash -c \'GW_PID=$(pgrep -f openclaw-gateway | head -1); '
+        f"nsenter --target $GW_PID --net -- "
+        f"curl -sf --proxy http://10.200.0.1:3128 --max-time {timeout} {url}'"
+    )
+    print(f"  $ {cmd.split(CONTAINER_NAME)[1].strip()}")
+    result = subprocess.run(
+        cmd, shell=True, capture_output=True, text=True, timeout=timeout + 10,
+    )
+    return result.returncode == 0, result.stdout or result.stderr or ""
+
+
 # =========================================================================
 # Step 1: Tear down existing container
 # =========================================================================
@@ -159,11 +179,11 @@ print('Device scopes updated')
 " """)
 
 # =========================================================================
-# Step 5: Send a prompt
+# Step 5: Send a prompt (MCP tool call via Gram)
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 5: Send prompt to OpenClaw agent")
+print("Step 5: Send prompt to OpenClaw agent (MCP tool call)")
 print("=" * 60)
 
 print()
@@ -188,64 +208,57 @@ for line in response.splitlines():
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 6: Fetch example.com (ALLOWED in OpenShell policy)")
+print("Step 6: curl example.com from sandbox (ALLOWED in OpenShell policy)")
 print("=" * 60)
 
 print()
-print('  Prompt: "Fetch http://example.com and tell me the page title"')
+print("  curl --proxy http://10.200.0.1:3128 https://example.com")
 print()
 
-response = docker_exec(
-    "openclaw agent --local --session-id poc-fetch-allowed "
-    '-m "Fetch http://example.com using web_fetch and tell me the page title. Be brief."',
-    timeout=120,
-)
-
-example_ok = False
-for line in response.splitlines():
-    if line.startswith("[") and ("]" in line[:40]):
-        continue
-    if line.strip():
-        print(f"  {line}")
-        if "example" in line.lower():
-            example_ok = True
+ok, output = sandbox_curl("https://example.com")
+example_ok = ok and "Example" in output
 
 if example_ok:
-    print("\n  PASS: example.com reachable (in OpenShell allow list)")
+    print("  PASS: example.com reachable (allowed by OPA policy)")
 else:
-    print("\n  WARN: could not confirm example.com content")
+    print(f"  FAIL: example.com not reachable (ok={ok})")
+    if output:
+        print(f"  output: {output.strip()[:200]}")
+
+# Check proxy log
+proxy_log = run(f"docker logs {CONTAINER_NAME} 2>&1 | grep 'CONNECT.*example.com'", check=False)
+if proxy_log:
+    print(f"  Proxy log: {proxy_log.split('action=')[1].split(' ')[0] if 'action=' in proxy_log else 'seen'}")
 
 # =========================================================================
 # Step 7: Test network policy — blocked host (asdf.com)
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 7: Fetch asdf.com (NOT in OpenShell policy — should be blocked)")
+print("Step 7: curl asdf.com from sandbox (NOT in policy — should be blocked)")
 print("=" * 60)
 
 print()
-print('  Prompt: "Fetch http://asdf.com and tell me what you get"')
+print("  curl --proxy http://10.200.0.1:3128 https://asdf.com")
 print()
 
-response = docker_exec(
-    "openclaw agent --local --session-id poc-fetch-blocked "
-    '-m "Fetch http://asdf.com using web_fetch and tell me exactly what happened. Be brief."',
-    timeout=120,
-)
+ok, output = sandbox_curl("https://asdf.com")
 
-blocked = False
-for line in response.splitlines():
-    if line.startswith("[") and ("]" in line[:40]):
-        continue
-    if line.strip():
-        print(f"  {line}")
-        if any(w in line.lower() for w in ["error", "fail", "block", "refused", "timeout", "unreachable", "unable", "couldn't", "cannot", "denied", "reject"]):
-            blocked = True
-
-if blocked:
-    print("\n  PASS: asdf.com blocked (not in OpenShell policy)")
+if not ok:
+    print("  PASS: asdf.com blocked by OpenShell proxy (connection denied by OPA policy)")
 else:
-    print("\n  FAIL: asdf.com was NOT blocked — network policy not enforced")
+    print("  FAIL: asdf.com was NOT blocked — network policy not enforced")
+    print(f"  Got: {output[:200]}")
+
+# Check proxy deny log
+proxy_log = run(f"docker logs {CONTAINER_NAME} 2>&1 | grep 'CONNECT.*asdf.com'", check=False)
+if proxy_log:
+    # Extract the deny reason
+    if "deny" in proxy_log:
+        reason = proxy_log.split("reason=")[-1].strip('"') if "reason=" in proxy_log else "denied"
+        print(f"  Proxy log: DENIED — {reason[:150]}")
+    else:
+        print(f"  Proxy log: {proxy_log.split('action=')[1].split(' ')[0] if 'action=' in proxy_log else 'seen'}")
 
 # =========================================================================
 # Summary
