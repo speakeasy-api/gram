@@ -1,0 +1,1 @@
+../../plugin-claude/hooks/send_hook.sh
