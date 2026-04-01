@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -66,6 +65,7 @@ var _ gen.Service = (*Service)(nil)
 
 func NewService(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	cfg AuthConfigurations,
@@ -73,7 +73,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
-		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
 		logger:       logger,
 		db:           db,
 		sessions:     sessions,

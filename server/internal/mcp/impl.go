@@ -637,7 +637,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 		return false, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").Log(ctx, s.logger)
 	}
 
-	schemes := toolconfig.DescribeToolSecurity(described.SecurityVariables)
+	schemes := describeToolSecurity(described.SecurityVariables)
 	if len(schemes) == 0 {
 		return true, nil
 	}
@@ -691,7 +691,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 		}
 	}
 
-	return toolconfig.AnySchemeSatisfied(schemes, mergedEnv, oauthToken), nil
+	return anySchemeSatisfied(schemes, mergedEnv, oauthToken), nil
 }
 
 func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {

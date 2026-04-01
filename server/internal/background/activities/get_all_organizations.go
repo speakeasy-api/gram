@@ -17,7 +17,7 @@ type GetAllOrganizations struct {
 
 func NewGetAllOrganizations(logger *slog.Logger, db *pgxpool.Pool) *GetAllOrganizations {
 	return &GetAllOrganizations{
-		logger: logger.With(attr.SlogComponent("get-all-organizations")),
+		logger: logger.With(attr.SlogComponent("get_all_organizations")),
 		repo:   repo.New(db),
 	}
 }

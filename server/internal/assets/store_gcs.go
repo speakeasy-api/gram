@@ -40,7 +40,7 @@ func NewGCSBlobStore(ctx context.Context, logger *slog.Logger, bucketURI string)
 	bucket := client.Bucket(uri.Hostname())
 
 	return &GCSBlobStore{
-		logger:    logger.With(attr.SlogComponent("blob-store-gcs")),
+		logger:    logger.With(attr.SlogComponent("blob_store_gcs")),
 		client:    client,
 		bucket:    bucket,
 		bucketURI: uri,

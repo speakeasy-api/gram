@@ -20,7 +20,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -72,6 +71,7 @@ type Service struct {
 
 func NewService(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
@@ -90,7 +90,7 @@ func NewService(
 		chatSessions:     chatSessions,
 		logger:           logger,
 		repo:             repo.New(db),
-		tracer:           otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:       openRouter,
 		completionClient: completionClient,
 		assetStorage:     assetStorage,

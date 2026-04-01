@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -50,6 +49,7 @@ var _ telem_gen.Auther = (*Service)(nil)
 // NewService creates a telemetry service.
 func NewService(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	chConn clickhouse.Conn,
 	sessions *sessions.Manager,
@@ -57,7 +57,7 @@ func NewService(
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	posthogClient PosthogClient) *Service {
-	logger = logger.With(attr.SlogComponent("logs"))
+	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
 
 	// The sessions and chatSessions parameters may be nil for callers that only need
@@ -76,7 +76,7 @@ func NewService(
 		logger:            logger,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
-		tracer:            otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
 		posthog:           posthogClient,
 		chatSessions:      chatSessions,
 	}

@@ -64,7 +64,7 @@ func newTestVariationsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := variations.NewService(logger, conn, sessionManager)
+	svc := variations.NewService(logger, tracerProvider, conn, sessionManager)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -45,11 +44,11 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
-		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
 		logger:        logger,
 		auth:          auth.New(logger, db, sessions),
 		serverURL:     serverURL,
