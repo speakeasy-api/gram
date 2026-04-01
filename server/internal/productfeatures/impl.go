@@ -42,7 +42,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, redisClient *redis.Client) *Service {
-	logger = logger.With(attr.SlogComponent("productfeatures"))
+	logger = logger.With(attr.SlogComponent("product_features"))
 
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),

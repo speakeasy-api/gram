@@ -53,7 +53,7 @@ type ReadResourcePayload struct {
 }
 
 func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, enc *encryption.Client, token string, scheme *security.JWTScheme) (context.Context, error) {
-	logger = logger.With(attr.SlogComponent("functions-auth"))
+	logger = logger.With(attr.SlogComponent("functions_auth"))
 
 	if scheme == nil || scheme.Name != constants.FunctionTokenSecurityScheme {
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "auth scheme not supported")

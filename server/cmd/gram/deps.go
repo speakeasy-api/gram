@@ -71,6 +71,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent("clickhouse"))
 	nilFunc := func(context.Context) error { return nil }
 
 	host := c.String("clickhouse-host")
@@ -175,7 +176,7 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 			Name:    "pgx",
 			Options: []trace.TracerOption{},
 		},
-		o11y.NewPGXLogger(logger, consoleLogLevel),
+		o11y.NewPGXLogger(logger.With(attr.SlogComponent("pgx")), consoleLogLevel),
 	)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolcfg)

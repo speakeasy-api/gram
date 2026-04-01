@@ -133,7 +133,7 @@ var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache) *Service {
-	logger = logger.With(attr.SlogComponent("mcp_install_page"))
+	logger = logger.With(attr.SlogComponent("mcp_metadata"))
 
 	// Calculate content hash for install page script (for cache busting)
 	scriptHash := sha256.Sum256(hostedPageScriptData)

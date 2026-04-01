@@ -28,6 +28,7 @@ type Auth struct {
 }
 
 func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Auth {
+	logger = logger.With(attr.SlogComponent("authorizer"))
 	return &Auth{
 		logger:   logger,
 		db:       db,

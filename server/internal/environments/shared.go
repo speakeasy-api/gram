@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -25,7 +26,7 @@ type EnvironmentEntries struct {
 
 func NewEnvironmentEntries(logger *slog.Logger, db repo.DBTX, enc *encryption.Client, mcpMetadataRepo *mcpmetadata_repo.Queries) *EnvironmentEntries {
 	return &EnvironmentEntries{
-		logger:          logger,
+		logger:          logger.With(attr.SlogComponent("environment_entries")),
 		repo:            repo.New(db),
 		enc:             enc,
 		mcpMetadataRepo: mcpMetadataRepo,

@@ -65,7 +65,7 @@ func NewService(
 	authService *auth.Auth,
 	temporalEnv *temporal.Environment,
 ) *Service {
-	logger = logger.With(attr.SlogComponent("agents-api"))
+	logger = logger.With(attr.SlogComponent("agents_api"))
 
 	agentsService := agentspkg.NewService(
 		logger,

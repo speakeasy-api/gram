@@ -8,6 +8,8 @@ import (
 	"hash"
 	"log/slog"
 	"sync"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type Pylon struct {
@@ -17,6 +19,8 @@ type Pylon struct {
 }
 
 func NewPylon(logger *slog.Logger, secret string) (*Pylon, error) {
+	logger = logger.With(attr.SlogComponent("pylon"))
+
 	if secret == "" {
 		return &Pylon{logger: logger, enabled: false, hashPool: nil}, nil
 	}

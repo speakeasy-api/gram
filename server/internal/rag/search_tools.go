@@ -56,7 +56,7 @@ func NewToolsetVectorStore(
 	}
 
 	return &ToolsetVectorStore{
-		logger:         logger,
+		logger:         logger.With(attr.SlogComponent("toolset_vector_store")),
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/rag"),
 		db:             db,
 		queries:        repo.New(db),

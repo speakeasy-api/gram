@@ -57,7 +57,7 @@ func NewService(
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	posthogClient PosthogClient) *Service {
-	logger = logger.With(attr.SlogComponent("logs"))
+	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
 
 	// The sessions and chatSessions parameters may be nil for callers that only need
