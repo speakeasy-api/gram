@@ -19,7 +19,7 @@ type logEntry struct {
 	Level   string         `json:"level"`
 	Msg     string         `json:"msg"`
 	Attrs   map[string]any `json:"attrs"`
-	ErrorID string         `json:"gram.error.id"`
+	ErrorID string         `json:"error.id"`
 	Error   string         `json:"error.message"`
 	Stack   string         `json:"error.stack"`
 }
