@@ -905,6 +905,10 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
+  // Delete mcp server state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeletingMcpServer, setIsDeletingMcpServer] = useState(false);
+
   // Export mutation
   const exportMutation = useExportMcpMetadataMutation();
 
@@ -955,16 +959,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const handleDeleteMcpServer = async () => {
     if (!toolset) return;
 
-    if (
-      !confirm(
-        "Are you sure you want to delete this MCP server? This action cannot be undone.",
-      )
-    ) {
-      return;
-    }
-
-    routes.mcp.goTo();
-    const toastId = toast.loading("Deleting MCP server...");
+    setIsDeletingMcpServer(true);
 
     try {
       const externalMcpUrn = toolset.toolUrns?.find((urn) =>
@@ -997,13 +992,14 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       invalidateAllGetPeriodUsage(queryClient);
       refetchDeployment();
 
-      toast.success("MCP server deleted", { id: toastId });
+      toast.success(`MCP server "${toolset.slug}" deleted`);
+      setIsDeleteDialogOpen(false);
+      routes.mcp.goTo();
     } catch (error) {
       console.error("Failed to delete MCP server:", error);
-      toast.error(
-        `Failed to delete: ${error instanceof Error ? error.message : "Unknown error"}`,
-        { id: toastId },
-      );
+      toast.error(`Failed to delete MCP server "${toolset.slug}"`);
+    } finally {
+      setIsDeletingMcpServer(false);
     }
   };
 
@@ -1375,7 +1371,8 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         <Button
           variant="destructive-primary"
           size="md"
-          onClick={handleDeleteMcpServer}
+          onClick={() => setIsDeleteDialogOpen(true)}
+          disabled={isDeleteDialogOpen}
         >
           <Button.LeftIcon>
             <Trash2 className="h-4 w-4" />
@@ -1383,6 +1380,45 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           <Button.Text>Delete MCP Server</Button.Text>
         </Button>
       </div>
+
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeletingMcpServer) setIsDeleteDialogOpen(open);
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Delete MCP Server</Dialog.Title>
+          </Dialog.Header>
+          <div className="space-y-4 py-4">
+            <Type variant="body">
+              <code className="font-mono font-bold px-1 py-0.5 bg-muted rounded">
+                {toolset.name}
+              </code>{" "}
+              and all its configuration will be permanently deleted. Connected
+              clients will immediately lose access. This action cannot be
+              undone.
+            </Type>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="secondary"
+                onClick={() => setIsDeleteDialogOpen(false)}
+                disabled={isDeletingMcpServer}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={handleDeleteMcpServer}
+                disabled={isDeletingMcpServer}
+              >
+                Delete MCP Server
+              </Button>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog>
 
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
