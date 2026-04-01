@@ -453,7 +453,13 @@ func newStartCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			workosClient := workos.New(logger, c.String("workos-api-key"))
+			var workosClient *workos.Client
+			if workosAPIKey := c.String("workos-api-key"); workosAPIKey != "" && workosAPIKey != "unset" {
+				workosClient, err = workos.NewClient(workosAPIKey)
+				if err != nil {
+					return fmt.Errorf("failed to create WorkOS client: %w", err)
+				}
+			}
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {

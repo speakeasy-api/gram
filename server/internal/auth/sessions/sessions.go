@@ -39,7 +39,7 @@ type Manager struct {
 	pylon                  *pylon.Pylon
 	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	billingRepo            billing.Repository
-	workos                 *workos.WorkOS
+	workos                 *workos.Client
 }
 
 func NewManager(
@@ -53,7 +53,7 @@ func NewManager(
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
-	workos *workos.WorkOS,
+	workos *workos.Client,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
 	speakeasyClient := &http.Client{
