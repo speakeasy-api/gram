@@ -1,6 +1,6 @@
-# DefenseClaw x Gram POC
+# DefenseClaw x Gram POC (Fly.io)
 
-Provisions an OpenClaw agent inside an **OpenShell sandbox**, pre-configured with a Gram tenant's MCP servers. LLM calls route through Gram's completions endpoint. Network egress is enforced by OpenShell's OPA/Rego policy engine via HTTP CONNECT proxy.
+Provisions an OpenClaw agent inside an **OpenShell sandbox** on a **Fly.io Firecracker VM**, pre-configured with a Gram tenant's MCP servers. LLM calls route through Gram's completions endpoint. Network egress is enforced by OpenShell's OPA/Rego policy engine via HTTP CONNECT proxy.
 
 ## Stack
 
@@ -8,18 +8,18 @@ Provisions an OpenClaw agent inside an **OpenShell sandbox**, pre-configured wit
 - **DefenseClaw** (GitHub: cisco-ai-defense/defenseclaw) — governance layer (Go binary + Python CLI)
 - **OpenShell** (NVIDIA) — sandbox providing namespace isolation, Landlock LSM, seccomp-BPF, and OPA-enforced network policy
 - **Gram** (app.getgram.ai) — hosts MCP servers + OpenAI-compatible `/chat/completions` endpoint
-- **mcp-remote** (npm) — stdio-to-HTTP bridge (OpenClaw's npm build only supports stdio MCP transports)
+- **Fly.io** — Firecracker microVM runtime (not a Docker container — OpenShell runs natively)
 
 ## Architecture
 
 ```
-Docker container
-├── Host side (10.200.0.1)
+Fly.io Firecracker VM
+├── Host side (10.200.0.1) — root
 │   ├── start.py (entrypoint — provisions everything)
-│   ├── iptables (DNS forwarding, gateway port forwarding)
+│   ├── iptables (DNS forwarding, gateway port DNAT)
 │   └── openshell-sandbox process
 │       └── HTTP CONNECT proxy on :3128 (OPA policy enforced)
-└── OpenShell sandbox (10.200.0.2)
+└── OpenShell sandbox (10.200.0.2) — sandbox user
     ├── Network namespace (veth pair isolation)
     ├── Landlock LSM (filesystem access control)
     ├── seccomp-BPF (syscall filtering)
@@ -32,23 +32,27 @@ Docker container
 
 | File | Purpose |
 |------|---------|
-| `config.py` | All provisioning inputs: Gram credentials, project, guardrail settings, OpenShell network policy. Loads API key from `../.env.local`. |
-| `verify_config.py` | Sanity checks credentials: verifies API key, lists MCP servers, tests a completion, tests a tool call. Run locally before Docker. |
-| `poc.py` | Full end-to-end: tears down old container, builds image, starts it, sends prompts, tests network policy enforcement. |
-| `start.py` | Container entrypoint: fetches MCP servers from Gram API, generates OpenShell policy YAML, starts openshell-sandbox, applies post-sandbox iptables. |
+| `config.py` | Gram credentials for local scripts. Loads API key from `../.env.local`. |
+| `verify_config.py` | Sanity checks credentials: verifies API key, MCP servers, completions, tool calls. |
+| `poc.py` | Full end-to-end: destroys/creates Fly app, deploys, sends prompts, tests network policy. |
+| `start.py` | VM entrypoint: fetches MCP servers from Gram API, generates OpenShell policy YAML, starts sandbox. |
 | `start-openclaw.sh` | Runs INSIDE the OpenShell sandbox: sets HTTP proxy env vars, starts OpenClaw gateway. |
 | `Dockerfile` | Multi-stage build: DefenseClaw Go binary, openshell-sandbox from NVIDIA OCI, OpenClaw + runtime. |
+| `fly.toml` | Fly.io app configuration. |
 
 ## Setup
 
 ```bash
-# 1. Create .env.local in the gram repo root with your API key
+# 1. Authenticate with Fly.io
+fly auth login
+
+# 2. Create .env.local in the gram repo root with your API key
 echo "GRAM_API_KEY=gram_live_xxx" > ../.env.local
 
-# 2. Verify credentials work
+# 3. Verify credentials work
 uv run python verify_config.py
 
-# 3. Run the full POC (builds Docker, starts instance, sends prompts)
+# 4. Run the full POC (deploys to Fly, sends prompts, tests network policy)
 uv run python poc.py
 ```
 
@@ -56,5 +60,13 @@ uv run python poc.py
 
 1. **MCP tool call** — agent calls `pizza-map` tool via Gram's MCP gateway
 2. **Chat completions** — LLM calls route through `Gram-Key` auth to Gram's `/chat/completions`
-3. **Network allow** — `example.com` is in the OpenShell policy, fetch succeeds (via OPA-enforced proxy)
+3. **Network allow** — `example.com` is in the OpenShell policy, curl succeeds (via OPA-enforced proxy)
 4. **Network block** — `asdf.com` is NOT in the OpenShell policy, proxy denies the CONNECT request
+
+## Why Fly.io instead of Docker?
+
+Fly runs Firecracker microVMs, not containers. This means:
+- OpenShell runs **natively** — no `--privileged`, no nested namespaces
+- No Docker-specific iptables bridging between container and sandbox namespaces
+- Each tenant gets a fully isolated VM with its own kernel namespace
+- Fly handles VM lifecycle, auto-stop/start, and persistent volumes

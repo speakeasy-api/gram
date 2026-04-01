@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-DefenseClaw x Gram — Container entrypoint.
+DefenseClaw x Gram — VM entrypoint (Fly.io).
 
 Provisions an OpenClaw instance inside an OpenShell sandbox, pre-configured
 with a Gram tenant's MCP servers and network policy.
+
+On Fly.io, the runtime is a Firecracker microVM (not a Docker container),
+so OpenShell runs natively — no --privileged, no nested namespaces, no
+Docker-specific iptables bridging.
 """
 import json
 import os
@@ -110,7 +114,7 @@ log(f"[2/5] Generating OpenShell network policy...")
 POLICY_DATA.parent.mkdir(parents=True, exist_ok=True)
 POLICY_DATA.write_text(f"""\
 # OpenShell network policy for DefenseClaw x Gram POC
-# Generated at container start — only these endpoints are reachable.
+# Generated at VM start — only these endpoints are reachable.
 # All other connections are denied by OPA policy per-CONNECT.
 
 network_policies:
@@ -179,28 +183,26 @@ if root_openclaw.exists() or root_openclaw.is_symlink():
     root_openclaw.unlink()
 root_openclaw.symlink_to(OPENCLAW_HOME)
 
-# Write sandbox resolv.conf (DNS via public resolver, forwarded through host)
-SANDBOX_RESOLV.write_text("nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
+# Write sandbox resolv.conf pointing to the VM's DNS
+# On Fly, the VM has real DNS at /etc/resolv.conf — use the same nameservers
+vm_resolv = Path("/etc/resolv.conf").read_text()
+SANDBOX_RESOLV.write_text(vm_resolv)
 
 # --- Security: lock down policy files (mirrors DefenseClaw architecture) ---
 # Policy files are owned by root and immutable from inside the sandbox.
 # The openshell-sandbox binary loads them at startup on the host side —
 # the sandbox process cannot modify them to weaken its own restrictions.
-# Even if the sandbox user overwrote the YAML on disk, the running proxy
-# would not reload it (policy is loaded once at startup).
 for policy_file in [POLICY_REGO, POLICY_DATA, SANDBOX_RESOLV]:
     os.chown(policy_file, 0, 0)       # root:root
     os.chmod(policy_file, 0o644)       # readable by all, writable only by root
 os.chmod(POLICY_DATA.parent, 0o755)    # /etc/defenseclaw/ traversable but not writable
 
 # Grant sandbox user ownership of its home (OpenClaw config, skills, workspace)
-# but NOT the policy directory
 run(f"chown -R sandbox:sandbox {SANDBOX_HOME}")
 
 log(f"  Sandbox user: sandbox")
 log(f"  OpenClaw home: {OPENCLAW_HOME} (owned by sandbox)")
 log(f"  Policy dir: {POLICY_DATA.parent} (owned by root, read-only to sandbox)")
-log(f"  DNS: 8.8.8.8 (forwarded through host-side veth)")
 
 # ---------------------------------------------------------------
 # 4. Start OpenShell sandbox
@@ -209,18 +211,17 @@ log("[4/5] Starting OpenShell sandbox...")
 
 os.environ["OPENCLAW_GATEWAY_TOKEN"] = "poc-token"
 
+# On Fly (Firecracker VM), OpenShell runs natively — no unshare --mount
+# hack needed. The VM owns its mounts, so we bind-mount resolv.conf directly.
 # openshell-sandbox creates:
 #   - Network namespace with veth pair (10.200.0.1 <-> 10.200.0.2)
 #   - HTTP CONNECT proxy on 10.200.0.1:3128 (evaluates OPA Rego policy)
 #   - Landlock LSM filesystem restrictions
 #   - seccomp-BPF syscall filters
 # Then drops privileges to sandbox user and execs start-openclaw.sh.
-#
-# unshare --mount isolates the resolv.conf bind-mount so it only
-# affects the sandbox, not the container's own DNS.
 sandbox_proc = subprocess.Popen(
     [
-        "unshare", "--mount", "--", "bash", "-c",
+        "bash", "-c",
         f"mount --bind {SANDBOX_RESOLV} /etc/resolv.conf && "
         f"exec openshell-sandbox "
         f"--policy-rules {POLICY_REGO} "
@@ -256,43 +257,24 @@ if veth_name:
 else:
     log("  WARN: veth pair did not appear in 30s")
 
-# Enable IP forwarding
+# Enable IP forwarding for DNS and gateway port forwarding
 run("sysctl -qw net.ipv4.ip_forward=1")
 run("sysctl -qw net.ipv4.conf.all.route_localnet=1")
 
-# --- Inject iptables INSIDE the sandbox namespace ---
-sandbox_ns_pid = None
-result = run(f"pgrep -P {sandbox_proc.pid}", check=False)
-candidates = (result.stdout.split() if result.stdout else []) + [str(sandbox_proc.pid)]
-for pid in candidates:
-    if Path(f"/proc/{pid}/ns").is_dir():
-        sandbox_ns_pid = pid
-        break
-
-if sandbox_ns_pid:
-    log(f"  Injecting iptables rules inside sandbox namespace (pid {sandbox_ns_pid})...")
-    for port in [3128, 18970, 4000]:
-        run(f"nsenter --target {sandbox_ns_pid} --net -- iptables -I OUTPUT -d 10.200.0.1 -p tcp --dport {port} -j ACCEPT", check=False)
-    for proto in ["udp", "tcp"]:
-        run(f"nsenter --target {sandbox_ns_pid} --net -- iptables -I OUTPUT -p {proto} --dport 53 -j ACCEPT", check=False)
-else:
-    log("  WARN: could not find sandbox namespace PID — skipping iptables injection")
-
-# --- Host-side iptables ---
-
-# DNS forwarding: sandbox -> upstream (8.8.8.8)
+# DNS forwarding: sandbox -> VM's upstream DNS
 run("iptables -A FORWARD -s 10.200.0.0/24 -p udp --dport 53 -j ACCEPT")
 run("iptables -A FORWARD -d 10.200.0.0/24 -p udp --sport 53 -j ACCEPT")
 run("iptables -t nat -A POSTROUTING -s 10.200.0.0/24 -p udp --dport 53 -j MASQUERADE")
 
-# Gateway port forwarding: *:18789 -> sandbox:18789
-run("iptables -t nat -A OUTPUT -d 127.0.0.1 -p tcp --dport 18789 -j DNAT --to-destination 10.200.0.2:18789")
+# Gateway port forwarding: VM:18789 -> sandbox:18789
+# Fly routes external traffic to internal_port (18789), which we DNAT to the sandbox.
 run("iptables -t nat -A PREROUTING -p tcp --dport 18789 -j DNAT --to-destination 10.200.0.2:18789")
+run("iptables -t nat -A OUTPUT -d 127.0.0.1 -p tcp --dport 18789 -j DNAT --to-destination 10.200.0.2:18789")
 run("iptables -t nat -A POSTROUTING -d 10.200.0.2 -p tcp --dport 18789 -j MASQUERADE")
 run("iptables -A FORWARD -d 10.200.0.2 -p tcp --dport 18789 -j ACCEPT")
 run("iptables -A FORWARD -s 10.200.0.2 -p tcp --sport 18789 -j ACCEPT")
 
-log(f"  DNS forwarding: sandbox -> 8.8.8.8 (via MASQUERADE)")
+log(f"  DNS forwarding: sandbox -> VM upstream (via MASQUERADE)")
 log(f"  Gateway forwarding: *:18789 -> 10.200.0.2:18789")
 
 # Wait for gateway health
@@ -312,10 +294,9 @@ if not gateway_ready:
 # ---------------------------------------------------------------
 # Print connection info
 # ---------------------------------------------------------------
-hostname = os.environ.get("HOSTNAME", "dc-poc")
 log("")
 log("============================================")
-log("DefenseClaw x Gram — RUNNING (OpenShell)")
+log("DefenseClaw x Gram — RUNNING (OpenShell on Fly.io)")
 log("============================================")
 log("")
 log(f"Sandbox:         OpenShell (pid {sandbox_proc.pid})")
@@ -325,7 +306,6 @@ log(f"  Filesystem:    Landlock restricted")
 log(f"  Syscalls:      seccomp-BPF filtered")
 log("")
 log(f"OpenClaw:        ws://10.200.0.2:18789 (inside sandbox)")
-log(f"  Forwarded to:  ws://localhost:18789")
 log(f"MCP servers:     from Gram project '{GRAM_PROJECT_SLUG}'")
 log(f"Completions:     {GRAM_SERVER_URL}/chat/completions (via proxy)")
 log("")
@@ -333,10 +313,9 @@ log(f"Network policy:  {POLICY_DATA}")
 log(f"  Allowed:       {GRAM_HOST}, registry.npmjs.org, example.com")
 log(f"  Blocked:       everything else (asdf.com, api.openai.com, ...)")
 log("")
-log("--- Send a message: ---")
+log("--- Send a message via Fly SSH: ---")
 log("")
-log(f"  docker exec -e OPENCLAW_GATEWAY_TOKEN=poc-token {hostname} \\")
-log(f"    openclaw agent --local -m 'What tools do you have available?'")
+log(f"  fly ssh console -C 'OPENCLAW_GATEWAY_TOKEN=poc-token openclaw agent --local -m \"What tools do you have?\"'")
 log("")
 log("============================================")
 log("")
@@ -348,5 +327,5 @@ def _forward_signal(signum, _frame):
 signal.signal(signal.SIGTERM, _forward_signal)
 signal.signal(signal.SIGINT, _forward_signal)
 
-# Keep container alive — follow sandbox process
+# Keep VM alive — follow sandbox process
 sys.exit(sandbox_proc.wait())

@@ -1,36 +1,30 @@
 #!/usr/bin/env python3
 """
-DefenseClaw x Gram POC — End-to-End
+DefenseClaw x Gram POC — End-to-End (Fly.io)
 
-Tears down any existing POC container, builds and starts a fresh one,
-waits for the gateway to be ready, then sends a prompt through OpenClaw
-to verify the full stack works: Gram completions + MCP tool calls.
-
-The container runs OpenClaw inside an OpenShell sandbox with:
-  - Network namespace isolation (veth pair: 10.200.0.1 ↔ 10.200.0.2)
-  - HTTP CONNECT proxy with OPA/Rego network policy enforcement
-  - Landlock LSM filesystem restrictions
-  - seccomp-BPF syscall filtering
+Tears down any existing Fly app, deploys a fresh one, waits for the
+gateway to be ready, then runs tests to verify:
+  - MCP tool calls via Gram
+  - OpenShell network policy enforcement (allow/deny)
 
 Usage:
+    fly auth login          # one-time
     uv run python poc.py
 """
-import json
 import subprocess
 import sys
 import time
 
 from config import GRAM_SERVER_URL, GRAM_PROJECT_SLUG, GRAM_API_KEY
 
-CONTAINER_NAME = "dc-poc"
-IMAGE_NAME = "defenseclaw-gram:poc"
+APP_NAME = "defenseclaw-gram-poc"
 
 
-def run(cmd, timeout=120, check=True, capture=True):
+def run(cmd, timeout=300, check=True):
     """Run a shell command, return stdout."""
     print(f"  $ {cmd}")
     result = subprocess.run(
-        cmd, shell=True, capture_output=capture, text=True, timeout=timeout,
+        cmd, shell=True, capture_output=True, text=True, timeout=timeout,
     )
     if check and result.returncode != 0:
         stderr = result.stderr.strip() if result.stderr else ""
@@ -38,80 +32,62 @@ def run(cmd, timeout=120, check=True, capture=True):
     return result.stdout.strip() if result.stdout else ""
 
 
-def docker_exec(cmd, timeout=120):
-    """Run a command inside the POC container."""
+def fly_ssh(cmd, timeout=120):
+    """Run a command on the Fly machine via SSH."""
     return run(
-        f"docker exec -e OPENCLAW_GATEWAY_TOKEN=poc-token {CONTAINER_NAME} {cmd}",
+        f"fly ssh console -a {APP_NAME} -C '{cmd}'",
         timeout=timeout,
     )
 
 
-def sandbox_curl(url, timeout=30):
-    """Run curl inside the OpenShell sandbox namespace to test network policy.
-
-    Uses nsenter to enter the gateway's network namespace, where all traffic
-    goes through the OpenShell CONNECT proxy (OPA policy enforced).
-    Returns (success: bool, output: str).
-    """
-    cmd = (
-        f"docker exec {CONTAINER_NAME} "
-        f'bash -c \'GW_PID=$(pgrep -f openclaw-gateway | head -1); '
-        f"nsenter --target $GW_PID --net -- "
-        f"curl -sf --proxy http://10.200.0.1:3128 --max-time {timeout} {url}'"
-    )
-    print(f"  $ {cmd.split(CONTAINER_NAME)[1].strip()}")
+def fly_ssh_ok(cmd, timeout=30):
+    """Run a command on the Fly machine, return (success, output)."""
+    full = f"fly ssh console -a {APP_NAME} -C '{cmd}'"
+    print(f"  $ {cmd}")
     result = subprocess.run(
-        cmd, shell=True, capture_output=True, text=True, timeout=timeout + 10,
+        full, shell=True, capture_output=True, text=True, timeout=timeout + 10,
     )
     return result.returncode == 0, result.stdout or result.stderr or ""
 
 
 # =========================================================================
-# Step 1: Tear down existing container
+# Step 1: Tear down existing app
 # =========================================================================
 print("=" * 60)
-print("Step 1: Tear down existing container")
+print("Step 1: Tear down existing Fly app")
 print("=" * 60)
 
-run(f"docker rm -f {CONTAINER_NAME}", check=False)
+run(f"fly apps destroy {APP_NAME} --yes", check=False)
 print("  Done")
 
 # =========================================================================
-# Step 2: Build image
+# Step 2: Create app and set secrets
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 2: Build Docker image")
+print("Step 2: Create Fly app and set secrets")
 print("=" * 60)
 
-output = run(f"docker build -t {IMAGE_NAME} .", timeout=600)
-# Show last few lines of build output
-for line in output.splitlines()[-3:]:
-    print(f"  {line}")
-
-# =========================================================================
-# Step 3: Start container
-# =========================================================================
-print()
-print("=" * 60)
-print("Step 3: Start container (privileged — OpenShell needs namespaces)")
-print("=" * 60)
-
-# --privileged is required because openshell-sandbox creates:
-#   - Linux namespaces (PID, network, mount, IPC, UTS) via unshare
-#   - veth pair for network isolation
-#   - Landlock LSM policies
-#   - seccomp-BPF filters
-# These kernel operations require elevated capabilities inside Docker.
+run(f"fly apps create {APP_NAME} --org personal")
 run(
-    f"docker run -d --name {CONTAINER_NAME} "
-    f"--privileged "
-    f"-p 18789:18789 "
-    f"-e GRAM_API_KEY='{GRAM_API_KEY}' "
-    f"-e GRAM_PROJECT_SLUG='{GRAM_PROJECT_SLUG}' "
-    f"-e GRAM_SERVER_URL='{GRAM_SERVER_URL}' "
-    f"{IMAGE_NAME}"
+    f"fly secrets set -a {APP_NAME} "
+    f"GRAM_API_KEY={GRAM_API_KEY} "
+    f"GRAM_PROJECT_SLUG={GRAM_PROJECT_SLUG} "
+    f"GRAM_SERVER_URL={GRAM_SERVER_URL}"
 )
+print("  Secrets set")
+
+# =========================================================================
+# Step 3: Deploy
+# =========================================================================
+print()
+print("=" * 60)
+print("Step 3: Deploy to Fly.io")
+print("=" * 60)
+
+output = run(f"fly deploy -a {APP_NAME} --wait-timeout 120", timeout=600)
+for line in output.splitlines()[-5:]:
+    print(f"  {line}")
 
 # =========================================================================
 # Step 4: Wait for gateway
@@ -124,16 +100,14 @@ print("=" * 60)
 ready = False
 logs = ""
 for i in range(45):
-    logs = run(f"docker logs {CONTAINER_NAME}", check=False)
+    logs = run(f"fly logs -a {APP_NAME} --no-tail 2>&1 | tail -50", check=False)
     if "Gateway is ready" in logs or "listening on ws://" in logs:
         ready = True
-        # Print the provisioning summary from logs
         for line in logs.splitlines():
             if any(k in line for k in [
                 "Fetching", "Configured", "listening", "agent model",
                 "via mcp-remote", "allow_", "DENY", "veth pair",
-                "OpenShell", "Sandbox", "Gateway is ready", "Landlock",
-                "seccomp", "Proxy:", "forwarding",
+                "OpenShell", "Sandbox", "Gateway is ready", "Proxy:",
             ]):
                 print(f"  {line.split('] ')[-1] if '] ' in line else line}")
         break
@@ -149,19 +123,16 @@ if not ready:
 
 print("  Gateway is ready")
 
-# Wait for paired.json to be created by the gateway, then grant full scopes
+# Wait for paired.json then grant full scopes
 for attempt in range(15):
     time.sleep(2)
-    result = subprocess.run(
-        f"docker exec {CONTAINER_NAME} test -f /home/sandbox/.openclaw/devices/paired.json",
-        shell=True, capture_output=True,
-    )
-    if result.returncode == 0:
+    ok, _ = fly_ssh_ok("test -f /home/sandbox/.openclaw/devices/paired.json")
+    if ok:
         break
 else:
     print("  WARN: paired.json not found after 30s — device pairing may fail")
 
-docker_exec("""python3 -c "
+fly_ssh("""python3 -c "
 import json
 from pathlib import Path
 paired_path = Path('/home/sandbox/.openclaw/devices/paired.json')
@@ -191,16 +162,15 @@ print()
 print('  Prompt: "Use the pizza-map tool with topping pepperoni and tell me the result"')
 print()
 
-response = docker_exec(
-    "openclaw agent --local --session-id poc-test "
+response = fly_ssh(
+    'OPENCLAW_GATEWAY_TOKEN=poc-token openclaw agent --local --session-id poc-test '
     '-m "Use the pizza-map tool with topping pepperoni and tell me the result"',
     timeout=120,
 )
 
-# Filter out noise lines
 for line in response.splitlines():
     if line.startswith("[") and ("]" in line[:40]):
-        continue  # skip log noise like [bundle-mcp], [agents/model-providers]
+        continue
     if line.strip():
         print(f"  {line}")
 
@@ -213,23 +183,20 @@ print("Step 6: curl example.com from sandbox (ALLOWED in OpenShell policy)")
 print("=" * 60)
 
 print()
-print("  curl --proxy http://10.200.0.1:3128 https://example.com")
-print()
 
-ok, output = sandbox_curl("https://example.com")
-example_ok = ok and "Example" in output
+# curl from inside the sandbox network namespace via the OpenShell proxy
+ok, output = fly_ssh_ok(
+    'bash -c \'GW_PID=$(pgrep -f openclaw-gateway | head -1); '
+    'nsenter --target $GW_PID --net -- '
+    'curl -sf --proxy http://10.200.0.1:3128 --max-time 15 https://example.com\''
+)
 
-if example_ok:
+if ok and "Example" in output:
     print("  PASS: example.com reachable (allowed by OPA policy)")
 else:
     print(f"  FAIL: example.com not reachable (ok={ok})")
     if output:
         print(f"  output: {output.strip()[:200]}")
-
-# Check proxy log
-proxy_log = run(f"docker logs {CONTAINER_NAME} 2>&1 | grep 'CONNECT.*example.com'", check=False)
-if proxy_log:
-    print(f"  Proxy log: {proxy_log.split('action=')[1].split(' ')[0] if 'action=' in proxy_log else 'seen'}")
 
 # =========================================================================
 # Step 7: Test network policy — blocked host (asdf.com)
@@ -240,10 +207,12 @@ print("Step 7: curl asdf.com from sandbox (NOT in policy — should be blocked)"
 print("=" * 60)
 
 print()
-print("  curl --proxy http://10.200.0.1:3128 https://asdf.com")
-print()
 
-ok, output = sandbox_curl("https://asdf.com")
+ok, output = fly_ssh_ok(
+    'bash -c \'GW_PID=$(pgrep -f openclaw-gateway | head -1); '
+    'nsenter --target $GW_PID --net -- '
+    'curl -sf --proxy http://10.200.0.1:3128 --max-time 15 https://asdf.com\''
+)
 
 if not ok:
     print("  PASS: asdf.com blocked by OpenShell proxy (connection denied by OPA policy)")
@@ -252,14 +221,9 @@ else:
     print(f"  Got: {output[:200]}")
 
 # Check proxy deny log
-proxy_log = run(f"docker logs {CONTAINER_NAME} 2>&1 | grep 'CONNECT.*asdf.com'", check=False)
-if proxy_log:
-    # Extract the deny reason
-    if "deny" in proxy_log:
-        reason = proxy_log.split("reason=")[-1].strip('"') if "reason=" in proxy_log else "denied"
-        print(f"  Proxy log: DENIED — {reason[:150]}")
-    else:
-        print(f"  Proxy log: {proxy_log.split('action=')[1].split(' ')[0] if 'action=' in proxy_log else 'seen'}")
+deny_log = run(f"fly logs -a {APP_NAME} --no-tail 2>&1 | grep 'CONNECT.*asdf.com'", check=False)
+if deny_log and "deny" in deny_log:
+    print(f"  Proxy log: DENIED")
 
 # =========================================================================
 # Summary
@@ -269,20 +233,19 @@ print("=" * 60)
 print("POC Complete")
 print("=" * 60)
 print()
-print(f"  Container:    {CONTAINER_NAME}")
-print(f"  Image:        {IMAGE_NAME}")
+print(f"  App:          {APP_NAME}")
+print(f"  Runtime:      Fly.io Firecracker VM")
 print(f"  Sandbox:      OpenShell (namespace + Landlock + seccomp)")
 print(f"  Network:      OPA/Rego policy via HTTP CONNECT proxy")
-print(f"  Gateway:      ws://localhost:18789 (forwarded to 10.200.0.2)")
 print(f"  LLM provider: Gram ({GRAM_SERVER_URL}/chat/completions)")
 print(f"  MCP servers:  from Gram project '{GRAM_PROJECT_SLUG}'")
 print()
 print("  Send more prompts:")
-print(f"    docker exec -e OPENCLAW_GATEWAY_TOKEN=poc-token {CONTAINER_NAME} \\")
-print(f'      openclaw agent --local --session-id mytest -m "your message"')
+print(f"    fly ssh console -a {APP_NAME} -C \\")
+print(f'      \'OPENCLAW_GATEWAY_TOKEN=poc-token openclaw agent --local -m "your message"\'')
 print()
-print("  Interactive shell:")
-print(f"    docker exec -it {CONTAINER_NAME} bash")
+print(f"  View logs:")
+print(f"    fly logs -a {APP_NAME}")
 print()
 print(f"  Tear down:")
-print(f"    docker rm -f {CONTAINER_NAME}")
+print(f"    fly apps destroy {APP_NAME} --yes")
