@@ -26,7 +26,7 @@ import Register from "./pages/login/Register";
 import Logs from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
-import { MCPPage, MCPRoot } from "./pages/mcp/MCPOverview";
+import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
