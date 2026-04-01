@@ -25,6 +25,8 @@ func TestService_CreateRole(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 
 	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
 		Name:        "Custom Builder",
@@ -64,7 +66,7 @@ func TestService_CreateRole(t *testing.T) {
 			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1", "project-2"}},
 			{Scope: string(access.ScopeMCPConnect), Resources: nil},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Custom Builder", role.Name)
@@ -239,7 +241,7 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 		Grants: []*gen.RoleGrant{
 			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "sync grants for created role")

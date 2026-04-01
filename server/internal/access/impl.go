@@ -232,10 +232,24 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 		}
 
-		membershipByUser := membershipsByUserID(members)
+		connectedMembers, err := s.connectedMembers(ctx, ac.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load connected members").Log(ctx, logger)
+		}
+
+		workosIDs := make(map[string]string, len(connectedMembers))
+		for _, cm := range connectedMembers {
+			if !cm.User.WorkosID.Valid || cm.User.WorkosID.String == "" {
+				continue
+			}
+
+			workosIDs[cm.User.ID] = cm.User.WorkosID.String
+		}
+
+		memberIDs := membershipsByLocalUserID(members, workosIDs)
 
 		for _, userID := range payload.MemberIds {
-			membershipID, ok := membershipByUser[userID]
+			membershipID, ok := memberIDs[userID]
 			if !ok {
 				continue
 			}
@@ -338,10 +352,24 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	}
 
 	if payload.MemberIds != nil {
-		membershipByUser := membershipsByUserID(membersBefore)
+		connectedMembers, err := s.connectedMembers(ctx, ac.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load connected members").Log(ctx, logger)
+		}
+
+		workosIDs := make(map[string]string, len(connectedMembers))
+		for _, cm := range connectedMembers {
+			if !cm.User.WorkosID.Valid || cm.User.WorkosID.String == "" {
+				continue
+			}
+
+			workosIDs[cm.User.ID] = cm.User.WorkosID.String
+		}
+
+		memberIDs := membershipsByLocalUserID(membersBefore, workosIDs)
 
 		for _, userID := range payload.MemberIds {
-			membershipID, ok := membershipByUser[userID]
+			membershipID, ok := memberIDs[userID]
 			if !ok {
 				continue
 			}
@@ -466,8 +494,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 	}}, nil
 }
 
-// ListMembers follows the original access API contract by returning WorkOS user
-// identifiers while decorating them with the role information the UI needs.
+// ListMembers returns Gram user identifiers and keeps WorkOS identifiers as an
+// internal implementation detail of access synchronization.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
 	_, workosOrgID, err := s.roleOrgContext(ctx)
 	ac, _ := s.authContext(ctx)
@@ -498,18 +526,35 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
+	connectedMembers, err := s.connectedMembers(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load connected members").Log(ctx, s.logger)
+	}
+	byMembershipID := make(map[string]connectedMember, len(connectedMembers))
+	for _, cm := range connectedMembers {
+		if cm.WorkosMembershipID == "" {
+			continue
+		}
+
+		byMembershipID[cm.WorkosMembershipID] = cm
+	}
+
 	result := make([]*gen.AccessMember, 0, len(members))
 	for _, member := range members {
 		user, ok := users[member.UserID]
 		if !ok {
 			continue
 		}
+		cm, ok := byMembershipID[member.ID]
+		if !ok {
+			continue
+		}
 
 		result = append(result, &gen.AccessMember{
-			ID:       user.ID,
-			Name:     formatUserName(user),
+			ID:       cm.User.ID,
+			Name:     conv.Default(cm.User.DisplayName, formatUserName(user)),
 			Email:    user.Email,
-			PhotoURL: nil,
+			PhotoURL: conv.FromPGText[string](cm.User.PhotoUrl),
 			RoleID:   roleIDBySlug[member.RoleSlug],
 			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		})
@@ -560,7 +605,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		attr.AccessRoleSlug(roleSlug),
 	)
 
-	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
+	connectedUser, err := s.connectedUser(ctx, ac.ActiveOrganizationID, payload.UserID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
 		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, logger)
@@ -718,13 +763,47 @@ func countMembersByRoleSlug(members []workos.Member) map[string]int {
 	return counts
 }
 
-func membershipsByUserID(members []workos.Member) map[string]string {
-	membershipByUser := make(map[string]string, len(members))
-	for _, member := range members {
-		membershipByUser[member.UserID] = member.ID
+func membershipsByLocalUserID(members []workos.Member, workosIDs map[string]string) map[string]string {
+	memberIDs := make(map[string]string, len(members))
+	for localUserID, workosUserID := range workosIDs {
+		for _, member := range members {
+			if member.UserID != workosUserID {
+				continue
+			}
+
+			memberIDs[localUserID] = member.ID
+			break
+		}
 	}
 
-	return membershipByUser
+	return memberIDs
+}
+
+type connectedMember struct {
+	User               usersrepo.User
+	WorkosMembershipID string
+}
+
+func (s *Service) connectedMembers(ctx context.Context, organizationID string) ([]connectedMember, error) {
+	relationships, err := orgrepo.New(s.db).ListOrganizationUsers(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list organization users: %w", err)
+	}
+
+	connectedMembers := make([]connectedMember, 0, len(relationships))
+	for _, relationship := range relationships {
+		user, err := usersrepo.New(s.db).GetUser(ctx, relationship.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("get user %q: %w", relationship.UserID, err)
+		}
+
+		connectedMembers = append(connectedMembers, connectedMember{
+			User:               user,
+			WorkosMembershipID: conv.PtrValOr(conv.FromPGText[string](relationship.WorkosMembershipID), ""),
+		})
+	}
+
+	return connectedMembers, nil
 }
 
 func findRoleByID(roles []workos.Role, id string) (workos.Role, bool) {
@@ -756,8 +835,8 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 	}, nil
 }
 
-func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {
-	hasRelationship, err := orgrepo.New(db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
+func (s *Service) connectedUser(ctx context.Context, organizationID string, userID string) (usersrepo.User, error) {
+	hasRelationship, err := orgrepo.New(s.db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
 		UserID:         userID,
 	})
@@ -768,7 +847,7 @@ func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string,
 		return usersrepo.User{}, errConnectedUserNotFound
 	}
 
-	user, err := usersrepo.New(db).GetUser(ctx, userID)
+	user, err := usersrepo.New(s.db).GetUser(ctx, userID)
 	if err != nil {
 		return usersrepo.User{}, fmt.Errorf("get user %q: %w", userID, err)
 	}

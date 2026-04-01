@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -15,6 +16,11 @@ func TestService_ListMembers(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
@@ -38,20 +44,24 @@ func TestService_ListMembers(t *testing.T) {
 		byID[member.ID] = member
 	}
 
-	require.Equal(t, "Ada Lovelace", byID["user_1"].Name)
-	require.Equal(t, "ada@example.com", byID["user_1"].Email)
-	require.Equal(t, "role_admin", byID["user_1"].RoleID)
-	require.Nil(t, byID["user_1"].PhotoURL)
-	require.Equal(t, "2024-11-15T15:04:05Z", byID["user_1"].JoinedAt)
+	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
+	require.Equal(t, "ada@example.com", byID["local_user_1"].Email)
+	require.Equal(t, "role_admin", byID["local_user_1"].RoleID)
+	require.Nil(t, byID["local_user_1"].PhotoURL)
+	require.Equal(t, "2024-11-15T15:04:05Z", byID["local_user_1"].JoinedAt)
 
-	require.Equal(t, "Grace", byID["user_2"].Name)
-	require.Equal(t, "role_builder", byID["user_2"].RoleID)
+	require.Equal(t, "Grace", byID["local_user_2"].Name)
+	require.Equal(t, "role_builder", byID["local_user_2"].RoleID)
 }
 
 func TestService_ListMembers_WorkOSUsersFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
 	}, nil).Once()

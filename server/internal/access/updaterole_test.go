@@ -23,6 +23,8 @@ func TestService_UpdateRole(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 	name := "Platform Builder"
 	description := "Updated description"
 
@@ -74,7 +76,7 @@ func TestService_UpdateRole(t *testing.T) {
 			{Scope: string(access.ScopeBuildWrite), Resources: []string{"project-1", "project-2"}},
 			{Scope: string(access.ScopeMCPConnect), Resources: nil},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "role_custom", role.ID)
