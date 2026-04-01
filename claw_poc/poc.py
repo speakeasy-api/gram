@@ -6,6 +6,12 @@ Tears down any existing POC container, builds and starts a fresh one,
 waits for the gateway to be ready, then sends a prompt through OpenClaw
 to verify the full stack works: Gram completions + MCP tool calls.
 
+The container runs OpenClaw inside an OpenShell sandbox with:
+  - Network namespace isolation (veth pair: 10.200.0.1 ↔ 10.200.0.2)
+  - HTTP CONNECT proxy with OPA/Rego network policy enforcement
+  - Landlock LSM filesystem restrictions
+  - seccomp-BPF syscall filtering
+
 Usage:
     uv run python poc.py
 """
@@ -68,12 +74,18 @@ for line in output.splitlines()[-3:]:
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 3: Start container")
+print("Step 3: Start container (privileged — OpenShell needs namespaces)")
 print("=" * 60)
 
+# --privileged is required because openshell-sandbox creates:
+#   - Linux namespaces (PID, network, mount, IPC, UTS) via unshare
+#   - veth pair for network isolation
+#   - Landlock LSM policies
+#   - seccomp-BPF filters
+# These kernel operations require elevated capabilities inside Docker.
 run(
     f"docker run -d --name {CONTAINER_NAME} "
-    f"--cap-add=NET_ADMIN "
+    f"--privileged "
     f"-p 18789:18789 "
     f"-e GRAM_API_KEY='{GRAM_API_KEY}' "
     f"-e GRAM_PROJECT_SLUG='{GRAM_PROJECT_SLUG}' "
@@ -86,39 +98,55 @@ run(
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 4: Wait for OpenClaw gateway")
+print("Step 4: Wait for OpenClaw gateway (inside OpenShell sandbox)")
 print("=" * 60)
 
 ready = False
-for i in range(30):
+for i in range(45):
     time.sleep(2)
     logs = run(f"docker logs {CONTAINER_NAME}", check=False)
-    if "listening on ws://" in logs:
+    if "Gateway is ready" in logs or "listening on ws://" in logs:
         ready = True
         # Print the provisioning summary from logs
         for line in logs.splitlines():
-            if any(k in line for k in ["Fetching", "Configured", "listening", "agent model", "via mcp-remote", "Allow ", "DROP"]):
+            if any(k in line for k in [
+                "Fetching", "Configured", "listening", "agent model",
+                "via mcp-remote", "allow_", "DENY", "veth pair",
+                "OpenShell", "Sandbox", "Gateway is ready", "Landlock",
+                "seccomp", "Proxy:", "forwarding",
+            ]):
                 print(f"  {line.split('] ')[-1] if '] ' in line else line}")
         break
     sys.stdout.write(".")
     sys.stdout.flush()
 
 if not ready:
-    print("\n  FAIL: Gateway did not start in 60s")
+    print("\n  FAIL: Gateway did not start in 90s")
     print("  Logs:")
     print(run(f"docker logs {CONTAINER_NAME}", check=False))
     sys.exit(1)
 
 print("  Gateway is ready")
 
-# Wait a bit more for device auto-approval
-time.sleep(5)
+# Wait for paired.json to be created by the gateway, then grant full scopes
+for attempt in range(15):
+    time.sleep(2)
+    result = subprocess.run(
+        f"docker exec {CONTAINER_NAME} test -f /home/sandbox/.openclaw/devices/paired.json",
+        shell=True, capture_output=True,
+    )
+    if result.returncode == 0:
+        break
+else:
+    print("  WARN: paired.json not found after 30s — device pairing may fail")
 
-# Grant full scopes to the auto-approved device
 docker_exec("""python3 -c "
 import json
 from pathlib import Path
-paired_path = Path.home() / '.openclaw/devices/paired.json'
+paired_path = Path('/home/sandbox/.openclaw/devices/paired.json')
+if not paired_path.exists():
+    print('No paired.json yet — skipping scope update')
+    exit(0)
 data = json.loads(paired_path.read_text())
 full_scopes = ['operator.read', 'operator.write', 'operator.admin', 'operator.approvals', 'operator.pairing']
 for device in data.values():
@@ -160,7 +188,7 @@ for line in response.splitlines():
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 6: Fetch example.com (ALLOWED in config)")
+print("Step 6: Fetch example.com (ALLOWED in OpenShell policy)")
 print("=" * 60)
 
 print()
@@ -183,7 +211,7 @@ for line in response.splitlines():
             example_ok = True
 
 if example_ok:
-    print("\n  PASS: example.com reachable (in allow list)")
+    print("\n  PASS: example.com reachable (in OpenShell allow list)")
 else:
     print("\n  WARN: could not confirm example.com content")
 
@@ -192,7 +220,7 @@ else:
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 7: Fetch asdf.com (NOT in config — should be blocked)")
+print("Step 7: Fetch asdf.com (NOT in OpenShell policy — should be blocked)")
 print("=" * 60)
 
 print()
@@ -211,11 +239,11 @@ for line in response.splitlines():
         continue
     if line.strip():
         print(f"  {line}")
-        if any(w in line.lower() for w in ["error", "fail", "block", "refused", "timeout", "unreachable", "unable", "couldn't", "cannot", "denied"]):
+        if any(w in line.lower() for w in ["error", "fail", "block", "refused", "timeout", "unreachable", "unable", "couldn't", "cannot", "denied", "reject"]):
             blocked = True
 
 if blocked:
-    print("\n  PASS: asdf.com blocked (not in allow list)")
+    print("\n  PASS: asdf.com blocked (not in OpenShell policy)")
 else:
     print("\n  FAIL: asdf.com was NOT blocked — network policy not enforced")
 
@@ -229,7 +257,9 @@ print("=" * 60)
 print()
 print(f"  Container:    {CONTAINER_NAME}")
 print(f"  Image:        {IMAGE_NAME}")
-print(f"  Gateway:      ws://localhost:18789")
+print(f"  Sandbox:      OpenShell (namespace + Landlock + seccomp)")
+print(f"  Network:      OPA/Rego policy via HTTP CONNECT proxy")
+print(f"  Gateway:      ws://localhost:18789 (forwarded to 10.200.0.2)")
 print(f"  LLM provider: Gram ({GRAM_SERVER_URL}/chat/completions)")
 print(f"  MCP servers:  from Gram project '{GRAM_PROJECT_SLUG}'")
 print()

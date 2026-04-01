@@ -18,7 +18,7 @@ if _env_local.exists():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip())
+            os.environ[key.strip()] = value.strip()
 
 # ---------------------------------------------------------------------------
 # Gram API
@@ -34,7 +34,7 @@ GUARDRAIL = {
     # Where the guardrail proxy forwards LLM completions (Gram's endpoint)
     # OpenAI-compatible, models need provider/ prefix (e.g. anthropic/claude-sonnet-4.5)
     "upstream_url": f"{GRAM_SERVER_URL}/chat/completions",
-    # Local proxy listen address (inside the container, host-side of veth)
+    # Local proxy listen address (host-side of veth, inside container)
     "listen_host": "10.200.0.1",
     "listen_port": 4000,
     # Policy template
@@ -44,8 +44,12 @@ GUARDRAIL = {
 # ---------------------------------------------------------------------------
 # OpenShell sandbox — network policy
 #
-# Only these endpoints are reachable from inside the sandbox.
-# Everything else (curl, pip, python requests, etc.) is blocked by iptables.
+# These endpoints are reachable from inside the OpenShell sandbox.
+# Traffic goes through OpenShell's HTTP CONNECT proxy on 10.200.0.1:3128,
+# which evaluates the OPA Rego policy per-connection.
+#
+# Connections to hosts NOT listed here are denied by the policy engine.
+# No iptables needed — enforcement is at the proxy layer via OPA/Rego.
 # ---------------------------------------------------------------------------
 OPENSHELL_NETWORK_POLICY = {
     # DefenseClaw sidecar (host-side of veth pair)
@@ -87,6 +91,5 @@ OPENSHELL_NETWORK_POLICY = {
 }
 # Endpoints that are explicitly NOT allowed (agent can't reach these):
 # - LLM providers (api.anthropic.com, api.openai.com) — forced through guardrail proxy
-# - Arbitrary internet — blocked by default-deny iptables rules
-# - asdf.com — intentionally NOT in the allow list (used to test blocking)
-# - Slack/Discord/Telegram — add to policy above if the agent needs them
+# - Arbitrary internet — denied by OPA policy (no matching network_policies entry)
+# - asdf.com — intentionally NOT in the policy (used to test blocking)
