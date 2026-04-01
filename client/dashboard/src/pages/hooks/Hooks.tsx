@@ -38,6 +38,7 @@ import { LogDetailSheet } from "../logs/LogDetailSheet";
 import { TraceLogsList } from "../logs/TraceLogsList";
 import { EditServerNameDialog } from "./EditServerNameDialog";
 import { HooksEmptyState } from "./HooksEmptyState";
+import { HooksSetupButton } from "./HooksSetupDialog";
 import { HookSourceIcon } from "./HookSourceIcon";
 
 const validPresets: DateRangePreset[] = [
@@ -657,12 +658,15 @@ function HooksInnerContent({
                 Monitor hook events and tool executions across all servers
               </p>
             </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link to={orgRoutes.logs.href()}>
-                <Settings className="h-4 w-4" />
-                Configure settings
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <HooksSetupButton />
+              <Button variant="outline" size="sm" asChild>
+                <Link to={orgRoutes.logs.href()}>
+                  <Settings className="h-4 w-4" />
+                  Configure settings
+                </Link>
+              </Button>
+            </div>
           </div>
 
           {/* Summary Tables */}

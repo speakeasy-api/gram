@@ -1,0 +1,20 @@
+{
+  "name": "gram-hooks",
+  "description": "Forward Cursor hooks to Gram for analytics, monitoring, and compliance",
+  "version": "0.0.1",
+  "author": {
+    "name": "Gram",
+    "url": "https://getgram.ai"
+  },
+  "homepage": "https://getgram.ai",
+  "repository": "https://github.com/gram-ai/gram",
+  "license": "MIT",
+  "keywords": [
+    "gram",
+    "hooks",
+    "cursor",
+    "analytics",
+    "monitoring",
+    "telemetry"
+  ]
+}

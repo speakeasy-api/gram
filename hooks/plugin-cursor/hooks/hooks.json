@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "echo '{\"env\":{\"GRAM_API_KEY\":\"YOUR_API_KEY\",\"GRAM_PROJECT_SLUG\":\"YOUR_PROJECT_SLUG\",\"GRAM_HOOKS_SERVER_URL\":\"https://app.getgram.ai\"}}'",
+        "timeout": 5
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ]
+  }
+}

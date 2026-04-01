@@ -1,10 +1,9 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
-import { ExternalLink, Workflow } from "lucide-react";
+import { Workflow } from "lucide-react";
 import { useState } from "react";
+import { HooksSetupDialog } from "./HooksSetupDialog";
 
 // Claude Code logo - official Anthropic Claude icon
 function ClaudeCodeIcon({ className }: { className?: string }) {
@@ -119,98 +118,8 @@ function ProviderCard({
   );
 }
 
-interface ClaudeInstallModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-function ClaudeInstallModal({ open, onOpenChange }: ClaudeInstallModalProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="max-w-4xl">
-        <Dialog.Header>
-          <Dialog.Title>Install Gram Hooks in Claude Code</Dialog.Title>
-        </Dialog.Header>
-
-        <div className="space-y-6">
-          {/* Test Yourself Section */}
-          <div>
-            <h3 className="text-sm font-semibold mb-2">Test Yourself</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Try Gram Hooks in your Claude Code instance:
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm space-y-2">
-              <div className="flex items-center justify-between">
-                <code>claude plugin marketplace add speakeasy-api/gram</code>
-              </div>
-              <div className="flex items-center justify-between">
-                <code>claude plugin install gram-hooks@gram</code>
-              </div>
-            </div>
-          </div>
-
-          {/* Distribute to Team Section */}
-          <div>
-            <h3 className="text-sm font-semibold mb-2">
-              Distribute to Your Team
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Require your team to use Gram Hooks by configuring their Claude
-              Code settings:
-            </p>
-
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-xs font-medium text-muted-foreground mb-2">
-                  1. Require the marketplace
-                </h4>
-                <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-                  <code>
-                    {`{
-  "pluginMarketplaces": {
-    "required": ["speakeasy-api/gram"]
-  }
-}`}
-                  </code>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-xs font-medium text-muted-foreground mb-2">
-                  2. Require the plugin
-                </h4>
-                <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-                  <code>
-                    {`{
-  "plugins": {
-    "required": ["gram-hooks@gram"]
-  }
-}`}
-                  </code>
-                </div>
-              </div>
-
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href="https://code.claude.com/docs/en/plugin-marketplaces#require-marketplaces-for-your-team"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2"
-                >
-                  <ExternalLink className="size-4" />
-                  View Full Documentation
-                </a>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
 export function HooksEmptyState() {
-  const [showClaudeModal, setShowClaudeModal] = useState(false);
+  const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [showFeatureRequestModal, setShowFeatureRequestModal] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>("");
 
@@ -221,9 +130,7 @@ export function HooksEmptyState() {
       return;
     }
 
-    if (provider === "claude") {
-      setShowClaudeModal(true);
-    }
+    setShowSetupDialog(true);
   };
 
   return (
@@ -259,8 +166,8 @@ export function HooksEmptyState() {
               <ProviderCard
                 name="Cursor"
                 icon={CursorIcon}
-                status="coming-soon"
-                onInstall={() => handleProviderClick("cursor", "coming-soon")}
+                status="available"
+                onInstall={() => handleProviderClick("cursor", "available")}
               />
               <ProviderCard
                 name="Codex"
@@ -273,10 +180,9 @@ export function HooksEmptyState() {
         </div>
       </div>
 
-      {/* Claude Install Modal */}
-      <ClaudeInstallModal
-        open={showClaudeModal}
-        onOpenChange={setShowClaudeModal}
+      <HooksSetupDialog
+        open={showSetupDialog}
+        onOpenChange={setShowSetupDialog}
       />
 
       {/* Feature Request Modal */}
