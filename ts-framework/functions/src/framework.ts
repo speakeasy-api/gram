@@ -380,7 +380,7 @@ export class Gram<
       uri,
       description: def.description,
       title: def.title,
-      mimeType: "text/html+mcp",
+      mimeType: "text/html;profile=mcp-app",
       content,
     });
   }

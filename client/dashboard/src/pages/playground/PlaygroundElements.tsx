@@ -97,8 +97,10 @@ export function PlaygroundElements({
   // Check if this toolset requires external MCP OAuth
   const mcpOAuthConfig = useMemo(
     () =>
-      toolset?.tools ? getExternalMcpOAuthConfig(toolset.tools) : undefined,
-    [toolset?.tools],
+      toolset?.rawTools
+        ? getExternalMcpOAuthConfig(toolset.rawTools)
+        : undefined,
+    [toolset?.rawTools],
   );
 
   const { data: oauthStatus, isLoading: oauthStatusLoading } =

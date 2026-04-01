@@ -498,7 +498,10 @@ type localRunnerResponseBody struct {
 func (b *localRunnerResponseBody) Close() error {
 	err := b.ReadCloser.Close()
 	b.cleanup()
-	return err
+	if err != nil {
+		return fmt.Errorf("close local runner response body: %w", err)
+	}
+	return nil
 }
 
 func (l *LocalRunner) runLocalRunnerInit(ctx context.Context, runnerBinary string, env []string, language string, codePath string, workDir string) error {

@@ -212,20 +212,18 @@ function PlaygroundMcpAppRenderer({
   tool: McpAppToolBinding;
 }) {
   const ctx = useContext(PlaygroundMcpAppsContext);
-  if (!ctx) {
-    return null;
-  }
-
-  const listing = ctx.resources.get(tool.resourceUri);
+  const mcpUrl = ctx?.mcpUrl ?? "";
+  const headers = ctx?.headers ?? null;
+  const listing = ctx?.resources.get(tool.resourceUri);
   const resourceQuery = useQuery({
     queryKey: [
       "playground-mcp-app-resource",
-      ctx.mcpUrl,
+      mcpUrl,
       tool.resourceUri,
-      JSON.stringify(Object.entries(ctx.headers ?? {}).sort()),
+      JSON.stringify(Object.entries(headers ?? {}).sort()),
     ],
     queryFn: async () => {
-      if (!ctx.headers) {
+      if (!headers) {
         throw new Error("Missing MCP headers");
       }
       const readResult = await requestMcpJsonRpc<{
@@ -236,7 +234,7 @@ function PlaygroundMcpAppRenderer({
           text?: string;
           uri: string;
         }>;
-      }>(ctx.mcpUrl, ctx.headers, {
+      }>(mcpUrl, headers, {
         method: "resources/read",
         params: { uri: tool.resourceUri },
       });
@@ -256,9 +254,13 @@ function PlaygroundMcpAppRenderer({
         uri: content.uri,
       } satisfies McpAppResourceContent;
     },
-    enabled: !!ctx.headers,
+    enabled: !!headers,
     staleTime: Infinity,
   });
+
+  if (!ctx) {
+    return null;
+  }
 
   if (resourceQuery.isLoading) {
     return (
@@ -646,11 +648,7 @@ function getToolInfo(tool: Toolset["rawTools"][number]) {
 }
 
 function getToolMetadata(tool: Toolset["rawTools"][number]) {
-  return (
-    tool.functionToolDefinition?.meta ??
-    tool.httpToolDefinition?.meta ??
-    tool.externalMcpToolDefinition?.meta
-  );
+  return tool.functionToolDefinition?.meta;
 }
 
 function getResourceUri(meta: Record<string, unknown> | undefined) {
@@ -760,7 +758,7 @@ function buildDirective(domains: string[] | undefined, fallback: string) {
 }
 
 function escapeAttribute(input: string) {
-  return input.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  return input.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
 function JsonPanel({ label, value }: { label: string; value: unknown }) {
