@@ -72,18 +72,16 @@ func TestService_ServePublic(t *testing.T) {
 			SessionID:            authCtx.SessionID,
 		}
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
@@ -150,12 +148,10 @@ func TestService_ServePublic(t *testing.T) {
 			SessionID:            authCtx.SessionID,
 		}
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -216,18 +212,16 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
@@ -295,18 +289,16 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
@@ -362,12 +354,10 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -426,18 +416,16 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
@@ -498,12 +486,10 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-			},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
 		}
 		bodyBytes, err := json.Marshal(reqBody)
 		require.NoError(t, err)
@@ -569,18 +555,16 @@ func TestService_ServePublic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
@@ -624,18 +608,16 @@ func TestService_ServePublic_PrivateMCP_WithOAuth(t *testing.T) {
 
 	// Helper to create initialize request body
 	initializeBody := func() []byte {
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
@@ -905,18 +887,16 @@ func TestService_ServePublic_CustomOAuthProxy(t *testing.T) {
 	t.Parallel()
 
 	initializeBody := func() []byte {
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
@@ -1043,7 +1023,7 @@ func TestService_ServePublic_CustomOAuthProxy(t *testing.T) {
 		require.Empty(t, w.Header().Get("WWW-Authenticate"), "no WWW-Authenticate on success")
 	})
 
-	t.Run("upstream refresh failure returns 401", func(t *testing.T) {
+	t.Run("upstream refresh failure still allows initialize", func(t *testing.T) {
 		t.Parallel()
 
 		pastExpiry := time.Now().Add(-1 * time.Hour)
@@ -1069,6 +1049,9 @@ func TestService_ServePublic_CustomOAuthProxy(t *testing.T) {
 		ctx, ti := newTestMCPServiceWithOAuth(t, mockOAuth)
 		mcpSlug := setupCustomOAuthToolset(t, ctx, ti)
 
+		// Token refresh failure is best-effort — initialize still succeeds because
+		// this test toolset has no security definitions (no deployed tools with
+		// http_security rows). A toolset WITH security definitions would return 401.
 		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(initializeBody()))
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Content-Type", "application/json")
@@ -1080,11 +1063,8 @@ func TestService_ServePublic_CustomOAuthProxy(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		err := ti.service.ServePublic(w, req)
-		require.Error(t, err)
-
-		wwwAuth := w.Header().Get("WWW-Authenticate")
-		require.NotEmpty(t, wwwAuth, "WWW-Authenticate should be present on refresh failure")
-		require.Contains(t, wwwAuth, "Bearer resource_metadata=")
+		require.NoError(t, err, "initialize should succeed even when token refresh fails")
+		require.Equal(t, http.StatusOK, w.Code)
 	})
 
 	t.Run("valid token does not trigger refresh", func(t *testing.T) {
@@ -1137,18 +1117,16 @@ func TestService_ServePublic_PrivateMCP_WithoutOAuth(t *testing.T) {
 
 	// Helper to create initialize request body
 	initializeBody := func() []byte {
-		reqBody := []map[string]any{
-			{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  "initialize",
-				"params": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities":    map[string]any{},
-					"clientInfo": map[string]any{
-						"name":    "test-client",
-						"version": "1.0.0",
-					},
+		reqBody := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo": map[string]any{
+					"name":    "test-client",
+					"version": "1.0.0",
 				},
 			},
 		}
