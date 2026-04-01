@@ -176,15 +176,18 @@ func (s *StubClient) SendInvitation(_ context.Context, opts SendInvitationOpts) 
 	state := s.orgState(opts.OrganizationID)
 	now := s.nowFn().UTC().Format(time.RFC3339)
 	invite := Invitation{
-		ID:             s.nextInviteID(),
-		Email:          opts.Email,
-		State:          InvitationStatePending,
-		Token:          fmt.Sprintf("token_%d", s.next),
-		OrganizationID: opts.OrganizationID,
-		InviterUserID:  opts.InviterUserID,
-		ExpiresAt:      now,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                  s.nextInviteID(),
+		Email:               opts.Email,
+		State:               InvitationStatePending,
+		AcceptedAt:          "",
+		RevokedAt:           "",
+		Token:               fmt.Sprintf("token_%d", s.next),
+		AcceptInvitationURL: "",
+		OrganizationID:      opts.OrganizationID,
+		InviterUserID:       opts.InviterUserID,
+		ExpiresAt:           now,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	state.invites[invite.ID] = invite
 	state.inviteOrder = append(state.inviteOrder, invite.ID)
