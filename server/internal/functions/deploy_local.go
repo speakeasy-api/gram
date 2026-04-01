@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -755,17 +756,25 @@ func writeJSONAtomic[T any](path string, value T, mode os.FileMode) error {
 }
 
 func makeWritableRecursive(root string) {
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return
+	}
+	defer func() {
+		_ = rootFS.Close()
+	}()
+
+	_ = fs.WalkDir(rootFS.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		if d.IsDir() {
 			// #nosec G302 -- local cleanup only needs owner/group write to ensure temp dirs can be removed.
-			_ = os.Chmod(path, 0750)
+			_ = rootFS.Chmod(path, 0750)
 			return nil
 		}
 		// #nosec G302 -- local cleanup only needs owner/group write to ensure temp files can be removed.
-		_ = os.Chmod(path, 0640)
+		_ = rootFS.Chmod(path, 0640)
 		return nil
 	})
 }
