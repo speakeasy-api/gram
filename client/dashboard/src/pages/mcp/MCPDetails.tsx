@@ -951,7 +951,9 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       console.error("Failed to export MCP configuration:", error);
       toast.error(
         `Failed to export: ${error instanceof Error ? error.message : "Unknown error"}`,
-        { id: toastId },
+        {
+          id: toastId,
+        },
       );
     }
   };
@@ -1613,9 +1615,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
 
   const mcpJsonPublic = `{
   "mcpServers": {
-    "Gram${toolset.slug
-      .replace(/-/g, "")
-      .replace(/^./, (c) => c.toUpperCase())}": {
+    "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
       "args": ${argsStringIndented}${
         !toolset.mcpIsPublic
@@ -1631,9 +1631,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
 
   const mcpJsonInternal = `{
   "mcpServers": {
-    "Gram${toolset.slug
-      .replace(/-/g, "")
-      .replace(/^./, (c) => c.toUpperCase())}": {
+    "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
       "args": [
         "mcp-remote@0.1.25",
@@ -1912,9 +1910,7 @@ function OAuthDetailsModal({
                     </Type>
                     <CodeBlock className="mt-1">
                       {mcpUrl
-                        ? `${
-                            new URL(mcpUrl).origin
-                          }/.well-known/oauth-authorization-server/mcp/${
+                        ? `${new URL(mcpUrl).origin}/.well-known/oauth-authorization-server/mcp/${
                             toolset.mcpSlug
                           }`
                         : ""}
@@ -2230,7 +2226,7 @@ function OAuthTabModal({
     let parsedMetadata;
     try {
       parsedMetadata = JSON.parse(metadataJson);
-    } catch (_e) {
+    } catch {
       setJsonError("Invalid JSON format");
       return;
     }
@@ -2407,7 +2403,7 @@ function OAuthTabModal({
                       OAuth Authorization Server Metadata
                     </Type>
                     {jsonError && (
-                      <Type className="!text-red-500 text-sm mt-1">
+                      <Type className="text-red-500! text-sm mt-1">
                         {jsonError}
                       </Type>
                     )}
@@ -2485,7 +2481,7 @@ function OAuthTabModal({
                 )}
 
                 {proxyError && (
-                  <Type className="!text-red-500 text-sm mb-4">
+                  <Type className="text-red-500! text-sm mb-4">
                     {proxyError}
                   </Type>
                 )}
