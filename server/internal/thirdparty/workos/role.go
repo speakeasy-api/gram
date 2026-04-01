@@ -32,12 +32,12 @@ type UpdateRoleOpts struct {
 	Description *string `json:"description,omitempty"`
 }
 
-func (rc *Client) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
-	if rc == nil {
+func (wc *Client) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
-	resp, err := rc.orgs.ListOrganizationRoles(ctx, organizations.ListOrganizationRolesOpts{
+	resp, err := wc.orgs.ListOrganizationRoles(ctx, organizations.ListOrganizationRolesOpts{
 		OrganizationID: orgID,
 	})
 	if err != nil {
@@ -53,8 +53,8 @@ func (rc *Client) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
 
 // CreateRole creates a custom role for an organization via the WorkOS REST API.
 // The Go SDK does not expose role CRUD, so we use raw HTTP against the /authorization/ endpoints.
-func (rc *Client) CreateRole(ctx context.Context, orgID string, opts CreateRoleOpts) (*Role, error) {
-	if rc == nil {
+func (wc *Client) CreateRole(ctx context.Context, orgID string, opts CreateRoleOpts) (*Role, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
@@ -69,7 +69,7 @@ func (rc *Client) CreateRole(ctx context.Context, orgID string, opts CreateRoleO
 	}
 
 	var role Role
-	if err := rc.do(ctx, http.MethodPost, path, body, &role); err != nil {
+	if err := wc.do(ctx, http.MethodPost, path, body, &role); err != nil {
 		return nil, fmt.Errorf("create role: %w", err)
 	}
 
@@ -77,8 +77,8 @@ func (rc *Client) CreateRole(ctx context.Context, orgID string, opts CreateRoleO
 }
 
 // UpdateRole updates a role by slug via the WorkOS REST API (PATCH).
-func (rc *Client) UpdateRole(ctx context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*Role, error) {
-	if rc == nil {
+func (wc *Client) UpdateRole(ctx context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*Role, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
@@ -93,7 +93,7 @@ func (rc *Client) UpdateRole(ctx context.Context, orgID string, roleSlug string,
 	}
 
 	var role Role
-	if err := rc.do(ctx, http.MethodPatch, path, body, &role); err != nil {
+	if err := wc.do(ctx, http.MethodPatch, path, body, &role); err != nil {
 		return nil, fmt.Errorf("update role: %w", err)
 	}
 
@@ -101,8 +101,8 @@ func (rc *Client) UpdateRole(ctx context.Context, orgID string, roleSlug string,
 }
 
 // DeleteRole deletes a role by slug via the WorkOS REST API.
-func (rc *Client) DeleteRole(ctx context.Context, orgID string, roleSlug string) error {
-	if rc == nil {
+func (wc *Client) DeleteRole(ctx context.Context, orgID string, roleSlug string) error {
+	if wc == nil {
 		return errors.New("workos client is not initialized")
 	}
 
@@ -111,7 +111,7 @@ func (rc *Client) DeleteRole(ctx context.Context, orgID string, roleSlug string)
 		return fmt.Errorf("build path: %w", err)
 	}
 
-	if err := rc.do(ctx, http.MethodDelete, path, nil, nil); err != nil {
+	if err := wc.do(ctx, http.MethodDelete, path, nil, nil); err != nil {
 		return fmt.Errorf("delete role: %w", err)
 	}
 

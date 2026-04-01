@@ -30,8 +30,8 @@ type User struct {
 }
 
 // ListMembers lists all active organization memberships for the given org.
-func (rc *Client) ListMembers(ctx context.Context, orgID string) ([]Member, error) {
-	if rc == nil {
+func (wc *Client) ListMembers(ctx context.Context, orgID string) ([]Member, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
@@ -39,7 +39,7 @@ func (rc *Client) ListMembers(ctx context.Context, orgID string) ([]Member, erro
 	after := ""
 
 	for {
-		resp, err := rc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
+		resp, err := wc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
 			OrganizationID: orgID,
 			UserID:         "",
 			Statuses:       []usermanagement.OrganizationMembershipStatus{usermanagement.Active},
@@ -66,8 +66,8 @@ func (rc *Client) ListMembers(ctx context.Context, orgID string) ([]Member, erro
 }
 
 // ListUsersInOrg returns all users in the given organization.
-func (rc *Client) ListUsersInOrg(ctx context.Context, orgID string) ([]User, error) {
-	if rc == nil {
+func (wc *Client) ListUsersInOrg(ctx context.Context, orgID string) ([]User, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
@@ -75,7 +75,7 @@ func (rc *Client) ListUsersInOrg(ctx context.Context, orgID string) ([]User, err
 	after := ""
 
 	for {
-		resp, err := rc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
+		resp, err := wc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
 			OrganizationID: orgID,
 			Limit:          100,
 			After:          after,
@@ -101,12 +101,12 @@ func (rc *Client) ListUsersInOrg(ctx context.Context, orgID string) ([]User, err
 }
 
 // GetUserByEmail returns the first WorkOS user for the given email.
-func (rc *Client) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	if rc == nil {
+func (wc *Client) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
-	resp, err := rc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
+	resp, err := wc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
 		Email:          email,
 		OrganizationID: "",
 		Limit:          1,
@@ -127,12 +127,12 @@ func (rc *Client) GetUserByEmail(ctx context.Context, email string) (*User, erro
 }
 
 // GetUser returns a WorkOS user by ID.
-func (rc *Client) GetUser(ctx context.Context, userID string) (*User, error) {
-	if rc == nil {
+func (wc *Client) GetUser(ctx context.Context, userID string) (*User, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
-	u, err := rc.um.GetUser(ctx, usermanagement.GetUserOpts{User: userID})
+	u, err := wc.um.GetUser(ctx, usermanagement.GetUserOpts{User: userID})
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
@@ -142,12 +142,12 @@ func (rc *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 }
 
 // GetOrgMembership returns the first membership matching a user and organization.
-func (rc *Client) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*Member, error) {
-	if rc == nil {
+func (wc *Client) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*Member, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
-	resp, err := rc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
+	resp, err := wc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
 		OrganizationID: workOSOrgID,
 		UserID:         workOSUserID,
 		Statuses:       nil,
@@ -169,8 +169,8 @@ func (rc *Client) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgI
 }
 
 // ListOrgUsers returns all users in the given organization as a map of userID → User.
-func (rc *Client) ListOrgUsers(ctx context.Context, orgID string) (map[string]User, error) {
-	if rc == nil {
+func (wc *Client) ListOrgUsers(ctx context.Context, orgID string) (map[string]User, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
@@ -178,7 +178,7 @@ func (rc *Client) ListOrgUsers(ctx context.Context, orgID string) (map[string]Us
 	after := ""
 
 	for {
-		resp, err := rc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
+		resp, err := wc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
 			Email:          "",
 			OrganizationID: orgID,
 			Limit:          100,
@@ -204,12 +204,12 @@ func (rc *Client) ListOrgUsers(ctx context.Context, orgID string) (map[string]Us
 }
 
 // UpdateMemberRole changes a member's role within an organization membership.
-func (rc *Client) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*Member, error) {
-	if rc == nil {
+func (wc *Client) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*Member, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
-	m, err := rc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
+	m, err := wc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
 		RoleSlug:  roleSlug,
 		RoleSlugs: nil,
 	})
@@ -222,12 +222,12 @@ func (rc *Client) UpdateMemberRole(ctx context.Context, membershipID string, rol
 }
 
 // DeleteOrganizationMembership deletes an organization membership by ID.
-func (rc *Client) DeleteOrganizationMembership(ctx context.Context, membershipID string) error {
-	if rc == nil {
+func (wc *Client) DeleteOrganizationMembership(ctx context.Context, membershipID string) error {
+	if wc == nil {
 		return errors.New("workos client is not initialized")
 	}
 
-	err := rc.um.DeleteOrganizationMembership(ctx, usermanagement.DeleteOrganizationMembershipOpts{
+	err := wc.um.DeleteOrganizationMembership(ctx, usermanagement.DeleteOrganizationMembershipOpts{
 		OrganizationMembership: membershipID,
 	})
 	if err != nil {
@@ -238,8 +238,8 @@ func (rc *Client) DeleteOrganizationMembership(ctx context.Context, membershipID
 }
 
 // ListOrgMemberships returns all organization memberships for an org.
-func (rc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Member, error) {
-	if rc == nil {
+func (wc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Member, error) {
+	if wc == nil {
 		return nil, errors.New("workos client is not initialized")
 	}
 
@@ -247,7 +247,7 @@ func (rc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Membe
 	after := ""
 
 	for {
-		resp, err := rc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
+		resp, err := wc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
 			OrganizationID: orgID,
 			Limit:          100,
 			After:          after,

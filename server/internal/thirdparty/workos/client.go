@@ -91,13 +91,13 @@ func NewClient(apiKey string, opts ...ClientOpts) (*Client, error) {
 
 // do performs a raw HTTP request against the WorkOS REST API.
 // Pass a non-nil out pointer to decode a JSON response body; pass nil to discard it (e.g. DELETE).
-func (rc *Client) do(ctx context.Context, method, path string, body []byte, out any) error {
-	req, err := rc.newRequest(ctx, method, path, body)
+func (wc *Client) do(ctx context.Context, method, path string, body []byte, out any) error {
+	req, err := wc.newRequest(ctx, method, path, body)
 	if err != nil {
 		return err
 	}
 
-	resp, err := rc.httpClient.Do(req)
+	resp, err := wc.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send request: %w", err)
 	}
@@ -118,8 +118,8 @@ func (rc *Client) do(ctx context.Context, method, path string, body []byte, out 
 }
 
 // newRequest builds an authenticated HTTP request targeting the WorkOS API.
-func (rc *Client) newRequest(ctx context.Context, method, path string, body []byte) (*http.Request, error) {
-	reqURL, err := url.JoinPath(rc.endpoint, path)
+func (wc *Client) newRequest(ctx context.Context, method, path string, body []byte) (*http.Request, error) {
+	reqURL, err := url.JoinPath(wc.endpoint, path)
 	if err != nil {
 		return nil, fmt.Errorf("build url: %w", err)
 	}
@@ -134,7 +134,7 @@ func (rc *Client) newRequest(ctx context.Context, method, path string, body []by
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+rc.apiKey)
+	req.Header.Set("Authorization", "Bearer "+wc.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	return req, nil
