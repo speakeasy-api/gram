@@ -248,7 +248,6 @@ run("sysctl -qw net.ipv4.ip_forward=1")
 run("sysctl -qw net.ipv4.conf.all.route_localnet=1")
 
 # --- Inject iptables INSIDE the sandbox namespace ---
-time.sleep(1)
 sandbox_ns_pid = None
 result = run(f"pgrep -P {sandbox_proc.pid}", check=False)
 candidates = (result.stdout.split() if result.stdout else []) + [str(sandbox_proc.pid)]
@@ -285,12 +284,17 @@ log(f"  Gateway forwarding: *:18789 -> 10.200.0.2:18789")
 
 # Wait for gateway health
 log("  Waiting for OpenClaw gateway...")
+gateway_ready = False
 for _ in range(30):
     result = run("curl -sf http://10.200.0.2:18789/healthz", check=False)
     if result.returncode == 0 and result.stdout and any(w in result.stdout.lower() for w in ["ok", "healthy"]):
         log("  Gateway is ready (inside sandbox at 10.200.0.2:18789)")
+        gateway_ready = True
         break
     time.sleep(2)
+
+if not gateway_ready:
+    log("  WARN: Gateway did not become healthy after 60s")
 
 # ---------------------------------------------------------------
 # Print connection info

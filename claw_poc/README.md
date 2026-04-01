@@ -15,7 +15,7 @@ Provisions an OpenClaw agent inside an **OpenShell sandbox**, pre-configured wit
 ```
 Docker container
 ├── Host side (10.200.0.1)
-│   ├── start.sh (entrypoint — provisions everything)
+│   ├── start.py (entrypoint — provisions everything)
 │   ├── iptables (DNS forwarding, gateway port forwarding)
 │   └── openshell-sandbox process
 │       └── HTTP CONNECT proxy on :3128 (OPA policy enforced)
@@ -35,7 +35,7 @@ Docker container
 | `config.py` | All provisioning inputs: Gram credentials, project, guardrail settings, OpenShell network policy. Loads API key from `../.env.local`. |
 | `verify_config.py` | Sanity checks credentials: verifies API key, lists MCP servers, tests a completion, tests a tool call. Run locally before Docker. |
 | `poc.py` | Full end-to-end: tears down old container, builds image, starts it, sends prompts, tests network policy enforcement. |
-| `start.sh` | Container entrypoint: fetches MCP servers from Gram API, generates OpenShell policy YAML, starts openshell-sandbox, applies post-sandbox iptables. |
+| `start.py` | Container entrypoint: fetches MCP servers from Gram API, generates OpenShell policy YAML, starts openshell-sandbox, applies post-sandbox iptables. |
 | `start-openclaw.sh` | Runs INSIDE the OpenShell sandbox: sets HTTP proxy env vars, starts OpenClaw gateway. |
 | `Dockerfile` | Multi-stage build: DefenseClaw Go binary, openshell-sandbox from NVIDIA OCI, OpenClaw + runtime. |
 

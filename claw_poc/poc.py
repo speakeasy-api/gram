@@ -122,8 +122,8 @@ print("Step 4: Wait for OpenClaw gateway (inside OpenShell sandbox)")
 print("=" * 60)
 
 ready = False
+logs = ""
 for i in range(45):
-    time.sleep(2)
     logs = run(f"docker logs {CONTAINER_NAME}", check=False)
     if "Gateway is ready" in logs or "listening on ws://" in logs:
         ready = True
@@ -139,11 +139,12 @@ for i in range(45):
         break
     sys.stdout.write(".")
     sys.stdout.flush()
+    time.sleep(2)
 
 if not ready:
     print("\n  FAIL: Gateway did not start in 90s")
     print("  Logs:")
-    print(run(f"docker logs {CONTAINER_NAME}", check=False))
+    print(logs)
     sys.exit(1)
 
 print("  Gateway is ready")

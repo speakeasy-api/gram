@@ -15,7 +15,7 @@ RUN OPENSHELL_INSTALL_DIR=/opt/bin bash /tmp/install.sh
 FROM python:3.12-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates git iptables iproute2 dnsutils procps \
+    curl ca-certificates iptables iproute2 dnsutils procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js 22 for OpenClaw
@@ -35,8 +35,9 @@ COPY --from=openshell-installer /opt/bin/openshell-sandbox /usr/local/bin/opensh
 # OpenShell OPA policy rules (Rego — from DefenseClaw)
 COPY --from=dc-builder /build/policies/openshell/default.rego /etc/defenseclaw/openshell-policy.rego
 
-# DefenseClaw Python CLI (from GitHub)
-RUN pip install --no-cache-dir "defenseclaw @ git+https://github.com/cisco-ai-defense/defenseclaw.git"
+# DefenseClaw Python CLI (reuse the clone from dc-builder instead of fetching again)
+COPY --from=dc-builder /build /tmp/defenseclaw
+RUN pip install --no-cache-dir /tmp/defenseclaw && rm -rf /tmp/defenseclaw
 
 # Create sandbox user (openshell-sandbox drops privileges to this user)
 RUN useradd -m -s /bin/bash sandbox \
