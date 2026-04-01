@@ -3,7 +3,7 @@
 
 server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
 api_key="${GRAM_API_KEY:-}"
-project_slug="${GRAM_PROJECT_SLUG:-}"
+project_slug="${GRAM_PROJECT_SLUG:-default}"
 
 # Fail silently if credentials are not configured
 if [ -z "$api_key" ] || [ -z "$project_slug" ]; then
