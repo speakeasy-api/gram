@@ -1,5 +1,13 @@
 # server
 
+## 0.34.1
+
+### Patch Changes
+
+- 9f179d5: Ensure `DeleteProject` returns idempotent success for non-existent project.
+- a1c64a1: Fix toolset cache not being invalidated when a template is deleted.
+- a64842e: Removes grants api endpoints (replaced by roles management).
+
 ## 0.34.0
 
 ### Minor Changes
