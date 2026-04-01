@@ -641,6 +641,11 @@ CREATE TABLE IF NOT EXISTS toolsets (
   tool_selection_mode TEXT NOT NULL DEFAULT 'static',
   custom_domain_id uuid,
 
+  -- Catalog publishing
+  catalog_published BOOLEAN NOT NULL DEFAULT FALSE,
+  catalog_published_by TEXT,
+  catalog_published_at timestamptz,
+
   -- OAuth configuration - mutually exclusive
   external_oauth_server_id uuid,
   oauth_proxy_server_id uuid,
@@ -1264,6 +1269,7 @@ CREATE TABLE IF NOT EXISTS mcp_registries (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   url TEXT NOT NULL CHECK (url <> '' AND CHAR_LENGTH(url) <= 500),
+  is_internal BOOLEAN NOT NULL DEFAULT FALSE,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
