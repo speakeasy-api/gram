@@ -46,23 +46,3 @@ func ListMembersAccessPath() string {
 func UpdateMemberRoleAccessPath() string {
 	return "/rpc/access.updateMemberRole"
 }
-
-// ListGrantsAccessPath returns the URL path to the access service listGrants HTTP endpoint.
-func ListGrantsAccessPath() string {
-	return "/rpc/access.listGrants"
-}
-
-// UpsertGrantsAccessPath returns the URL path to the access service upsertGrants HTTP endpoint.
-func UpsertGrantsAccessPath() string {
-	return "/rpc/access.upsertGrants"
-}
-
-// RemoveGrantsAccessPath returns the URL path to the access service removeGrants HTTP endpoint.
-func RemoveGrantsAccessPath() string {
-	return "/rpc/access.removeGrants"
-}
-
-// RemovePrincipalGrantsAccessPath returns the URL path to the access service removePrincipalGrants HTTP endpoint.
-func RemovePrincipalGrantsAccessPath() string {
-	return "/rpc/access.removePrincipalGrants"
-}

@@ -73,10 +73,8 @@ func TestService_CreateRole(t *testing.T) {
 	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
-	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder").String()
-	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: &principalURN})
-	require.NoError(t, err)
-	require.Len(t, grants.Grants, 3)
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
+	require.Len(t, grants, 3)
 }
 
 func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
@@ -126,11 +124,9 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 	require.Equal(t, "role_existing", role.ID)
 	require.Equal(t, "Custom Builder", role.Name)
 
-	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder").String()
-	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: &principalURN})
-	require.NoError(t, err)
-	require.Len(t, grants.Grants, 1)
-	require.Equal(t, authCtx.ActiveOrganizationID, grants.Grants[0].OrganizationID)
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
+	require.Len(t, grants, 1)
+	require.Equal(t, authCtx.ActiveOrganizationID, grants[0].OrganizationID)
 }
 
 func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {

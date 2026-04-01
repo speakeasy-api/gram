@@ -5,15 +5,11 @@
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
-import { accessList } from "../funcs/accessList.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
-import { accessRemove } from "../funcs/accessRemove.js";
-import { accessRemovePrincipal } from "../funcs/accessRemovePrincipal.js";
 import { accessUpdateMemberRole } from "../funcs/accessUpdateMemberRole.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
-import { accessUpsert } from "../funcs/accessUpsert.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -70,25 +66,6 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Role> {
     return unwrapAsync(accessGetRole(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * listGrants access
-   *
-   * @remarks
-   * List all permissions in your organization, optionally filtered to a specific user or role.
-   */
-  async list(
-    request?: operations.ListGrantsRequest | undefined,
-    security?: operations.ListGrantsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListGrantsResult> {
-    return unwrapAsync(accessList(
       this,
       request,
       security,
@@ -154,44 +131,6 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * removeGrants access
-   *
-   * @remarks
-   * Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).
-   */
-  async remove(
-    request: operations.RemoveGrantsRequest,
-    security?: operations.RemoveGrantsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(accessRemove(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * removePrincipalGrants access
-   *
-   * @remarks
-   * Revoke all permissions for a specific user or role.
-   */
-  async removePrincipal(
-    request: operations.RemovePrincipalGrantsRequest,
-    security?: operations.RemovePrincipalGrantsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(accessRemovePrincipal(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * updateMemberRole access
    *
    * @remarks
@@ -222,25 +161,6 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Role> {
     return unwrapAsync(accessUpdateRole(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * upsertGrants access
-   *
-   * @remarks
-   * Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.
-   */
-  async upsert(
-    request: operations.UpsertGrantsRequest,
-    security?: operations.UpsertGrantsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.UpsertGrantsResult> {
-    return unwrapAsync(accessUpsert(
       this,
       request,
       security,

@@ -84,9 +84,8 @@ func TestService_UpdateRole(t *testing.T) {
 	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
-	grants, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{PrincipalUrn: new(urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder").String())})
-	require.NoError(t, err)
-	require.Len(t, grants.Grants, 3)
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	require.Len(t, grants, 3)
 }
 
 func TestService_UpdateRole_NotFound(t *testing.T) {
