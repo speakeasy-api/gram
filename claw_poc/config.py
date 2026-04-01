@@ -6,7 +6,7 @@ In production, these values come from the Gram dashboard.
 
 Used by:
   - verify_config.py (local sanity check)
-  - poc.py (passes these as env vars to the Docker container)
+  - poc.py (passes these as Fly secrets to the VM)
 """
 import os
 from pathlib import Path

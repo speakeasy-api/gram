@@ -11,6 +11,7 @@ Usage:
     fly auth login          # one-time
     uv run python poc.py
 """
+import json
 import subprocess
 import sys
 import time
@@ -18,6 +19,7 @@ import time
 from config import GRAM_SERVER_URL, GRAM_PROJECT_SLUG, GRAM_API_KEY
 
 APP_NAME = "defenseclaw-gram-poc"
+FLY_ORG = "speakeasy-lab"
 
 
 def run(cmd, timeout=300, check=True):
@@ -43,26 +45,22 @@ def _fly_ssh_args(cmd):
     return args
 
 
-def fly_ssh(cmd, timeout=120):
-    """Run a command on the Fly machine via SSH."""
+def fly_ssh(cmd, timeout=120, check=True):
+    """Run a command on the Fly machine via SSH.
+
+    If check=True (default), raises on failure and returns stdout.
+    If check=False, returns (success: bool, output: str).
+    """
     print(f"  $ {cmd[:120]}{'...' if len(cmd) > 120 else ''}")
     result = subprocess.run(
         _fly_ssh_args(cmd),
         capture_output=True, text=True, timeout=timeout,
     )
-    if result.returncode != 0:
-        stderr = result.stderr.strip() if result.stderr else ""
-        raise RuntimeError(f"Command failed ({result.returncode}): {stderr}")
-    return result.stdout.strip() if result.stdout else ""
-
-
-def fly_ssh_ok(cmd, timeout=30):
-    """Run a command on the Fly machine, return (success, output)."""
-    print(f"  $ {cmd[:120]}{'...' if len(cmd) > 120 else ''}")
-    result = subprocess.run(
-        _fly_ssh_args(cmd),
-        capture_output=True, text=True, timeout=timeout + 10,
-    )
+    if check:
+        if result.returncode != 0:
+            stderr = result.stderr.strip() if result.stderr else ""
+            raise RuntimeError(f"Command failed ({result.returncode}): {stderr}")
+        return result.stdout.strip() if result.stdout else ""
     return result.returncode == 0, result.stdout or result.stderr or ""
 
 
@@ -84,7 +82,7 @@ print("=" * 60)
 print("Step 2: Create Fly app and set secrets")
 print("=" * 60)
 
-run(f"fly apps create {APP_NAME} --org speakeasy-lab")
+run(f"fly apps create {APP_NAME} --org {FLY_ORG}")
 run(
     f"fly secrets set -a {APP_NAME} "
     f"GRAM_API_KEY={GRAM_API_KEY} "
@@ -108,8 +106,7 @@ for line in output.splitlines()[-5:]:
 # Pin all SSH commands to the running machine
 machine_list = run(f"fly machines list -a {APP_NAME} --json", check=False)
 if machine_list:
-    import json as _json
-    machines = _json.loads(machine_list)
+    machines = json.loads(machine_list)
     started = [m for m in machines if m.get("state") == "started"]
     if started:
         MACHINE_ID = started[0]["id"]

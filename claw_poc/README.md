@@ -36,7 +36,9 @@ Fly.io Firecracker VM
 | `verify_config.py` | Sanity checks credentials: verifies API key, MCP servers, completions, tool calls. |
 | `poc.py` | Full end-to-end: destroys/creates Fly app, deploys, sends prompts, tests network policy. |
 | `start.py` | VM entrypoint: fetches MCP servers from Gram API, generates OpenShell policy YAML, starts sandbox. |
-| `start-openclaw.sh` | Runs INSIDE the OpenShell sandbox: sets HTTP proxy env vars, starts OpenClaw gateway. |
+| `start-openclaw.sh` | Runs INSIDE the sandbox: sets proxy env vars, starts gateway, runs network policy tests. |
+| `grant-scopes.py` | Baked into image. Waits for paired.json, grants full operator scopes to auto-paired devices. |
+| `test-network-policy.py` | Baked into image. Runs inside sandbox to test allow/deny via OPA proxy (process ancestry matters). |
 | `Dockerfile` | Multi-stage build: DefenseClaw Go binary, openshell-sandbox from NVIDIA OCI, OpenClaw + runtime. |
 | `fly.toml` | Fly.io app configuration. |
 
