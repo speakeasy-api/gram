@@ -47,6 +47,8 @@ RUN useradd -m -s /bin/bash sandbox \
 # POC scripts
 COPY start.py /poc/start.py
 COPY start-openclaw.sh /poc/start-openclaw.sh
+COPY grant-scopes.py /poc/grant-scopes.py
+COPY test-network-policy.py /poc/test-network-policy.py
 RUN chmod +x /poc/start.py /poc/start-openclaw.sh
 
 WORKDIR /poc
