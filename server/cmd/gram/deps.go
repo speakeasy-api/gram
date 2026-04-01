@@ -485,16 +485,13 @@ func newFunctionOrchestrator(
 			return nil, nilShutdown, fmt.Errorf("create local functions root directory: %w", err)
 		}
 
-		codeRoot, err := os.OpenRoot(codeRootDir)
+		surl := c.String("server-url")
+		serverURL, err := url.Parse(surl)
 		if err != nil {
-			return nil, nilShutdown, fmt.Errorf("open local functions root directory: %w", err)
+			return nil, nilShutdown, fmt.Errorf("parse server url for local functions provider: %w", err)
 		}
 
-		shutdown := func(ctx context.Context) error {
-			return codeRoot.Close()
-		}
-
-		return functions.NewLocalRunner(codeRoot), shutdown, nil
+		return functions.NewLocalRunner(logger, codeRootDir, serverURL, assetStore), nilShutdown, nil
 	case "flyio":
 		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")

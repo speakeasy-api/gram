@@ -38,6 +38,8 @@ var (
 	language = flag.String("language", "javascript", "Programming language for the function. Can be 'javascript', 'typescript', or 'python'.")
 	codePath = flag.String("codePath", "/data/code.zip", "Path to the code zip file")
 	workDir  = flag.String("workDir", "/var/task", "Working directory for the application")
+	addr     = flag.String("addr", ":8888", "Address to bind the HTTP server to")
+	addrFile = flag.String("addr-file", "", "Optional file that receives the bound HTTP server address")
 	version  = flag.Bool("version", false, "Print version information and exit")
 	doinit   = flag.Bool("init", false, "Initialize the filesystem and exit")
 )
@@ -150,7 +152,7 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 
 	idle := svc.NewIdleTracker(time.Minute)
 	srv := &http.Server{
-		Addr:              ":8888",
+		Addr:              *addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
 		BaseContext: func(net.Listener) context.Context {
@@ -181,8 +183,20 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 		}
 	}()
 
-	logger.InfoContext(ctx, "starting server", attr.SlogServerAddress(srv.Addr))
-	err = srv.ListenAndServe()
+	listener, err := net.Listen("tcp", *addr)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	if *addrFile != "" {
+		if err := os.WriteFile(*addrFile, []byte(listener.Addr().String()), 0600); err != nil {
+			_ = listener.Close()
+			return fmt.Errorf("write addr file: %w", err)
+		}
+	}
+
+	logger.InfoContext(ctx, "starting server", attr.SlogServerAddress(listener.Addr().String()))
+	err = srv.Serve(listener)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("server error: %w", err)
 	}
