@@ -1,7 +1,7 @@
 import { InputDialog } from "@/components/input-dialog";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
-import { MCPCard } from "@/components/mcp/MCPCard";
-import { MCPTableRow } from "@/components/mcp/MCPTableRow";
+import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
+import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
 import { ViewToggle, useViewMode } from "@/components/ui/view-toggle";
@@ -54,6 +54,8 @@ export function MCPOverview() {
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
+
+  const isLoading = toolsets.isLoading || isProjectLoading;
 
   const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
@@ -156,9 +158,16 @@ export function MCPOverview() {
         <Page.Section.Body>
           {viewMode === "grid" ? (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {toolsets.map((toolset) => (
-                <MCPCard key={toolset.id} toolset={toolset} />
-              ))}
+              {isLoading ? (
+                <>
+                  <MCPCardSkeleton />
+                  <MCPCardSkeleton />
+                </>
+              ) : (
+                toolsets.map((toolset) => (
+                  <MCPCard key={toolset.id} toolset={toolset} />
+                ))
+              )}
             </div>
           ) : (
             <DotTable
@@ -169,9 +178,16 @@ export function MCPOverview() {
                 { label: "Tools" },
               ]}
             >
-              {toolsets.map((toolset) => (
-                <MCPTableRow key={toolset.id} toolset={toolset} />
-              ))}
+              {isLoading ? (
+                <>
+                  <MCPTableRowSkeleton />
+                  <MCPTableRowSkeleton />
+                </>
+              ) : (
+                toolsets.map((toolset) => (
+                  <MCPTableRow key={toolset.id} toolset={toolset} />
+                ))
+              )}
             </DotTable>
           )}
         </Page.Section.Body>

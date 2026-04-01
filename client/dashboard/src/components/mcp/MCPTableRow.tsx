@@ -130,3 +130,25 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
     </DotRow>
   );
 }
+
+export function MCPTableRowSkeleton() {
+  return (
+    <DotRow>
+      <td className="px-3 py-3">
+        <div className="h-4 w-2/3 bg-muted rounded animate-pulse" />
+      </td>
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-muted animate-pulse" />
+          <div className="h-3.5 w-12 bg-muted rounded animate-pulse" />
+        </div>
+      </td>
+      <td className="px-3 py-3">
+        <div className="h-3.5 w-40 bg-muted rounded animate-pulse" />
+      </td>
+      <td className="px-3 py-3">
+        <div className="h-5 w-10 bg-muted rounded-full animate-pulse" />
+      </td>
+    </DotRow>
+  );
+}
