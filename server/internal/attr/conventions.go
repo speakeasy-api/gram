@@ -12,6 +12,7 @@ import (
 type Key = attribute.Key
 
 const (
+	ErrorIDKey                        = attribute.Key("error.id")
 	ErrorMessageKey                   = attribute.Key("error.message")
 	ErrorStackKey                     = attribute.Key("error.stack")
 	ErrorKindKey                      = attribute.Key("error.kind")
@@ -124,7 +125,6 @@ const (
 	EnvironmentSlugKey             = attribute.Key("gram.environment.slug")
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
 	EventSourceKey                 = attribute.Key("gram.event.source")
-	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
 	FunctionIDKey                  = attribute.Key("gram.function.id")

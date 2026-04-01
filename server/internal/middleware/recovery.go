@@ -41,7 +41,7 @@ func NewRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
 						true,
 					)
 
-					var errID string
+					errID := payload.ID
 					var se *oops.ShareableError
 					if errors.As(maybeErr, &se) {
 						code = se.HTTPStatus()
