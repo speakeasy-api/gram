@@ -31,6 +31,19 @@ export function MCPRoot() {
   return <Outlet />;
 }
 
+export const MCPPage = () => {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <MCPOverview />
+      </Page.Body>
+    </Page>
+  );
+};
+
 export function MCPOverview() {
   const toolsets = useToolsets();
   const routes = useRoutes();
@@ -112,69 +125,59 @@ export function MCPOverview() {
 
   if (!toolsets.isLoading && toolsets.length === 0) {
     return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          {isProjectEmpty && !isProjectLoading ? (
-            <InitialChoiceStep
-              routes={routes}
-              isFunctionsEnabled={isFunctionsEnabled}
-            />
-          ) : (
-            <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
-          )}
-          {builtInSection}
-          {newMcpServerDialog}
-        </Page.Body>
-      </Page>
+      <>
+        {isProjectEmpty && !isProjectLoading ? (
+          <InitialChoiceStep
+            routes={routes}
+            isFunctionsEnabled={isFunctionsEnabled}
+          />
+        ) : (
+          <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
+        )}
+        {builtInSection}
+        {newMcpServerDialog}
+      </>
     );
   }
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
-          <Page.Section.CTA>
-            <ViewToggle value={viewMode} onChange={setViewMode} />
-          </Page.Section.CTA>
-          <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
-          <Page.Section.Description className="max-w-2xl">
-            Each source is exposed as an MCP server. First-party sources like
-            functions and OpenAPI specs are private by default, while catalog
-            servers are public.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            {viewMode === "grid" ? (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {toolsets.map((toolset) => (
-                  <MCPCard key={toolset.id} toolset={toolset} />
-                ))}
-              </div>
-            ) : (
-              <DotTable
-                headers={[
-                  { label: "Name" },
-                  { label: "Visibility" },
-                  { label: "URL" },
-                  { label: "Tools" },
-                ]}
-              >
-                {toolsets.map((toolset) => (
-                  <MCPTableRow key={toolset.id} toolset={toolset} />
-                ))}
-              </DotTable>
-            )}
-          </Page.Section.Body>
-        </Page.Section>
-        {builtInSection}
-        {newMcpServerDialog}
-      </Page.Body>
-    </Page>
+    <>
+      <Page.Section>
+        <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
+        <Page.Section.CTA>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+        </Page.Section.CTA>
+        <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
+        <Page.Section.Description className="max-w-2xl">
+          Each source is exposed as an MCP server. First-party sources like
+          functions and OpenAPI specs are private by default, while catalog
+          servers are public.
+        </Page.Section.Description>
+        <Page.Section.Body>
+          {viewMode === "grid" ? (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {toolsets.map((toolset) => (
+                <MCPCard key={toolset.id} toolset={toolset} />
+              ))}
+            </div>
+          ) : (
+            <DotTable
+              headers={[
+                { label: "Name" },
+                { label: "Visibility" },
+                { label: "URL" },
+                { label: "Tools" },
+              ]}
+            >
+              {toolsets.map((toolset) => (
+                <MCPTableRow key={toolset.id} toolset={toolset} />
+              ))}
+            </DotTable>
+          )}
+        </Page.Section.Body>
+      </Page.Section>
+      {builtInSection}
+      {newMcpServerDialog}
+    </>
   );
 }

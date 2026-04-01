@@ -26,7 +26,7 @@ import Register from "./pages/login/Register";
 import Logs from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
-import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
+import { MCPPage, MCPRoot } from "./pages/mcp/MCPOverview";
 import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
@@ -264,7 +264,7 @@ const ROUTE_STRUCTURE = {
     url: "mcp",
     icon: "network",
     component: MCPRoot,
-    indexComponent: MCPOverview,
+    indexComponent: MCPPage,
     subPages: {
       builtIn: {
         title: "Built-in MCP",
