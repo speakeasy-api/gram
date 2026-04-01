@@ -32,10 +32,33 @@ func NewRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
 
 					ctx := r.Context()
 
-					stack := debug.Stack()
+					code := http.StatusInternalServerError
+					payload := goa.NewServiceError(
+						errors.New(oops.CodeUnexpected.UserMessage()),
+						string(oops.CodeUnexpected),
+						false,
+						false,
+						true,
+					)
 
-					fmtErr := fmt.Errorf("panic: %v", recValue)
-					logger.ErrorContext(ctx, "recovered from panic", attr.SlogError(fmtErr), attr.SlogErrorKind("panic"), attr.SlogErrorStack(string(stack)))
+					var errID string
+					var se *oops.ShareableError
+					if errors.As(maybeErr, &se) {
+						code = se.HTTPStatus()
+						payload = se.AsGoa()
+						errID = payload.ID
+					}
+
+					attrs := []slog.Attr{
+						attr.SlogError(fmt.Errorf("panic: %v", recValue)),
+						attr.SlogErrorKind("panic"),
+						attr.SlogErrorStack(string(debug.Stack())),
+					}
+					if errID != "" {
+						attrs = append(attrs, attr.SlogErrorID(errID))
+					}
+
+					logger.LogAttrs(ctx, slog.LevelError, "recovered from panic", attrs...)
 
 					// Skip writing an HTTP error response for upgraded connections
 					// ((e.g. WebSocket). The underlying ResponseWriter is no longer
@@ -46,21 +69,6 @@ func NewRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
 					// Reference: https://github.com/go-chi/chi/issues/661
 					if httpguts.HeaderValuesContainsToken(r.Header["Connection"], "upgrade") {
 						return
-					}
-
-					code := http.StatusInternalServerError
-					payload := goa.NewServiceError(
-						errors.New(oops.CodeUnexpected.UserMessage()),
-						string(oops.CodeUnexpected),
-						false,
-						false,
-						true,
-					)
-
-					var se *oops.ShareableError
-					if errors.As(maybeErr, &se) {
-						code = se.HTTPStatus()
-						payload = se.AsGoa()
 					}
 
 					w.Header().Set("Connection", "close")
