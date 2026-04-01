@@ -49,11 +49,16 @@ function findActiveRoute(routes: AppRoutes): AppRoute | null {
  *
  * @param routes - The routes object from useRoutes()
  */
-export function usePageTitle(routes: AppRoutes): void {
+export function usePageTitle(
+  routes: AppRoutes,
+  fallbackRoutes?: AppRoutes,
+): void {
   useEffect(() => {
-    const activeRoute = findActiveRoute(routes);
+    const activeRoute =
+      findActiveRoute(routes) ??
+      (fallbackRoutes ? findActiveRoute(fallbackRoutes) : null);
     document.title = activeRoute
       ? `${activeRoute.title} | ${BASE_TITLE}`
       : BASE_TITLE;
-  }, [routes]);
+  }, [routes, fallbackRoutes]);
 }

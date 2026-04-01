@@ -1,4 +1,6 @@
 import { Page } from "@/components/page-layout";
+import { DotTable } from "@/components/ui/dot-table";
+import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
@@ -31,6 +33,7 @@ import { create } from "zustand";
 import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard, SourceCardSkeleton } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
+import { SourceTableRow } from "./SourceTableRow";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
 import { useFailedDeploymentSources } from "./useFailedDeploymentSources";
 import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
@@ -102,6 +105,8 @@ export default function Sources() {
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
 
+  const [viewMode, setViewMode] = useViewMode();
+  const toolCountsBySource = useToolCountsBySource();
   const assetsCausingFailure = useUnusedAssetIds();
   const {
     dialogState,
@@ -184,6 +189,7 @@ export default function Sources() {
       await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.id,
+          nonBlocking: true,
           ...(type === "openapi"
             ? { excludeOpenapiv3Assets: [assetId] }
             : type === "function"
@@ -246,11 +252,14 @@ export default function Sources() {
     <>
       <Page.Section>
         <Page.Section.Title>Sources</Page.Section.Title>
-        <Page.Section.Description>
+        <Page.Section.Description className="max-w-2xl">
           {isFunctionsEnabled
             ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
             : "OpenAPI documents and third-party MCP servers providing tools for your project"}
         </Page.Section.Description>
+        <Page.Section.CTA>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+        </Page.Section.CTA>
         <Page.Section.CTA>
           <DeploymentsButton deploymentId={deployment?.id} />
         </Page.Section.CTA>
@@ -316,15 +325,15 @@ export default function Sources() {
           </DropdownMenu>
         </Page.Section.CTA>
         <Page.Section.Body>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {isLoading ? (
-              <>
-                <SourceCardSkeleton />
-                <SourceCardSkeleton />
-                <SourceCardSkeleton />
-              </>
-            ) : (
-              allSources?.map((asset: NamedAsset) => (
+          {isLoading ? (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <SourceCardSkeleton />
+              <SourceCardSkeleton />
+              <SourceCardSkeleton />
+            </div>
+          ) : viewMode === "grid" ? (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {allSources?.map((asset: NamedAsset) => (
                 <SourceCard
                   key={asset.id}
                   asset={asset}
@@ -336,9 +345,38 @@ export default function Sources() {
                   handleViewAsset={() => openViewAsset(asset)}
                   setChangeDocumentTargetSlug={openUploadOpenApi}
                 />
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <DotTable
+              headers={[
+                { label: "Name" },
+                { label: "Type" },
+                { label: "Tools" },
+                { label: "Created" },
+                { label: "Updated" },
+                { label: "" },
+                { label: "", className: "text-right" },
+              ]}
+            >
+              {allSources?.map((asset: NamedAsset) => (
+                <SourceTableRow
+                  key={asset.id}
+                  asset={asset}
+                  causingFailure={assetsCausingFailure.has(
+                    asset.deploymentAssetId,
+                  )}
+                  toolCount={
+                    toolCountsBySource.get(asset.deploymentAssetId) ?? 0
+                  }
+                  deploymentId={deployment?.id}
+                  handleRemove={() => openRemoveSource(asset)}
+                  handleViewAsset={() => openViewAsset(asset)}
+                  setChangeDocumentTargetSlug={openUploadOpenApi}
+                />
+              ))}
+            </DotTable>
+          )}
           <Dialog
             open={dialogState.type !== "closed"}
             onOpenChange={(open) => !open && closeDialog()}
@@ -414,6 +452,66 @@ const useUnusedAssetIds = () => {
   }, [toolsList.data, latestDeployment.data]);
 
   return unusedAssetIds;
+};
+
+/**
+ * Hook to count tools per source (keyed by deploymentAssetId).
+ * OpenAPI tools are matched by openapiv3DocumentId, function tools by assetId,
+ * and external MCP tools by slug.
+ */
+const useToolCountsBySource = () => {
+  const latestDeployment = useLatestDeployment();
+  const toolsList = useListTools(
+    {
+      deploymentId: latestDeployment.data?.deployment?.id ?? "",
+    },
+    undefined,
+    {
+      enabled: !!latestDeployment.data?.deployment?.id,
+    },
+  );
+
+  return useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!toolsList.data) return counts;
+
+    const deployment = latestDeployment.data?.deployment;
+    if (!deployment) return counts;
+
+    for (const tool of toolsList.data.tools) {
+      // OpenAPI tools → match by openapiv3DocumentId to deployment asset id
+      const docId = tool.httpToolDefinition?.openapiv3DocumentId;
+      if (docId) {
+        const match = deployment.openapiv3Assets.find((a) => a.id === docId);
+        if (match) {
+          counts.set(match.id, (counts.get(match.id) ?? 0) + 1);
+        }
+      }
+
+      // Function tools → match by assetId to deployment functions asset id
+      const funcAssetId = tool.functionToolDefinition?.assetId;
+      if (funcAssetId) {
+        for (const fa of deployment.functionsAssets ?? []) {
+          if (fa.assetId === funcAssetId) {
+            counts.set(fa.id, (counts.get(fa.id) ?? 0) + 1);
+          }
+        }
+      }
+
+      // External MCP tools → match by slug to external MCP id
+      const extSlug = tool.externalMcpToolDefinition?.slug;
+      if (extSlug) {
+        const match = (deployment.externalMcps ?? []).find(
+          (m) => m.slug === extSlug,
+        );
+        if (match) {
+          counts.set(match.id, (counts.get(match.id) ?? 0) + 1);
+        }
+      }
+    }
+
+    return counts;
+  }, [toolsList.data, latestDeployment.data]);
 };
 
 function DeploymentsButton({ deploymentId }: { deploymentId?: string }) {

@@ -8,6 +8,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 )
 
 func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
@@ -394,4 +396,139 @@ func TestTemplatesService_UpdateTemplate_Unauthorized(t *testing.T) {
 	})
 	require.Error(t, err, "expected error for unauthorized request")
 	require.Contains(t, err.Error(), "unauthorized")
+}
+
+func TestTemplatesService_UpdateTemplate_AuditLogCount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		Name:             types.Slug("audit-update-template"),
+		Prompt:           "Original prompt",
+		Description:      nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+		Arguments:        nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+
+	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
+		ID:               created.Template.ID,
+		Prompt:           new("Updated prompt"),
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           nil,
+		Kind:             nil,
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestTemplatesService_UpdateTemplate_NoChanges_DoesNotAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		Name:             types.Slug("audit-update-no-changes"),
+		Prompt:           "Original prompt",
+		Description:      nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+		Arguments:        nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+
+	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
+		ID:               created.Template.ID,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Prompt:           nil,
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           nil,
+		Kind:             nil,
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestTemplatesService_UpdateTemplate_AuditLogMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		Name:             types.Slug("audit-update-metadata"),
+		Prompt:           "Original prompt",
+		Description:      nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+		Arguments:        nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
+		ID:               created.Template.ID,
+		Prompt:           new("Updated prompt"),
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           nil,
+		Kind:             nil,
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionTemplateUpdate), record.Action)
+	require.Equal(t, "template", record.SubjectType)
+	require.Equal(t, "audit-update-metadata", record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "tools:prompt:prompt:audit-update-metadata", metadata["template_urn"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTemplateUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }

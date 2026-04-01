@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"testing"
 	"time"
@@ -37,8 +38,21 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			return nil, fmt.Errorf("failed to parse redis connection string: %w", err)
 		}
 
+		host, port, err := net.SplitHostPort(uri.Host)
+		if err != nil {
+			return nil, fmt.Errorf("split redis host/port: %w", err)
+		}
+
+		// Avoid a DNS lookup for localhost inside synctest bubbles without
+		// changing arbitrary Docker/Testcontainers endpoints. Re-resolving the
+		// host here can pick an address that is not the actual published Redis
+		// endpoint (for example ::1 instead of Docker's IPv4 localhost binding).
+		if host == "localhost" {
+			host = "127.0.0.1"
+		}
+
 		client := redis.NewClient(&redis.Options{
-			Addr:         uri.Host,
+			Addr:         net.JoinHostPort(host, port),
 			DB:           db,
 			DialTimeout:  1 * time.Second,
 			ReadTimeout:  300 * time.Millisecond,

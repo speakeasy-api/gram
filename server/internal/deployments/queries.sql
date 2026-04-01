@@ -675,32 +675,34 @@ INSERT INTO functions_access (
 RETURNING id;
 
 -- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
-VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
+VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier, @selected_remotes)
 ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET
   registry_id = EXCLUDED.registry_id,
   name = EXCLUDED.name,
   registry_server_specifier = EXCLUDED.registry_server_specifier,
+  selected_remotes = EXCLUDED.selected_remotes,
   updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at;
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at;
 
 -- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = @deployment_id AND deleted IS FALSE
 ORDER BY created_at ASC;
 
 -- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
 SELECT
   @clone_deployment_id
   , current.registry_id
   , current.name
   , current.slug
   , current.registry_server_specifier
+  , current.selected_remotes
 FROM external_mcp_attachments as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.deleted IS FALSE
   AND current.slug <> ALL (@excluded_slugs::text[])
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier;
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes;

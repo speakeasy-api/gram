@@ -19,12 +19,6 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// CustomProvider implements OAuth provider for custom OAuth providers
-type CustomProvider struct {
-	logger       *slog.Logger
-	environments *environments.EnvironmentEntries
-}
-
 // oauthTokenResponseSnake is the spec-compliant (RFC 6749) token response format.
 type oauthTokenResponseSnake struct {
 	AccessToken  string  `json:"access_token"`
@@ -43,6 +37,20 @@ type oauthTokenResponseCamel struct {
 	AccessToken  string  `json:"accessToken"`
 	RefreshToken string  `json:"refreshToken"`
 	ExpiresIn    float64 `json:"expiresIn"`
+}
+
+// CustomProvider implements OAuth provider for custom OAuth providers
+type CustomProvider struct {
+	logger       *slog.Logger
+	environments *environments.EnvironmentEntries
+}
+
+// NewCustomProvider creates a new custom OAuth provider
+func NewCustomProvider(logger *slog.Logger, environments *environments.EnvironmentEntries) *CustomProvider {
+	return &CustomProvider{
+		logger:       logger,
+		environments: environments,
+	}
 }
 
 // parseTokenResponse deserializes a raw OAuth token response body into a TokenExchangeResult.
@@ -92,14 +100,6 @@ func (p *CustomProvider) parseTokenResponse(ctx context.Context, body []byte, pr
 		RefreshToken: camel.RefreshToken,
 		ExpiresAt:    expiresAt,
 	}, nil
-}
-
-// NewCustomProvider creates a new custom OAuth provider
-func NewCustomProvider(logger *slog.Logger, environments *environments.EnvironmentEntries) *CustomProvider {
-	return &CustomProvider{
-		logger:       logger,
-		environments: environments,
-	}
 }
 
 // resolveClientCredentials extracts client_id and client_secret from provider secrets,
@@ -157,6 +157,7 @@ func (p *CustomProvider) ExchangeToken(
 	provider repo.OauthProxyProvider,
 	toolset *toolsets_repo.Toolset,
 	serverURL *url.URL,
+	codeVerifier string,
 ) (*TokenExchangeResult, error) {
 	clientID, clientSecret, err := p.resolveClientCredentials(ctx, provider, toolset)
 	if err != nil {
@@ -170,6 +171,9 @@ func (p *CustomProvider) ExchangeToken(
 	tokenData.Set("grant_type", "authorization_code")
 	tokenData.Set("redirect_uri", callbackURL)
 	tokenData.Set("code", code)
+	if codeVerifier != "" {
+		tokenData.Set("code_verifier", codeVerifier)
+	}
 
 	// Determine authentication method based on provider configuration
 	// Default to client_secret_post (form body) if TokenEndpointAuthMethodsSupported is empty
@@ -196,6 +200,7 @@ func (p *CustomProvider) ExchangeToken(
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
 	if useBasicAuth {
 		req.SetBasicAuth(clientID, clientSecret)
 	}
@@ -214,9 +219,11 @@ func (p *CustomProvider) ExchangeToken(
 	}()
 
 	if tokenResp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(tokenResp.Body)
 		p.logger.ErrorContext(ctx, "OAuth token exchange failed",
 			attr.SlogOAuthProvider(provider.Slug),
-			attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode))
+			attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode),
+			attr.SlogHTTPResponseBody(string(errBody)))
 		return nil, fmt.Errorf("token exchange failed with status %d", tokenResp.StatusCode)
 	}
 
@@ -275,6 +282,7 @@ func (p *CustomProvider) RefreshToken(
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
 	if useBasicAuth {
 		req.SetBasicAuth(clientID, clientSecret)
 	}
@@ -290,6 +298,11 @@ func (p *CustomProvider) RefreshToken(
 	}()
 
 	if tokenResp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(tokenResp.Body)
+		p.logger.ErrorContext(ctx, "OAuth token refresh failed",
+			attr.SlogOAuthProvider(provider.Slug),
+			attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode),
+			attr.SlogHTTPResponseBody(string(errBody)))
 		return nil, fmt.Errorf("token refresh failed with status %d", tokenResp.StatusCode)
 	}
 

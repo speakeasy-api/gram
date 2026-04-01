@@ -525,6 +525,13 @@ func DescribeToolset(
 		}
 	}
 
+	for _, tool := range toolsetTools.Tools {
+		if tool.ExternalMcpToolDefinition != nil && tool.ExternalMcpToolDefinition.RequiresOauth {
+			oauth2AuthCodeSecurityCount++
+			break
+		}
+	}
+
 	result := &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,

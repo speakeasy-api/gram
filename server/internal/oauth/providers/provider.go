@@ -18,13 +18,15 @@ type TokenExchangeResult struct {
 
 // Provider defines the interface for OAuth provider implementations
 type Provider interface {
-	// ExchangeToken exchanges an authorization code for an access token
+	// ExchangeToken exchanges an authorization code for an access token.
+	// codeVerifier is the PKCE verifier for the upstream provider (empty if not used).
 	ExchangeToken(
 		ctx context.Context,
 		code string,
 		provider repo.OauthProxyProvider,
 		toolset *toolsets_repo.Toolset,
 		serverURL *url.URL,
+		codeVerifier string,
 	) (*TokenExchangeResult, error)
 
 	// RefreshToken exchanges a refresh token for a new access token

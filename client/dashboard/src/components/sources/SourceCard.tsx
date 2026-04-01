@@ -3,20 +3,16 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { DotCard } from "@/components/ui/dot-card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
-import { UpdatedAt } from "@/components/updated-at";
 import { sourceTypeToUrnKind } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@speakeasy-api/moonshine";
-import { CircleAlertIcon } from "lucide-react";
-import {
-  ExternalMCPIllustration,
-  MCPPatternIllustration,
-} from "./SourceCardIllustrations";
+import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
 
 export type NamedAsset =
   | (Asset & {
@@ -100,56 +96,30 @@ export function SourceCard({
   ];
 
   const displayName = asset.name;
-  let subtitle: React.ReactNode = null;
 
-  if (asset.type === "externalmcp") {
-    subtitle = asset.slug;
-  } else if ("updatedAt" in asset && asset.updatedAt) {
-    subtitle = (
-      <UpdatedAt
-        date={new Date(asset.updatedAt)}
-        italic={false}
-        className="text-xs"
-        showRecentness
-      />
-    );
-  }
-
-  // Render the appropriate illustration based on source type
-  const renderIllustration = () => {
-    switch (asset.type) {
-      case "openapi":
-      case "function":
-        return (
-          <MCPPatternIllustration
-            toolsetSlug={asset.slug}
-            className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
-          />
-        );
-      case "externalmcp":
-        return (
-          <ExternalMCPIllustration
-            logoUrl={asset.iconUrl}
-            name={asset.name}
-            slug={asset.slug}
-          />
-        );
+  const iconContent = (() => {
+    if (asset.type === "externalmcp" && asset.iconUrl) {
+      return (
+        <img
+          src={asset.iconUrl}
+          alt={asset.name}
+          className="w-12 h-12 object-contain"
+        />
+      );
     }
-  };
+    if (asset.type === "externalmcp") {
+      return <Network className="w-8 h-8 text-muted-foreground" />;
+    }
+    return <FileCode className="w-8 h-8 text-muted-foreground" />;
+  })();
 
   return (
     <routes.sources.source.Link
       key={asset.id}
       params={[sourceKind, asset.slug]}
-      className="group bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden hover:border-foreground/20 hover:shadow-md transition-all hover:no-underline"
+      className="hover:no-underline"
     >
-      {/* Illustration header */}
-      <div className="h-36 w-full overflow-hidden border-b">
-        {renderIllustration()}
-      </div>
-
-      {/* Content area */}
-      <div className="p-4 flex flex-col flex-1">
+      <DotCard icon={iconContent}>
         {/* Header row with name and actions */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <Type
@@ -168,26 +138,27 @@ export function SourceCard({
           </div>
         </div>
 
-        {/* Footer row with type badge and metadata */}
+        {/* Footer row with type badge and open link */}
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
           <Badge variant="neutral">{config.label}</Badge>
-          <Type small muted as="span">
-            {subtitle}
-          </Type>
+          <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+            <span>Open</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
         </div>
-      </div>
+      </DotCard>
     </routes.sources.source.Link>
   );
 }
 
 export function SourceCardSkeleton() {
   return (
-    <div className="bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden">
-      {/* Illustration header placeholder */}
-      <div className="h-36 w-full bg-muted/50 animate-pulse border-b" />
+    <div className="bg-card text-card-foreground flex flex-row rounded-xl border overflow-hidden">
+      {/* Dot pattern sidebar placeholder */}
+      <div className="w-40 shrink-0 bg-muted/50 animate-pulse border-r" />
 
       {/* Content area */}
-      <div className="p-4 flex flex-col">
+      <div className="p-4 flex flex-col flex-1">
         {/* Name placeholder */}
         <div className="h-5 w-2/3 bg-muted rounded animate-pulse mb-2" />
 

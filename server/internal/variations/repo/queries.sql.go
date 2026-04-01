@@ -23,7 +23,7 @@ WHERE tool_variations.id = $1
     WHERE project_tool_variations.project_id = $2
   )
   AND tool_variations.deleted IS FALSE
-RETURNING tool_variations.id
+RETURNING tool_variations.id, tool_variations.src_tool_urn
 `
 
 type DeleteGlobalToolVariationParams struct {
@@ -31,11 +31,16 @@ type DeleteGlobalToolVariationParams struct {
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) DeleteGlobalToolVariation(ctx context.Context, arg DeleteGlobalToolVariationParams) (uuid.UUID, error) {
+type DeleteGlobalToolVariationRow struct {
+	ID         uuid.UUID
+	SrcToolUrn urn.Tool
+}
+
+func (q *Queries) DeleteGlobalToolVariation(ctx context.Context, arg DeleteGlobalToolVariationParams) (DeleteGlobalToolVariationRow, error) {
 	row := q.db.QueryRow(ctx, deleteGlobalToolVariation, arg.ID, arg.ProjectID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i DeleteGlobalToolVariationRow
+	err := row.Scan(&i.ID, &i.SrcToolUrn)
+	return i, err
 }
 
 const findGlobalVariationsByToolURNs = `-- name: FindGlobalVariationsByToolURNs :many

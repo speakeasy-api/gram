@@ -43,10 +43,7 @@ export function buildGetDomainQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetDomainQueryData>;
 } {
   return {
-    queryKey: queryKeyGetDomain({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyGetDomain({ gramSession: request?.gramSession }),
     queryFn: async function getDomainQueryFn(ctx): Promise<GetDomainQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -70,10 +67,7 @@ export function buildGetDomainQuery(
 }
 
 export function queryKeyGetDomain(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "domains", "getDomain", parameters];
 }

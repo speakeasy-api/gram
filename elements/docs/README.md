@@ -1,4 +1,4 @@
-**@gram-ai/elements v1.27.4**
+**@gram-ai/elements v1.27.5**
 
 ***
 
@@ -13,12 +13,12 @@ Please follow the [Setup Instructions](_media/README.md#setup) in the main READM
 The minimal configuration required to get Elements setup is demonstrated below:
 
 ```ts
-import type { ElementsConfig } from '@gram-ai/elements'
+import type { ElementsConfig } from "@gram-ai/elements";
 
 const config: ElementsConfig = {
-  mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
-  projectSlug: 'your-project-slug',
-}
+  mcp: "https://app.getgram.ai/mcp/your-mcp-slug",
+  projectSlug: "your-project-slug",
+};
 ```
 
 The `mcp` and `projectSlug` values can be retrieved from the MCP and project pages respectively.
@@ -28,11 +28,11 @@ The `mcp` and `projectSlug` values can be retrieved from the MCP and project pag
 `@gram-ai/elements` supports React 16.8+, React 17, React 18, and React 19. React 18 and 19 work out of the box. For React 16 or 17, add the compatibility plugin to your Vite config:
 
 ```ts
-import { reactCompat } from '@gram-ai/elements/compat'
+import { reactCompat } from "@gram-ai/elements/compat";
 
 export default defineConfig({
   plugins: [react(), reactCompat()],
-})
+});
 ```
 
 React 16 and React 17 are not regularly tested — please reach out to us for support if you run into any issues with these versions.

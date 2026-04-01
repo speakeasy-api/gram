@@ -37,6 +37,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   convertToModelMessages,
   createUIMessageStream,
+  LanguageModel,
   smoothStream,
   stepCountIs,
   streamText,
@@ -374,7 +375,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         // Stream the response
         const modelToUse = config.languageModel
           ? config.languageModel
-          : openRouterModel!.chat(model);
+          : (openRouterModel!.chat(model) as LanguageModel);
 
         try {
           // This works around AI SDK bug where these fields cause validation failures

@@ -3,7 +3,7 @@ name: Plugin Version Check
 on:
   pull_request:
     paths:
-      - 'hooks/plugin-claude/**'
+      - "hooks/plugin-claude/**"
 
 jobs:
   check-version-bump:

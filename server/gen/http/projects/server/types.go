@@ -39,6 +39,15 @@ type UpsertAllowedOriginRequestBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
 
+// SetOrganizationWhitelistRequestBody is the type of the "projects" service
+// "setOrganizationWhitelist" endpoint HTTP request body.
+type SetOrganizationWhitelistRequestBody struct {
+	// The ID of the organization to update
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Whether the organization should be whitelisted
+	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+}
+
 // GetProjectResponseBody is the type of the "projects" service "getProject"
 // endpoint HTTP response body.
 type GetProjectResponseBody struct {
@@ -1364,6 +1373,196 @@ type DeleteProjectGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetOrganizationWhitelistUnauthorizedResponseBody is the type of the
+// "projects" service "setOrganizationWhitelist" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetOrganizationWhitelistUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistForbiddenResponseBody is the type of the "projects"
+// service "setOrganizationWhitelist" endpoint HTTP response body for the
+// "forbidden" error.
+type SetOrganizationWhitelistForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistBadRequestResponseBody is the type of the "projects"
+// service "setOrganizationWhitelist" endpoint HTTP response body for the
+// "bad_request" error.
+type SetOrganizationWhitelistBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistNotFoundResponseBody is the type of the "projects"
+// service "setOrganizationWhitelist" endpoint HTTP response body for the
+// "not_found" error.
+type SetOrganizationWhitelistNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistConflictResponseBody is the type of the "projects"
+// service "setOrganizationWhitelist" endpoint HTTP response body for the
+// "conflict" error.
+type SetOrganizationWhitelistConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistUnsupportedMediaResponseBody is the type of the
+// "projects" service "setOrganizationWhitelist" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetOrganizationWhitelistUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistInvalidResponseBody is the type of the "projects"
+// service "setOrganizationWhitelist" endpoint HTTP response body for the
+// "invalid" error.
+type SetOrganizationWhitelistInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistInvariantViolationResponseBody is the type of the
+// "projects" service "setOrganizationWhitelist" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetOrganizationWhitelistInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistUnexpectedResponseBody is the type of the "projects"
+// service "setOrganizationWhitelist" endpoint HTTP response body for the
+// "unexpected" error.
+type SetOrganizationWhitelistUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationWhitelistGatewayErrorResponseBody is the type of the
+// "projects" service "setOrganizationWhitelist" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetOrganizationWhitelistGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
 	// The ID of the project
@@ -2481,6 +2680,156 @@ func NewDeleteProjectGatewayErrorResponseBody(res *goa.ServiceError) *DeleteProj
 	return body
 }
 
+// NewSetOrganizationWhitelistUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setOrganizationWhitelist" endpoint of the
+// "projects" service.
+func NewSetOrganizationWhitelistUnauthorizedResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistUnauthorizedResponseBody {
+	body := &SetOrganizationWhitelistUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistForbiddenResponseBody builds the HTTP response
+// body from the result of the "setOrganizationWhitelist" endpoint of the
+// "projects" service.
+func NewSetOrganizationWhitelistForbiddenResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistForbiddenResponseBody {
+	body := &SetOrganizationWhitelistForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistBadRequestResponseBody builds the HTTP response
+// body from the result of the "setOrganizationWhitelist" endpoint of the
+// "projects" service.
+func NewSetOrganizationWhitelistBadRequestResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistBadRequestResponseBody {
+	body := &SetOrganizationWhitelistBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistNotFoundResponseBody builds the HTTP response
+// body from the result of the "setOrganizationWhitelist" endpoint of the
+// "projects" service.
+func NewSetOrganizationWhitelistNotFoundResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistNotFoundResponseBody {
+	body := &SetOrganizationWhitelistNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistConflictResponseBody builds the HTTP response
+// body from the result of the "setOrganizationWhitelist" endpoint of the
+// "projects" service.
+func NewSetOrganizationWhitelistConflictResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistConflictResponseBody {
+	body := &SetOrganizationWhitelistConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setOrganizationWhitelist" endpoint of
+// the "projects" service.
+func NewSetOrganizationWhitelistUnsupportedMediaResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistUnsupportedMediaResponseBody {
+	body := &SetOrganizationWhitelistUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistInvalidResponseBody builds the HTTP response body
+// from the result of the "setOrganizationWhitelist" endpoint of the "projects"
+// service.
+func NewSetOrganizationWhitelistInvalidResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistInvalidResponseBody {
+	body := &SetOrganizationWhitelistInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setOrganizationWhitelist" endpoint of
+// the "projects" service.
+func NewSetOrganizationWhitelistInvariantViolationResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistInvariantViolationResponseBody {
+	body := &SetOrganizationWhitelistInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistUnexpectedResponseBody builds the HTTP response
+// body from the result of the "setOrganizationWhitelist" endpoint of the
+// "projects" service.
+func NewSetOrganizationWhitelistUnexpectedResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistUnexpectedResponseBody {
+	body := &SetOrganizationWhitelistUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationWhitelistGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setOrganizationWhitelist" endpoint of the
+// "projects" service.
+func NewSetOrganizationWhitelistGatewayErrorResponseBody(res *goa.ServiceError) *SetOrganizationWhitelistGatewayErrorResponseBody {
+	body := &SetOrganizationWhitelistGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetProjectPayload builds a projects service getProject endpoint payload.
 func NewGetProjectPayload(slug string, apikeyToken *string, sessionToken *string) *projects.GetProjectPayload {
 	v := &projects.GetProjectPayload{}
@@ -2568,6 +2917,18 @@ func NewDeleteProjectPayload(id string, apikeyToken *string, sessionToken *strin
 	return v
 }
 
+// NewSetOrganizationWhitelistPayload builds a projects service
+// setOrganizationWhitelist endpoint payload.
+func NewSetOrganizationWhitelistPayload(body *SetOrganizationWhitelistRequestBody, apikeyToken *string) *projects.SetOrganizationWhitelistPayload {
+	v := &projects.SetOrganizationWhitelistPayload{
+		OrganizationID: *body.OrganizationID,
+		Whitelisted:    *body.Whitelisted,
+	}
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
 // ValidateCreateProjectRequestBody runs the validations defined on
 // CreateProjectRequestBody
 func ValidateCreateProjectRequestBody(body *CreateProjectRequestBody) (err error) {
@@ -2613,6 +2974,18 @@ func ValidateUpsertAllowedOriginRequestBody(body *UpsertAllowedOriginRequestBody
 		if !(*body.Status == "pending" || *body.Status == "approved" || *body.Status == "rejected") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "approved", "rejected"}))
 		}
+	}
+	return
+}
+
+// ValidateSetOrganizationWhitelistRequestBody runs the validations defined on
+// SetOrganizationWhitelistRequestBody
+func ValidateSetOrganizationWhitelistRequestBody(body *SetOrganizationWhitelistRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Whitelisted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
 	return
 }

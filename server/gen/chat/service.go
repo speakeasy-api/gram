@@ -23,7 +23,7 @@ type Service interface {
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Generate a title for a chat based on its messages
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
-	// Load a chat by its ID
+	// Get the total number of chat credits and usage for the current billing period
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 	// List all chats for a project with their resolutions
 	ListChatsWithResolutions(context.Context, *ListChatsWithResolutionsPayload) (res *ListChatsWithResolutionsResult, err error)
@@ -156,9 +156,7 @@ type ChatResolution struct {
 // CreditUsagePayload is the payload type of the chat service creditUsage
 // method.
 type CreditUsagePayload struct {
-	SessionToken      *string
-	ProjectSlugInput  *string
-	ChatSessionsToken *string
+	SessionToken *string
 }
 
 // CreditUsageResult is the result type of the chat service creditUsage method.

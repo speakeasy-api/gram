@@ -18,7 +18,10 @@ import (
 type Service interface {
 	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
-	Claude(context.Context, *ClaudePayload) (res *ClaudeHookResult, err error)
+	Claude(context.Context, *ClaudeHookPayload) (res *ClaudeHookResult, err error)
+	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
+	// authentication.
+	Logs(context.Context, *LogsPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -41,22 +44,10 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"claude"}
+var MethodNames = [2]string{"claude", "logs"}
 
-// ClaudeHookResult is the result type of the hooks service claude method.
-type ClaudeHookResult struct {
-	// Whether to continue (SessionStart only)
-	Continue *bool
-	// Reason if blocked (SessionStart only)
-	StopReason *string
-	// Hook-specific output as JSON object
-	HookSpecificOutput any
-}
-
-// ClaudePayload is the payload type of the hooks service claude method.
-type ClaudePayload struct {
-	ApikeyToken      *string
-	ProjectSlugInput *string
+// ClaudeHookPayload is the payload type of the hooks service claude method.
+type ClaudeHookPayload struct {
 	// The type of hook event
 	HookEventName string
 	// The name of the tool (for tool-related events)
@@ -68,11 +59,107 @@ type ClaudePayload struct {
 	// The response from the tool (PostToolUse only)
 	ToolResponse any
 	// The error from the tool (PostToolUseFailure only)
-	ToolError any
+	Error any
+	// Whether the failure was caused by user interruption (PostToolUseFailure only)
+	IsInterrupt *bool
 	// The Claude Code session ID
 	SessionID *string
 	// Additional hook-specific data
 	AdditionalData map[string]any
+}
+
+// ClaudeHookResult is the result type of the hooks service claude method.
+type ClaudeHookResult struct {
+	// Whether to continue (SessionStart only)
+	Continue *bool
+	// Reason if blocked (SessionStart only)
+	StopReason *string
+	// Hook-specific output as JSON object
+	HookSpecificOutput any
+}
+
+// LogsPayload is the payload type of the hooks service logs method.
+type LogsPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Array of resource logs
+	ResourceLogs []*OTELResourceLog
+}
+
+// OTEL log attribute with key and typed value
+type OTELAttribute struct {
+	// Attribute key
+	Key string
+	// Attribute value
+	Value *OTELAttributeValue
+}
+
+// OTEL attribute value - supports stringValue or intValue
+type OTELAttributeValue struct {
+	// String value
+	StringValue *string
+	// Integer value
+	IntValue *int64
+}
+
+// OTEL log body
+type OTELLogBody struct {
+	// String body value
+	StringValue *string
+}
+
+// Individual OTEL log record
+type OTELLogRecord struct {
+	// Timestamp in nanoseconds since Unix epoch
+	TimeUnixNano string
+	// Observed timestamp in nanoseconds
+	ObservedTimeUnixNano string
+	// Log body content
+	Body *OTELLogBody
+	// Log attributes
+	Attributes []*OTELAttribute
+	// Number of dropped attributes
+	DroppedAttributesCount *int
+}
+
+// OTEL resource information
+type OTELResource struct {
+	// Resource attributes
+	Attributes []*OTELResourceAttribute
+	// Number of dropped attributes
+	DroppedAttributesCount *int
+}
+
+// OTEL resource attribute
+type OTELResourceAttribute struct {
+	// Resource attribute key
+	Key string
+	// Resource attribute value
+	Value *OTELAttributeValue
+}
+
+// OTEL resource logs container
+type OTELResourceLog struct {
+	// Resource information
+	Resource *OTELResource
+	// Array of scope logs
+	ScopeLogs []*OTELScopeLog
+}
+
+// OTEL instrumentation scope
+type OTELScope struct {
+	// Scope name
+	Name *string
+	// Scope version
+	Version *string
+}
+
+// OTEL scope logs container
+type OTELScopeLog struct {
+	// Instrumentation scope information
+	Scope *OTELScope
+	// Array of log records
+	LogRecords []*OTELLogRecord
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

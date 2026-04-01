@@ -15,6 +15,8 @@ import (
 	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -214,6 +216,131 @@ func TestDeploymentsService_Evolve_UpsertOpenAPIv3(t *testing.T) {
 		return a.Name
 	})
 	require.ElementsMatch(t, assetNames, []string{"initial-doc", "second-doc"}, "unexpected asset names")
+}
+
+func TestDeploymentsService_Evolve_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	bs1 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares1, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs1.Len()),
+	}, io.NopCloser(bs1))
+	require.NoError(t, err, "upload first openapi v3 asset")
+
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-audit-evolve-initial-deployment",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares1.Asset.ID,
+				Name:    "initial-doc",
+				Slug:    "initial-doc",
+			},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsEvolve)
+	require.NoError(t, err)
+
+	bs2 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares2, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs2.Len()),
+	}, io.NopCloser(bs2))
+	require.NoError(t, err, "upload second openapi v3 asset")
+
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares2.Asset.ID,
+				Name:    "second-doc",
+				Slug:    "second-doc",
+			},
+		},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, evolved)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDeploymentsEvolve)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionDeploymentsEvolve), record.Action)
+	require.Equal(t, "deployment", record.SubjectType)
+	require.Empty(t, record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.Metadata)
+	require.NotNil(t, record.BeforeSnapshot)
+	require.NotNil(t, record.AfterSnapshot)
+
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, initial.Deployment.ID, beforeSnapshot["ID"])
+	require.Len(t, beforeSnapshot["Openapiv3Assets"], 1)
+	require.Equal(t, evolved.Deployment.ID, afterSnapshot["ID"])
+	require.Len(t, afterSnapshot["Openapiv3Assets"], 2)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsEvolve)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestDeploymentsService_Evolve_AuditLog_NotWrittenOnFailure(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsEvolve)
+	require.NoError(t, err)
+
+	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:            nil,
+		SessionToken:           nil,
+		ProjectSlugInput:       nil,
+		DeploymentID:           nil,
+		UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsEvolve)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {

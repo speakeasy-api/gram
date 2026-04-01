@@ -40,6 +40,8 @@ type Service interface {
 	ListAttributeKeys(context.Context, *ListAttributeKeysPayload) (res *ListAttributeKeysResult, err error)
 	// Get aggregated hooks metrics grouped by server
 	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
+	// List hook traces aggregated by trace_id with user information
+	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -64,18 +66,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary"}
-
-// Filter on a log attribute by path.
-type AttributeFilter struct {
-	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
-	// bare path for system attributes (e.g. 'http.route').
-	Path string
-	// Comparison operator
-	Op string
-	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
-	Value *string
-}
+var MethodNames = [12]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -157,12 +148,12 @@ type GetHooksSummaryPayload struct {
 type GetHooksSummaryResult struct {
 	// Aggregated metrics grouped by server
 	Servers []*HooksServerSummary
+	// Aggregated metrics grouped by user
+	Users []*HooksUserSummary
 	// Total number of hook events
 	TotalEvents int64
 	// Total number of unique sessions
 	TotalSessions int64
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -170,8 +161,6 @@ type GetHooksSummaryResult struct {
 type GetMetricsSummaryResult struct {
 	// Aggregated metrics
 	Metrics *ProjectSummary
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetObservabilityOverviewPayload is the payload type of the telemetry service
@@ -188,8 +177,8 @@ type GetObservabilityOverviewPayload struct {
 	ExternalUserID *string
 	// Optional API key ID filter
 	APIKeyID *string
-	// Optional toolset/MCP server ID filter
-	ToolsetID *string
+	// Optional toolset/MCP server slug filter
+	ToolsetSlug *string
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool
 }
@@ -209,8 +198,6 @@ type GetObservabilityOverviewResult struct {
 	TopToolsByFailureRate []*ToolMetric
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // GetProjectMetricsSummaryPayload is the payload type of the telemetry service
@@ -246,8 +233,30 @@ type GetUserMetricsSummaryPayload struct {
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummary
-	// Whether telemetry is enabled for the organization
-	Enabled bool
+}
+
+// Summary information for a hook trace
+type HookTraceSummary struct {
+	// Trace ID (32 hex characters)
+	TraceID string
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
+	// Total number of logs in this trace
+	LogCount uint64
+	// Hook execution status
+	HookStatus *string
+	// Gram URN associated with this hook trace
+	GramUrn string
+	// Tool name (from materialized column)
+	ToolName *string
+	// Tool call source (from materialized column)
+	ToolSource *string
+	// Event source (from materialized column)
+	EventSource *string
+	// User email (from attributes.user.email)
+	UserEmail *string
+	// Hook source (from attributes.gram.hook.source)
+	HookSource *string
 }
 
 // Aggregated hooks metrics for a single server
@@ -257,6 +266,22 @@ type HooksServerSummary struct {
 	// Total number of hook events for this server
 	EventCount int64
 	// Number of unique tools used for this server
+	UniqueTools int64
+	// Number of successful tool completions (PostToolUse events)
+	SuccessCount int64
+	// Number of failed tool completions (PostToolUseFailure events)
+	FailureCount int64
+	// Failure rate as a decimal (0.0 to 1.0)
+	FailureRate float64
+}
+
+// Aggregated hooks metrics for a single user
+type HooksUserSummary struct {
+	// User email address
+	UserEmail string
+	// Total number of hook events for this user
+	EventCount int64
+	// Number of unique tools used by this user
 	UniqueTools int64
 	// Number of successful tool completions (PostToolUse events)
 	SuccessCount int64
@@ -304,8 +329,48 @@ type ListFilterOptionsPayload struct {
 type ListFilterOptionsResult struct {
 	// List of filter options
 	Options []*FilterOption
-	// Whether telemetry is enabled for the organization
-	Enabled bool
+}
+
+// ListHooksTracesPayload is the payload type of the telemetry service
+// listHooksTraces method.
+type ListHooksTracesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From string
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To string
+	// Filter conditions for the search query
+	Filters []*LogFilter
+	// Cursor for pagination (trace_id)
+	Cursor *string
+	// Sort order
+	Sort string
+	// Number of items to return (1-1000)
+	Limit int
+}
+
+// ListHooksTracesResult is the result type of the telemetry service
+// listHooksTraces method.
+type ListHooksTracesResult struct {
+	// List of hook trace summaries
+	Traces []*HookTraceSummary
+	// Cursor for next page
+	NextCursor *string
+}
+
+// A single filter condition for a log search query.
+type LogFilter struct {
+	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
+	// bare path for system attributes (e.g. 'http.route').
+	Path string
+	// Comparison operator
+	Operator string
+	// Values to compare against. Pass one value for single-value operators (eq,
+	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
+	// 'not_exists'.
+	Values []string
 }
 
 // Model usage statistics
@@ -427,8 +492,6 @@ type SearchChatsResult struct {
 	Chats []*ChatSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
 }
 
 // Filter criteria for searching logs
@@ -455,8 +518,6 @@ type SearchLogsFilter struct {
 	ExternalUserID *string
 	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
 	EventSource *string
-	// Filters on custom log attributes
-	AttributeFilters []*AttributeFilter
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -475,7 +536,13 @@ type SearchLogsPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Filter criteria for the search
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string
+	// Filter conditions for the search query
+	Filters []*LogFilter
+	// [Deprecated] Use 'filters' and top-level 'from'/'to' instead.
 	Filter *SearchLogsFilter
 	// Cursor for pagination
 	Cursor *string
@@ -492,8 +559,6 @@ type SearchLogsResult struct {
 	Logs []*TelemetryLogRecord
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
 }
 
 // Filter criteria for searching tool calls
@@ -535,10 +600,6 @@ type SearchToolCallsResult struct {
 	ToolCalls []*ToolCallSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether tool metrics are enabled for the organization
-	Enabled bool
-	// Whether tool input/output logging is enabled for the organization
-	ToolIoLogsEnabled bool
 }
 
 // Filter criteria for searching user usage summaries
@@ -576,8 +637,6 @@ type SearchUsersResult struct {
 	Users []*UserSummary
 	// Cursor for next page
 	NextCursor *string
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Service information

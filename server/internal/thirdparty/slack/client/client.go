@@ -58,6 +58,7 @@ type SlackAppAuthInfoResponse struct {
 	AccessToken    string
 	TeamName       string
 	TeamID         string
+	SystemPrompt   string
 }
 
 func (s *SlackClient) Enabled() bool {
@@ -65,10 +66,6 @@ func (s *SlackClient) Enabled() bool {
 }
 
 func (s *SlackClient) GetAppAuthInfo(ctx context.Context, slackTeamID string) (*SlackAppAuthInfoResponse, error) {
-	if !s.enabled {
-		return nil, fmt.Errorf("slack client is not enabled")
-	}
-
 	app, err := s.repo.GetSlackAppByTeamID(ctx, conv.ToPGText(slackTeamID))
 	if err != nil {
 		return nil, fmt.Errorf("get slack app by team id: %w", err)
@@ -90,6 +87,7 @@ func (s *SlackClient) GetAppAuthInfo(ctx context.Context, slackTeamID string) (*
 		ProjectID:      app.ProjectID,
 		TeamName:       conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
 		TeamID:         conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
+		SystemPrompt:   conv.PtrValOr(conv.FromPGText[string](app.SystemPrompt), ""),
 	}, nil
 }
 
@@ -123,10 +121,6 @@ type SlackMessageResponse struct {
 }
 
 func (s *SlackClient) GetConversationReplies(ctx context.Context, accessToken string, input SlackConversationInput) (*SlackConversationRepliesResponse, error) {
-	if !s.enabled {
-		return nil, fmt.Errorf("slack client is not enabled")
-	}
-
 	urlStr := slackServer + "/conversations.replies"
 
 	// Build form body
@@ -178,10 +172,6 @@ func (s *SlackClient) GetConversationReplies(ctx context.Context, accessToken st
 }
 
 func (s *SlackClient) PostMessage(ctx context.Context, accessToken string, input SlackPostMessageInput) error {
-	if !s.enabled {
-		return fmt.Errorf("slack client is not enabled")
-	}
-
 	urlStr := slackServer + "/chat.postMessage"
 
 	// Build form body
@@ -233,6 +223,93 @@ func (s *SlackClient) PostMessage(ctx context.Context, accessToken string, input
 	}
 
 	return nil
+}
+
+type SlackPostEphemeralInput struct {
+	ChannelID string
+	UserID    string
+	Message   string
+	ThreadTS  *string
+}
+
+func (s *SlackClient) PostEphemeralMessage(ctx context.Context, accessToken string, input SlackPostEphemeralInput) error {
+	urlStr := slackServer + "/chat.postEphemeral"
+
+	form := url.Values{}
+	form.Set("channel", input.ChannelID)
+	form.Set("user", input.UserID)
+	form.Set("text", input.Message)
+	if input.ThreadTS != nil {
+		form.Set("thread_ts", *input.ThreadTS)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlStr, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("create ephemeral request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send ephemeral request to Slack: %w", err)
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			fmt.Printf("failed to close response body: %v\n", cerr)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("slack postEphemeral non-200 response: %d, read body: %w", resp.StatusCode, err)
+		}
+		return fmt.Errorf("slack postEphemeral non-200 response: %d, body: %s", resp.StatusCode, string(respBody))
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read ephemeral response body: %w", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("unmarshal ephemeral response: %w", err)
+	}
+
+	if ok, exists := result["ok"].(bool); !exists || !ok {
+		errMsg, _ := result["error"].(string)
+		return fmt.Errorf("slack postEphemeral failed: %s", errMsg)
+	}
+
+	return nil
+}
+
+func (s *SlackClient) GetAppAuthInfoByID(ctx context.Context, gramAppID uuid.UUID) (*SlackAppAuthInfoResponse, error) {
+	app, err := s.repo.GetSlackAppByID(ctx, gramAppID)
+	if err != nil {
+		return nil, fmt.Errorf("get slack app by id: %w", err)
+	}
+
+	if !app.SlackBotToken.Valid {
+		return nil, fmt.Errorf("slack app has no bot token")
+	}
+
+	decryptedAccessToken, err := s.enc.Decrypt(app.SlackBotToken.String)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt bot token: %w", err)
+	}
+
+	return &SlackAppAuthInfoResponse{
+		SlackAppID:     app.ID,
+		AccessToken:    decryptedAccessToken,
+		OrganizationID: app.OrganizationID,
+		ProjectID:      app.ProjectID,
+		TeamName:       conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
+		TeamID:         conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
+		SystemPrompt:   conv.PtrValOr(conv.FromPGText[string](app.SystemPrompt), ""),
+	}, nil
 }
 
 func (s *SlackClient) OAuthV2Access(ctx context.Context, code, initialRedirectUI string) (*slackOAuthResponse, error) {
@@ -333,4 +410,61 @@ func (s *SlackClient) OAuthV2AccessWithCredentials(ctx context.Context, code, re
 	}
 
 	return &oauthResponse, nil
+}
+
+type SlackAddReactionInput struct {
+	ChannelID string
+	Timestamp string
+	Name      string
+}
+
+func (s *SlackClient) AddReaction(ctx context.Context, accessToken string, input SlackAddReactionInput) error {
+	urlStr := slackServer + "/reactions.add"
+
+	form := url.Values{}
+	form.Set("channel", input.ChannelID)
+	form.Set("timestamp", input.Timestamp)
+	form.Set("name", input.Name)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlStr, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("create reaction request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send reaction request to Slack: %w", err)
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			fmt.Printf("failed to close response body: %v\n", cerr)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("slack reactions.add non-200 response: %d, read body: %w", resp.StatusCode, err)
+		}
+		return fmt.Errorf("slack reactions.add non-200 response: %d, body: %s", resp.StatusCode, string(respBody))
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read reaction response body: %w", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("unmarshal reaction response: %w", err)
+	}
+
+	if ok, exists := result["ok"].(bool); !exists || !ok {
+		errMsg, _ := result["error"].(string)
+		return fmt.Errorf("slack reactions.add failed: %s", errMsg)
+	}
+
+	return nil
 }

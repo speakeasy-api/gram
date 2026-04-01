@@ -111,3 +111,32 @@ WHERE sat.slack_app_id = @slack_app_id
   AND sa.project_id = @project_id
   AND sa.deleted IS FALSE
 ORDER BY sat.created_at ASC;
+
+-- name: ListSlackAppToolsetNames :many
+SELECT t.name, t.slug
+FROM slack_app_toolsets sat
+JOIN toolsets t ON t.id = sat.toolset_id
+JOIN slack_apps sa ON sa.id = sat.slack_app_id
+WHERE sat.slack_app_id = @slack_app_id
+  AND sa.deleted IS FALSE
+  AND t.deleted IS FALSE
+ORDER BY t.name ASC;
+
+-- name: GetSlackRegistration :one
+SELECT *
+FROM slack_registrations
+WHERE slack_app_id = @slack_app_id
+  AND slack_account_id = @slack_account_id;
+
+-- name: GetSlackRegistrationWithUser :one
+SELECT sr.*, u.display_name AS user_display_name, u.email AS user_email
+FROM slack_registrations sr
+JOIN users u ON u.id = sr.user_id::text
+WHERE sr.slack_app_id = @slack_app_id
+  AND sr.slack_account_id = @slack_account_id;
+
+-- name: CreateSlackRegistration :one
+INSERT INTO slack_registrations (slack_app_id, slack_account_id, user_id)
+VALUES (@slack_app_id, @slack_account_id, @user_id)
+ON CONFLICT (slack_app_id, slack_account_id) DO UPDATE SET user_id = @user_id, updated_at = clock_timestamp()
+RETURNING *;

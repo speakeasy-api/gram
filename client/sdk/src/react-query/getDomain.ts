@@ -56,7 +56,7 @@ export type GetDomainQueryError =
  * getDomain domains
  *
  * @remarks
- * Get the custom domain for a project
+ * Get the custom domain for an organization
  */
 export function useGetDomain(
   request?: operations.GetDomainRequest | undefined,
@@ -79,7 +79,7 @@ export function useGetDomain(
  * getDomain domains
  *
  * @remarks
- * Get the custom domain for a project
+ * Get the custom domain for an organization
  */
 export function useGetDomainSuspense(
   request?: operations.GetDomainRequest | undefined,
@@ -100,12 +100,7 @@ export function useGetDomainSuspense(
 
 export function setGetDomainData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: GetDomainQueryData,
 ): GetDomainQueryData | undefined {
   const key = queryKeyGetDomain(...queryKeyBase);
@@ -116,10 +111,7 @@ export function setGetDomainData(
 export function invalidateGetDomain(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

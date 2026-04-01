@@ -22,7 +22,7 @@ func New(polar *polar.Client, posthog *posthog.Posthog, logger *slog.Logger) *Co
 	return &Composite{
 		polar:   polar,
 		posthog: posthog,
-		logger:  logger.With(attr.SlogComponent("usage-tracker")),
+		logger:  logger.With(attr.SlogComponent("usage_tracker")),
 	}
 }
 

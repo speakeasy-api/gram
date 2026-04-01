@@ -29,6 +29,7 @@ scratch/
 /local/functions
 .speakeasy/temp
 mprocs.log
+.madprocs.port
 melange.log
 __debug_bin*
 go.work

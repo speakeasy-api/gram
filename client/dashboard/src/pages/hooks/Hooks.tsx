@@ -3,34 +3,42 @@ import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
+import { PieProgress } from "@/components/PieProgress";
 import { Button } from "@/components/ui/button";
-import { SearchBar } from "@/components/ui/search-bar";
+import { MultiSearch } from "@/components/ui/multi-search";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
+import { useOrgRoutes } from "@/routes";
 import {
   getPresetRange,
   TimeRangePicker,
   type DateRangePreset,
 } from "@gram-ai/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
-import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
+import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
 import type {
-  AttributeFilter,
   GetHooksSummaryResult,
   HooksServerSummary,
+  HookTraceSummary as HookTrace,
+  LogFilter,
   TelemetryLogRecord,
 } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Settings } from "lucide-react";
+import { Filter, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "../logs/LogDetailSheet";
+import { TraceLogsList } from "../logs/TraceLogsList";
+import { EditServerNameDialog } from "./EditServerNameDialog";
 import { HooksEmptyState } from "./HooksEmptyState";
+import { HookSourceIcon } from "./HookSourceIcon";
 
 const validPresets: DateRangePreset[] = [
   "15m",
@@ -47,6 +55,16 @@ const validPresets: DateRangePreset[] = [
 
 function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
+}
+
+// Generic filter chip that displays one thing but filters on multiple values
+interface FilterChip {
+  // What to display in the UI (e.g., "Linear" or "Tom")
+  display: string;
+  // The actual filter values to use in queries (e.g., ["claude_ai_Linear", "my_linear_server"] or ["tom@speakeasy.com"])
+  filters: string[];
+  // The attribute path to filter on (e.g., "gram.tool_call.source" or "user.email")
+  path: string;
 }
 
 function safeBase64Encode(str: string): string {
@@ -70,7 +88,7 @@ function safeBase64Decode(str: string): string | null {
   }
 }
 
-const perPage = 25;
+const perPage = 100;
 
 export default function HooksPage() {
   return <HooksContent />;
@@ -85,20 +103,58 @@ function HooksContent() {
       toolName.includes("logs") || toolName.includes("hooks"),
   });
 
-  const initialQuery = searchParams.get("q");
+  // Server name mappings for display overrides
+  const serverNameMappings = useServerNameMappings();
+
   const initialServer = searchParams.get("server");
   const initialUserEmail = searchParams.get("user");
-  const [searchQuery, setSearchQuery] = useState<string | null>(
-    initialQuery || null,
+  const initialHideLocal = searchParams.get("hideLocal") !== "false"; // default to true
+
+  // Active filter chips
+  const [activeFilters, setActiveFilters] = useState<FilterChip[]>(() => {
+    const filters: FilterChip[] = [];
+
+    // Parse comma-separated server filters
+    if (initialServer) {
+      const serverValues = initialServer
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      serverValues.forEach((value) => {
+        filters.push({
+          display: value,
+          filters: [value],
+          path: "gram.tool_call.source",
+        });
+      });
+    }
+
+    // Parse comma-separated user filters
+    if (initialUserEmail) {
+      const userValues = initialUserEmail
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      userValues.forEach((value) => {
+        filters.push({
+          display: value,
+          filters: [value],
+          path: "user.email",
+        });
+      });
+    }
+
+    return filters;
+  });
+
+  const [serverInput, setServerInput] = useState("");
+  const [userEmailInput, setUserEmailInput] = useState("");
+  const [hideLocalToolCalls, setHideLocalToolCalls] =
+    useState(initialHideLocal);
+  const [summaryView, setSummaryView] = useState<"servers" | "users">(
+    "servers",
   );
-  const [searchInput, setSearchInput] = useState(initialQuery || "");
-  const [selectedServer, setSelectedServer] = useState<string | null>(
-    initialServer || null,
-  );
-  const [userEmailFilter, setUserEmailFilter] = useState<string | null>(
-    initialUserEmail || null,
-  );
-  const [userEmailInput, setUserEmailInput] = useState(initialUserEmail || "");
+  const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
   );
@@ -203,43 +259,36 @@ function HooksContent() {
     }),
   );
 
-  // Build attribute filters for server, search query, and user email
-  const attributeFilters = useMemo(() => {
-    const filters: AttributeFilter[] = [];
+  // Build attribute filters from active filter chips
+  const logFilters = useMemo(() => {
+    const filters: LogFilter[] = [];
 
-    // Filter by tool source (gram.tool_call.source)
-    if (selectedServer) {
+    // Each chip becomes its own filter entry to preserve operator semantics:
+    // - Single-value chips (from search input) use "contains" (substring match)
+    // - Multi-value chips (from table clicks with grouped servers) use "in" (exact match)
+    for (const chip of activeFilters) {
+      filters.push({
+        path: chip.path,
+        operator: chip.filters.length > 1 ? "in" : "contains",
+        values: chip.filters,
+      });
+    }
+
+    // Hide local tool calls (filter out empty gram.tool_call.source)
+    if (hideLocalToolCalls) {
       filters.push({
         path: "gram.tool_call.source",
-        op: "eq",
-        value: selectedServer,
-      });
-    }
-
-    // Filter by tool name (search query)
-    if (searchQuery) {
-      filters.push({
-        path: "gram.tool.name",
-        op: "contains",
-        value: searchQuery,
-      });
-    }
-
-    // Filter by user email
-    if (userEmailFilter) {
-      filters.push({
-        path: "user.email",
-        op: "contains",
-        value: userEmailFilter,
+        operator: "not_eq",
+        values: [""],
       });
     }
 
     return filters.length > 0 ? filters : undefined;
-  }, [selectedServer, searchQuery, userEmailFilter]);
+  }, [activeFilters, hideLocalToolCalls]);
 
-  // Fetch hooks logs with infinite scroll
+  // Fetch hooks traces with infinite scroll (pre-aggregated by backend)
   const {
-    data: logsData,
+    data: tracesData,
     error,
     fetchNextPage,
     hasNextPage,
@@ -250,23 +299,19 @@ function HooksContent() {
   } = useLogsEnabledErrorCheck(
     useInfiniteQuery({
       queryKey: [
-        "hooks-logs",
-        searchQuery,
-        selectedServer,
-        userEmailFilter,
+        "hooks-traces",
+        activeFilters,
+        hideLocalToolCalls,
         from.toISOString(),
         to.toISOString(),
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
-          telemetrySearchLogs(client, {
-            searchLogsPayload: {
-              filter: {
-                eventSource: "hook",
-                from,
-                to,
-                attributeFilters,
-              },
+          telemetryListHooksTraces(client, {
+            listHooksTracesPayload: {
+              from,
+              to,
+              filters: logFilters,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -279,67 +324,121 @@ function HooksContent() {
     }),
   );
 
-  const logs = logsData?.pages.flatMap((page) => page.logs) ?? [];
+  // No more client-side grouping - traces are pre-aggregated by backend
+  const groupedTraces = useMemo(() => {
+    return tracesData?.pages.flatMap((page) => page.traces) ?? [];
+  }, [tracesData]);
 
-  const handleServerChange = useCallback(
-    (serverName: string | null) => {
-      if (serverName === "") serverName = null;
-      setSelectedServer(serverName);
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (serverName) {
-            next.set("server", serverName);
-          } else {
-            next.delete("server");
-          }
-          return next;
-        },
-        { replace: true },
-      );
+  // Add a filter chip
+  const addFilter = useCallback(
+    (chip: FilterChip) => {
+      setActiveFilters((prev) => {
+        // Check if this exact filter already exists
+        const exists = prev.some(
+          (f) => f.path === chip.path && f.display === chip.display,
+        );
+        if (exists) return prev;
+
+        // Add the new filter alongside existing ones
+        const newFilters = [...prev, chip];
+
+        // Update URL params with all values (comma-separated)
+        setSearchParams(
+          (urlPrev) => {
+            const next = new URLSearchParams(urlPrev);
+            if (chip.path === "gram.tool_call.source") {
+              const serverFilters = newFilters
+                .filter((f) => f.path === "gram.tool_call.source")
+                .map((f) => f.display);
+              next.set("server", serverFilters.join(","));
+            } else if (chip.path === "user.email") {
+              const userFilters = newFilters
+                .filter((f) => f.path === "user.email")
+                .map((f) => f.display);
+              next.set("user", userFilters.join(","));
+            }
+            return next;
+          },
+          { replace: true },
+        );
+
+        return newFilters;
+      });
     },
     [setSearchParams],
   );
 
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      const newQuery = searchInput || null;
-      setSearchQuery(newQuery);
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (newQuery) {
-            next.set("q", newQuery);
-          } else {
-            next.delete("q");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    }, 500);
-    return () => clearTimeout(timeoutId);
-  }, [searchInput, setSearchParams]);
+  // Remove a filter chip by path and display value
+  const removeFilter = useCallback(
+    (path: string, display?: string) => {
+      setActiveFilters((prev) => {
+        const newFilters = display
+          ? prev.filter((f) => !(f.path === path && f.display === display))
+          : prev.filter((f) => f.path !== path);
 
+        // Update URL params with remaining values
+        setSearchParams(
+          (urlPrev) => {
+            const next = new URLSearchParams(urlPrev);
+            if (path === "gram.tool_call.source") {
+              const serverFilters = newFilters
+                .filter((f) => f.path === "gram.tool_call.source")
+                .map((f) => f.display);
+              if (serverFilters.length > 0) {
+                next.set("server", serverFilters.join(","));
+              } else {
+                next.delete("server");
+              }
+            } else if (path === "user.email") {
+              const userFilters = newFilters
+                .filter((f) => f.path === "user.email")
+                .map((f) => f.display);
+              if (userFilters.length > 0) {
+                next.set("user", userFilters.join(","));
+              } else {
+                next.delete("user");
+              }
+            }
+            return next;
+          },
+          { replace: true },
+        );
+
+        return newFilters;
+      });
+    },
+    [setSearchParams],
+  );
+
+  // Debounced server filter from search input
   useEffect(() => {
+    if (!serverInput.trim()) return;
+
     const timeoutId = setTimeout(() => {
-      const newUserEmail = userEmailInput || null;
-      setUserEmailFilter(newUserEmail);
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (newUserEmail) {
-            next.set("user", newUserEmail);
-          } else {
-            next.delete("user");
-          }
-          return next;
-        },
-        { replace: true },
-      );
+      addFilter({
+        display: serverInput,
+        filters: [serverInput],
+        path: "gram.tool_call.source",
+      });
+      setServerInput(""); // Clear input after adding
     }, 500);
     return () => clearTimeout(timeoutId);
-  }, [userEmailInput, setSearchParams]);
+  }, [serverInput, addFilter]);
+
+  // Debounced user filter from search input
+  useEffect(() => {
+    if (!userEmailInput.trim()) return;
+
+    const timeoutId = setTimeout(() => {
+      addFilter({
+        display: userEmailInput,
+        filters: [userEmailInput],
+        path: "user.email",
+      });
+      setUserEmailInput(""); // Clear input after adding
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [userEmailInput, addFilter]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
@@ -360,13 +459,36 @@ function HooksContent() {
     setSelectedLog(log);
   };
 
+  const toggleExpand = (traceId: string) => {
+    setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
+  };
+
+  const handleHideLocalToggle = useCallback(
+    (value: boolean) => {
+      setHideLocalToolCalls(value);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.delete("hideLocal"); // default is true, so remove param
+          } else {
+            next.set("hideLocal", "false");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const refetch = useCallback(() => {
     refetchSummary();
     refetchLogs();
   }, [refetchSummary, refetchLogs]);
 
   const isLogsDisabled = isSummaryLogsDisabled || isLogsLogsDisabled;
-  const isLoading = isFetching && logs.length === 0;
+  const isLoading = isFetching && groupedTraces.length === 0;
 
   return (
     <InsightsSidebar
@@ -375,61 +497,100 @@ function HooksContent() {
       subtitle="Ask me about your hooks! Powered by Elements + Gram MCP"
       hideTrigger={isLogsDisabled}
     >
-      <EnterpriseGate
-        icon="workflow"
-        description="Hooks are available on the Enterprise plan. Book a time to get started."
-      >
-        <HooksInnerContent
-          isLogsDisabled={isLogsDisabled}
-          isLoading={isLoading}
-          isFetching={isFetching}
-          error={error}
-          summaryData={summaryData}
-          logs={logs}
-          searchQuery={searchQuery}
-          searchInput={searchInput}
-          setSearchInput={setSearchInput}
-          userEmailInput={userEmailInput}
-          setUserEmailInput={setUserEmailInput}
-          userEmailFilter={userEmailFilter}
-          selectedServer={selectedServer}
-          onServerChange={handleServerChange}
-          selectedLog={selectedLog}
-          handleLogClick={handleLogClick}
-          setSelectedLog={setSelectedLog}
-          containerRef={containerRef}
-          handleScroll={handleScroll}
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          refetch={refetch}
-          dateRange={dateRange}
-          customRange={customRange}
-          customRangeLabel={urlLabel}
-          onDateRangeChange={setDateRangeParam}
-          onCustomRangeChange={setCustomRangeParam}
-          onClearCustomRange={clearCustomRange}
-          projectSlug={projectSlug}
-        />
-      </EnterpriseGate>
+      <div className="h-full overflow-hidden flex flex-col">
+        <Page>
+          <Page.Header>
+            <Page.Header.Breadcrumbs fullWidth />
+          </Page.Header>
+          {isLogsDisabled ? (
+            <Page.Body fullWidth className="space-y-6">
+              <div className="flex flex-col gap-1 min-w-0">
+                <h1 className="text-xl font-semibold">Hooks</h1>
+                <p className="text-sm text-muted-foreground">
+                  Monitor hook events and tool executions across all servers
+                </p>
+              </div>
+              <div className="flex-1 relative">
+                <div
+                  className="pointer-events-none select-none h-full"
+                  aria-hidden="true"
+                >
+                  <ObservabilitySkeleton />
+                </div>
+                <EnableLoggingOverlay onEnabled={refetch} />
+              </div>
+            </Page.Body>
+          ) : (
+            <Page.Body fullWidth noPadding overflowHidden className="flex-1">
+              <EnterpriseGate
+                icon="workflow"
+                description="Hooks are available on the Enterprise plan. Book a time to get started."
+              >
+                <HooksInnerContent
+                  isLogsDisabled={isLogsDisabled}
+                  isLoading={isLoading}
+                  isFetching={isFetching}
+                  error={error}
+                  summaryData={summaryData}
+                  summaryView={summaryView}
+                  onSummaryViewChange={setSummaryView}
+                  groupedTraces={groupedTraces}
+                  serverInput={serverInput}
+                  setServerInput={setServerInput}
+                  userEmailInput={userEmailInput}
+                  setUserEmailInput={setUserEmailInput}
+                  activeFilters={activeFilters}
+                  addFilter={addFilter}
+                  removeFilter={removeFilter}
+                  hideLocalToolCalls={hideLocalToolCalls}
+                  onHideLocalToggle={handleHideLocalToggle}
+                  expandedTraceId={expandedTraceId}
+                  toggleExpand={toggleExpand}
+                  selectedLog={selectedLog}
+                  handleLogClick={handleLogClick}
+                  setSelectedLog={setSelectedLog}
+                  containerRef={containerRef}
+                  handleScroll={handleScroll}
+                  hasNextPage={hasNextPage}
+                  isFetchingNextPage={isFetchingNextPage}
+                  refetch={refetch}
+                  dateRange={dateRange}
+                  customRange={customRange}
+                  customRangeLabel={urlLabel}
+                  onDateRangeChange={setDateRangeParam}
+                  onCustomRangeChange={setCustomRangeParam}
+                  onClearCustomRange={clearCustomRange}
+                  projectSlug={projectSlug}
+                  serverNameMappings={serverNameMappings}
+                />
+              </EnterpriseGate>
+            </Page.Body>
+          )}
+        </Page>
+      </div>
     </InsightsSidebar>
   );
 }
 
 function HooksInnerContent({
-  isLogsDisabled,
   isLoading,
   isFetching,
   error,
   summaryData,
-  logs,
-  searchQuery,
-  searchInput,
-  setSearchInput,
+  summaryView,
+  onSummaryViewChange,
+  groupedTraces,
+  serverInput,
+  setServerInput,
   userEmailInput,
   setUserEmailInput,
-  userEmailFilter,
-  selectedServer,
-  onServerChange,
+  activeFilters,
+  addFilter,
+  removeFilter,
+  hideLocalToolCalls,
+  onHideLocalToggle,
+  expandedTraceId,
+  toggleExpand,
   selectedLog,
   handleLogClick,
   setSelectedLog,
@@ -437,7 +598,6 @@ function HooksInnerContent({
   handleScroll,
   hasNextPage,
   isFetchingNextPage,
-  refetch,
   dateRange,
   customRange,
   customRangeLabel,
@@ -445,21 +605,27 @@ function HooksInnerContent({
   onCustomRangeChange,
   onClearCustomRange,
   projectSlug,
+  serverNameMappings,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
   isFetching: boolean;
   error: Error | null;
   summaryData?: GetHooksSummaryResult;
-  logs: TelemetryLogRecord[];
-  searchQuery: string | null;
-  searchInput: string;
-  setSearchInput: (value: string) => void;
+  summaryView: "servers" | "users";
+  onSummaryViewChange: (view: "servers" | "users") => void;
+  groupedTraces: HookTrace[];
+  serverInput: string;
+  setServerInput: (value: string) => void;
   userEmailInput: string;
   setUserEmailInput: (value: string) => void;
-  userEmailFilter: string | null;
-  selectedServer: string | null;
-  onServerChange: (serverName: string | null) => void;
+  activeFilters: FilterChip[];
+  addFilter: (chip: FilterChip) => void;
+  removeFilter: (path: string, display?: string) => void;
+  hideLocalToolCalls: boolean;
+  onHideLocalToggle: (value: boolean) => void;
+  expandedTraceId: string | null;
+  toggleExpand: (traceId: string) => void;
   selectedLog: TelemetryLogRecord | null;
   handleLogClick: (log: TelemetryLogRecord) => void;
   setSelectedLog: (log: TelemetryLogRecord | null) => void;
@@ -475,150 +641,161 @@ function HooksInnerContent({
   onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
   onClearCustomRange: () => void;
   projectSlug?: string;
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
-  if (isLogsDisabled) {
-    return (
-      <div className="h-full overflow-hidden flex flex-col">
-        <Page>
-          <Page.Header>
-            <Page.Header.Breadcrumbs fullWidth />
-          </Page.Header>
-          <Page.Body fullWidth className="space-y-6">
+  const orgRoutes = useOrgRoutes();
+
+  return (
+    <>
+      <div className="flex flex-col flex-1 min-h-0 w-full">
+        {/* Header section */}
+        <div className="px-8 pt-8 pb-4 shrink-0">
+          <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex flex-col gap-1 min-w-0">
               <h1 className="text-xl font-semibold">Hooks</h1>
               <p className="text-sm text-muted-foreground">
                 Monitor hook events and tool executions across all servers
               </p>
             </div>
-            <div className="flex-1 relative">
-              <div
-                className="pointer-events-none select-none h-full"
-                aria-hidden="true"
-              >
-                <ObservabilitySkeleton />
-              </div>
-              <EnableLoggingOverlay onEnabled={refetch} />
-            </div>
-          </Page.Body>
-        </Page>
-      </div>
-    );
-  }
+            <Button variant="outline" size="sm" asChild>
+              <Link to={orgRoutes.logs.href()}>
+                <Settings className="h-4 w-4" />
+                Configure settings
+              </Link>
+            </Button>
+          </div>
 
-  return (
-    <>
-      <div className="h-full overflow-hidden flex flex-col">
-        <Page>
-          <Page.Header>
-            <Page.Header.Breadcrumbs fullWidth />
-          </Page.Header>
-          <Page.Body fullWidth noPadding overflowHidden>
-            <div className="flex flex-col flex-1 min-h-0 w-full">
-              {/* Header section */}
-              <div className="px-8 py-4 shrink-0">
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <h1 className="text-xl font-semibold">Hooks</h1>
-                    <p className="text-sm text-muted-foreground">
-                      Monitor hook events and tool executions across all servers
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="../settings/logs">
-                      <Settings className="h-4 w-4" />
-                      Configure settings
-                    </Link>
-                  </Button>
-                </div>
-
-                {/* Server Cards */}
-                {summaryData && summaryData.servers.length > 0 && (
-                  <div className="mb-4">
-                    <HooksServerCards
+          {/* Summary Tables */}
+          {summaryData &&
+            (summaryData.servers.length > 0 ||
+              (summaryData.users && summaryData.users.length > 0)) && (
+              <div className="mb-4 border rounded-lg overflow-hidden">
+                {summaryView === "servers" &&
+                  summaryData.servers.length > 0 && (
+                    <HooksServerTable
                       servers={summaryData.servers}
-                      selectedServer={selectedServer}
-                      onServerChange={onServerChange}
+                      onFilterSelect={addFilter}
+                      summaryView={summaryView}
+                      onSummaryViewChange={onSummaryViewChange}
+                      serverNameMappings={serverNameMappings}
                     />
-                  </div>
-                )}
-
-                {/* Filter and Search Row */}
-                <div className="flex items-center gap-4 flex-wrap">
-                  <SearchBar
-                    value={searchInput}
-                    onChange={setSearchInput}
-                    placeholder="Search by tool name"
-                    className="flex-1 min-w-[200px]"
-                  />
-                  <SearchBar
-                    value={userEmailInput}
-                    onChange={setUserEmailInput}
-                    placeholder="Filter by user email"
-                    className="flex-1 min-w-[200px]"
-                  />
-                  <div className="ml-auto">
-                    <TimeRangePicker
-                      preset={customRange ? null : dateRange}
-                      customRange={customRange}
-                      customRangeLabel={customRangeLabel}
-                      onPresetChange={onDateRangeChange}
-                      onCustomRangeChange={onCustomRangeChange}
-                      onClearCustomRange={onClearCustomRange}
-                      projectSlug={projectSlug}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Content section */}
-              <div className="flex-1 overflow-hidden min-h-0 border-t">
-                <div className="h-full flex flex-col bg-background">
-                  {isFetching && logs.length > 0 && (
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
-                      <div className="h-full bg-primary animate-pulse" />
-                    </div>
                   )}
-
-                  {/* Header */}
-                  <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-                    <div className="shrink-0 w-[150px]">Timestamp</div>
-                    <div className="flex-1 min-w-0">Server / Tool</div>
-                    <div className="shrink-0 w-[250px]">User</div>
-                    <div className="shrink-0 w-20 text-right">Event</div>
-                  </div>
-
-                  {/* Scrollable logs list */}
-                  <div
-                    ref={containerRef}
-                    className="overflow-y-auto flex-1"
-                    onScroll={handleScroll}
-                  >
-                    <HooksLogsContent
-                      error={error}
-                      isLoading={isLoading}
-                      logs={logs}
-                      searchQuery={searchQuery}
-                      selectedServer={selectedServer}
-                      userEmailFilter={userEmailFilter}
-                      isFetchingNextPage={isFetchingNextPage}
-                      onLogClick={handleLogClick}
+                {summaryView === "users" &&
+                  summaryData.users &&
+                  summaryData.users.length > 0 && (
+                    <HooksUserTable
+                      users={summaryData.users}
+                      onFilterSelect={addFilter}
+                      summaryView={summaryView}
+                      onSummaryViewChange={onSummaryViewChange}
                     />
-                  </div>
-
-                  {/* Footer */}
-                  {logs.length > 0 && (
-                    <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
-                      <span>
-                        {logs.length} {logs.length === 1 ? "event" : "events"}
-                        {hasNextPage && " • Scroll to load more"}
-                      </span>
-                    </div>
                   )}
-                </div>
               </div>
+            )}
+
+          {/* Filter and Search Row */}
+          <div className="flex items-center gap-2 flex-wrap mt-4">
+            <MultiSearch
+              value={serverInput}
+              onChange={setServerInput}
+              placeholder="Filter by server name"
+              className="flex-1 min-w-[200px]"
+              chips={activeFilters
+                .filter((f) => f.path === "gram.tool_call.source")
+                .map((f) => ({ display: f.display, value: f.display }))}
+              onRemoveChip={(display) =>
+                removeFilter("gram.tool_call.source", display)
+              }
+            />
+            <MultiSearch
+              value={userEmailInput}
+              onChange={setUserEmailInput}
+              placeholder="Filter by user email"
+              className="flex-1 min-w-[200px]"
+              chips={activeFilters
+                .filter((f) => f.path === "user.email")
+                .map((f) => ({ display: f.display, value: f.display }))}
+              onRemoveChip={(display) => removeFilter("user.email", display)}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onHideLocalToggle(!hideLocalToolCalls)}
+              className={cn(
+                "shrink-0 h-[42px]",
+                hideLocalToolCalls ? "bg-primary/5" : "",
+              )}
+            >
+              <Icon
+                name={hideLocalToolCalls ? "eye-off" : "eye"}
+                className="size-4"
+              />
+              {hideLocalToolCalls ? "Hiding local" : "Showing local"}
+            </Button>
+            <div className="ml-auto">
+              <TimeRangePicker
+                preset={customRange ? null : dateRange}
+                customRange={customRange}
+                customRangeLabel={customRangeLabel}
+                onPresetChange={onDateRangeChange}
+                onCustomRangeChange={onCustomRangeChange}
+                onClearCustomRange={onClearCustomRange}
+                projectSlug={projectSlug}
+              />
             </div>
-          </Page.Body>
-        </Page>
+          </div>
+        </div>
+
+        {/* Content section */}
+        <div className="flex-1 overflow-hidden min-h-0 border-t">
+          <div className="h-full flex flex-col bg-background">
+            {isFetching && groupedTraces.length > 0 && (
+              <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
+                <div className="h-full bg-primary animate-pulse" />
+              </div>
+            )}
+
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+              <div className="shrink-0 w-[150px]">Timestamp</div>
+              <div className="shrink-0 w-5" />
+              <div className="flex-1 min-w-0">Server / Tool</div>
+              <div className="shrink-0 w-[260px]">User</div>
+              <div className="shrink-0 w-[120px]">Source</div>
+              <div className="shrink-0 w-20 text-right">Status</div>
+            </div>
+
+            {/* Scrollable trace list */}
+            <div
+              ref={containerRef}
+              className="overflow-y-auto flex-1"
+              onScroll={handleScroll}
+            >
+              <HooksTraceContent
+                error={error}
+                isLoading={isLoading}
+                groupedTraces={groupedTraces}
+                activeFilters={activeFilters}
+                expandedTraceId={expandedTraceId}
+                isFetchingNextPage={isFetchingNextPage}
+                onToggleExpand={toggleExpand}
+                onLogClick={handleLogClick}
+                serverNameMappings={serverNameMappings}
+              />
+            </div>
+
+            {/* Footer */}
+            {groupedTraces.length > 0 && (
+              <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                <span>
+                  {groupedTraces.length}{" "}
+                  {groupedTraces.length === 1 ? "trace" : "traces"}
+                  {hasNextPage && " • Scroll to load more"}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <LogDetailSheet
@@ -630,78 +807,425 @@ function HooksInnerContent({
   );
 }
 
-function HooksServerCards({
-  servers,
-  selectedServer,
-  onServerChange,
-}: {
-  servers: HooksServerSummary[];
-  selectedServer: string | null;
-  onServerChange: (serverName: string | null) => void;
-}) {
+interface SummaryItemData {
+  name: string;
+  displayName?: string;
+  toolCallCount: number;
+  uniqueTools: number;
+  failureRate: number;
+}
+
+interface SummaryTableProps {
+  items: SummaryItemData[];
+  onItemSelect: (key: string) => void;
+  onItemEdit?: (key: string) => void;
+  sortItems?: (items: SummaryItemData[]) => SummaryItemData[];
+  tabValue?: string;
+  onTabChange?: (value: string) => void;
+  tabs?: Array<{ value: string; label: string }>;
+}
+
+function SummaryTable({
+  items,
+  onItemSelect,
+  onItemEdit,
+  sortItems,
+  tabValue,
+  onTabChange,
+  tabs,
+}: SummaryTableProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const sortedItems = useMemo(() => {
+    return sortItems ? sortItems(items) : items;
+  }, [items, sortItems]);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      {servers.map((server) => (
-        <button
-          key={server.serverName}
-          onClick={() =>
-            onServerChange(
-              selectedServer === server.serverName ? null : server.serverName,
-            )
-          }
-          className={cn(
-            "p-4 rounded-lg border transition-all text-left",
-            selectedServer === server.serverName
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/50 hover:bg-muted/50",
+    <div className="bg-background relative">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-1 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {/* First column - tabs or header */}
+        <div className="flex-1 min-w-0">
+          {tabs && tabValue && onTabChange ? (
+            <Tabs value={tabValue} onValueChange={onTabChange}>
+              <TabsList className="h-7 p-0.5">
+                {tabs.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="text-xs px-2.5 h-6"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : (
+            "Name"
           )}
+        </div>
+        <div className="shrink-0 w-[100px] text-right">Unique Tools</div>
+        <div className="shrink-0 w-[100px] text-right">Tool Calls</div>
+        <div className="shrink-0 w-[100px] text-right">Success Rate</div>
+      </div>
+
+      {/* Rows */}
+      <div
+        className={cn(
+          "overflow-y-auto transition-all duration-300",
+          isExpanded ? "max-h-[400px]" : "max-h-[150px]",
+        )}
+      >
+        {sortedItems.map((item) => (
+          <div
+            key={item.name}
+            className="group w-full flex items-center gap-3 px-5 py-3 border-b last:border-b-0"
+          >
+            {/* Name + Actions */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-sm font-medium truncate">
+                {item.displayName || item.name}
+              </span>
+
+              {/* Actions - shown on hover */}
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <button
+                  onClick={() => onItemSelect(item.name)}
+                  className="p-1.5 rounded hover:bg-primary/10"
+                  title={`Filter by ${item.displayName || item.name}`}
+                >
+                  <Filter className="size-4 text-muted-foreground hover:text-primary" />
+                </button>
+                {onItemEdit && (
+                  <button
+                    onClick={() => onItemEdit(item.name)}
+                    className="p-1.5 rounded hover:bg-primary/10"
+                    title={`Edit display name for ${item.displayName || item.name}`}
+                  >
+                    <Icon
+                      name="pencil"
+                      className="size-4 text-muted-foreground hover:text-primary"
+                    />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Unique Tools */}
+            <div className="shrink-0 w-[100px] text-right text-sm text-muted-foreground">
+              {item.uniqueTools}
+            </div>
+
+            {/* Tool Calls (successCount + failureCount (eventCount is something else)) */}
+            <div className="shrink-0 w-[100px] text-right text-sm">
+              {item.toolCallCount}
+            </div>
+
+            {/* Success Rate */}
+            <div className="shrink-0 w-[100px] flex justify-end items-center gap-1.5">
+              <span className="text-sm font-medium tabular-nums">
+                {Math.round((1 - item.failureRate) * 100)}%
+              </span>
+              <PieProgress
+                value={Math.round((1 - item.failureRate) * 100)}
+                size={16}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Expand/Collapse Button */}
+      {sortedItems.length > 3 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 h-7 px-2 bg-background/95 backdrop-blur-sm shadow-sm border border-border/50 hover:bg-muted"
         >
-          <div className="flex items-start justify-between mb-2">
-            <div className="font-medium text-sm truncate">
-              {!server.serverName ? "Local Tools" : server.serverName}
-            </div>
-            <Icon
-              name={server.failureRate > 0.1 ? "circle-alert" : "circle-check"}
-              className={cn(
-                "size-4 shrink-0",
-                server.failureRate > 0.1
-                  ? "text-destructive"
-                  : "text-emerald-500",
-              )}
-            />
-          </div>
-          <div className="space-y-1">
-            <div className="text-2xl font-semibold">{server.eventCount}</div>
-            <div className="text-xs text-muted-foreground">
-              {server.uniqueTools} {server.uniqueTools === 1 ? "tool" : "tools"}
-              {" • "}
-              {Math.round((1 - server.failureRate) * 100)}% success
-            </div>
-          </div>
-        </button>
-      ))}
+          <Icon
+            name={isExpanded ? "chevrons-up" : "chevrons-down"}
+            className="size-3.5"
+          />
+          <span className="text-xs ml-1">
+            {isExpanded ? "Collapse" : "Expand"}
+          </span>
+        </Button>
+      )}
     </div>
   );
 }
 
-function HooksLogsContent({
+function HooksServerTable({
+  servers,
+  onFilterSelect,
+  summaryView,
+  onSummaryViewChange,
+  serverNameMappings,
+}: {
+  servers: HooksServerSummary[];
+  onFilterSelect: (chip: FilterChip) => void;
+  summaryView: "servers" | "users";
+  onSummaryViewChange: (view: "servers" | "users") => void;
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
+}) {
+  const [editingServer, setEditingServer] = useState<string | null>(null);
+
+  // Group servers by their final display name and merge metrics
+  const items: SummaryItemData[] = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        rawNames: string[];
+        toolCallCount: number;
+        uniqueToolsSet: Set<string>;
+        successCount: number;
+        failureCount: number;
+      }
+    >();
+
+    for (const s of servers) {
+      const rawName = s.serverName;
+      const displayName = !rawName
+        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+        : (serverNameMappings.rawToDisplay.get(rawName) ?? rawName);
+
+      const existing = grouped.get(displayName);
+      if (existing) {
+        // Merge with existing
+        existing.rawNames.push(rawName);
+        existing.toolCallCount += s.successCount + s.failureCount;
+        existing.successCount += s.successCount;
+        existing.failureCount += s.failureCount;
+        // Note: uniqueTools from backend are already counted per server
+        // We can't accurately merge unique tools across servers, so we sum them
+        // This is an approximation - ideally backend would provide this
+      } else {
+        // Create new entry
+        grouped.set(displayName, {
+          rawNames: [rawName],
+          toolCallCount: s.successCount + s.failureCount,
+          uniqueToolsSet: new Set(), // Not used in current logic
+          successCount: s.successCount,
+          failureCount: s.failureCount,
+        });
+      }
+    }
+
+    // Convert to SummaryItemData array
+    return Array.from(grouped.entries()).map(([displayName, data]) => {
+      const failureRate =
+        data.toolCallCount > 0 ? data.failureCount / data.toolCallCount : 0;
+
+      // For uniqueTools, sum across servers (approximation)
+      const uniqueTools = data.rawNames.reduce((sum, rawName) => {
+        const server = servers.find((s) => s.serverName === rawName);
+        return sum + (server?.uniqueTools || 0);
+      }, 0);
+
+      return {
+        name: data.rawNames[0], // Use first raw name for filtering
+        displayName,
+        toolCallCount: data.toolCallCount,
+        uniqueTools,
+        failureRate,
+      };
+    });
+  }, [servers, serverNameMappings.rawToDisplay]);
+
+  const handleEditClick = (serverName: string) => {
+    setEditingServer(serverName);
+  };
+
+  const editingServerInfo = useMemo(() => {
+    if (editingServer === null) return { overrides: [], unmappedRawName: null };
+
+    // editingServer is a raw server name — find the display name for it
+    const displayName =
+      serverNameMappings.rawToDisplay.get(editingServer) ?? editingServer;
+
+    // Get all overrides that share this display name (for grouped servers)
+    const overridesForDisplay =
+      serverNameMappings.displayToOverrides.get(displayName) || [];
+
+    // Check if editingServer itself exists as a raw server name in the servers list
+    // (meaning it's unmapped and shows as itself)
+    const serverExistsAsRaw = servers.some(
+      (s) => s.serverName === editingServer,
+    );
+
+    if (serverExistsAsRaw) {
+      // Check if this raw server already has an override
+      const hasOverride = overridesForDisplay.some(
+        (o) => o.rawServerName === editingServer,
+      );
+
+      if (!hasOverride && overridesForDisplay.length > 0) {
+        // This server exists unmapped alongside other servers that map to it
+        return {
+          overrides: overridesForDisplay,
+          unmappedRawName: editingServer,
+        };
+      }
+    }
+
+    return { overrides: overridesForDisplay, unmappedRawName: null };
+  }, [editingServer, serverNameMappings, servers]);
+
+  const handleItemSelect = useCallback(
+    (itemName: string) => {
+      // Find the item to get its display name and raw server names
+      const item = items.find((i) => i.name === itemName);
+      if (!item) return;
+
+      const displayName = item.displayName || item.name;
+
+      // Get all raw server names that have overrides pointing to this display name
+      const mappedRawNames =
+        serverNameMappings.displayToRaws.get(displayName) || [];
+
+      // Also include the display name itself if it exists as a raw server (no override to it)
+      const allRawNames = new Set(mappedRawNames);
+
+      // Always include the item's actual raw name (e.g. "" for Local Tools)
+      allRawNames.add(item.name);
+
+      // Check if the display name itself exists as a raw server name in the data
+      // (this handles the case where "B" is both a display name and a raw server)
+      const displayNameExistsAsRaw = servers.some(
+        (s) => s.serverName === displayName,
+      );
+      if (displayNameExistsAsRaw) {
+        allRawNames.add(displayName);
+      }
+
+      // Create a filter chip
+      onFilterSelect({
+        display: displayName,
+        filters: Array.from(allRawNames),
+        path: "gram.tool_call.source",
+      });
+    },
+    [items, onFilterSelect, serverNameMappings.displayToRaws, servers],
+  );
+
+  return (
+    <>
+      <SummaryTable
+        items={items}
+        onItemSelect={handleItemSelect}
+        onItemEdit={handleEditClick}
+        sortItems={(items) =>
+          [...items].sort((a, b) => {
+            // Sort by tool call count descending
+            return b.toolCallCount - a.toolCallCount;
+          })
+        }
+        tabValue={summaryView}
+        onTabChange={(v) => onSummaryViewChange(v as "servers" | "users")}
+        tabs={[
+          { value: "servers", label: "Servers" },
+          { value: "users", label: "Users" },
+        ]}
+      />
+
+      <EditServerNameDialog
+        key={editingServer}
+        open={editingServer !== null}
+        onOpenChange={(open) => !open && setEditingServer(null)}
+        serverName={editingServer ?? ""}
+        groupedOverrides={editingServerInfo.overrides}
+        unmappedRawName={editingServerInfo.unmappedRawName}
+        upsert={serverNameMappings.upsert}
+        remove={serverNameMappings.remove}
+        isUpserting={serverNameMappings.isUpserting}
+        isDeleting={serverNameMappings.isDeleting}
+      />
+    </>
+  );
+}
+
+function HooksUserTable({
+  users,
+  onFilterSelect,
+  summaryView,
+  onSummaryViewChange,
+}: {
+  users: Array<{
+    userEmail: string;
+    eventCount: number;
+    uniqueTools: number;
+    successCount: number;
+    failureCount: number;
+    failureRate: number;
+  }>;
+  onFilterSelect: (chip: FilterChip) => void;
+  summaryView: "servers" | "users";
+  onSummaryViewChange: (view: "servers" | "users") => void;
+}) {
+  const items: SummaryItemData[] = users.map((u) => ({
+    name: u.userEmail,
+    displayName:
+      u.userEmail === "Unknown" || u.userEmail === ""
+        ? "Unknown user"
+        : u.userEmail,
+    toolCallCount: u.successCount + u.failureCount,
+    uniqueTools: u.uniqueTools,
+    failureRate: u.failureRate,
+  }));
+
+  const handleItemSelect = useCallback(
+    (itemName: string) => {
+      const item = items.find((i) => i.name === itemName);
+      if (!item) return;
+
+      onFilterSelect({
+        display: item.displayName || item.name,
+        filters: [item.name], // For users, filter by the actual email
+        path: "user.email",
+      });
+    },
+    [items, onFilterSelect],
+  );
+
+  return (
+    <SummaryTable
+      items={items}
+      onItemSelect={handleItemSelect}
+      sortItems={(items) =>
+        [...items].sort((a, b) => {
+          return b.toolCallCount - a.toolCallCount;
+        })
+      }
+      tabValue={summaryView}
+      onTabChange={(v) => onSummaryViewChange(v as "servers" | "users")}
+      tabs={[
+        { value: "servers", label: "Servers" },
+        { value: "users", label: "Users" },
+      ]}
+    />
+  );
+}
+
+function HooksTraceContent({
   error,
   isLoading,
-  logs,
-  searchQuery,
-  selectedServer,
-  userEmailFilter,
+  groupedTraces,
+  activeFilters,
+  expandedTraceId,
   isFetchingNextPage,
+  onToggleExpand,
   onLogClick,
+  serverNameMappings,
 }: {
   error: Error | null;
   isLoading: boolean;
-  logs: TelemetryLogRecord[];
-  searchQuery: string | null;
-  selectedServer: string | null;
-  userEmailFilter: string | null;
+  groupedTraces: HookTrace[];
+  activeFilters: FilterChip[];
+  expandedTraceId: string | null;
   isFetchingNextPage: boolean;
+  onToggleExpand: (traceId: string) => void;
   onLogClick: (log: TelemetryLogRecord) => void;
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
   if (error) {
     return (
@@ -728,9 +1252,9 @@ function HooksLogsContent({
     );
   }
 
-  if (logs.length === 0) {
+  if (groupedTraces.length === 0) {
     // Show the full empty state if no filters are applied
-    const hasFilters = searchQuery || selectedServer || userEmailFilter;
+    const hasFilters = activeFilters.length > 0;
 
     if (!hasFilters) {
       return <HooksEmptyState />;
@@ -756,8 +1280,15 @@ function HooksLogsContent({
 
   return (
     <>
-      {logs.map((log) => (
-        <HookLogRow key={log.id} log={log} onClick={() => onLogClick(log)} />
+      {groupedTraces.map((trace) => (
+        <HookTraceRow
+          key={trace.traceId}
+          trace={trace}
+          isExpanded={expandedTraceId === trace.traceId}
+          onToggle={() => onToggleExpand(trace.traceId)}
+          onLogClick={onLogClick}
+          serverNameMappings={serverNameMappings}
+        />
       ))}
 
       {isFetchingNextPage && (
@@ -770,21 +1301,22 @@ function HooksLogsContent({
   );
 }
 
-function HookLogRow({
-  log,
-  onClick,
+function HookTraceRow({
+  trace,
+  isExpanded,
+  onToggle,
+  onLogClick,
+  serverNameMappings,
 }: {
-  log: TelemetryLogRecord;
-  onClick: () => void;
+  trace: HookTrace;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onLogClick: (log: TelemetryLogRecord) => void;
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
-  const hookEventName = log.attributes?.gram?.hook?.event as string | undefined;
-  const toolName = log.attributes?.gram?.tool?.name as string | undefined;
-  const serverName = log.attributes?.gram?.tool_call?.source as
-    | string
-    | undefined;
-  const userEmail = log.attributes?.user?.email as string | undefined;
-
-  const timestamp = new Date(Number(log.timeUnixNano) / 1000000);
+  const timestamp = new Date(
+    Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
+  );
   const timeAgo = useMemo(() => {
     const now = new Date();
     const diff = now.getTime() - timestamp.getTime();
@@ -799,91 +1331,129 @@ function HookLogRow({
     return `${seconds}s ago`;
   }, [timestamp]);
 
+  const serverName = trace.toolSource;
+  const toolName = trace.toolName;
+  const userEmail = trace.userEmail;
+  const hookSource = trace.hookSource;
+
+  // Apply display name mapping
+  const displayServerName = useMemo(() => {
+    if (!serverName) return serverNameMappings.rawToDisplay.get("") ?? null;
+    return serverNameMappings.rawToDisplay.get(serverName) ?? serverName;
+  }, [serverName, serverNameMappings.rawToDisplay]);
+
   const serverNameBadge = useMemo(() => {
+    const isLocal = !serverName;
     return (
-      <span className="text-xs font-mono truncate bg-muted px-1 py-1 rounded-sm">
-        {serverName || "local"}
+      <span
+        className={cn(
+          "text-xs font-mono truncate px-2 py-1 rounded-md shrink-0",
+          isLocal
+            ? "bg-muted/50 text-muted-foreground"
+            : "bg-primary/10 text-primary border border-primary/20 font-medium",
+        )}
+      >
+        {displayServerName || "local"}
       </span>
     );
-  }, [serverName]);
+  }, [displayServerName]);
 
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center gap-3 px-5 py-3 border-b hover:bg-muted/30 transition-colors text-left"
-    >
-      <div className="shrink-0 w-[150px] text-sm text-muted-foreground">
-        {timeAgo}
-      </div>
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        {serverNameBadge}
-        <span className="text-sm font-mono truncate">
-          {toolName || "unknown"}
-        </span>
-      </div>
-      <div className="shrink-0 w-[250px] text-sm text-muted-foreground truncate">
-        {userEmail || "—"}
-      </div>
-      <div className="shrink-0 w-20 flex justify-end">
-        <HookEventBadge eventName={hookEventName} />
-      </div>
-    </button>
-  );
-}
-
-function HookEventBadge({ eventName }: { eventName?: string }) {
-  const config = useMemo(() => {
-    switch (eventName) {
-      case "SessionStart":
-        return {
-          color: "text-blue-500",
-          bgColor: "bg-blue-500/10",
-          label: "Session Start",
-        };
-      case "PreToolUse":
-        return {
-          color: "text-yellow-500",
-          bgColor: "bg-yellow-500/10",
-          label: "Pre Tool",
-        };
-      case "PostToolUse":
-        return {
-          color: "text-emerald-500",
-          bgColor: "bg-emerald-500/10",
-          label: "Success",
-        };
-      case "PostToolUseFailure":
-        return {
-          color: "text-destructive",
-          bgColor: "bg-destructive/10",
-          label: "Failure",
-        };
-      default:
-        return {
-          color: "text-muted-foreground",
-          bgColor: "bg-muted",
-          label: "Unknown",
-        };
+  const statusConfig = useMemo(() => {
+    if (trace.hookStatus === "failure") {
+      return {
+        color: "text-destructive",
+        bgColor: "bg-destructive/10",
+        label: "Failure",
+      };
+    } else if (trace.hookStatus === "success") {
+      return {
+        color: "text-emerald-500",
+        bgColor: "bg-emerald-500/10",
+        label: "Success",
+      };
     }
-  }, [eventName]);
+    return {
+      color: "text-muted-foreground",
+      bgColor: "bg-muted",
+      label: "Pending",
+    };
+  }, [trace.hookStatus]);
 
   return (
-    <div
-      className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium",
-        config.bgColor,
-        config.color,
+    <div className="border-b border-border/50 last:border-b-0">
+      {/* Parent trace row */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-muted/50 transition-colors text-left"
+      >
+        {/* Timestamp */}
+        <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono">
+          {timeAgo}
+        </div>
+
+        {/* Expand/collapse indicator */}
+        <div className="shrink-0 w-5 flex items-center justify-center">
+          <Icon
+            name={isExpanded ? "chevron-down" : "chevron-right"}
+            className="size-4 text-muted-foreground"
+          />
+        </div>
+
+        {/* Server badge + Tool name */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {serverNameBadge}
+          <span className="text-sm font-mono truncate">
+            {toolName || "unknown"}
+          </span>
+        </div>
+
+        {/* User email */}
+        <div className="shrink-0 w-[260px] text-sm text-muted-foreground truncate">
+          {userEmail || "—"}
+        </div>
+
+        {/* Hook source */}
+        <div className="shrink-0 w-[120px] flex items-center gap-2">
+          <HookSourceIcon source={hookSource} className="size-4 shrink-0" />
+          {hookSource && (
+            <span className="text-xs text-foreground font-medium truncate">
+              {hookSource}
+            </span>
+          )}
+        </div>
+
+        {/* Status badge */}
+        <div className="shrink-0 w-20 flex justify-end">
+          <div
+            className={cn(
+              "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium",
+              statusConfig.bgColor,
+              statusConfig.color,
+            )}
+          >
+            <div
+              className={cn(
+                "size-1.5 rounded-full",
+                statusConfig.color === "text-muted-foreground"
+                  ? "bg-muted-foreground"
+                  : "bg-current",
+              )}
+            />
+            {statusConfig.label}
+          </div>
+        </div>
+      </button>
+
+      {/* Expanded child logs */}
+      {isExpanded && (
+        <TraceLogsList
+          traceId={trace.traceId}
+          toolName={toolName || "unknown"}
+          isExpanded={isExpanded}
+          onLogClick={onLogClick}
+          parentTimestamp={trace.startTimeUnixNano}
+        />
       )}
-    >
-      <div
-        className={cn(
-          "size-1.5 rounded-full",
-          config.color === "text-muted-foreground"
-            ? "bg-muted-foreground"
-            : "bg-current",
-        )}
-      />
-      {config.label}
     </div>
   );
 }

@@ -16,12 +16,14 @@ import (
 // Client is the "hooks" service client.
 type Client struct {
 	ClaudeEndpoint goa.Endpoint
+	LogsEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "hooks" service client given the endpoints.
-func NewClient(claude goa.Endpoint) *Client {
+func NewClient(claude, logs goa.Endpoint) *Client {
 	return &Client{
 		ClaudeEndpoint: claude,
+		LogsEndpoint:   logs,
 	}
 }
 
@@ -38,11 +40,29 @@ func NewClient(claude goa.Endpoint) *Client {
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) Claude(ctx context.Context, p *ClaudePayload) (res *ClaudeHookResult, err error) {
+func (c *Client) Claude(ctx context.Context, p *ClaudeHookPayload) (res *ClaudeHookResult, err error) {
 	var ires any
 	ires, err = c.ClaudeEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*ClaudeHookResult), nil
+}
+
+// Logs calls the "logs" endpoint of the "hooks" service.
+// Logs may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Logs(ctx context.Context, p *LogsPayload) (err error) {
+	_, err = c.LogsEndpoint(ctx, p)
+	return
 }

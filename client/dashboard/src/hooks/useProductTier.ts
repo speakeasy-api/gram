@@ -1,5 +1,4 @@
 import { useSession } from "@/contexts/Auth";
-import { useGetPeriodUsage } from "@gram/client/react-query";
 import { useMemo } from "react";
 
 export type ProductTier =
@@ -10,9 +9,6 @@ export type ProductTier =
 
 export const useProductTier = () => {
   const session = useSession();
-  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
-    throwOnError: false,
-  });
 
   const productTier = useMemo(() => {
     if (session.rawGramAccountType === "enterprise") {
@@ -22,11 +18,11 @@ export const useProductTier = () => {
       return "__deprecated__pro";
     }
 
-    if (periodUsage?.hasActiveSubscription) {
+    if (session.hasActiveSubscription) {
       return "base_PAID";
     }
     return "base";
-  }, [periodUsage, session.rawGramAccountType]);
+  }, [session.hasActiveSubscription, session.rawGramAccountType]);
 
   return productTier;
 };

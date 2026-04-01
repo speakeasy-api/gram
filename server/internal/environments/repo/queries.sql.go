@@ -112,17 +112,21 @@ func (q *Queries) CreateEnvironmentEntries(ctx context.Context, arg CreateEnviro
 	return items, nil
 }
 
-const deleteEnvironment = `-- name: DeleteEnvironment :exec
+const deleteEnvironment = `-- name: DeleteEnvironment :one
 WITH deleted_env AS (
     UPDATE environments
     SET deleted_at = now()
     WHERE environments.slug = $1 AND environments.project_id = $2 AND environments.deleted IS FALSE
-    RETURNING slug, project_id
+    RETURNING id, name, slug, project_id
+), cleared_toolsets AS (
+    UPDATE toolsets
+    SET default_environment_slug = NULL
+    FROM deleted_env
+    WHERE toolsets.default_environment_slug = deleted_env.slug AND toolsets.project_id = deleted_env.project_id
+    RETURNING toolsets.id
 )
-UPDATE toolsets
-SET default_environment_slug = NULL
+SELECT id, name, slug, project_id
 FROM deleted_env
-WHERE toolsets.default_environment_slug = deleted_env.slug AND toolsets.project_id = deleted_env.project_id
 `
 
 type DeleteEnvironmentParams struct {
@@ -130,9 +134,23 @@ type DeleteEnvironmentParams struct {
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) DeleteEnvironment(ctx context.Context, arg DeleteEnvironmentParams) error {
-	_, err := q.db.Exec(ctx, deleteEnvironment, arg.Slug, arg.ProjectID)
-	return err
+type DeleteEnvironmentRow struct {
+	ID        uuid.UUID
+	Name      string
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteEnvironment(ctx context.Context, arg DeleteEnvironmentParams) (DeleteEnvironmentRow, error) {
+	row := q.db.QueryRow(ctx, deleteEnvironment, arg.Slug, arg.ProjectID)
+	var i DeleteEnvironmentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.ProjectID,
+	)
+	return i, err
 }
 
 const deleteEnvironmentEntry = `-- name: DeleteEnvironmentEntry :exec

@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/variations"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -13,6 +15,8 @@ func TestVariationsService_UpsertGlobal_Create(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
 
 	name := "test-variation"
 	summary := "test summary"
@@ -52,12 +56,39 @@ func TestVariationsService_UpsertGlobal_Create(t *testing.T) {
 	require.Equal(t, &summarizer, result.Variation.Summarizer, "summarizer should match")
 	require.NotEmpty(t, result.Variation.CreatedAt, "created at should not be empty")
 	require.NotEmpty(t, result.Variation.UpdatedAt, "updated at should not be empty")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionVariationUpdateGlobal), record.Action)
+	require.Equal(t, "variation", record.SubjectType)
+	require.Equal(t, "test-tool", record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Equal(t, "null", string(record.BeforeSnapshot))
+	require.NotNil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "tools:http:test:test-tool", metadata["src_tool_urn"])
+
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, result.Variation.ID, afterSnapshot["ID"])
+	require.Equal(t, result.Variation.GroupID, afterSnapshot["GroupID"])
+	require.Equal(t, result.Variation.SrcToolUrn, afterSnapshot["SrcToolUrn"])
+	require.Equal(t, result.Variation.SrcToolName, afterSnapshot["SrcToolName"])
+	require.Equal(t, name, afterSnapshot["Name"])
 }
 
 func TestVariationsService_UpsertGlobal_Update(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
 
 	// Create initial variation
 	initialName := "initial-variation"
@@ -117,6 +148,26 @@ func TestVariationsService_UpsertGlobal_Update(t *testing.T) {
 
 	// Updated at should be greater or equal (it could be the same if update happens very quickly)
 	require.GreaterOrEqual(t, second.Variation.UpdatedAt, first.Variation.UpdatedAt, "updated at should be greater or equal after update")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+2, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
+	require.NotNil(t, record.BeforeSnapshot)
+	require.NotNil(t, record.AfterSnapshot)
+
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, first.Variation.ID, beforeSnapshot["ID"])
+	require.Equal(t, initialName, beforeSnapshot["Name"])
+
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, second.Variation.ID, afterSnapshot["ID"])
+	require.Equal(t, updatedName, afterSnapshot["Name"])
+	require.Equal(t, updatedDescription, afterSnapshot["Description"])
 }
 
 func TestVariationsService_UpsertGlobal_MinimalPayload(t *testing.T) {
@@ -214,12 +265,14 @@ func TestVariationsService_UpsertGlobal_NilTags(t *testing.T) {
 func TestVariationsService_UpsertGlobal_Unauthorized(t *testing.T) {
 	t.Parallel()
 
-	_, ti := newTestVariationsService(t)
+	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
 
 	// Test with context that has no auth context
-	ctx := t.Context()
+	ctxWithoutAuth := t.Context()
 
-	_, err := ti.service.UpsertGlobal(ctx, &gen.UpsertGlobalPayload{
+	_, err = ti.service.UpsertGlobal(ctxWithoutAuth, &gen.UpsertGlobalPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -235,15 +288,21 @@ func TestVariationsService_UpsertGlobal_Unauthorized(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_UpsertGlobal_NoProjectID(t *testing.T) {
 	t.Parallel()
 
-	_, ti := newTestVariationsService(t)
+	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
 
 	// Create context with auth but no project ID
-	ctx := t.Context()
+	ctx = t.Context()
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID: "test-org",
 		UserID:               "test-user",
@@ -257,7 +316,7 @@ func TestVariationsService_UpsertGlobal_NoProjectID(t *testing.T) {
 	}
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.UpsertGlobal(ctx, &gen.UpsertGlobalPayload{
+	_, err = ti.service.UpsertGlobal(ctx, &gen.UpsertGlobalPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -273,6 +332,32 @@ func TestVariationsService_UpsertGlobal_NoProjectID(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestVariationsService_UpsertGlobal_InvalidSourceToolURN_NoAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
+
+	_, err = ti.service.UpsertGlobal(ctx, &gen.UpsertGlobalPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		SrcToolUrn:       "not-a-tool-urn",
+		SrcToolName:      "bad-tool",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid source tool urn")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationUpdateGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_UpsertGlobal_CreatesGroup(t *testing.T) {

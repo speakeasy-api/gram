@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ExternalMCPRemote,
+  ExternalMCPRemote$inboundSchema,
+} from "./externalmcpremote.js";
+import {
   ExternalMCPTool,
   ExternalMCPTool$inboundSchema,
 } from "./externalmcptool.js";
@@ -37,6 +41,10 @@ export type ExternalMCPServer = {
    */
   registrySpecifier: string;
   /**
+   * Available remote endpoints for the server
+   */
+  remotes?: Array<ExternalMCPRemote> | undefined;
+  /**
    * Display name for the server
    */
   title?: string | undefined;
@@ -61,6 +69,7 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
     meta: z.optional(z.any()),
     registry_id: z.string(),
     registry_specifier: z.string(),
+    remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
     title: z.optional(z.string()),
     tools: z.optional(z.array(ExternalMCPTool$inboundSchema)),
     version: z.string(),

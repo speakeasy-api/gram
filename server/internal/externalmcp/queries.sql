@@ -2,12 +2,13 @@
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries
 WHERE deleted IS FALSE
+  AND url IS NOT NULL
 ORDER BY name ASC;
 
 -- name: GetMCPRegistryByID :one
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries
-WHERE id = @id AND deleted IS FALSE;
+WHERE id = @id AND deleted IS FALSE AND url IS NOT NULL;
 
 -- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)

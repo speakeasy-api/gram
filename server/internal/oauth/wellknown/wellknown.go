@@ -27,7 +27,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -146,31 +145,6 @@ func ResolveOAuthServerMetadataFromToolset(
 		}, nil
 	}
 
-	fullToolset, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), toolsetCache)
-	if err != nil {
-		return nil, err
-	}
-
-	if oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset); oauthConfig != nil {
-		// Return static metadata with upstream OAuth endpoints passed through directly.
-		// The issuer is Gram's URL, but auth/token/registration endpoints point to the upstream server.
-		return &OAuthServerMetadataResult{
-			Kind: OAuthServerMetadataResultKindStatic,
-			Static: &OAuthServerMetadata{
-				Issuer:                        baseURL + "/mcp/" + mcpSlug,
-				AuthorizationEndpoint:         oauthConfig.AuthorizationEndpoint,
-				TokenEndpoint:                 oauthConfig.TokenEndpoint,
-				RegistrationEndpoint:          oauthConfig.RegistrationEndpoint,
-				ScopesSupported:               oauthConfig.ScopesSupported,
-				ResponseTypesSupported:        []string{"code"},
-				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
-				CodeChallengeMethodsSupported: []string{"S256"},
-			},
-			Raw:      nil,
-			ProxyURL: "",
-		}, nil
-	}
-
 	return nil, nil
 }
 
@@ -191,20 +165,6 @@ func ResolveOAuthProtectedResourceFromToolset(
 			Resource:             baseURL + "/mcp/" + mcpSlug,
 			AuthorizationServers: []string{baseURL + "/mcp/" + mcpSlug},
 			ScopesSupported:      nil,
-		}, nil
-	}
-
-	// Check for external MCP tools that require OAuth
-	fullToolset, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), toolsetCache)
-	if err != nil {
-		return nil, err
-	}
-
-	if oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset); oauthConfig != nil {
-		return &OAuthProtectedResourceMetadata{
-			Resource:             baseURL + "/mcp/" + mcpSlug,
-			AuthorizationServers: []string{baseURL + "/mcp/" + mcpSlug},
-			ScopesSupported:      oauthConfig.ScopesSupported,
 		}, nil
 	}
 

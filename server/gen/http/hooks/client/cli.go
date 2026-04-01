@@ -17,13 +17,13 @@ import (
 
 // BuildClaudePayload builds the payload for the hooks claude endpoint from CLI
 // flags.
-func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string) (*hooks.ClaudePayload, error) {
+func BuildClaudePayload(hooksClaudeBody string) (*hooks.ClaudeHookPayload, error) {
 	var err error
 	var body ClaudeRequestBody
 	{
 		err = json.Unmarshal([]byte(hooksClaudeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"hook_event_name\": \"PreToolUse\",\n      \"session_id\": \"abc123\",\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
 		}
 		if !(body.HookEventName == "SessionStart" || body.HookEventName == "PreToolUse" || body.HookEventName == "PostToolUse" || body.HookEventName == "PostToolUseFailure") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure"}))
@@ -32,25 +32,14 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 			return nil, err
 		}
 	}
-	var apikeyToken *string
-	{
-		if hooksClaudeApikeyToken != "" {
-			apikeyToken = &hooksClaudeApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if hooksClaudeProjectSlugInput != "" {
-			projectSlugInput = &hooksClaudeProjectSlugInput
-		}
-	}
-	v := &hooks.ClaudePayload{
+	v := &hooks.ClaudeHookPayload{
 		HookEventName: body.HookEventName,
 		ToolName:      body.ToolName,
 		ToolUseID:     body.ToolUseID,
 		ToolInput:     body.ToolInput,
 		ToolResponse:  body.ToolResponse,
-		ToolError:     body.ToolError,
+		Error:         body.Error,
+		IsInterrupt:   body.IsInterrupt,
 		SessionID:     body.SessionID,
 	}
 	if body.AdditionalData != nil {
@@ -60,6 +49,59 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 			tv := val
 			v.AdditionalData[tk] = tv
 		}
+	}
+
+	return v, nil
+}
+
+// BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
+// flags.
+func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {
+	var err error
+	var body LogsRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksLogsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceLogs\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"intValue\": 1,\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeLogs\": [\n               {\n                  \"logRecords\": [\n                     {\n                        \"attributes\": [\n                           {\n                              \"key\": \"abc123\",\n                              \"value\": {\n                                 \"intValue\": 1,\n                                 \"stringValue\": \"abc123\"\n                              }\n                           }\n                        ],\n                        \"body\": {\n                           \"stringValue\": \"abc123\"\n                        },\n                        \"droppedAttributesCount\": 1,\n                        \"observedTimeUnixNano\": \"abc123\",\n                        \"timeUnixNano\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }'")
+		}
+		if body.ResourceLogs == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("resourceLogs", "body"))
+		}
+		for _, e := range body.ResourceLogs {
+			if e != nil {
+				if err2 := ValidateOTELResourceLogRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksLogsApikeyToken != "" {
+			apikeyToken = &hooksLogsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksLogsProjectSlugInput != "" {
+			projectSlugInput = &hooksLogsProjectSlugInput
+		}
+	}
+	v := &hooks.LogsPayload{}
+	if body.ResourceLogs != nil {
+		v.ResourceLogs = make([]*hooks.OTELResourceLog, len(body.ResourceLogs))
+		for i, val := range body.ResourceLogs {
+			if val == nil {
+				v.ResourceLogs[i] = nil
+				continue
+			}
+			v.ResourceLogs[i] = marshalOTELResourceLogRequestBodyToHooksOTELResourceLog(val)
+		}
+	} else {
+		v.ResourceLogs = []*hooks.OTELResourceLog{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

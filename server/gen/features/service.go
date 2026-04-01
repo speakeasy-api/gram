@@ -48,8 +48,7 @@ var MethodNames = [2]string{"getProductFeatures", "setProductFeature"}
 // GetProductFeaturesPayload is the payload type of the features service
 // getProductFeatures method.
 type GetProductFeaturesPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // GramProductFeatures is the result type of the features service
@@ -67,9 +66,8 @@ type SetProductFeaturePayload struct {
 	// Name of the feature to update
 	FeatureName string
 	// Whether the feature should be enabled
-	Enabled          bool
-	SessionToken     *string
-	ProjectSlugInput *string
+	Enabled      bool
+	SessionToken *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

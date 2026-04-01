@@ -10,12 +10,15 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
 	srv "github.com/speakeasy-api/gram/server/gen/http/domains/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/enums/v1"
@@ -28,26 +31,26 @@ import (
 type Service struct {
 	tracer         trace.Tracer
 	logger         *slog.Logger
-	repo           *repo.Queries
+	db             *pgxpool.Pool
 	auth           *auth.Auth
 	temporalClient TemporalClient
 }
 
 type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
-	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error)
+	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string) (client.WorkflowRun, error)
 	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient) *Service {
-	logger = logger.With(attr.SlogComponent("customdomains"))
+	logger = logger.With(attr.SlogComponent("custom_domains"))
 
 	return &Service{
 		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/customdomains"),
 		logger:         logger,
-		repo:           repo.New(db),
+		db:             db,
 		auth:           auth.New(logger, db, sessions),
 		temporalClient: temporal,
 	}
@@ -73,7 +76,9 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	domain, err := s.repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	repo := repo.New(s.db)
+
+	domain, err := repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
 	}
@@ -105,7 +110,13 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		return oops.E(oops.CodeUnauthorized, err, "custom domain registration is not supported for free account").Log(ctx, s.logger)
 	}
 
-	_, err = s.temporalClient.ExecuteCustomDomainRegistration(ctx, authCtx.ActiveOrganizationID, payload.Domain)
+	_, err = s.temporalClient.ExecuteCustomDomainRegistration(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		payload.Domain,
+		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		authCtx.Email,
+	)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error executing custom domain registration").Log(ctx, s.logger)
 	}
@@ -119,7 +130,7 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	domain, err := s.repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	domain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
 	}
@@ -134,8 +145,32 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		}
 	}
 
-	if err := s.repo.DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID); err != nil {
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to access custom domains").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	repo := repo.New(dbtx)
+
+	if err := repo.DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogCustomDomainDelete(ctx, dbtx, audit.LogCustomDomainDeleteEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		CustomDomainURN: urn.NewCustomDomain(domain.ID),
+		DomainName:      domain.Domain,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create custom domain deletion audit log").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to commit custom domain deletion").Log(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "custom domain deleted",

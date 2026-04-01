@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "hooks" service endpoints.
 type Endpoints struct {
 	Claude goa.Endpoint
+	Logs   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "hooks" service with endpoints.
@@ -24,25 +25,36 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Claude: NewClaudeEndpoint(s, a.APIKeyAuth),
+		Claude: NewClaudeEndpoint(s),
+		Logs:   NewLogsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "hooks" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Claude = m(e.Claude)
+	e.Logs = m(e.Logs)
 }
 
 // NewClaudeEndpoint returns an endpoint function that calls the method
 // "claude" of service "hooks".
-func NewClaudeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewClaudeEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ClaudePayload)
+		p := req.(*ClaudeHookPayload)
+		return s.Claude(ctx, p)
+	}
+}
+
+// NewLogsEndpoint returns an endpoint function that calls the method "logs" of
+// service "hooks".
+func NewLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*LogsPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
-			RequiredScopes: []string{"consumer"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"hooks"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
@@ -53,7 +65,7 @@ func NewClaudeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"consumer"},
+				RequiredScopes: []string{"hooks"},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
@@ -64,6 +76,6 @@ func NewClaudeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 		if err != nil {
 			return nil, err
 		}
-		return s.Claude(ctx, p)
+		return nil, s.Logs(ctx, p)
 	}
 }

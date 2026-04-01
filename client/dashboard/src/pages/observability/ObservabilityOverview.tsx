@@ -772,7 +772,7 @@ export default function ObservabilityOverview() {
     const params: {
       apiKeyId?: string;
       externalUserId?: string;
-      toolsetId?: string;
+      toolsetSlug?: string;
     } = {};
 
     // Add dimension filter (API key or user)
@@ -784,32 +784,14 @@ export default function ObservabilityOverview() {
       }
     }
 
-    // Add MCP server filter - derive URN prefix from toolset's tool URNs
+    // Add MCP server filter by toolset slug
     // Only apply MCP filter when on the "tools" tab to avoid filtering out chat data
     if (selectedMcpServer && activeTab === "tools") {
-      const selectedToolset = toolsets.find(
-        (t) => t.slug === selectedMcpServer,
-      );
-      if (selectedToolset?.toolUrns?.length) {
-        // Extract common URN prefix from the first tool URN
-        // e.g., "tools:http:gram:some_tool" -> "tools:http:gram"
-        const firstUrn = selectedToolset.toolUrns[0];
-        const parts = firstUrn.split(":");
-        if (parts.length >= 3) {
-          // Take first 3 parts: "tools:http:gram"
-          params.toolsetId = parts.slice(0, 3).join(":");
-        }
-      }
+      params.toolsetSlug = selectedMcpServer;
     }
 
     return params;
-  }, [
-    filterDimension,
-    selectedFilterValue,
-    selectedMcpServer,
-    toolsets,
-    activeTab,
-  ]);
+  }, [filterDimension, selectedFilterValue, selectedMcpServer, activeTab]);
 
   const { data, isPending, isFetching, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(

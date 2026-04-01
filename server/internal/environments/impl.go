@@ -21,6 +21,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/environments/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -29,7 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -81,6 +84,8 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
 	slug := conv.ToSlug(payload.Name)
 
 	input := repo.CreateEnvironmentParams{
@@ -91,9 +96,18 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		Description:    conv.PtrToPGText(payload.Description),
 	}
 
-	environment, err := s.repo.CreateEnvironment(ctx, input)
+	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to access environments").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	er := s.repo.WithTx(dbtx)
+	entriesRepo := NewEnvironmentEntries(logger, dbtx, s.entries.enc, s.entries.mcpMetadataRepo)
+
+	environment, err := er.CreateEnvironment(ctx, input)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment").Log(ctx, logger)
 	}
 
 	names := make([]string, len(payload.Entries))
@@ -103,37 +117,35 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		values[i] = entry.Value
 	}
 
-	rows, err := s.entries.CreateEnvironmentEntries(ctx, repo.CreateEnvironmentEntriesParams{
+	rows, err := entriesRepo.CreateEnvironmentEntries(ctx, repo.CreateEnvironmentEntriesParams{
 		EnvironmentID: environment.ID,
 		Names:         names,
 		Values:        values,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment entries").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment entries").Log(ctx, logger)
 	}
 
-	entries := make([]*types.EnvironmentEntry, len(payload.Entries))
-	for i, entry := range rows {
-		entries[i] = &types.EnvironmentEntry{
-			Name:      entry.Name,
-			Value:     entry.Value,
-			ValueHash: computeValueHash(entry.Value),
-			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
-		}
+	environmentView := buildEnvironmentView(environment, rows)
+
+	if err := audit.LogEnvironmentCreate(ctx, dbtx, audit.LogEnvironmentCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		EnvironmentURN:   urn.NewEnvironment(environment.ID),
+		EnvironmentName:  environment.Name,
+		EnvironmentSlug:  environment.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log environment creation").Log(ctx, logger)
 	}
 
-	return &types.Environment{
-		ID:             environment.ID.String(),
-		OrganizationID: environment.OrganizationID,
-		ProjectID:      environment.ProjectID.String(),
-		Name:           environment.Name,
-		Slug:           types.Slug(environment.Slug),
-		Description:    conv.FromPGText[string](environment.Description),
-		Entries:        entries,
-		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment").Log(ctx, logger)
+	}
+
+	return environmentView, nil
 }
 
 func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnvironmentsPayload) (*gen.ListEnvironmentsResult, error) {
@@ -188,13 +200,30 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	environment, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to access environments").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	er := s.repo.WithTx(dbtx)
+	entriesRepo := NewEnvironmentEntries(logger, dbtx, s.entries.enc, s.entries.mcpMetadataRepo)
+
+	environment, err := er.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, logger)
 	}
+
+	beforeEntries, err := entriesRepo.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, logger)
+	}
+	beforeView := buildEnvironmentView(environment, beforeEntries)
 
 	updateInput := repo.UpdateEnvironmentParams{
 		Slug:        conv.ToLower(payload.Slug),
@@ -210,9 +239,9 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		updateInput.Description = pgtype.Text{String: *payload.Description, Valid: true}
 	}
 
-	_, err = s.repo.UpdateEnvironment(ctx, updateInput)
+	updatedEnvironment, err := er.UpdateEnvironment(ctx, updateInput)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to update environment").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update environment").Log(ctx, logger)
 	}
 
 	projectID := *authCtx.ProjectID
@@ -221,37 +250,109 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	}
 
 	for _, updatedEntry := range payload.EntriesToUpdate {
-		if err := s.entries.UpdateEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
+		if err := entriesRepo.UpdateEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
 			EnvironmentID: environment.ID,
 			Name:          updatedEntry.Name,
 			Value:         updatedEntry.Value, // This is the actual environment value to update too, do not redact it
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to update environment entry").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update environment entry").Log(ctx, logger)
 		}
 	}
 	for _, removedEntry := range payload.EntriesToRemove {
-		if err := s.entries.DeleteEnvironmentEntry(ctx, repo.DeleteEnvironmentEntryParams{
+		if err := entriesRepo.DeleteEnvironmentEntry(ctx, repo.DeleteEnvironmentEntryParams{
 			EnvironmentID: environment.ID,
 			Name:          removedEntry,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete environment entry").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete environment entry").Log(ctx, logger)
 		}
 	}
 
 	// Re-fetch environment to get the latest state after all updates
-	environment, err = s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
+	environment, err = er.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: projectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to re-fetch environment").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to re-fetch environment").Log(ctx, logger)
 	}
 
-	entries, err := s.entries.ListEnvironmentEntries(ctx, projectID, environment.ID, true)
+	entries, err := entriesRepo.ListEnvironmentEntries(ctx, projectID, environment.ID, true)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, logger)
 	}
 
+	afterView := buildEnvironmentView(environment, entries)
+
+	if err := audit.LogEnvironmentUpdate(ctx, dbtx, audit.LogEnvironmentUpdateEvent{
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		Actor:                     urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:          authCtx.Email,
+		ActorSlug:                 nil,
+		EnvironmentURN:            urn.NewEnvironment(updatedEnvironment.ID),
+		EnvironmentName:           updatedEnvironment.Name,
+		EnvironmentSlug:           updatedEnvironment.Slug,
+		EnvironmentSnapshotBefore: beforeView,
+		EnvironmentSnapshotAfter:  afterView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log environment update").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update environment").Log(ctx, logger)
+	}
+
+	return afterView, nil
+}
+
+func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvironmentPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to access environments").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	er := s.repo.WithTx(dbtx)
+
+	deleted, err := er.DeleteEnvironment(ctx, repo.DeleteEnvironmentParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "failed to delete environment").Log(ctx, logger)
+	}
+
+	if err := audit.LogEnvironmentDelete(ctx, dbtx, audit.LogEnvironmentDeleteEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		EnvironmentURN:   urn.NewEnvironment(deleted.ID),
+		EnvironmentName:  deleted.Name,
+		EnvironmentSlug:  deleted.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to save environment delete audit log event").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete environment").Log(ctx, logger)
+	}
+
+	return nil
+}
+
+func buildEnvironmentEntries(entries []repo.EnvironmentEntry) []*types.EnvironmentEntry {
 	genEntries := make([]*types.EnvironmentEntry, len(entries))
 	for i, entry := range entries {
 		genEntries[i] = &types.EnvironmentEntry{
@@ -263,6 +364,10 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 
+	return genEntries
+}
+
+func buildEnvironmentView(environment repo.Environment, entries []repo.EnvironmentEntry) *types.Environment {
 	return &types.Environment{
 		ID:             environment.ID.String(),
 		OrganizationID: environment.OrganizationID,
@@ -270,27 +375,10 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		Name:           environment.Name,
 		Slug:           types.Slug(environment.Slug),
 		Description:    conv.FromPGText[string](environment.Description),
-		Entries:        genEntries,
+		Entries:        buildEnvironmentEntries(entries),
 		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
-}
-
-func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvironmentPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized)
 	}
-
-	err := s.repo.DeleteEnvironment(ctx, repo.DeleteEnvironmentParams{
-		Slug:      conv.ToLower(payload.Slug),
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return oops.E(oops.CodeUnexpected, err, "failed to delete environment").Log(ctx, s.logger)
-	}
-
-	return nil
 }
 
 func (s *Service) SetSourceEnvironmentLink(ctx context.Context, payload *gen.SetSourceEnvironmentLinkPayload) (*gen.SourceEnvironmentLink, error) {

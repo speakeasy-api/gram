@@ -45,10 +45,6 @@ func EncodeGetDomainRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		return nil
 	}
 }
@@ -279,10 +275,6 @@ func EncodeCreateDomainRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		body := NewCreateDomainRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("domains", "createDomain", err)
@@ -503,10 +495,6 @@ func EncodeDeleteDomainRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		return nil
 	}

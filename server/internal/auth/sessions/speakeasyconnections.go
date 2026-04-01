@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type speakeasyProviderUser struct {
@@ -53,7 +54,15 @@ type TokenExchangeResponse struct {
 	IDToken string `json:"id_token"`
 }
 
-func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (string, error) {
+func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (idtoken string, err error) {
+	ctx, span := s.tracer.Start(ctx, "sessions.exchangeTokenFromSpeakeasy")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	// Prepare the request body
 	payload := TokenExchangeRequest{Code: code}
 	body, err := json.Marshal(payload)
@@ -72,7 +81,7 @@ func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (
 	req.Header.Set("Accept", "application/json")
 
 	// Send the request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.speakeasyClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to perform token exchange: %w", err)
 	}
@@ -96,10 +105,14 @@ func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (
 	return exchangeResp.IDToken, nil
 }
 
-func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) error {
-	if s.unsafeLocal {
-		return nil
-	}
+func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) (err error) {
+	ctx, span := s.tracer.Start(ctx, "sessions.revokeTokenFromSpeakeasy")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
 	// Create the HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", s.speakeasyServerAddress+"/v1/speakeasy_provider/revoke", nil)
@@ -111,7 +124,7 @@ func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) 
 	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
 
 	// Send the request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.speakeasyClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to perform token revocation: %w", err)
 	}
@@ -129,12 +142,16 @@ func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) 
 	return nil
 }
 
-func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) (*CachedUserInfo, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) (userInfo *CachedUserInfo, err error) {
+	ctx, span := s.tracer.Start(ctx, "sessions.getUserInfoFromSpeakeasy")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
-	req, err := http.NewRequest("GET", s.speakeasyServerAddress+"/v1/speakeasy_provider/validate", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", s.speakeasyServerAddress+"/v1/speakeasy_provider/validate", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -142,7 +159,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
 	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
 
-	resp, err := client.Do(req)
+	resp, err := s.speakeasyClient.Do(req)
 	if err != nil {
 		s.logger.ErrorContext(context.Background(), "failed to make request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to make request: %w", err)
@@ -243,10 +260,14 @@ type createOrgRequest struct {
 	AccountType      string `json:"account_type"`
 }
 
-func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, orgName string) (*CachedUserInfo, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, orgName string) (userInfo *CachedUserInfo, err error) {
+	ctx, span := s.tracer.Start(ctx, "sessions.createOrgFromSpeakeasy")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
 	orgReq := createOrgRequest{
 		OrganizationName: orgName,
@@ -259,7 +280,7 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", s.speakeasyServerAddress+"/v1/speakeasy_provider/register", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", s.speakeasyServerAddress+"/v1/speakeasy_provider/register", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -268,14 +289,14 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
 	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
 
-	resp, err := client.Do(req)
+	resp, err := s.speakeasyClient.Do(req)
 	if err != nil {
-		s.logger.ErrorContext(context.Background(), "failed to make request", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "failed to make request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			s.logger.ErrorContext(context.Background(), "failed to close response body", attr.SlogError(err))
+			s.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
 		}
 	}()
 
@@ -331,11 +352,7 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 	var userInfo *CachedUserInfo
 	var err error
 
-	if s.unsafeLocal {
-		userInfo, err = s.GetUserInfoFromLocalEnvFile(userID)
-	} else {
-		userInfo, err = s.GetUserInfoFromSpeakeasy(ctx, sessionID)
-	}
+	userInfo, err = s.GetUserInfoFromSpeakeasy(ctx, sessionID)
 	if err != nil {
 		return nil, false, fmt.Errorf("fetch user info: %w", err)
 	}
@@ -387,20 +404,29 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		return
 	}
 
-	workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
-		return
-	}
-	if workosUser == nil {
-		return
-	}
+	var workosUserID string
 
-	if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
-		ID:       user.ID,
-		WorkosID: conv.ToPGText(workosUser.ID),
-	}); err != nil {
-		s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
+	if user.WorkosID.Valid && user.WorkosID.String != "" {
+		// Already have the user's WorkOS ID — skip the API lookup
+		workosUserID = user.WorkosID.String
+	} else {
+		workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
+			return
+		}
+		if workosUser == nil {
+			return
+		}
+
+		workosUserID = workosUser.ID
+
+		if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+			ID:       user.ID,
+			WorkosID: conv.ToPGText(workosUserID),
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
+		}
 	}
 
 	for _, org := range validateResp.Organizations {
@@ -408,7 +434,7 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 			continue
 		}
 
-		orgMembership, err := s.workos.GetOrgMembership(ctx, workosUser.ID, org.ID)
+		orgMembership, err := s.workos.GetOrgMembership(ctx, workosUserID, org.ID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "failed to get workos org membership", attr.SlogError(err))
 			continue

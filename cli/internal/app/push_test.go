@@ -1,79 +1,11 @@
 package app
 
 import (
-	"context"
-	"errors"
-	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
-
-//nolint:paralleltest // Tests modify shared package-level variables (isTerminalFunc, openURLFunc)
-func TestOpenDeploymentURL(t *testing.T) {
-	tests := []struct {
-		name           string
-		isTerminal     bool
-		openURLErr     error
-		expectOpenCall bool
-	}{
-		{
-			name:           "it opens URL when running in TTY",
-			isTerminal:     true,
-			openURLErr:     nil,
-			expectOpenCall: true,
-		},
-		{
-			name:           "it does not open URL when not running in TTY",
-			isTerminal:     false,
-			openURLErr:     nil,
-			expectOpenCall: false,
-		},
-		{
-			name:           "it logs error when open fails in TTY",
-			isTerminal:     true,
-			openURLErr:     errors.New("failed to open browser"),
-			expectOpenCall: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original functions
-			origIsTerminal := isTerminalFunc
-			origOpenURL := openURLFunc
-			t.Cleanup(func() {
-				isTerminalFunc = origIsTerminal
-				openURLFunc = origOpenURL
-			})
-
-			// Set up mocks
-			isTerminalFunc = func() bool { return tt.isTerminal }
-
-			var openCalled bool
-			var openedURL string
-			openURLFunc = func(url string) error {
-				openCalled = true
-				openedURL = url
-				return tt.openURLErr
-			}
-
-			// Execute
-			logger := slog.Default()
-			ctx := context.Background()
-			testURL := "https://app.getgram.ai/org/project/deployments/123"
-
-			openDeploymentURL(logger, ctx, testURL)
-
-			// Verify
-			require.Equal(t, tt.expectOpenCall, openCalled, "openURL call expectation mismatch")
-			if tt.expectOpenCall {
-				require.Equal(t, testURL, openedURL, "opened URL mismatch")
-			}
-		})
-	}
-}
 
 func TestProcessingMessage(t *testing.T) {
 	t.Parallel()

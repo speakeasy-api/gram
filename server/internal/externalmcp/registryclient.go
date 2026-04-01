@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
@@ -46,7 +48,7 @@ func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider,
 				otelhttp.WithTracerProvider(tracerProvider),
 			),
 		},
-		logger:       logger.With(attr.SlogComponent("mcp-registry-client")),
+		logger:       logger.With(attr.SlogComponent("mcp_registry_client")),
 		backend:      backend,
 		listCache:    nil,
 		detailsCache: nil,
@@ -251,6 +253,14 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			})
 		}
 
+		var remotes []*types.ExternalMCPRemote
+		for _, r := range s.Server.Remotes {
+			remotes = append(remotes, &types.ExternalMCPRemote{
+				URL:           r.URL,
+				TransportType: r.Type,
+			})
+		}
+
 		server := &types.ExternalMCPServer{
 			RegistrySpecifier: s.Server.Name,
 			Version:           s.Server.Version,
@@ -260,6 +270,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			IconURL:           iconURL,
 			Meta:              s.Meta,
 			Tools:             tools,
+			Remotes:           remotes,
 		}
 
 		servers = append(servers, server)
@@ -279,6 +290,23 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	return servers, nil
 }
 
+// ClearCache removes all cached entries for the given registry URL.
+func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) error {
+	if c.listCache != nil {
+		prefix := fmt.Sprintf("registry:list:%s", registryURL)
+		if err := c.listCache.DeleteByPrefix(ctx, prefix); err != nil {
+			return fmt.Errorf("clear list cache for registry %s: %w", registryURL, err)
+		}
+	}
+	if c.detailsCache != nil {
+		prefix := fmt.Sprintf("registry:details:%s", registryURL)
+		if err := c.detailsCache.DeleteByPrefix(ctx, prefix); err != nil {
+			return fmt.Errorf("clear details cache for registry %s: %w", registryURL, err)
+		}
+	}
+	return nil
+}
+
 // ServerDetails contains detailed information about an MCP server including connection info.
 type ServerDetails struct {
 	Name          string
@@ -291,7 +319,8 @@ type ServerDetails struct {
 }
 
 // GetServerDetails fetches server details including the remote URL from the registry.
-func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry, serverName string) (*ServerDetails, error) {
+// If allowedRemoteURLs is provided and non-empty, only remotes with matching URLs are considered.
+func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry, serverName string, allowedRemoteURLs []string) (*ServerDetails, error) {
 	u, err := url.Parse(registry.URL)
 	if err != nil {
 		return nil, oops.Permanent(fmt.Errorf("parse external mcp registry url: %w", err))
@@ -311,9 +340,22 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		}
 	}
 
+	// Build cache key including allowedRemoteURLs filter
+	buildCacheKey := func() string {
+		baseKey := registryCacheKey("details", req)
+		if len(allowedRemoteURLs) == 0 {
+			return baseKey
+		}
+		// Sort URLs for deterministic key
+		sortedURLs := make([]string, len(allowedRemoteURLs))
+		copy(sortedURLs, allowedRemoteURLs)
+		sort.Strings(sortedURLs)
+		return fmt.Sprintf("%s:filter:%s", baseKey, strings.Join(sortedURLs, ","))
+	}
+
 	// Check cache after authorization so headers are populated.
 	if c.detailsCache != nil {
-		cacheKey := registryCacheKey("details", req)
+		cacheKey := buildCacheKey()
 		cached, err := c.detailsCache.Get(ctx, cacheKey)
 		if err == nil {
 			c.logger.DebugContext(ctx, "registry details cache hit", attr.SlogCacheKey(cacheKey))
@@ -346,13 +388,28 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, fmt.Errorf("decode external mcp server details response: %w", err)
 	}
 
+	// Build a set of allowed URLs for filtering (if provided)
+	allowedURLSet := make(map[string]struct{}, len(allowedRemoteURLs))
+	for _, u := range allowedRemoteURLs {
+		allowedURLSet[u] = struct{}{}
+	}
+	hasFilter := len(allowedURLSet) > 0
+
 	// Find the remote URL, preferring streamable-http over sse
+	// If allowedRemoteURLs is set, only consider remotes in that list
 	var remoteURL string
 	var transportType externalmcptypes.TransportType
 	var tools []serverTool
 	var headers []RemoteHeader
-	var remoteIndex int
+	remoteIndex := -1 // Use -1 as sentinel to detect when no remote matched
 	for i, remote := range serverResp.Server.Remotes {
+		// Skip remotes not in allowed list (if filter is active)
+		if hasFilter {
+			if _, ok := allowedURLSet[remote.URL]; !ok {
+				continue
+			}
+		}
+
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeStreamableHTTP
@@ -367,7 +424,9 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		}
 	}
 
-	// Obviously not ideal, this is just the way the registry API is structured
+	// Only fetch tools if a remote was actually matched.
+	// If remoteIndex is -1 (no match), tools stays nil.
+	// Obviously not ideal, this is just the way the registry API is structured.
 	switch remoteIndex {
 	case 0:
 		tools = serverResp.Meta.Version.FirstRemote.Tools
@@ -393,7 +452,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	// Store in cache on success.
 	if c.detailsCache != nil {
-		cacheKey := registryCacheKey("details", req)
+		cacheKey := buildCacheKey()
 		if storeErr := c.detailsCache.Store(ctx, CachedServerDetailsResponse{
 			Key:     cacheKey,
 			Details: details,

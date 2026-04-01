@@ -64,7 +64,7 @@ func NewGetInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, aut
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 				RequiredScopes: []string{"consumer"},
 			}
 			var key string
@@ -88,7 +88,7 @@ func NewGetInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, aut
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 				RequiredScopes: []string{"chat"},
 			}
 			var key string

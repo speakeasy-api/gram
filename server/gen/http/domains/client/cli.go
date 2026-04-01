@@ -16,29 +16,22 @@ import (
 
 // BuildGetDomainPayload builds the payload for the domains getDomain endpoint
 // from CLI flags.
-func BuildGetDomainPayload(domainsGetDomainSessionToken string, domainsGetDomainProjectSlugInput string) (*domains.GetDomainPayload, error) {
+func BuildGetDomainPayload(domainsGetDomainSessionToken string) (*domains.GetDomainPayload, error) {
 	var sessionToken *string
 	{
 		if domainsGetDomainSessionToken != "" {
 			sessionToken = &domainsGetDomainSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if domainsGetDomainProjectSlugInput != "" {
-			projectSlugInput = &domainsGetDomainProjectSlugInput
-		}
-	}
 	v := &domains.GetDomainPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildCreateDomainPayload builds the payload for the domains createDomain
 // endpoint from CLI flags.
-func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomainSessionToken string, domainsCreateDomainProjectSlugInput string) (*domains.CreateDomainPayload, error) {
+func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomainSessionToken string) (*domains.CreateDomainPayload, error) {
 	var err error
 	var body CreateDomainRequestBody
 	{
@@ -53,39 +46,25 @@ func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomai
 			sessionToken = &domainsCreateDomainSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if domainsCreateDomainProjectSlugInput != "" {
-			projectSlugInput = &domainsCreateDomainProjectSlugInput
-		}
-	}
 	v := &domains.CreateDomainPayload{
 		Domain: body.Domain,
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDeleteDomainPayload builds the payload for the domains deleteDomain
 // endpoint from CLI flags.
-func BuildDeleteDomainPayload(domainsDeleteDomainSessionToken string, domainsDeleteDomainProjectSlugInput string) (*domains.DeleteDomainPayload, error) {
+func BuildDeleteDomainPayload(domainsDeleteDomainSessionToken string) (*domains.DeleteDomainPayload, error) {
 	var sessionToken *string
 	{
 		if domainsDeleteDomainSessionToken != "" {
 			sessionToken = &domainsDeleteDomainSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if domainsDeleteDomainProjectSlugInput != "" {
-			projectSlugInput = &domainsDeleteDomainProjectSlugInput
-		}
-	}
 	v := &domains.DeleteDomainPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

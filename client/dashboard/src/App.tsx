@@ -1,34 +1,35 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
+import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
+import { FontTexture, WebGLCanvas } from "@/components/webgl";
 import {
   MoonshineConfigProvider,
   TooltipProvider,
 } from "@speakeasy-api/moonshine";
-import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
   Route,
   Routes,
-  useSearchParams,
   useLocation,
+  useSearchParams,
 } from "react-router";
-import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
+import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
+import { CommandPalette } from "./components/command-palette";
 import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
-import { SdkProvider } from "./contexts/Sdk.tsx";
-import { TelemetryProvider } from "./contexts/Telemetry.tsx";
-import { AppRoute, useRoutes } from "./routes";
-import { usePageTitle } from "./hooks/use-page-title";
-import { Toaster } from "@/components/ui/sonner";
-import CliCallback from "./pages/cli/CliCallback";
-import HooksLogin from "./pages/hooks/HooksLogin";
 import {
   CommandPaletteProvider,
   useCommandPalette,
 } from "./contexts/CommandPalette";
-import { CommandPalette } from "./components/command-palette";
-import { WebGLCanvas, FontTexture } from "@/components/webgl";
+import { SdkProvider, useSlugs } from "./contexts/Sdk.tsx";
+import { TelemetryProvider } from "./contexts/Telemetry.tsx";
+import { usePageTitle } from "./hooks/use-page-title";
+import CliCallback from "./pages/cli/CliCallback";
+import SlackRegister from "./pages/slackapp/SlackRegister";
+import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -87,11 +88,13 @@ export default function App() {
           <TelemetryProvider>
             <CommandPaletteProvider>
               <BrowserRouter>
-                <SdkProvider>
-                  <AppContent />
-                  <Toaster />
-                  <CommandPalette />
-                </SdkProvider>
+                <NuqsAdapter>
+                  <SdkProvider>
+                    <AppContent />
+                    <Toaster />
+                    <CommandPalette />
+                  </SdkProvider>
+                </NuqsAdapter>
               </BrowserRouter>
             </CommandPaletteProvider>
           </TelemetryProvider>
@@ -103,9 +106,9 @@ export default function App() {
 
 function AppContent() {
   /**
-   * NOTE(cjea): Do not wrap CliCallback or HooksLogin in an AuthProvider.
+   * NOTE(cjea): Do not wrap CliCallback in an AuthProvider.
    *
-   * CLI and Hooks requests don't include a redirect URL, so AuthProvider wouldn't know
+   * CLI requests don't include a redirect URL, so AuthProvider wouldn't know
    * where to send authenticated users. Instead, these components handle the flow:
    *
    * 1. Component receives an unauthenticated request.
@@ -114,7 +117,6 @@ function AppContent() {
    * 4. Authenticated user is redirected back to the component.
    */
   const cliFlow = useCliAuthFlow();
-  const hooksFlow = useHooksAuthFlow();
   const location = useLocation();
 
   // Only render WebGL canvas during onboarding
@@ -122,10 +124,6 @@ function AppContent() {
 
   if (cliFlow) {
     return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
-  }
-
-  if (hooksFlow) {
-    return <HooksLogin callbackUrl={hooksFlow.callbackUrl} />;
   }
 
   return (
@@ -145,88 +143,123 @@ function AppContent() {
 
 const RouteProvider = () => {
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const { addActions, removeActions } = useCommandPalette();
+  const { projectSlug } = useSlugs();
 
   // Update document title based on active route
-  usePageTitle(routes);
+  usePageTitle(routes, orgRoutes);
 
   // Register global command palette actions
   useEffect(() => {
-    const globalActions = [
+    // Only register project-scoped navigation actions when a project is selected
+    const globalActions = projectSlug
+      ? [
+          {
+            id: "go-home",
+            label: "Go to Home",
+            icon: "home",
+            onSelect: () => routes.home.goTo(),
+            group: "Navigation",
+          },
+          {
+            id: "go-sources",
+            label: "Go to Sources",
+            icon: "file-code",
+            onSelect: () => routes.sources.goTo(),
+            group: "Navigation",
+          },
+          {
+            id: "go-mcp-servers",
+            label: "Go to MCP Servers",
+            icon: "network",
+            onSelect: () => routes.mcp.goTo(),
+            group: "Navigation",
+          },
+          {
+            id: "go-playground",
+            label: "Go to Playground",
+            icon: "message-square",
+            onSelect: () => routes.playground.goTo(),
+            group: "Navigation",
+          },
+          {
+            id: "go-insights",
+            label: "Go to Insights",
+            icon: "layout-dashboard",
+            onSelect: () => routes.observability.goTo(),
+            group: "Navigation",
+          },
+        ]
+      : [];
+
+    // Always register org-level navigation actions
+    const orgActions = [
       {
-        id: "go-home",
-        label: "Go to Home",
-        icon: "home",
-        onSelect: () => routes.home.goTo(),
+        id: "go-billing",
+        label: "Go to Billing",
+        icon: "credit-card",
+        onSelect: () => orgRoutes.billing.goTo(),
         group: "Navigation",
       },
       {
-        id: "go-sources",
-        label: "Go to Sources",
-        icon: "file-code",
-        onSelect: () => routes.sources.goTo(),
-        group: "Navigation",
-      },
-      {
-        id: "go-mcp-servers",
-        label: "Go to MCP Servers",
-        icon: "network",
-        onSelect: () => routes.mcp.goTo(),
-        group: "Navigation",
-      },
-      {
-        id: "go-playground",
-        label: "Go to Playground",
-        icon: "message-square",
-        onSelect: () => routes.playground.goTo(),
-        group: "Navigation",
-      },
-      {
-        id: "go-insights",
-        label: "Go to Insights",
-        icon: "layout-dashboard",
-        onSelect: () => routes.observability.goTo(),
+        id: "go-api-keys",
+        label: "Go to API Keys",
+        icon: "key-round",
+        onSelect: () => orgRoutes.apiKeys.goTo(),
         group: "Navigation",
       },
     ];
 
-    addActions(globalActions);
+    const allActions = [...globalActions, ...orgActions];
+    addActions(allActions);
 
     return () => {
-      removeActions(globalActions.map((a) => a.id));
+      removeActions(allActions.map((a) => a.id));
     };
-  }, [routes, addActions, removeActions]);
+  }, [routes, orgRoutes, projectSlug, addActions, removeActions]);
 
-  const unauthenticatedRoutes = Object.values(routes).filter(
-    (route) => route.unauthenticated,
-  );
+  const routeElements = useMemo(() => {
+    const allRoutes = Object.values(routes);
+    const unauthenticatedRoutes = allRoutes.filter(
+      (route) => route.unauthenticated,
+    );
+    const outsideStructureRoutes = allRoutes.filter(
+      (route) => route.outsideMainLayout,
+    );
+    const authenticatedRoutes = allRoutes.filter(
+      (route) =>
+        !outsideStructureRoutes.includes(route) && !route.unauthenticated,
+    );
 
-  const outsideStructureRoutes = Object.values(routes).filter(
-    (route) => route.outsideMainLayout,
-  );
+    const orgRouteValues = Object.values(orgRoutes);
+    const orgHomeRoute = orgRouteValues.find((r) => r.url === "");
+    const otherOrgRoutes = orgRouteValues.filter((r) => r.url !== "");
 
-  const authenticatedRoutes = Object.values(routes).filter(
-    (route) =>
-      !outsideStructureRoutes.includes(route) && !route.unauthenticated,
-  );
-
-  const routeElements = useMemo(
-    () => (
+    return (
       <Routes>
         {/* Register these unauthenticated paths outside of root layout */}
         {routesWithSubroutes(unauthenticatedRoutes)}
+        <Route path="/slack/register" element={<LoginCheck />}>
+          <Route index element={<SlackRegister />} />
+        </Route>
         <Route path="/" element={<LoginCheck />}>
-          <Route path=":orgSlug/:projectSlug">
+          <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
-          <Route path=":orgSlug/:projectSlug" element={<AppLayout />}>
+          <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
+          </Route>
+          <Route path=":orgSlug" element={<OrgLayout />}>
+            {orgHomeRoute?.component && (
+              <Route index element={<orgHomeRoute.component />} />
+            )}
+            {routesWithSubroutes(otherOrgRoutes)}
           </Route>
         </Route>
       </Routes>
-    ),
-    [routes],
-  );
+    );
+  }, [routes, orgRoutes]);
 
   return routeElements;
 };
@@ -266,19 +299,6 @@ function useCliAuthFlow() {
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
     return { cliCallbackUrl };
-  }
-
-  return null;
-}
-
-function useHooksAuthFlow() {
-  const [searchParams] = useSearchParams();
-  const location = useLocation();
-
-  const callbackUrl = searchParams.get("callback");
-
-  if (location.pathname === "/hooks-login" && callbackUrl) {
-    return { callbackUrl };
   }
 
   return null;

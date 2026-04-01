@@ -7,7 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
 export type RegisterDomainSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -16,16 +15,11 @@ export type RegisterDomainRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
   createDomainRequestBody: components.CreateDomainRequestBody;
 };
 
 /** @internal */
 export type RegisterDomainSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -35,12 +29,10 @@ export const RegisterDomainSecurity$outboundSchema: z.ZodMiniType<
   RegisterDomainSecurity
 > = z.pipe(
   z.object({
-    projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -57,7 +49,6 @@ export function registerDomainSecurityToJSON(
 /** @internal */
 export type RegisterDomainRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   CreateDomainRequestBody: components.CreateDomainRequestBody$Outbound;
 };
 
@@ -68,13 +59,11 @@ export const RegisterDomainRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
     createDomainRequestBody: components.CreateDomainRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
       createDomainRequestBody: "CreateDomainRequestBody",
     });
   }),

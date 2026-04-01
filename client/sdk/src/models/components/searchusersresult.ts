@@ -14,10 +14,6 @@ import { UserSummary, UserSummary$inboundSchema } from "./usersummary.js";
  */
 export type SearchUsersResult = {
   /**
-   * Whether telemetry is enabled for the organization
-   */
-  enabled: boolean;
-  /**
    * Cursor for next page
    */
   nextCursor?: string | undefined;
@@ -33,7 +29,6 @@ export const SearchUsersResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    enabled: z.boolean(),
     next_cursor: z.optional(z.string()),
     users: z.array(UserSummary$inboundSchema),
   }),

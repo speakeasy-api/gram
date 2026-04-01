@@ -74,48 +74,35 @@ export function MCPPatternIllustration({
 }
 
 /**
- * Large hero illustration for MCP details page
- * Uses the same pattern as the card at full saturation
- */
-export function MCPHeroIllustration({
-  className,
-  toolsetSlug,
-}: IllustrationProps & { toolsetSlug: string }) {
-  const seed = hashString(toolsetSlug);
-  const random = seededRandom(seed);
-
-  const colorIndex = Math.floor(random() * PATTERN_IMAGES.length);
-  const patternIndex = Math.floor(random() * PATTERN_IMAGES[colorIndex].length);
-  const patternImage = PATTERN_IMAGES[colorIndex][patternIndex];
-
-  return (
-    <img
-      src={patternImage}
-      alt=""
-      className={cn("w-full h-full object-fill", className)}
-      aria-hidden="true"
-    />
-  );
-}
-
-/**
  * Illustration for external MCP servers
  * Shows the server logo on a pattern background if available,
  * otherwise uses the pattern alone
+ *
+ * @param className - Applied to the outer container (for transforms like scale-200)
+ * @param saturationClassName - Applied to the pattern for saturation control (defaults to desaturated with hover)
  */
 export function ExternalMCPIllustration({
   className,
+  saturationClassName,
   logoUrl,
   name,
   slug,
-}: IllustrationProps & { logoUrl?: string; name?: string; slug: string }) {
+}: IllustrationProps & {
+  saturationClassName?: string;
+  logoUrl?: string;
+  name?: string;
+  slug: string;
+}) {
+  const saturationClass =
+    saturationClassName ?? "saturate-[.3] group-hover:saturate-100";
+
   if (logoUrl) {
     return (
       <div className={cn("w-full h-full relative", className)}>
         {/* Pattern background */}
         <MCPPatternIllustration
           toolsetSlug={slug}
-          className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
+          className={cn("transition-all duration-300", saturationClass)}
         />
         {/* Logo overlay */}
         <div className="absolute inset-0 flex items-center justify-center">
@@ -133,9 +120,11 @@ export function ExternalMCPIllustration({
 
   // Fallback: just use the pattern illustration
   return (
-    <MCPPatternIllustration
-      toolsetSlug={slug}
-      className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
-    />
+    <div className={cn("w-full h-full", className)}>
+      <MCPPatternIllustration
+        toolsetSlug={slug}
+        className={cn("transition-all duration-300", saturationClass)}
+      />
+    </div>
   );
 }

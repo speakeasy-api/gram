@@ -16,6 +16,7 @@ interface OpenApiSourceInputProps {
   /** When provided, shows a CLI tab with pre-filled commands for this document slug. */
   documentSlug?: string;
   className?: string;
+  isLoading?: boolean;
 }
 
 export function OpenApiSourceInput({
@@ -23,6 +24,7 @@ export function OpenApiSourceInput({
   onUrlUpload,
   documentSlug,
   className,
+  isLoading,
 }: OpenApiSourceInputProps) {
   const [url, setUrl] = useState("");
   const client = useSdkClient();
@@ -97,6 +99,7 @@ export function OpenApiSourceInput({
           onUpload={onUpload}
           className="max-w-full"
           allowedExtensions={["yaml", "yml", "json"]}
+          isLoading={isLoading}
         />
       </TabsContent>
       <TabsContent value="url" className="my-3 flex flex-col justify-center">

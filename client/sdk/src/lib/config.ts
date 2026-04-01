@@ -11,10 +11,7 @@ import { Params, pathToFunc } from "./url.js";
  * Contains the list of servers available to the SDK
  */
 export const ServerList = [
-  /**
-   * Default server for gram
-   */
-  "http://localhost:80",
+  "https://app.getgram.ai",
 ] as const;
 
 export type SDKOptions = {
@@ -59,7 +56,7 @@ export function serverURLFromOptions(options: SDKOptions): URL | null {
 export const SDK_METADATA = {
   language: "typescript",
   openapiDocVersion: "0.0.1",
-  sdkVersion: "0.27.17",
-  genVersion: "2.801.2",
-  userAgent: "speakeasy-sdk/typescript 0.27.17 2.801.2 0.0.1 @gram/client",
+  sdkVersion: "0.32.17",
+  genVersion: "2.844.3",
+  userAgent: "speakeasy-sdk/typescript 0.32.17 2.844.3 0.0.1 @gram/client",
 } as const;

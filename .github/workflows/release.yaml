@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
-        uses: jdx/mise-action@e79ddf65a11cec7b0e882bedced08d6e976efb2d # v3.6.2
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           install: true
           cache: true
@@ -40,7 +40,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -87,16 +87,11 @@ jobs:
     needs: [release]
     if: needs.release.outputs.published == 'true' && contains(fromJSON(needs.release.outputs.publishedPackages).*.name, 'cli')
     name: Release Gram CLI
-    # NOTE(cjea): Using Windows runner for future Chocolatey/Winget
-    # compatibility.
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write # to push tags
       id-token: write # for cosign keyless signing
     steps:
-      - name: Setup environment
-        run: |-
-          chcp 65001 #set code page to utf-8
       - name: Checkout repository
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
         with:
@@ -106,12 +101,8 @@ jobs:
           go-version-file: "go.mod"
           # Reference: https://github.com/actions/setup-go/issues/495
           cache: false
-      - name: Setup Choco
-        uses: crazy-max/ghaction-chocolatey@dff3862348493b11fba2fbc49147b6d2dfe09b66 # v4.0.0
-        with:
-          args: --version
       - name: Install cosign
-        uses: sigstore/cosign-installer@fb28c2b6339dcd94da6e4cbcbc5e888961f6f8c3 # v3.9.0
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
       - name: Generate GitHub App Token for Gram Bot
         id: bot-token
         uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42 # v2.1.4
@@ -124,19 +115,17 @@ jobs:
         # GoReleaser expects a tag on HEAD before releasing. The newest tag
         # will be on an old commit, specified by `changeset`, so this is a
         # local-only tag to help GoReleaser publish.
-        shell: pwsh
         run: |
-          $version = (Get-Content cli/package.json | ConvertFrom-Json).version
-          $tag = "cli/$version"
-          git tag -f $tag
-          Write-Host "Created local tag $tag"
+          version=$(jq -r .version cli/package.json)
+          tag="cli/$version"
+          git tag -f "$tag"
+          echo "Created local tag $tag"
       - name: goreleaser
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
           distribution: goreleaser-pro
-          version: latest
+          version: "~> v2.14"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
           GORELEASER_KEY: ${{secrets.GORELEASER_PRO_LICENSE_KEY}}

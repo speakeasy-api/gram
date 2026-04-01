@@ -1,6 +1,11 @@
-import { useOrganization, useProject, useUser } from "@/contexts/Auth";
+import {
+  useIsAdmin,
+  useOrganization,
+  useProject,
+  useUser,
+} from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +20,7 @@ import {
   BugIcon,
   CheckIcon,
   ChevronsUpDown,
+  ArrowRightLeftIcon,
   CreditCardIcon,
   LogOutIcon,
   MailIcon,
@@ -22,7 +28,8 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { Link } from "react-router";
 import { GramLogo } from "./gram-logo";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
@@ -40,12 +47,23 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 export function TopHeader() {
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const project = useProject();
   const user = useUser();
   const { projectSlug } = useSlugs();
   const [open, setOpen] = useState(false);
+  const isAdmin = useIsAdmin();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [pylonOpen, setPylonOpen] = useState(false);
+  const togglePylon = useCallback(() => {
+    if (pylonOpen) {
+      window.Pylon?.("hide");
+    } else {
+      window.Pylon?.("show");
+    }
+    setPylonOpen((prev) => !prev);
+  }, [pylonOpen]);
   const [newProjectName, setNewProjectName] = useState("");
   const client = useSdkClient();
 
@@ -85,86 +103,104 @@ export function TopHeader() {
       <header className="flex items-center h-14 pl-5 pr-4 border-b bg-white dark:bg-background shrink-0">
         <div className="flex items-center gap-3">
           {/* Logo */}
-          <routes.home.Link className="hover:no-underline flex items-center">
-            <GramLogo className="w-20" />
-          </routes.home.Link>
+          <Link
+            to={projectSlug ? routes.home.href() : `/${organization.slug}`}
+            className="hover:no-underline flex items-center"
+          >
+            <GramLogo className="w-28" />
+          </Link>
 
           {/* Separator */}
           <span className="text-muted-foreground/50 text-xl select-none">
             /
           </span>
 
-          {/* Org/Project Switcher */}
-          <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                className="h-8 !px-2 gap-2 relative -left-1"
-              >
-                <ProjectAvatar
-                  project={project}
-                  className="h-5 w-5 rounded shrink-0"
-                />
-                <span className="text-base font-medium">
-                  {project?.slug || projectSlug || "Select"}
-                </span>
-                <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[240px] p-0" align="start">
-              <Command className="border-none">
-                <div className="border-b">
-                  <CommandInput
-                    placeholder="Find Project..."
-                    className="h-10"
-                  />
-                </div>
-                <CommandList className="max-h-[250px] !p-1">
-                  <CommandEmpty>No projects found.</CommandEmpty>
-                  <CommandGroup heading="Projects">
-                    {[...organization.projects]
-                      .sort((a, b) => a.slug.localeCompare(b.slug))
-                      .map((p) => (
-                        <CommandItem
-                          key={p.id}
-                          value={p.slug}
-                          onSelect={() => handleProjectSelect(p.slug)}
-                          className="flex items-center gap-2 cursor-pointer"
-                        >
-                          <ProjectAvatar
-                            project={p}
-                            className="h-5 w-5 rounded shrink-0"
-                          />
-                          <span className="flex-1 truncate">{p.slug}</span>
-                          {p.id === project.id && (
-                            <CheckIcon className="w-4 h-4 shrink-0" />
-                          )}
-                        </CommandItem>
-                      ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-              <button
-                onClick={() => handleProjectSelect("new-project")}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm cursor-pointer hover:bg-accent border-t"
-              >
-                <PlusIcon className="w-5 h-5 text-muted-foreground shrink-0" />
-                <span>Create Project</span>
-              </button>
-            </PopoverContent>
-          </Popover>
+          {/* Org link */}
+          <Link
+            to={`/${organization.slug}`}
+            className="text-base font-medium text-foreground/80 hover:text-foreground hover:bg-accent hover:no-underline transition-colors rounded-md px-2 py-1 whitespace-nowrap"
+          >
+            {organization.slug}
+          </Link>
+
+          {/* Project Switcher - hidden on org-level pages */}
+          {projectSlug && (
+            <>
+              <span className="text-muted-foreground/50 text-xl select-none">
+                /
+              </span>
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="h-8 !px-2 gap-2 relative -left-1"
+                  >
+                    <ProjectAvatar
+                      project={project}
+                      className="h-5 w-5 rounded shrink-0"
+                    />
+                    <span className="text-base font-medium">
+                      {project?.slug || projectSlug || "Select"}
+                    </span>
+                    <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[240px] p-0" align="start">
+                  <Command className="border-none">
+                    <div className="border-b">
+                      <CommandInput
+                        placeholder="Find Project..."
+                        className="h-10"
+                      />
+                    </div>
+                    <CommandList className="max-h-[250px] !p-1">
+                      <CommandEmpty>No projects found.</CommandEmpty>
+                      <CommandGroup heading="Projects">
+                        {[...organization.projects]
+                          .sort((a, b) => a.slug.localeCompare(b.slug))
+                          .map((p) => (
+                            <CommandItem
+                              key={p.id}
+                              value={p.slug}
+                              onSelect={() => handleProjectSelect(p.slug)}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <ProjectAvatar
+                                project={p}
+                                className="h-5 w-5 rounded shrink-0"
+                              />
+                              <span className="flex-1 truncate">{p.slug}</span>
+                              {p.id === project.id && (
+                                <CheckIcon className="w-4 h-4 shrink-0" />
+                              )}
+                            </CommandItem>
+                          ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                  <button
+                    onClick={() => handleProjectSelect("new-project")}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm cursor-pointer hover:bg-accent border-t"
+                  >
+                    <PlusIcon className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <span>Create Project</span>
+                  </button>
+                </PopoverContent>
+              </Popover>
+            </>
+          )}
         </div>
 
         {/* Right side - Nav links, Theme toggle & User menu */}
         <div className="ml-auto flex items-center gap-4">
-          <nav className="flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               className="text-sm"
-              onClick={() => window.Pylon?.("show")}
+              onClick={togglePylon}
             >
-              Support
+              {pylonOpen ? "Close Support" : "Get Support"}
             </Button>
             <Button variant="outline" size="sm" className="text-sm" asChild>
               <a
@@ -216,21 +252,31 @@ export function TopHeader() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem onClick={() => routes.settings.goTo()}>
-                  <SettingsIcon className="mr-2 h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => routes.billing.goTo()}>
+                {projectSlug && (
+                  <DropdownMenuItem onClick={() => routes.settings.goTo()}>
+                    <SettingsIcon className="mr-2 h-4 w-4" />
+                    Project Settings
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
                   <CreditCardIcon className="mr-2 h-4 w-4" />
                   Billing
                 </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem
+                    onClick={() => orgRoutes.adminSettings.goTo()}
+                  >
+                    <ArrowRightLeftIcon className="mr-2 h-4 w-4" />
+                    Organization Override
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                {window.Pylon && (
-                  <DropdownMenuItem onClick={() => window.Pylon("show")}>
+                {"Pylon" in window && (
+                  <DropdownMenuItem onClick={togglePylon}>
                     <MessageCircleIcon className="mr-2 h-4 w-4" />
-                    Get Support
+                    {pylonOpen ? "Close Support" : "Get Support"}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem asChild>

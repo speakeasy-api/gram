@@ -11,10 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	polargo "github.com/polarsource/polar-go"
+	"github.com/polarsource/polar-go/models/apierrors"
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	polarOperations "github.com/polarsource/polar-go/models/operations"
 	"github.com/redis/go-redis/v9"
@@ -79,7 +79,7 @@ var _ billing.Repository = (*Client)(nil)
 
 func NewClient(polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
 	return &Client{
-		logger:             logger.With(attr.SlogComponent("polar-usage")),
+		logger:             logger.With(attr.SlogComponent("polar_usage")),
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/polar"),
 		polar:              polarClient,
 		httpClient:         &http.Client{Timeout: 30 * time.Second},
@@ -483,24 +483,13 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 		polarCustomerState = customerState.CustomerState
 	} else {
 		externalCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
-		notFoundErrors := []string{
-			"resourcenotfound",
-			"not found",
-		}
-		containsNotFoundError := func(err error) bool {
-			for _, notFoundError := range notFoundErrors {
-				if strings.Contains(strings.ToLower(err.Error()), notFoundError) {
-					return true
-				}
-			}
-			return false
-		}
+		var notFound *apierrors.ResourceNotFound
+		isNotFoundError := errors.As(err, &notFound) ||
+			(externalCustomerState != nil &&
+				externalCustomerState.HTTPMeta.Response != nil &&
+				externalCustomerState.HTTPMeta.Response.StatusCode == http.StatusNotFound)
 
-		isNotFoundError := externalCustomerState != nil &&
-			externalCustomerState.HTTPMeta.Response != nil &&
-			externalCustomerState.HTTPMeta.Response.StatusCode == http.StatusNotFound
-
-		if err != nil && !isNotFoundError && !containsNotFoundError(err) {
+		if err != nil && !isNotFoundError {
 			return nil, fmt.Errorf("query polar customer state: %w", err)
 		}
 
@@ -601,9 +590,13 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	if customer != nil {
 		var toolCallMeter, serverMeter, creditMeter *polarComponents.CustomerStateMeter
 
-		if len(customer.ActiveSubscriptions) >= 1 {
-			usage.HasActiveSubscription = true
+		// Use extractCustomerTier for subscription check so auth and usage
+		// paths share the same logic.
+		_, hasActiveSub, err := p.extractCustomerTier(ctx, customer)
+		if err != nil {
+			return nil, fmt.Errorf("extract customer tier: %w", err)
 		}
+		usage.HasActiveSubscription = hasActiveSub
 
 		for _, meter := range customer.ActiveMeters {
 			if meter.MeterID == p.catalog.MeterIDToolCalls {

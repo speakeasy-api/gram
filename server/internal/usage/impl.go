@@ -220,10 +220,7 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	successURL := s.serverURL.String()
-	if authCtx.ProjectSlug != nil {
-		successURL = fmt.Sprintf("%s/%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug, *authCtx.ProjectSlug)
-	}
+	successURL := fmt.Sprintf("%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug)
 
 	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
 	if err != nil {

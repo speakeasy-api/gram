@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 )
 
@@ -15,6 +16,8 @@ type WorkOS struct {
 }
 
 func New(logger *slog.Logger, apiKey string) *WorkOS {
+	logger = logger.With(attr.SlogComponent("workos"))
+
 	if apiKey == "" || apiKey == "unset" {
 		return nil
 	}

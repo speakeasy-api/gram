@@ -169,7 +169,7 @@ func NewUploadImageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -228,7 +228,7 @@ func NewUploadFunctionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -287,7 +287,7 @@ func NewUploadOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -346,7 +346,7 @@ func NewFetchOpenAPIv3FromURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -405,7 +405,7 @@ func NewServeOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{},
 		}
 		var key string
@@ -444,7 +444,7 @@ func NewServeFunctionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{},
 		}
 		var key string
@@ -483,7 +483,7 @@ func NewListAssetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -542,7 +542,7 @@ func NewUploadChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -625,7 +625,7 @@ func NewServeChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{},
 		}
 		var key string
@@ -676,7 +676,7 @@ func NewCreateSignedChatAttachmentURLEndpoint(s Service, authAPIKeyFn security.A
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string

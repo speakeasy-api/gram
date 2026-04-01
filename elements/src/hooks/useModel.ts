@@ -26,5 +26,5 @@ export const useModel = (
     },
   });
 
-  return openRouter.chat(model);
+  return openRouter.chat(model) as LanguageModel;
 };

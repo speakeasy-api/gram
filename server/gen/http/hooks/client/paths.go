@@ -11,3 +11,8 @@ package client
 func ClaudeHooksPath() string {
 	return "/rpc/hooks.claude"
 }
+
+// LogsHooksPath returns the URL path to the hooks service logs HTTP endpoint.
+func LogsHooksPath() string {
+	return "/rpc/hooks.otel/v1/logs"
+}

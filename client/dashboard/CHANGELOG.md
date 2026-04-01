@@ -1,5 +1,144 @@
 # dashboard
 
+## 0.36.2
+
+### Patch Changes
+
+- b0f341b: Fix Pylon chat widget overlapping playground send button by hiding the default launcher and adding toggle support to the Get Support button.
+- c54bf04: Clean up defunct observability seed tool logic
+
+## 0.36.1
+
+### Patch Changes
+
+- 2b7754e: Align built-in MCP detail page header and install section with standard MCP detail page styling
+
+## 0.36.0
+
+### Minor Changes
+
+- 7710d31: Introduced a diff viewer that highlights the changes in audit subjects for update events.
+
+  This establishes a baseline UX for understanding the changes happening in orgs/projects. In future iterations, some of the changes will be promoted to natural language bullet points under each audit log message.
+
+  Additionally this change adds a preprocessing step to rename toolset:_ audit events to mcp:_ since "toolsets" are no longer a visible primitive on the dashboard.
+
+### Patch Changes
+
+- ba94c5a: Make deployment interactions non-blocking by passing `nonBlocking: true` to create/evolve API calls. The UI now polls for deployment completion instead of blocking the request, preventing timeouts on long-running deployments. Added error handling for polling failures so the UI shows an error state instead of getting stuck on a permanent spinner.
+
+## 0.35.0
+
+### Minor Changes
+
+- c4d9bdd: Introduced a new "Audit Logs" page to the organization dashboard, allowing Gram users to view a history of actions taken within the organization.
+
+### Patch Changes
+
+- 3d28f83: Fixes bug with server selection in logs page.
+
+## 0.34.3
+
+### Patch Changes
+
+- 68177ef: Upgrade insights copilot to anthropic/claude-sonnet-4.5 and inject current date into system prompt
+- 544fac2: Revamp login page with Speakeasy brand styling, distributed platform diagram, and updated copy.
+
+  - Right pane: new copy, Build/Secure/Observe/Distribute badges, off-white background with moving dot pattern, RGB gradient bar, Terms of Service and Privacy Policy links
+  - Left pane: distributed AI agents and product agents view, Control Plane and Tools Platform sections, pulse flow animations, hover-activated dot background, docs social link
+  - Accessibility: prefers-reduced-motion support for all animations
+
+- cbc16a9: Suppress skeleton flash on logout by skipping the loading shell on unauthenticated routes
+- Updated dependencies [658bef4]
+  - @gram/client@0.33.0
+
+## 0.34.2
+
+### Patch Changes
+
+- 045f51a: Replace hardcoded org slugs in MCP URLs for the built in MCP logs server
+
+## 0.34.1
+
+### Patch Changes
+
+- 558c158: Show coming soon placeholder on CLIs page
+- 41d507c: Fixed `GET /rpc/chat.creditUsage` authentication so org-scoped credit usage works correctly for customers with multiple projects, requiring only session auth and no longer allowing chat-session access.
+- Updated dependencies [7ef727b]
+  - @gram/client@0.28.5
+
+## 0.34.0
+
+### Minor Changes
+
+- 30036db: Add table view toggle for list pages (MCP, Sources, Catalog) with grid/table switching, animated dot-pattern rows, and localStorage persistence
+
+### Patch Changes
+
+- 17788a8: fix: MCP environments section shows wrong default when none attached
+- b0120d4: Prevent double-back-button on detail pages
+
+## 0.33.2
+
+### Patch Changes
+
+- 7aaeb96: Fix playground OAuth discovery to use toolset-level configuration instead of removed tool-definition fields.
+
+  The frontend now detects OAuth requirements from `toolset.oauthProxyServer` and `toolset.externalOauthServer` instead of inspecting individual external MCP tool definitions (whose `requiresOauth` field was removed in a prior PR). The backend `getExternalOAuthConfig()` gains two new resolution paths — OAuth proxy providers with pre-configured client credentials (skipping DCR) and external OAuth server metadata — before falling back to the legacy tool-definition lookup for backward compatibility.
+
+## 0.33.1
+
+### Patch Changes
+
+- 3b26329: Display audience field in OAuth proxy server details view
+
+## 0.33.0
+
+### Minor Changes
+
+- 8c72d8c: Renames attribute_filters to filters in searchLogs, and introduces "in" operator.
+
+### Patch Changes
+
+- 110f5b1: Replace Claude Desktop mcpb download with Connections instructions on MCP install page
+- d8133af: Suite of hooks improvements
+- 5c7aa32: Rename MCP environment tab labels for clarity. `Project` tab renamed to `default` to match environment name.
+- 76b411d: Update hooks UI to better accomodate many servers/users
+- 686fee5: Add gpt-5.4 support in playground.
+- Updated dependencies [d8133af]
+- Updated dependencies [6108c5a]
+- Updated dependencies [686fee5]
+- Updated dependencies [8c72d8c]
+  - @gram/client@0.28.0
+  - @gram-ai/elements@1.27.5
+
+## 0.32.1
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- 1500853: Surface correct http status attribute references in MCP logs search
+- e616da7: Add admin-only cache purging functionality
+- Updated dependencies [1765931]
+- Updated dependencies [e616da7]
+  - @gram/client@0.27.20
+
+## 0.32.0
+
+### Minor Changes
+
+- 63d10d0: ## Changeset
+
+  External MCP servers now use the same OAuth configuration pathway as all other toolsets — no more special-cased token resolution.
+
+  The "Configure OAuth" button is now enabled for external MCP servers that require OAuth. When discovered OAuth metadata is available, the configuration form can be auto-populated with a single click.
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+- Updated dependencies [0c90e1e]
+  - @gram/client@0.27.24
+
 ## 0.31.0
 
 ### Minor Changes
@@ -483,6 +622,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level

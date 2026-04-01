@@ -43,6 +43,9 @@ export function CategoryTabs({ value, onChange, counts }: CategoryTabsProps) {
         const isActive = value === category.value;
         const count = counts?.[category.value];
 
+        // Hide categories with 0 count (unless it's the active one)
+        if (count === 0 && !isActive) return null;
+
         return (
           <button
             key={category.value}
@@ -64,7 +67,7 @@ export function CategoryTabs({ value, onChange, counts }: CategoryTabsProps) {
                 className={cn(
                   "ml-1 px-1.5 py-0.5 rounded text-xs",
                   isActive
-                    ? "bg-primary/20 text-primary"
+                    ? "bg-primary text-white"
                     : "bg-muted text-muted-foreground",
                 )}
               >

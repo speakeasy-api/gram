@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,14 +50,21 @@ func NewSlackChatCompletionActivity(logger *slog.Logger, client *client.SlackCli
 
 func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionInput) (string, error) {
 	slackChatCompletionTimeout := 60 * time.Second
-	authInfo, err := s.slackClient.GetAppAuthInfo(ctx, input.Event.TeamID)
+	gramAppID, err := uuid.Parse(input.Event.GramAppID)
+	if err != nil {
+		return "", oops.E(oops.CodeBadRequest, err, "invalid gram app ID on event").Log(ctx, s.logger)
+	}
+	authInfo, err := s.slackClient.GetAppAuthInfoByID(ctx, gramAppID)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error getting app auth info").Log(ctx, s.logger)
 	}
 
 	systemPrompt := slackSystemPrompt
+	if authInfo.SystemPrompt != "" {
+		systemPrompt = authInfo.SystemPrompt + "\n\n" + systemPrompt
+	}
 
-	previousConversationContext := ""
+	var previousConversationContext strings.Builder
 	if input.Event.Event.ThreadTs != "" {
 		if replies, err := s.slackClient.GetConversationReplies(ctx, authInfo.AccessToken, client.SlackConversationInput{
 			ChannelID: input.Event.Event.Channel,
@@ -65,13 +74,13 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			s.logger.ErrorContext(ctx, "error getting conversation replies", attr.SlogError(err))
 		} else {
 			for _, reply := range replies.Messages {
-				previousConversationContext += fmt.Sprintf("%s: %s\n\n", reply.User, reply.Text)
+				fmt.Fprintf(&previousConversationContext, "%s: %s\n\n", reply.User, reply.Text)
 			}
 		}
 	}
 
-	if previousConversationContext != "" {
-		systemPrompt += "\n\nHere is the previous conversation context for reference:\n" + previousConversationContext
+	if previousConversationContext.String() != "" {
+		systemPrompt += "\n\nHere is the previous conversation context for reference:\n" + previousConversationContext.String()
 	}
 
 	currentDatetimeParams := map[string]any{
@@ -103,15 +112,11 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		SystemPrompt:    &systemPrompt,
 		ToolsetSlug:     &input.ToolsetSlug,
 		AdditionalTools: []chat.AgentTool{currentDatetimeTool},
-		AddedEnvironmentEntries: map[string]string{
-			"SLACK_TOKEN": authInfo.AccessToken,
-		},
-		AgentTimeout: &slackChatCompletionTimeout,
-		Temperature:  nil,
-		Model:        "",
+		AgentTimeout:    &slackChatCompletionTimeout,
+		Temperature:     nil,
+		Model:           "",
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))
 		return "", fmt.Errorf("error getting chat response: %w", err)
 	}
 
@@ -124,14 +129,13 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			chatResponse,
 		)
 		chatResponse, err = s.chatClient.AgentChat(ctx, authInfo.OrganizationID, authInfo.ProjectID, retryPrompt, chat.AgentChatOptions{
-			SystemPrompt:            &retrySystemPrompt,
-			ToolsetSlug:             nil,
-			AgentTimeout:            &slackChatCompletionTimeout,
-			AdditionalTools:         []chat.AgentTool{},
-			AddedEnvironmentEntries: map[string]string{},
-			Temperature:             nil,
-			Model:                   "",
-			UsageSource:             "",
+			SystemPrompt:    &retrySystemPrompt,
+			ToolsetSlug:     nil,
+			AgentTimeout:    &slackChatCompletionTimeout,
+			AdditionalTools: []chat.AgentTool{},
+			Temperature:     nil,
+			Model:           "",
+			UsageSource:     "",
 		})
 		if err != nil {
 			s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))

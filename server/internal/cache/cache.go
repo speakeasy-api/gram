@@ -23,6 +23,10 @@ type Cache interface {
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 	Update(ctx context.Context, key string, value any) error
 	Delete(ctx context.Context, key string) error
+	// List operations for atomic append/read
+	ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error
+	ListRange(ctx context.Context, key string, start, stop int64, value any) error
+	DeleteByPrefix(ctx context.Context, prefix string) error
 }
 
 type TypedCacheObject[T CacheableObject[T]] struct {
@@ -43,6 +47,10 @@ type CacheableObject[T any] interface {
 
 func (d *TypedCacheObject[T]) fullKey(key string) string {
 	return key + ":" + d.keySuffix
+}
+
+func (d *TypedCacheObject[T]) SkipCache() TypedCacheObject[T] {
+	return TypedCacheObject[T]{logger: d.logger, cache: NoopCache, keySuffix: d.keySuffix}
 }
 
 func (d *TypedCacheObject[T]) Delete(ctx context.Context, obj T) error {
@@ -79,6 +87,21 @@ func (d *TypedCacheObject[T]) DeleteByKey(ctx context.Context, key string) error
 		return fmt.Errorf("delete by key: %s: %w", cacheKey, err)
 	}
 
+	return nil
+}
+
+func (d *TypedCacheObject[T]) DeleteByPrefix(ctx context.Context, prefix string) error {
+	if d.cache == nil {
+		return nil
+	}
+
+	fullPrefix := prefix
+	if d.keySuffix != "" {
+		fullPrefix += ":" + d.keySuffix
+	}
+	if err := d.cache.DeleteByPrefix(ctx, fullPrefix); err != nil {
+		return fmt.Errorf("delete by prefix: %s: %w", fullPrefix, err)
+	}
 	return nil
 }
 

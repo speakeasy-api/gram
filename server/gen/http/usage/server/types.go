@@ -1405,30 +1405,27 @@ func NewCreateCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *CreateChe
 
 // NewGetPeriodUsagePayload builds a usage service getPeriodUsage endpoint
 // payload.
-func NewGetPeriodUsagePayload(sessionToken *string, projectSlugInput *string) *usage.GetPeriodUsagePayload {
+func NewGetPeriodUsagePayload(sessionToken *string) *usage.GetPeriodUsagePayload {
 	v := &usage.GetPeriodUsagePayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewCreateCustomerSessionPayload builds a usage service createCustomerSession
 // endpoint payload.
-func NewCreateCustomerSessionPayload(sessionToken *string, projectSlugInput *string) *usage.CreateCustomerSessionPayload {
+func NewCreateCustomerSessionPayload(sessionToken *string) *usage.CreateCustomerSessionPayload {
 	v := &usage.CreateCustomerSessionPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewCreateCheckoutPayload builds a usage service createCheckout endpoint
 // payload.
-func NewCreateCheckoutPayload(sessionToken *string, projectSlugInput *string) *usage.CreateCheckoutPayload {
+func NewCreateCheckoutPayload(sessionToken *string) *usage.CreateCheckoutPayload {
 	v := &usage.CreateCheckoutPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

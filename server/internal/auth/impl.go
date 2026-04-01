@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -36,9 +37,8 @@ import (
 type authErr string
 
 const (
-	authErrCodeLookup      authErr = "lookup_error"
-	authErrInit            authErr = "init_error"
-	authErrLocalDevStubbed authErr = "local_dev_stubbed"
+	authErrCodeLookup authErr = "lookup_error"
+	authErrInit       authErr = "init_error"
 )
 
 const gramWaitlistTypeForm = "https://speakeasyapi.typeform.com/to/h6WJdwWr"
@@ -99,7 +99,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.Authenticate(ctx, key, true) // TODO: canStubAuth is a temporary hack to allow us to limit auth stubbing to rpc/auth endpoints
+	return s.sessions.Authenticate(ctx, key)
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
@@ -176,6 +176,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		Name:            activeOrg.Name,
 		Slug:            activeOrg.Slug,
 		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
+		Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
 	})
 	if err != nil {
 		return redirectWithError(authErrInit, err)
@@ -198,15 +199,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
-	if s.sessions.IsUnsafeLocalDevelopment() {
-		err = errors.New("calling rpc.login for local development stubbed auth is not supported because stubbed auth implies always being logged in. Reaching this point suggests a problem with dashboard authentication")
-		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(authErrLocalDevStubbed)))
-		return &gen.LoginResult{
-			Location: fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, authErrLocalDevStubbed),
-		}, nil
-	}
-
+	// In local dev, use the site URL so the mock IDP redirects back through
+	// the Vite proxy (which forwards /rpc to the server). In production, use
+	// the server URL directly since the site may not proxy /rpc paths.
 	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+	if s.cfg.Environment == "local" {
+		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	}
 
 	// Get the request context to access the Host
 	requestCtx, ok := contextvalues.GetRequestContext(ctx)
@@ -251,6 +250,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 				Name:            org.Name,
 				Slug:            org.Slug,
 				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
+				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 			}
@@ -262,7 +262,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}
 	authCtx.ActiveOrganizationID = selectedOrg
 
-	if err := s.sessions.UpdateSession(ctx, sessions.Session{
+	if err := s.sessions.StoreSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
@@ -359,6 +359,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 				Name:            org.Name,
 				Slug:            org.Slug,
 				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
+				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 			}
@@ -375,17 +376,19 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}
 
 	return &gen.InfoResult{
-		SessionToken:         *authCtx.SessionID,
-		SessionCookie:        *authCtx.SessionID,
-		ActiveOrganizationID: authCtx.ActiveOrganizationID,
-		GramAccountType:      authCtx.AccountType,
-		UserID:               userInfo.UserID,
-		UserEmail:            userInfo.Email,
-		UserSignature:        userInfo.UserPylonSignature,
-		UserDisplayName:      userInfo.DisplayName,
-		UserPhotoURL:         userInfo.PhotoURL,
-		IsAdmin:              userInfo.Admin,
-		Organizations:        organizations,
+		SessionToken:          *authCtx.SessionID,
+		SessionCookie:         *authCtx.SessionID,
+		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
+		GramAccountType:       authCtx.AccountType,
+		HasActiveSubscription: authCtx.HasActiveSubscription,
+		Whitelisted:           authCtx.Whitelisted,
+		UserID:                userInfo.UserID,
+		UserEmail:             userInfo.Email,
+		UserSignature:         userInfo.UserPylonSignature,
+		UserDisplayName:       userInfo.DisplayName,
+		UserPhotoURL:          userInfo.PhotoURL,
+		IsAdmin:               userInfo.Admin,
+		Organizations:         organizations,
 	}, nil
 }
 
@@ -433,11 +436,13 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error storing session").Log(ctx, s.logger)
 	}
 
+	whitelisted := false
 	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:              info.Organizations[0].ID,
 		Name:            info.Organizations[0].Name,
 		Slug:            info.Organizations[0].Slug,
 		SsoConnectionID: conv.PtrToPGText(nil),
+		Whitelisted:     conv.PtrToPGBool(&whitelisted),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}

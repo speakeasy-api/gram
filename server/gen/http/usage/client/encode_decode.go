@@ -45,10 +45,6 @@ func EncodeGetPeriodUsageRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		return nil
 	}
 }
@@ -494,10 +490,6 @@ func EncodeCreateCustomerSessionRequest(encoder func(*http.Request) goahttp.Enco
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		return nil
 	}
 }
@@ -722,10 +714,6 @@ func EncodeCreateCheckoutRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		return nil
 	}

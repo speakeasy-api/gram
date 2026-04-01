@@ -120,29 +120,15 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 
 // BuildCreditUsagePayload builds the payload for the chat creditUsage endpoint
 // from CLI flags.
-func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsageProjectSlugInput string, chatCreditUsageChatSessionsToken string) (*chat.CreditUsagePayload, error) {
+func BuildCreditUsagePayload(chatCreditUsageSessionToken string) (*chat.CreditUsagePayload, error) {
 	var sessionToken *string
 	{
 		if chatCreditUsageSessionToken != "" {
 			sessionToken = &chatCreditUsageSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if chatCreditUsageProjectSlugInput != "" {
-			projectSlugInput = &chatCreditUsageProjectSlugInput
-		}
-	}
-	var chatSessionsToken *string
-	{
-		if chatCreditUsageChatSessionsToken != "" {
-			chatSessionsToken = &chatCreditUsageChatSessionsToken
-		}
-	}
 	v := &chat.CreditUsagePayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }

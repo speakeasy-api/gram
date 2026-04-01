@@ -34,7 +34,7 @@ export class Domains extends ClientSDK {
    * getDomain domains
    *
    * @remarks
-   * Get the custom domain for a project
+   * Get the custom domain for an organization
    */
   async getDomain(
     request?: operations.GetDomainRequest | undefined,
@@ -53,7 +53,7 @@ export class Domains extends ClientSDK {
    * createDomain domains
    *
    * @remarks
-   * Create a custom domain for a organization
+   * Create a custom domain for an organization
    */
   async registerDomain(
     request: operations.RegisterDomainRequest,

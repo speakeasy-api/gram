@@ -58,6 +58,18 @@ Contains the main application code for the Gram server:
 
 </commands>
 
+### client/dashboard
+
+The main frontend application lives in `client/dashboard/` (not `client/` directly).
+
+<commands>
+
+- `cd client/dashboard && npx tsc --noEmit`: Type-check the dashboard
+- `cd client/dashboard && pnpm build`: Build the dashboard
+- `cd client/dashboard && pnpm dev`: Run dev server
+
+</commands>
+
 ### Atlas Migration Troubleshooting
 
 - **"migration file X was added out of order" error**: Rename the migration file to have a timestamp after the latest existing migration (e.g., `20260129_foo.sql` → `20260203000001_foo.sql`), then run `mise db:hash` to regenerate `atlas.sum`.
@@ -96,6 +108,8 @@ Activate a skill when your task falls within its scope.
 | `vercel-react-best-practices` | Optimizing React performance, reviewing components for best practices      |
 | `gram-functions`              | Understanding or modifying the Gram Functions serverless execution feature |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
+| `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |
+| `datadog-insights`            | Running the full Gram production health digest and posting it to Slack     |
 
 # Plan Mode
 

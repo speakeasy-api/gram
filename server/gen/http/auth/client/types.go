@@ -24,15 +24,19 @@ type RegisterRequestBody struct {
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
-	UserID               *string                          `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	UserEmail            *string                          `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	UserSignature        *string                          `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
-	UserDisplayName      *string                          `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
-	UserPhotoURL         *string                          `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
-	IsAdmin              *bool                            `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
-	ActiveOrganizationID *string                          `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
-	GramAccountType      *string                          `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
-	Organizations        []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	UserID               *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	UserEmail            *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	UserSignature        *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
+	UserDisplayName      *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
+	UserPhotoURL         *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
+	IsAdmin              *bool   `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
+	ActiveOrganizationID *string `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
+	GramAccountType      *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
+	// Whether the organization has an active billing subscription
+	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
+	// Whether the organization is whitelisted to access the platform
+	Whitelisted   *bool                            `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	Organizations []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1918,14 +1922,16 @@ func NewRegisterGatewayError(body *RegisterGatewayErrorResponseBody) *goa.Servic
 // "OK" response.
 func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie string) *auth.InfoResult {
 	v := &auth.InfoResult{
-		UserID:               *body.UserID,
-		UserEmail:            *body.UserEmail,
-		UserSignature:        body.UserSignature,
-		UserDisplayName:      body.UserDisplayName,
-		UserPhotoURL:         body.UserPhotoURL,
-		IsAdmin:              *body.IsAdmin,
-		ActiveOrganizationID: *body.ActiveOrganizationID,
-		GramAccountType:      *body.GramAccountType,
+		UserID:                *body.UserID,
+		UserEmail:             *body.UserEmail,
+		UserSignature:         body.UserSignature,
+		UserDisplayName:       body.UserDisplayName,
+		UserPhotoURL:          body.UserPhotoURL,
+		IsAdmin:               *body.IsAdmin,
+		ActiveOrganizationID:  *body.ActiveOrganizationID,
+		GramAccountType:       *body.GramAccountType,
+		HasActiveSubscription: *body.HasActiveSubscription,
+		Whitelisted:           *body.Whitelisted,
 	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -2102,6 +2108,12 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.GramAccountType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("gram_account_type", "body"))
+	}
+	if body.HasActiveSubscription == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_active_subscription", "body"))
+	}
+	if body.Whitelisted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
 	for _, e := range body.Organizations {
 		if e != nil {

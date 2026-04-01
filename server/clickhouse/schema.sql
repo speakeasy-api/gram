@@ -49,7 +49,10 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     evaluation_score_label String MATERIALIZED toString(attributes.gen_ai.evaluation.score.label) COMMENT 'Evaluation result label (success, failure, partial, abandoned).',
     tool_name String MATERIALIZED toString(attributes.gram.tool.name) COMMENT 'Tool name (materialized from attributes.gram.tool.name).',
     tool_source String MATERIALIZED toString(attributes.gram.tool_call.source) COMMENT 'Tool call source (materialized from attributes.gram.tool_call.source).',
-    event_source String MATERIALIZED toString(attributes.gram.event.source) COMMENT 'Event source (materialized from attributes.gram.event.source).'
+    event_source String MATERIALIZED toString(attributes.gram.event.source) COMMENT 'Event source (materialized from attributes.gram.event.source).',
+    toolset_slug String MATERIALIZED toString(attributes.gram.toolset.slug) COMMENT 'Toolset slug (materialized from attributes.gram.toolset.slug).',
+    user_email String MATERIALIZED toString(attributes.user.email) COMMENT 'User email (materialized from attributes.user.email).',
+    hook_source String MATERIALIZED toString(attributes.gram.hook.source) COMMENT 'Hook source (materialized from attributes.gram.hook.source).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -78,6 +81,9 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_evaluation_score_label ON tele
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_tool_name ON telemetry_logs (tool_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_tool_source ON telemetry_logs (tool_source) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_event_source ON telemetry_logs (event_source) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_toolset_slug ON telemetry_logs (toolset_slug) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_email ON telemetry_logs (user_email) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_source ON telemetry_logs (hook_source) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
@@ -91,12 +97,19 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     tool_name SimpleAggregateFunction(any, String),
     tool_source SimpleAggregateFunction(any, String),
     event_source SimpleAggregateFunction(any, String),
+    user_email SimpleAggregateFunction(any, String),
+    hook_source SimpleAggregateFunction(any, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
     log_count SimpleAggregateFunction(sum, UInt64),
 
-    http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8)
+    http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8),
+
+    -- Hook status tracking (0 = false, 1 = true)
+    -- Using max() ensures once we see a 1, it stays 1 across merges
+    hook_has_success SimpleAggregateFunction(max, UInt8),
+    hook_has_failure SimpleAggregateFunction(max, UInt8)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
@@ -113,12 +126,16 @@ SELECT
     any(tool_name) AS tool_name,
     any(tool_source) AS tool_source,
     any(event_source) AS event_source,
+    any(user_email) AS user_email,
+    any(hook_source) AS hook_source,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(
         toInt32OrNull(toString(attributes.http.response.status_code)),
         toString(attributes.http.response.status_code) != ''
-    ) AS http_status_code
+    ) AS http_status_code,
+    max(if(toString(attributes.gram.hook.event) = 'PostToolUse', 1, 0)) AS hook_has_success,
+    max(if(toString(attributes.gram.hook.event) = 'PostToolUseFailure', 1, 0)) AS hook_has_failure
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
@@ -232,11 +249,10 @@ SELECT
     countIfState(evaluation_score_label = 'abandoned') AS chat_resolution_abandoned,
     avgIfState(toFloat64OrZero(toString(attributes.gen_ai.evaluation.score.value)), evaluation_score_label != '') AS avg_chat_resolution_score,
 
-    -- Overview: evaluated chat counts (distinct chats by resolution status)
-    -- ifNull wraps gram_chat_id (Nullable) to produce non-nullable String/UInt8 for the aggregate state
-    uniqExactIfState(ifNull(toString(gram_chat_id), ''), ifNull(toString(gram_chat_id), '') != '' AND evaluation_score_label != '') AS evaluated_chats,
-    uniqExactIfState(ifNull(toString(gram_chat_id), ''), ifNull(toString(gram_chat_id), '') != '' AND evaluation_score_label = 'success') AS resolved_chats,
-    uniqExactIfState(ifNull(toString(gram_chat_id), ''), ifNull(toString(gram_chat_id), '') != '' AND evaluation_score_label = 'failure') AS failed_chats,
+    -- Overview: chat counts by resolution status (uses gen_ai.conversation.id to stay consistent with total_chats)
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label != '') AS evaluated_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label = 'success') AS resolved_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND evaluation_score_label = 'failure') AS failed_chats,
     avgIfState(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') AS avg_resolution_time_ms,
 
     -- Model breakdown

@@ -18,10 +18,6 @@ export type SearchChatsResult = {
    */
   chats: Array<ChatSummary>;
   /**
-   * Whether tool metrics are enabled for the organization
-   */
-  enabled: boolean;
-  /**
    * Cursor for next page
    */
   nextCursor?: string | undefined;
@@ -34,7 +30,6 @@ export const SearchChatsResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     chats: z.array(ChatSummary$inboundSchema),
-    enabled: z.boolean(),
     next_cursor: z.optional(z.string()),
   }),
   z.transform((v) => {

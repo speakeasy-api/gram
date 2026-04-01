@@ -19,7 +19,7 @@ import {
 } from "@gram/client/react-query";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Link, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
@@ -91,7 +91,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       vars
         .map((v) => {
           const valueGroupsHash = v.valueGroups
-            .map((vg) => `${vg.environments.sort().join(",")}`)
+            .map((vg) => `${[...vg.environments].sort().join(",")}`)
             .join("|");
           return `${v.key}:${v.state}:${valueGroupsHash}`;
         })
@@ -124,10 +124,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     }
   }, [mcpAttachedEnvironmentSlug]);
 
-  // Get attached environment and its available variables
+  // Get attached environment and its available variables — only if explicitly set
   const attachedEnvironment = mcpMetadata?.defaultEnvironmentId
-    ? environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId)
-    : environments.find((e) => e.slug === "default") || null;
+    ? (environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId) ??
+      null)
+    : null;
 
   const environmentConfigs = mcpMetadata?.environmentConfigs || [];
   const availableEnvVarsFromAttached =
@@ -200,10 +201,31 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to update default environment",
+          : "Failed to update attached environment",
       );
     },
   });
+
+  const handleDetachEnvironment = () => {
+    setMcpMetadataMutation.mutate(
+      {
+        request: {
+          setMcpMetadataRequestBody: {
+            ...mcpMetadata,
+            toolsetSlug: toolset.slug,
+            // Omitting defaultEnvironmentId causes the upsert to write NULL, detaching the environment
+            defaultEnvironmentId: undefined,
+            environmentConfigs: mcpMetadata?.environmentConfigs || [],
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success("Detached environment from this MCP server");
+        },
+      },
+    );
+  };
 
   const handleCreateEnvironment = () => {
     if (!newEnvironmentName.trim()) {
@@ -249,13 +271,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       setMcpMetadataMutation.mutate({
         request: {
           setMcpMetadataRequestBody: {
+            ...mcpMetadata,
             toolsetSlug: toolset.slug,
             defaultEnvironmentId:
               mcpMetadata?.defaultEnvironmentId || attachedEnvironment.id,
             environmentConfigs: newEntries,
-            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-            instructions: mcpMetadata?.instructions,
-            logoAssetId: mcpMetadata?.logoAssetId,
           },
         },
       });
@@ -315,13 +335,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           setMcpMetadataMutation.mutate({
             request: {
               setMcpMetadataRequestBody: {
+                ...mcpMetadata,
                 toolsetSlug: toolset.slug,
                 defaultEnvironmentId:
                   mcpMetadata?.defaultEnvironmentId || targetEnv.id,
                 environmentConfigs: [...existingEntries, ...newConfigEntries],
-                externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-                instructions: mcpMetadata?.instructions,
-                logoAssetId: mcpMetadata?.logoAssetId,
               },
             },
           });
@@ -572,13 +590,10 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       await setMcpMetadataMutation.mutateAsync({
         request: {
           setMcpMetadataRequestBody: {
+            ...mcpMetadata,
             toolsetSlug: toolset.slug,
-            defaultEnvironmentId:
-              mcpMetadata?.defaultEnvironmentId || targetEnv.id,
+            defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
             environmentConfigs: environmentConfigsToSave,
-            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-            instructions: mcpMetadata?.instructions,
-            logoAssetId: mcpMetadata?.logoAssetId,
           },
         },
       });
@@ -654,17 +669,15 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setMcpMetadataMutation.mutate({
       request: {
         setMcpMetadataRequestBody: {
+          ...mcpMetadata,
           toolsetSlug: toolset.slug,
           defaultEnvironmentId: targetEnv.id,
           environmentConfigs: mcpMetadata?.environmentConfigs || [],
-          externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-          instructions: mcpMetadata?.instructions,
-          logoAssetId: mcpMetadata?.logoAssetId,
         },
       },
     });
 
-    toast.success(`Set ${targetEnv.name} as default environment`);
+    toast.success(`Set ${targetEnv.name} as attached environment`);
   };
 
   return (
@@ -691,10 +704,34 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Configure required credentials and add custom variables. Click the state
-        button to cycle between User Provided (set at runtime), System (set
-        here), and Omitted (not included).
+        Environments store key-value pairs that are passed to the backend when
+        users connect. They can be shared across multiple MCP servers, so you
+        only need to configure common values like API keys once.
       </p>
+      <p className="text-sm text-muted-foreground">
+        Add variables for API keys, configuration options, or any custom data
+        your backend needs. Use the state button to set each variable as User
+        Provided (set at runtime), System (set here), or Omitted (not included).
+      </p>
+
+      {/* Attached environment badge */}
+      {attachedEnvironment ? (
+        <Badge variant="information">
+          <Badge.LeftIcon>
+            <Link className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          <Badge.Text>
+            Attached:{" "}
+            {attachedEnvironment.slug === "default"
+              ? "Default"
+              : attachedEnvironment.name}
+          </Badge.Text>
+        </Badge>
+      ) : (
+        <Badge variant="neutral">
+          <Badge.Text>No environment attached</Badge.Text>
+        </Badge>
+      )}
 
       {/* All Variables Section */}
       <div className="space-y-4">
@@ -716,6 +753,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
               onSaveAll={handleSaveAll}
               onCancelAll={handleCancelAll}
               onSetDefaultEnvironment={handleSetDefaultEnvironment}
+              onDetachEnvironment={handleDetachEnvironment}
               onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
             />
             {envVars.map((envVar, index) => (
@@ -726,9 +764,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 totalCount={envVars.length}
                 selectedEnvironmentView={selectedEnvironmentView}
                 mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
-                defaultEnvironmentSlug={
-                  toolset.defaultEnvironmentSlug || "default"
-                }
                 environmentConfigs={environmentConfigs}
                 editingState={editingState}
                 editingHeaderId={editingHeaderId}
@@ -744,8 +779,13 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         ) : (
           // Empty State
           <div className="border rounded-lg border-dashed p-8 text-center">
-            <p className="text-muted-foreground mb-4">
-              No environment variables added yet.
+            <p className="text-muted-foreground mb-2">
+              No environment variables configured yet.
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Add key-value pairs to pass API keys, configuration, or any custom
+              data to your backend. Environments can be shared across multiple
+              MCP servers.
             </p>
             <Button onClick={() => setIsAddingNew(true)} variant="secondary">
               <Button.LeftIcon>

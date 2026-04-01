@@ -29,7 +29,7 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: Setup Mise
-        uses: jdx/mise-action@e79ddf65a11cec7b0e882bedced08d6e976efb2d # v3.6.2
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           install: true
           cache: true
@@ -39,7 +39,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |

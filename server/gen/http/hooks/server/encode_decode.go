@@ -33,9 +33,9 @@ func EncodeClaudeResponse(encoder func(context.Context, http.ResponseWriter) goa
 
 // DecodeClaudeRequest returns a decoder for requests sent to the hooks claude
 // endpoint.
-func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.ClaudePayload, error) {
-	return func(r *http.Request) (*hooks.ClaudePayload, error) {
-		var payload *hooks.ClaudePayload
+func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.ClaudeHookPayload, error) {
+	return func(r *http.Request) (*hooks.ClaudeHookPayload, error) {
+		var payload *hooks.ClaudeHookPayload
 		var (
 			body ClaudeRequestBody
 			err  error
@@ -55,34 +55,7 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if err != nil {
 			return payload, err
 		}
-
-		var (
-			apikeyToken      *string
-			projectSlugInput *string
-		)
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewClaudePayload(&body, apikeyToken, projectSlugInput)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
+		payload = NewClaudeHookPayload(&body)
 
 		return payload, nil
 	}
@@ -242,4 +215,370 @@ func EncodeClaudeError(encoder func(context.Context, http.ResponseWriter) goahtt
 			return encodeError(ctx, w, v)
 		}
 	}
+}
+
+// EncodeLogsResponse returns an encoder for responses returned by the hooks
+// logs endpoint.
+func EncodeLogsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusAccepted)
+		return nil
+	}
+}
+
+// DecodeLogsRequest returns a decoder for requests sent to the hooks logs
+// endpoint.
+func DecodeLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.LogsPayload, error) {
+	return func(r *http.Request) (*hooks.LogsPayload, error) {
+		var payload *hooks.LogsPayload
+		var (
+			body LogsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateLogsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewLogsPayload(&body, apikeyToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeLogsError returns an encoder for errors returned by the logs hooks
+// endpoint.
+func EncodeLogsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog builds a value of
+// type *hooks.OTELResourceLog from a value of type *OTELResourceLogRequestBody.
+func unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog(v *OTELResourceLogRequestBody) *hooks.OTELResourceLog {
+	res := &hooks.OTELResourceLog{}
+	if v.Resource != nil {
+		res.Resource = unmarshalOTELResourceRequestBodyToHooksOTELResource(v.Resource)
+	}
+	res.ScopeLogs = make([]*hooks.OTELScopeLog, len(v.ScopeLogs))
+	for i, val := range v.ScopeLogs {
+		if val == nil {
+			res.ScopeLogs[i] = nil
+			continue
+		}
+		res.ScopeLogs[i] = unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog(val)
+	}
+
+	return res
+}
+
+// unmarshalOTELResourceRequestBodyToHooksOTELResource builds a value of type
+// *hooks.OTELResource from a value of type *OTELResourceRequestBody.
+func unmarshalOTELResourceRequestBodyToHooksOTELResource(v *OTELResourceRequestBody) *hooks.OTELResource {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.OTELResource{
+		DroppedAttributesCount: v.DroppedAttributesCount,
+	}
+	if v.Attributes != nil {
+		res.Attributes = make([]*hooks.OTELResourceAttribute, len(v.Attributes))
+		for i, val := range v.Attributes {
+			if val == nil {
+				res.Attributes[i] = nil
+				continue
+			}
+			res.Attributes[i] = unmarshalOTELResourceAttributeRequestBodyToHooksOTELResourceAttribute(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalOTELResourceAttributeRequestBodyToHooksOTELResourceAttribute builds
+// a value of type *hooks.OTELResourceAttribute from a value of type
+// *OTELResourceAttributeRequestBody.
+func unmarshalOTELResourceAttributeRequestBodyToHooksOTELResourceAttribute(v *OTELResourceAttributeRequestBody) *hooks.OTELResourceAttribute {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.OTELResourceAttribute{
+		Key: *v.Key,
+	}
+	res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+
+	return res
+}
+
+// unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue builds a
+// value of type *hooks.OTELAttributeValue from a value of type
+// *OTELAttributeValueRequestBody.
+func unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v *OTELAttributeValueRequestBody) *hooks.OTELAttributeValue {
+	res := &hooks.OTELAttributeValue{
+		StringValue: v.StringValue,
+		IntValue:    v.IntValue,
+	}
+
+	return res
+}
+
+// unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog builds a value of type
+// *hooks.OTELScopeLog from a value of type *OTELScopeLogRequestBody.
+func unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog(v *OTELScopeLogRequestBody) *hooks.OTELScopeLog {
+	res := &hooks.OTELScopeLog{}
+	if v.Scope != nil {
+		res.Scope = unmarshalOTELScopeRequestBodyToHooksOTELScope(v.Scope)
+	}
+	res.LogRecords = make([]*hooks.OTELLogRecord, len(v.LogRecords))
+	for i, val := range v.LogRecords {
+		if val == nil {
+			res.LogRecords[i] = nil
+			continue
+		}
+		res.LogRecords[i] = unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(val)
+	}
+
+	return res
+}
+
+// unmarshalOTELScopeRequestBodyToHooksOTELScope builds a value of type
+// *hooks.OTELScope from a value of type *OTELScopeRequestBody.
+func unmarshalOTELScopeRequestBodyToHooksOTELScope(v *OTELScopeRequestBody) *hooks.OTELScope {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.OTELScope{
+		Name:    v.Name,
+		Version: v.Version,
+	}
+
+	return res
+}
+
+// unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord builds a value of type
+// *hooks.OTELLogRecord from a value of type *OTELLogRecordRequestBody.
+func unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequestBody) *hooks.OTELLogRecord {
+	res := &hooks.OTELLogRecord{
+		TimeUnixNano:           *v.TimeUnixNano,
+		ObservedTimeUnixNano:   *v.ObservedTimeUnixNano,
+		DroppedAttributesCount: v.DroppedAttributesCount,
+	}
+	res.Body = unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v.Body)
+	res.Attributes = make([]*hooks.OTELAttribute, len(v.Attributes))
+	for i, val := range v.Attributes {
+		if val == nil {
+			res.Attributes[i] = nil
+			continue
+		}
+		res.Attributes[i] = unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(val)
+	}
+
+	return res
+}
+
+// unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody builds a value of type
+// *hooks.OTELLogBody from a value of type *OTELLogBodyRequestBody.
+func unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v *OTELLogBodyRequestBody) *hooks.OTELLogBody {
+	res := &hooks.OTELLogBody{
+		StringValue: v.StringValue,
+	}
+
+	return res
+}
+
+// unmarshalOTELAttributeRequestBodyToHooksOTELAttribute builds a value of type
+// *hooks.OTELAttribute from a value of type *OTELAttributeRequestBody.
+func unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(v *OTELAttributeRequestBody) *hooks.OTELAttribute {
+	res := &hooks.OTELAttribute{
+		Key: *v.Key,
+	}
+	res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+
+	return res
 }

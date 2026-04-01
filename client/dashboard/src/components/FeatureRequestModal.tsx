@@ -3,7 +3,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@speakeasy-api/moonshine";
 import { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 
 interface FeatureRequestModalProps {
   isOpen: boolean;
@@ -27,7 +27,7 @@ export function FeatureRequestModal({
   accountUpgrade,
 }: FeatureRequestModalProps) {
   const telemetry = useTelemetry();
-  const routes = useRoutes();
+  const routes = useOrgRoutes();
 
   const handleRequestFeature = async () => {
     if (accountUpgrade) return; // For account upgrades, this is handled by the anchor tag's onClick

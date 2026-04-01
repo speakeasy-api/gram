@@ -1,40 +1,24 @@
+import { MCPCard } from "@/components/mcp/MCPCard";
 import { Page } from "@/components/page-layout";
-import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useUser } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { DeploymentExternalMCP } from "@gram/client/models/components";
-import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
+import { useLatestDeployment } from "@/hooks/toolTypes";
+import { useListToolsets } from "@gram/client/react-query";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import {
   ArrowRight,
   BlocksIcon,
   CheckCircle,
   Code,
-  Database,
-  Globe,
   MessageCircleIcon,
   ServerIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router";
-
-function useWindowWidth() {
-  const [width, setWidth] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1200,
-  );
-
-  useEffect(() => {
-    const handleResize = () => setWidth(window.innerWidth);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  return width;
-}
 
 export const LINKED_FROM_PARAM = "from";
 
@@ -56,15 +40,12 @@ const FEATURED_SERVER_SPECIFIERS = [
 
 export default function Home() {
   const routes = useRoutes();
-  const user = useUser();
   const telemetry = useTelemetry();
   const { data, isLoading } = useInfiniteListMCPCatalog();
-  const { data: deploymentResult, isLoading: isDeploymentLoading } =
-    useLatestDeployment();
+  const { data: deploymentResult } = useLatestDeployment();
   const { data: toolsetsResult, isLoading: isToolsetsLoading } =
     useListToolsets();
   const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
-  const deployment = deploymentResult?.deployment;
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
 
@@ -76,25 +57,6 @@ export default function Home() {
     ).filter((s): s is Server => s !== undefined);
   }, [data]);
 
-  const firstName = user.displayName?.split(" ")[0];
-
-  // Setup completion state
-  const hasSource = useMemo(() => {
-    if (!deployment) return false;
-    return (
-      deployment.openapiv3Assets.length > 0 ||
-      (deployment.functionsAssets?.length ?? 0) > 0 ||
-      (deployment.externalMcps?.length ?? 0) > 0
-    );
-  }, [deployment]);
-
-  const hasEnabledMcpWithTools = useMemo(() => {
-    if (!toolsetsResult?.toolsets) return false;
-    return toolsetsResult.toolsets.some(
-      (t) => t.mcpEnabled && t.toolUrns.length > 0,
-    );
-  }, [toolsetsResult]);
-
   // Get the first public MCP toolset slug to pass to elements page
   const firstPublicToolsetSlug = useMemo(() => {
     if (!toolsetsResult?.toolsets) return undefined;
@@ -104,21 +66,17 @@ export default function Home() {
     return publicToolset?.slug;
   }, [toolsetsResult]);
 
-  // Check localStorage for chat/claude setup completion
-  // Only count as complete if prior steps are also complete
-  const hasDeployedChatFlag =
-    typeof window !== "undefined" &&
-    localStorage.getItem(onboardingStepStorageKeys.configure) === "true";
-  const hasDeployedChat =
-    hasSource && hasEnabledMcpWithTools && hasDeployedChatFlag;
-
-  const completedSteps = [
-    hasSource,
-    hasEnabledMcpWithTools,
-    hasDeployedChat,
-  ].filter(Boolean).length;
-  const isSetupComplete = completedSteps === 3;
-  const isSetupDataLoading = isDeploymentLoading || isToolsetsLoading;
+  // MCP servers sorted by most recently updated
+  const recentMcpServers = useMemo(() => {
+    if (!toolsetsResult?.toolsets) return [];
+    return [...toolsetsResult.toolsets]
+      .filter((t) => t.mcpEnabled)
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      )
+      .slice(0, 6);
+  }, [toolsetsResult]);
 
   return (
     <Page>
@@ -126,20 +84,34 @@ export default function Home() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <h1 className="text-2xl font-semibold mb-6">
-          Welcome{firstName ? `, ${firstName}` : ""}
-        </h1>
-
-        {/* Setup Progress Widget */}
-        <SetupSteps
-          isSetupDataLoading={isSetupDataLoading}
-          isSetupComplete={isSetupComplete}
-          hasSource={hasSource}
-          hasEnabledMcpWithTools={hasEnabledMcpWithTools}
-          hasDeployedChat={hasDeployedChat}
-          routes={routes}
-          firstPublicToolsetSlug={firstPublicToolsetSlug}
-        />
+        {/* MCP Servers Section */}
+        {(isToolsetsLoading || recentMcpServers.length > 0) && (
+          <div className="mb-10">
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+              className="mb-4"
+            >
+              <h2 className="text-lg font-semibold">MCP Servers</h2>
+              <routes.mcp.Link>
+                <span className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
+                  View all <ArrowRight className="w-4 h-4" />
+                </span>
+              </routes.mcp.Link>
+            </Stack>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {isToolsetsLoading &&
+                [...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-[120px] rounded-xl" />
+                ))}
+              {!isToolsetsLoading &&
+                recentMcpServers.map((toolset) => (
+                  <MCPCard key={toolset.id} toolset={toolset} />
+                ))}
+            </div>
+          </div>
+        )}
 
         <h2 className="text-lg font-semibold mb-4">Quick actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -359,201 +331,6 @@ function FeaturedServerCard({
           </Stack>
         </div>
       </div>
-    </Link>
-  );
-}
-
-function SetupSteps({
-  isSetupDataLoading,
-  isSetupComplete,
-  hasSource,
-  hasEnabledMcpWithTools,
-  hasDeployedChat,
-  routes,
-  firstPublicToolsetSlug,
-}: {
-  isSetupDataLoading: boolean;
-  isSetupComplete: boolean;
-  hasSource: boolean;
-  hasEnabledMcpWithTools: boolean;
-  hasDeployedChat: boolean;
-  routes: ReturnType<typeof useRoutes>;
-  firstPublicToolsetSlug: string | undefined;
-}) {
-  const windowWidth = useWindowWidth();
-  const isVertical = windowWidth < 1000;
-
-  if (isSetupDataLoading || isSetupComplete) {
-    return null;
-  }
-
-  return (
-    <div className="mb-8">
-      <div
-        className={`flex items-stretch ${isVertical ? "flex-col" : "flex-row"}`}
-      >
-        <SetupStep
-          number={1}
-          title="Add a source"
-          description="Connect an API, function, or third-party server"
-          completed={hasSource}
-          enabled={true}
-          href={routes.sources.href()}
-          icon={<Database className="h-[18px] w-[18px]" strokeWidth={1.5} />}
-          position="first"
-          cta="Add source"
-          isVertical={isVertical}
-        />
-        <SetupStep
-          number={2}
-          title="Add an MCP server"
-          description="Enable an MCP server connected to your source"
-          completed={hasEnabledMcpWithTools}
-          enabled={hasSource}
-          href={routes.mcp.href()}
-          icon={<Globe className="h-[18px] w-[18px]" strokeWidth={1.5} />}
-          position="middle"
-          cta="Configure"
-          isVertical={isVertical}
-        />
-        <SetupStep
-          number={3}
-          title="Deploy chat or connect"
-          description="Embed chat on your site or connect via Claude"
-          completed={hasDeployedChat}
-          enabled={hasSource && hasEnabledMcpWithTools}
-          href={`${routes.elements.href()}${firstPublicToolsetSlug ? `?toolset=${firstPublicToolsetSlug}` : ""}`}
-          icon={
-            <MessageCircleIcon
-              className="h-[18px] w-[18px]"
-              strokeWidth={1.5}
-            />
-          }
-          position="last"
-          cta="Deploy"
-          isVertical={isVertical}
-        />
-      </div>
-    </div>
-  );
-}
-
-function SetupStep({
-  number,
-  title,
-  description,
-  completed,
-  enabled,
-  href,
-  icon: _icon,
-  position,
-  cta,
-  isVertical,
-}: {
-  number: number;
-  title: string;
-  description: string;
-  completed: boolean;
-  enabled: boolean;
-  href: string;
-  icon: React.ReactNode;
-  position: "first" | "middle" | "last";
-  cta: string;
-  isVertical: boolean;
-}) {
-  const isActive = enabled && !completed;
-  const bgColor = completed
-    ? "bg-emerald-500/10"
-    : isActive
-      ? "bg-primary/10"
-      : enabled
-        ? "bg-background"
-        : "bg-muted/30";
-
-  // Horizontal arrow clip-paths (pointing right)
-  const horizontalClipPaths = {
-    first:
-      "polygon(0 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 0 100%)",
-    middle:
-      "polygon(0 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 0 100%, 20px 50%)",
-    last: "polygon(0 0, 100% 0, 100% 100%, 0 100%, 20px 50%)",
-  };
-
-  // Vertical arrow clip-paths (pointing down) - fixed arrow size (80px base, 20px depth)
-  const verticalClipPaths = {
-    first:
-      "polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(50% + 40px) calc(100% - 20px), 50% 100%, calc(50% - 40px) calc(100% - 20px), 0 calc(100% - 20px))",
-    middle:
-      "polygon(0 0, calc(50% - 40px) 0, 50% 20px, calc(50% + 40px) 0, 100% 0, 100% calc(100% - 20px), calc(50% + 40px) calc(100% - 20px), 50% 100%, calc(50% - 40px) calc(100% - 20px), 0 calc(100% - 20px))",
-    last: "polygon(0 0, calc(50% - 40px) 0, 50% 20px, calc(50% + 40px) 0, 100% 0, 100% 100%, 0 100%)",
-  };
-
-  const clipPath = isVertical
-    ? verticalClipPaths[position]
-    : horizontalClipPaths[position];
-
-  const content = (
-    <div
-      className={cn(
-        "group relative flex flex-row items-start gap-3 py-5 pr-8 transition-all h-full flex-1",
-        bgColor,
-        isActive && "hover:bg-primary/15",
-        !enabled && "opacity-60",
-        isVertical && "pl-6",
-        isVertical && position !== "first" && "-mt-[10px]",
-        isVertical && (position === "first" ? "pt-7" : "pt-12"),
-        isVertical && (position === "last" ? "pb-7" : "pb-12"),
-        !isVertical && position !== "first" && "-ml-[10px]",
-        !isVertical && (position === "first" ? "pl-4" : "pl-9"),
-      )}
-      style={{ clipPath }}
-    >
-      <div
-        className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 border ${
-          isActive ? "bg-white dark:bg-white border-primary" : "bg-background"
-        }`}
-      >
-        {completed ? (
-          <CheckCircle className="h-4 w-4 text-emerald-500" strokeWidth={2} />
-        ) : (
-          <span
-            className={`text-sm font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}
-          >
-            {number}
-          </span>
-        )}
-      </div>
-      <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-        <h3 className="font-medium text-sm">{title}</h3>
-        <Type small muted>
-          {description}
-        </Type>
-        {completed ? (
-          <Button size="sm" disabled className="mt-1 w-fit">
-            <Button.LeftIcon>
-              <CheckCircle className="w-3 h-3" />
-            </Button.LeftIcon>
-            <Button.Text>Done</Button.Text>
-          </Button>
-        ) : (
-          <Button size="sm" disabled={!enabled} className="mt-1 w-fit">
-            <Button.Text>{cta}</Button.Text>
-            <Button.RightIcon>
-              <ArrowRight className="w-3 h-3" />
-            </Button.RightIcon>
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-
-  if (!enabled || completed) {
-    return <div className="flex-1 flex">{content}</div>;
-  }
-
-  return (
-    <Link to={href} className="no-underline flex-1 flex">
-      {content}
     </Link>
   );
 }

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 export const CopyButton = ({
@@ -10,6 +10,7 @@ export const CopyButton = ({
   className,
   tooltip,
   onCopy,
+  icon: Icon = Copy,
 }: {
   text: string;
   size?: "icon" | "icon-sm" | "inline";
@@ -17,6 +18,7 @@ export const CopyButton = ({
   className?: string;
   tooltip?: string;
   onCopy?: () => void; // Extra callback to do something when the code is copied
+  icon?: LucideIcon;
 }) => {
   const [recentlyCopied, setRecentlyCopied] = useState(false);
 
@@ -48,7 +50,7 @@ export const CopyButton = ({
       {recentlyCopied ? (
         <Check className="h-5 w-5" />
       ) : (
-        <Copy className="h-5 w-5" />
+        <Icon className="h-5 w-5" />
       )}
     </Button>
   );

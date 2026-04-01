@@ -54,3 +54,12 @@ if [ "$invalid_indexes" = true ]; then
 "
   exit 1
 fi
+
+# Run atlas migrate lint
+echo -e "\n🔎 Running atlas migrate lint..."
+atlas migrate lint \
+  --config "file://server/atlas.hcl" \
+  --dir "file://server/migrations" \
+  --dir-format atlas \
+  --git-base "$base_ref" \
+  --dev-url "postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable&search_path=public"

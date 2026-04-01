@@ -29,7 +29,6 @@ func TestListFilterOptions_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.Empty(t, result.Options)
 }
 
@@ -68,7 +67,6 @@ func TestListFilterOptions_FilterByAPIKey(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.Len(t, result.Options, 2)
 
 	// Results should be ordered by count descending
@@ -114,7 +112,6 @@ func TestListFilterOptions_FilterByUser(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.Len(t, result.Options, 2)
 
 	// Results should be ordered by count descending

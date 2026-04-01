@@ -437,6 +437,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			}
 		}
 
+		attrRecorder.RecordToolsetSlug(toolsetSlug)
 		logParams := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{

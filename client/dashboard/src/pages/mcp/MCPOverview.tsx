@@ -1,8 +1,14 @@
 import { InputDialog } from "@/components/input-dialog";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { MCPCard } from "@/components/mcp/MCPCard";
+import { MCPTableRow } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
+import { DotTable } from "@/components/ui/dot-table";
+import { ViewToggle, useViewMode } from "@/components/ui/view-toggle";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useIsProjectEmpty } from "@/pages/onboarding/UploadOpenAPI";
+import { InitialChoiceStep } from "@/pages/onboarding/Wizard";
 import { useRoutes } from "@/routes";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
@@ -30,7 +36,13 @@ export function MCPOverview() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const client = useSdkClient();
+  const { isEmpty: isProjectEmpty, isLoading: isProjectLoading } =
+    useIsProjectEmpty();
+  const telemetry = useTelemetry();
+  const isFunctionsEnabled =
+    telemetry.isFeatureEnabled("gram-functions") ?? false;
 
+  const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
   const [newMcpServerName, setNewMcpServerName] = useState("");
 
@@ -89,7 +101,7 @@ export function MCPOverview() {
         from Claude Desktop, Cursor, or any MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {BUILT_IN_SERVERS.map((server) => (
             <BuiltInMCPCard key={server.slug} {...server} />
           ))}
@@ -105,7 +117,14 @@ export function MCPOverview() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
+          {isProjectEmpty && !isProjectLoading ? (
+            <InitialChoiceStep
+              routes={routes}
+              isFunctionsEnabled={isFunctionsEnabled}
+            />
+          ) : (
+            <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
+          )}
           {builtInSection}
           {newMcpServerDialog}
         </Page.Body>
@@ -121,18 +140,36 @@ export function MCPOverview() {
       <Page.Body>
         <Page.Section>
           <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
+          <Page.Section.CTA>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+          </Page.Section.CTA>
           <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
-          <Page.Section.Description>
+          <Page.Section.Description className="max-w-2xl">
             Each source is exposed as an MCP server. First-party sources like
             functions and OpenAPI specs are private by default, while catalog
             servers are public.
           </Page.Section.Description>
           <Page.Section.Body>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {toolsets.map((toolset) => (
-                <MCPCard key={toolset.id} toolset={toolset} />
-              ))}
-            </div>
+            {viewMode === "grid" ? (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                {toolsets.map((toolset) => (
+                  <MCPCard key={toolset.id} toolset={toolset} />
+                ))}
+              </div>
+            ) : (
+              <DotTable
+                headers={[
+                  { label: "Name" },
+                  { label: "Visibility" },
+                  { label: "URL" },
+                  { label: "Tools" },
+                ]}
+              >
+                {toolsets.map((toolset) => (
+                  <MCPTableRow key={toolset.id} toolset={toolset} />
+                ))}
+              </DotTable>
+            )}
           </Page.Section.Body>
         </Page.Section>
         {builtInSection}

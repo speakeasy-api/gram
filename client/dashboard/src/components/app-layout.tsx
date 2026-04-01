@@ -5,6 +5,7 @@ import { ShieldAlert } from "lucide-react";
 import { useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
+import { OrgSidebar } from "./org-sidebar.tsx";
 import { TopHeader } from "./top-header.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
@@ -13,12 +14,12 @@ export const LoginCheck = () => {
   const session = useSession();
   const location = useLocation();
 
-  if (session.session === "" && !import.meta.env.DEV) {
+  if (session.session === "") {
     const redirectTo = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?redirect=${redirectTo}`} />;
   }
 
-  if (!session.activeOrganizationId && !import.meta.env.DEV) {
+  if (!session.activeOrganizationId) {
     const redirectTo = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/register?redirect=${redirectTo}`} />;
   }
@@ -34,9 +35,10 @@ export const AppLayout = () => {
   return (
     <SidebarProvider
       style={
-        isImpersonating
-          ? ({ "--header-offset": "5.75rem" } as React.CSSProperties)
-          : undefined
+        {
+          "--sidebar-width": "14rem",
+          ...(isImpersonating ? { "--header-offset": "5.75rem" } : undefined),
+        } as React.CSSProperties
       }
     >
       <ModalProvider>
@@ -101,5 +103,35 @@ const AppLayoutContent = ({
         </SidebarInset>
       </div>
     </div>
+  );
+};
+
+export const OrgLayout = () => {
+  const isAdmin = useIsAdmin();
+  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
+  const isImpersonating = isAdmin && !!overrideSlug;
+
+  return (
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "14rem",
+          ...(isImpersonating ? { "--header-offset": "5.75rem" } : undefined),
+        } as React.CSSProperties
+      }
+    >
+      <ModalProvider>
+        <div className="flex flex-col h-screen w-full">
+          {isImpersonating && <ImpersonationBanner />}
+          <TopHeader />
+          <div className="flex flex-1 w-full overflow-hidden pt-2">
+            <OrgSidebar variant="inset" />
+            <SidebarInset>
+              <Outlet />
+            </SidebarInset>
+          </div>
+        </div>
+      </ModalProvider>
+    </SidebarProvider>
   );
 };

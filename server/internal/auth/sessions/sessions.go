@@ -4,9 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"time"
 
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -21,26 +26,14 @@ import (
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-type localEnvFile map[string]struct {
-	UserEmail     string  `json:"user_email"`
-	DisplayName   *string `json:"display_name"`
-	Admin         bool    `json:"admin"`
-	Organizations []struct {
-		OrganizationID   string `json:"organization_id"`
-		OrganizationName string `json:"organization_name"`
-		OrganizationSlug string `json:"organization_slug"`
-		AccountType      string `json:"account_type"`
-	} `json:"organizations"`
-}
-
 type Manager struct {
 	logger                 *slog.Logger
+	tracer                 trace.Tracer
 	sessionCache           cache.TypedCacheObject[Session]
 	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
-	localEnvFile           localEnvFile
-	unsafeLocal            bool
 	speakeasyServerAddress string
 	speakeasySecretKey     string
+	speakeasyClient        *http.Client
 	orgRepo                *orgRepo.Queries
 	userRepo               *userRepo.Queries
 	pylon                  *pylon.Pylon
@@ -51,6 +44,7 @@ type Manager struct {
 
 func NewManager(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	suffix cache.Suffix,
@@ -62,15 +56,22 @@ func NewManager(
 	workos *workos.WorkOS,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
+	speakeasyClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: otelhttp.NewTransport(
+			cleanhttp.DefaultPooledTransport(),
+			otelhttp.WithTracerProvider(tracerProvider),
+		),
+	}
 
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),
+		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
 		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		localEnvFile:           localEnvFile{},
-		unsafeLocal:            false,
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,
+		speakeasyClient:        speakeasyClient,
 		orgRepo:                orgRepo.New(db),
 		userRepo:               userRepo.New(db),
 		pylon:                  pylon,
@@ -80,20 +81,7 @@ func NewManager(
 	}
 }
 
-func (s *Manager) IsUnsafeLocalDevelopment() bool {
-	return s.unsafeLocal
-}
-
-func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool) (context.Context, error) {
-	var stubLocalAuth = func() (string, error) {
-		stubbable := canStubAuth && s.unsafeLocal
-		if !stubbable {
-			return "", oops.C(oops.CodeUnauthorized)
-		}
-
-		return s.PopulateLocalDevDefaultAuthSession(ctx)
-	}
-
+func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context, error) {
 	if key == "" {
 		// This may have been set via cookie from http middleware, GOA does not support natively
 		key, _ = contextvalues.GetSessionTokenFromContext(ctx)
@@ -101,14 +89,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 
 	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
 	if err != nil {
-		key, err = stubLocalAuth()
-		if err != nil {
-			return ctx, oops.C(oops.CodeUnauthorized)
-		}
-		session, err = s.sessionCache.Get(ctx, SessionCacheKey(key))
-		if err != nil {
-			return ctx, oops.C(oops.CodeUnauthorized)
-		}
+		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
 	authCtx := &contextvalues.AuthContext{
@@ -121,6 +102,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		Email:                 nil,
 		AccountType:           "",
 		HasActiveSubscription: false,
+		Whitelisted:           false,
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		APIKeyID:              "",
@@ -146,6 +128,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 
 	authCtx.AccountType = orgMetadata.GramAccountType
 	authCtx.HasActiveSubscription = orgMetadata.HasActiveSubscription
+	authCtx.Whitelisted = orgMetadata.Whitelisted
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 
@@ -155,7 +138,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 }
 
 func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, error) {
-	return s.Authenticate(ctx, "", false)
+	return s.Authenticate(ctx, "")
 }
 
 func (s *Manager) Billing() billing.Repository {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -15,8 +16,10 @@ import (
 )
 
 type CustomDomainRegistrationParams struct {
-	OrgID  string
-	Domain string
+	OrgID         string
+	Domain        string
+	CreatedBy     urn.Principal
+	CreatedByName *string
 }
 
 type CustomDomainDeletionParams struct {
@@ -63,7 +66,7 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context
 	})
 }
 
-func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error) {
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string) (client.WorkflowRun, error) {
 	id := c.GetID(orgID, domain)
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
@@ -71,8 +74,10 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx con
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    5 * time.Minute,
 	}, CustomDomainRegistrationWorkflow, CustomDomainRegistrationParams{
-		OrgID:  orgID,
-		Domain: domain,
+		OrgID:         orgID,
+		Domain:        domain,
+		CreatedBy:     createdBy,
+		CreatedByName: createdByName,
 	})
 }
 
@@ -89,7 +94,12 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	err := workflow.ExecuteActivity(
 		ctx,
 		a.VerifyCustomDomain,
-		activities.VerifyCustomDomainArgs{OrgID: params.OrgID, Domain: params.Domain},
+		activities.VerifyCustomDomainArgs{
+			OrgID:         params.OrgID,
+			Domain:        params.Domain,
+			CreatedBy:     params.CreatedBy,
+			CreatedByName: params.CreatedByName,
+		},
 	).Get(ctx, nil)
 	if err != nil {
 		logger.Error("failed to verify custom domain", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)

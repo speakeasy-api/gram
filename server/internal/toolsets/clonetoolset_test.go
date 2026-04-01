@@ -8,6 +8,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -17,6 +19,8 @@ func TestToolsetsService_CloneToolset_Success(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Create deployment with petstore fixture
 	dep := createPetstoreDeployment(t, ctx, ti)
@@ -75,12 +79,18 @@ func TestToolsetsService_CloneToolset_Success(t *testing.T) {
 		clonedToolNames[i] = baseTool.Name
 	}
 	require.ElementsMatch(t, originalToolNames, clonedToolNames)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+2, afterCount)
 }
 
 func TestToolsetsService_CloneToolset_MultipleClones(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Create deployment with petstore fixture
 	dep := createPetstoreDeployment(t, ctx, ti)
@@ -144,44 +154,62 @@ func TestToolsetsService_CloneToolset_MultipleClones(t *testing.T) {
 	require.NotEqual(t, cloned1.Slug, cloned2.Slug)
 	require.NotEqual(t, cloned1.Slug, cloned3.Slug)
 	require.NotEqual(t, cloned2.Slug, cloned3.Slug)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+4, afterCount)
 }
 
 func TestToolsetsService_CloneToolset_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Try to clone a non-existent toolset
-	_, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+	_, err = ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
 		SessionToken:     nil,
 		Slug:             types.Slug("non-existent-toolset"),
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "toolset not found")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_CloneToolset_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Test with context that has no auth context
 	ctx := t.Context()
 
-	_, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+	_, err = ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
 		SessionToken:     nil,
 		Slug:             types.Slug("some-toolset"),
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestToolsetsService_CloneToolset_NoProjectID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
 
 	// Create auth context without project ID
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -189,11 +217,79 @@ func TestToolsetsService_CloneToolset_NoProjectID(t *testing.T) {
 	authCtx.ProjectID = nil
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+	_, err = ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
 		SessionToken:     nil,
 		Slug:             types.Slug("some-toolset"),
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestToolsetsService_CloneToolset_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+
+	original, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Clone Audit Original",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	middleCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, middleCount)
+
+	cloned, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+		SessionToken:     nil,
+		Slug:             original.Slug,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, cloned)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionToolsetCreate), record.Action)
+	require.Equal(t, "toolset", record.SubjectType)
+	require.Equal(t, cloned.Name, record.SubjectDisplay)
+	require.Equal(t, string(cloned.Slug), record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, middleCount+1, afterCount)
+}
+
+func TestToolsetsService_CloneToolset_NotFound_NoAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+
+	_, err = ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+		SessionToken:     nil,
+		Slug:             types.Slug("non-existent-toolset"),
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "toolset not found")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }

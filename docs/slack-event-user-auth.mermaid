@@ -1,0 +1,61 @@
+sequenceDiagram
+    participant SlackUser as Slack User
+    participant Slack as Slack Platform
+    participant API as Gram Server
+    participant DB as Database
+    participant Redis as Redis
+    participant Temporal as Temporal Worker
+    participant Browser as User's Browser
+    participant Dashboard as Gram Dashboard
+
+    Note over SlackUser,Dashboard: Event Arrival
+    SlackUser->>Slack: @bot or DM
+    Slack->>API: POST /rpc/slack-apps/{id}/events<br/>(signed with signing_secret)
+    API->>API: validateSlackEvent()<br/>(HMAC-SHA256 signature + timestamp)
+
+    Note over API,DB: Registration Check
+    API->>DB: GetSlackRegistration(slack_app_id, slack_account_id)
+
+    alt User IS registered
+        DB-->>API: registration found (user_id)
+        API->>Temporal: ExecuteProcessSlackEventWorkflow()
+        Temporal->>Temporal: Parse text, resolve toolset
+        Temporal->>Temporal: SlackChatCompletion (LLM call)
+        Temporal->>Slack: Post response to thread
+        Slack-->>SlackUser: Bot reply
+
+    else User NOT registered
+        DB-->>API: no registration
+        API->>Redis: SET slack_token:{token}<br/>{slack_app_id, slack_account_id, channel_id}<br/>TTL: expiry
+        API->>Slack: chat.postEphemeral<br/>"Register your Gram account: {GRAM_SITE_URL}/slack/register?token={token}"
+        Slack-->>SlackUser: Ephemeral message with link
+
+        Note over SlackUser,Dashboard: User clicks link
+
+        SlackUser->>Browser: Click link → /slack/register?token={token}
+
+        Note over Browser,Dashboard: Dashboard requires authentication on all routes
+        Browser->>Dashboard: /slack/register?token={token}
+        Dashboard->>Dashboard: No session → redirect to /login?redirect=/slack/register?token={token}
+        Browser->>Dashboard: Gram login flow (email/OAuth/etc)
+        Dashboard->>Dashboard: Session established
+        Dashboard->>Dashboard: Redirect to /slack/register?token={token}
+
+        Note over Dashboard,API: Page loads (authenticated)
+        Dashboard->>API: GET /rpc/slack-apps.getByToken?token={token}
+        API->>Redis: GET slack_token:{token}
+        Redis-->>API: {slack_app_id, slack_account_id, channel_id}
+        API->>DB: Get slack app name + toolset names
+        API-->>Dashboard: {appName, toolsets}
+        Dashboard->>Dashboard: Show app name, toolsets,<br/>and "Connect" button
+
+        Note over Dashboard,API: User confirms registration
+        SlackUser->>Dashboard: Click "Connect"
+        Dashboard->>API: POST /rpc/slack-apps.register<br/>{token} (with session cookie)
+        API->>Redis: GET + DEL slack_token:{token}
+        API->>DB: INSERT slack_registrations<br/>(slack_app_id, slack_account_id, user_id)
+        API-->>Dashboard: 200 OK
+        Dashboard->>Dashboard: Show "You're connected!"
+
+        Note over SlackUser,Dashboard: Subsequent events now pass registration check
+    end

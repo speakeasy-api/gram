@@ -56,7 +56,7 @@ export type GetCreditUsageQueryError =
  * creditUsage chat
  *
  * @remarks
- * Load a chat by its ID
+ * Get the total number of chat credits and usage for the current billing period
  */
 export function useGetCreditUsage(
   request?: operations.CreditUsageRequest | undefined,
@@ -79,7 +79,7 @@ export function useGetCreditUsage(
  * creditUsage chat
  *
  * @remarks
- * Load a chat by its ID
+ * Get the total number of chat credits and usage for the current billing period
  */
 export function useGetCreditUsageSuspense(
   request?: operations.CreditUsageRequest | undefined,
@@ -103,13 +103,7 @@ export function useGetCreditUsageSuspense(
 
 export function setGetCreditUsageData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: GetCreditUsageQueryData,
 ): GetCreditUsageQueryData | undefined {
   const key = queryKeyGetCreditUsage(...queryKeyBase);
@@ -120,11 +114,7 @@ export function setGetCreditUsageData(
 export function invalidateGetCreditUsage(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
-    }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

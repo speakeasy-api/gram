@@ -2638,6 +2638,268 @@ func EncodeGetHooksSummaryError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// EncodeListHooksTracesResponse returns an encoder for responses returned by
+// the telemetry listHooksTraces endpoint.
+func EncodeListHooksTracesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.ListHooksTracesResult)
+		enc := encoder(ctx, w)
+		body := NewListHooksTracesResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListHooksTracesRequest returns a decoder for requests sent to the
+// telemetry listHooksTraces endpoint.
+func DecodeListHooksTracesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.ListHooksTracesPayload, error) {
+	return func(r *http.Request) (*telemetry.ListHooksTracesPayload, error) {
+		var payload *telemetry.ListHooksTracesPayload
+		var (
+			body ListHooksTracesRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateListHooksTracesRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewListHooksTracesPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListHooksTracesError returns an encoder for errors returned by the
+// listHooksTraces telemetry endpoint.
+func EncodeListHooksTracesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListHooksTracesGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// unmarshalLogFilterRequestBodyToTelemetryLogFilter builds a value of type
+// *telemetry.LogFilter from a value of type *LogFilterRequestBody.
+func unmarshalLogFilterRequestBodyToTelemetryLogFilter(v *LogFilterRequestBody) *telemetry.LogFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.LogFilter{
+		Path: *v.Path,
+	}
+	if v.Operator != nil {
+		res.Operator = *v.Operator
+	}
+	if v.Operator == nil {
+		res.Operator = "eq"
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	}
+
+	return res
+}
+
 // unmarshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter builds a
 // value of type *telemetry.SearchLogsFilter from a value of type
 // *SearchLogsFilterRequestBody.
@@ -2667,37 +2929,6 @@ func unmarshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter(v *SearchLo
 		for i, val := range v.GramUrns {
 			res.GramUrns[i] = val
 		}
-	}
-	if v.AttributeFilters != nil {
-		res.AttributeFilters = make([]*telemetry.AttributeFilter, len(v.AttributeFilters))
-		for i, val := range v.AttributeFilters {
-			if val == nil {
-				res.AttributeFilters[i] = nil
-				continue
-			}
-			res.AttributeFilters[i] = unmarshalAttributeFilterRequestBodyToTelemetryAttributeFilter(val)
-		}
-	}
-
-	return res
-}
-
-// unmarshalAttributeFilterRequestBodyToTelemetryAttributeFilter builds a value
-// of type *telemetry.AttributeFilter from a value of type
-// *AttributeFilterRequestBody.
-func unmarshalAttributeFilterRequestBodyToTelemetryAttributeFilter(v *AttributeFilterRequestBody) *telemetry.AttributeFilter {
-	if v == nil {
-		return nil
-	}
-	res := &telemetry.AttributeFilter{
-		Path:  *v.Path,
-		Value: v.Value,
-	}
-	if v.Op != nil {
-		res.Op = *v.Op
-	}
-	if v.Op == nil {
-		res.Op = "eq"
 	}
 
 	return res
@@ -3016,6 +3247,42 @@ func marshalTelemetryHooksServerSummaryToHooksServerSummaryResponseBody(v *telem
 		SuccessCount: v.SuccessCount,
 		FailureCount: v.FailureCount,
 		FailureRate:  v.FailureRate,
+	}
+
+	return res
+}
+
+// marshalTelemetryHooksUserSummaryToHooksUserSummaryResponseBody builds a
+// value of type *HooksUserSummaryResponseBody from a value of type
+// *telemetry.HooksUserSummary.
+func marshalTelemetryHooksUserSummaryToHooksUserSummaryResponseBody(v *telemetry.HooksUserSummary) *HooksUserSummaryResponseBody {
+	res := &HooksUserSummaryResponseBody{
+		UserEmail:    v.UserEmail,
+		EventCount:   v.EventCount,
+		UniqueTools:  v.UniqueTools,
+		SuccessCount: v.SuccessCount,
+		FailureCount: v.FailureCount,
+		FailureRate:  v.FailureRate,
+	}
+
+	return res
+}
+
+// marshalTelemetryHookTraceSummaryToHookTraceSummaryResponseBody builds a
+// value of type *HookTraceSummaryResponseBody from a value of type
+// *telemetry.HookTraceSummary.
+func marshalTelemetryHookTraceSummaryToHookTraceSummaryResponseBody(v *telemetry.HookTraceSummary) *HookTraceSummaryResponseBody {
+	res := &HookTraceSummaryResponseBody{
+		TraceID:           v.TraceID,
+		StartTimeUnixNano: v.StartTimeUnixNano,
+		LogCount:          v.LogCount,
+		HookStatus:        v.HookStatus,
+		GramUrn:           v.GramUrn,
+		ToolName:          v.ToolName,
+		ToolSource:        v.ToolSource,
+		EventSource:       v.EventSource,
+		UserEmail:         v.UserEmail,
+		HookSource:        v.HookSource,
 	}
 
 	return res

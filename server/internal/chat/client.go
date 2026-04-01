@@ -6,7 +6,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -28,7 +27,6 @@ func NewBaseChatClient(logger *slog.Logger,
 	messageCaptureStrategy := NewChatMessageCaptureStrategy(
 		logger,
 		db,
-		repo.New(db),
 		assetStorage,
 	)
 

@@ -23,7 +23,7 @@ export function EnterpriseGate({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center py-24 px-8 rounded-xl border border-dashed bg-muted/20">
+    <div className="flex flex-col items-center justify-center py-24 px-8 m-8 rounded-xl border border-dashed bg-muted/20">
       <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
         <Icon name={icon} className="w-6 h-6 text-muted-foreground" />
       </div>

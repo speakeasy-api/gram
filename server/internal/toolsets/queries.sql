@@ -58,11 +58,12 @@ SET
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
 
--- name: DeleteToolset :exec
+-- name: DeleteToolset :one
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
 WHERE slug = @slug
-  AND project_id = @project_id AND deleted IS FALSE;
+  AND project_id = @project_id AND deleted IS FALSE
+RETURNING id, name, slug;
 
 -- name: GetHTTPSecurityDefinitions :many
 SELECT *

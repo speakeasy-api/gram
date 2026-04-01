@@ -127,6 +127,18 @@ func (h HTTPLogAttributes) RecordResponseBodyContent(body []byte) {
 	h[attr.GenAIToolCallResultKey] = truncateBody(body)
 }
 
+func (h HTTPLogAttributes) RecordToolsetSlug(slug string) {
+	if slug != "" {
+		h[attr.ToolsetSlugKey] = slug
+	}
+}
+
+func (h HTTPLogAttributes) RecordMCPURL(url string) {
+	if url != "" {
+		h[attr.McpURLKey] = url
+	}
+}
+
 func truncateBody(body []byte) string {
 	if len(body) <= maxBodyContentBytes {
 		return string(body)

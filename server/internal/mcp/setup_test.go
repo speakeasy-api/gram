@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -42,7 +43,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background())
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -87,8 +88,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -127,11 +127,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		posthog,
 	)
 
-	temporalEnv, devserver := infra.NewTemporalEnv(t)
-	t.Cleanup(func() {
-		temporalEnv.Client().Close()
-		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
-	})
+	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
@@ -187,8 +183,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -213,11 +208,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	temporalEnv, devserver := infra.NewTemporalEnv(t)
-	t.Cleanup(func() {
-		temporalEnv.Client().Close()
-		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
-	})
+	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
@@ -262,10 +253,70 @@ func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) stri
 	return *key.Key
 }
 
-// getSessionToken returns a valid session token for testing
+// getSessionToken returns a valid session token for testing.
+// The session must already be established via InitAuthContext.
 func (ti *testInstance) getSessionToken(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	sessionToken, err := ti.sessionManager.PopulateLocalDevDefaultAuthSession(ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context must be set before calling getSessionToken")
+	require.NotNil(t, authCtx.SessionID, "session ID must be set in auth context")
+	return *authCtx.SessionID
+}
+
+// addToolWithSecurity creates a deployment, an HTTP tool definition with an apiKey
+// security scheme, and a toolset_version linking them. This makes DescribeToolset
+// return SecurityVariables so the security check in ServePublic is exercised.
+// Returns the env var name used for the apiKey scheme.
+func (ti *testInstance) addToolWithSecurity(ctx context.Context, t *testing.T, toolsetID uuid.UUID, projectID uuid.UUID, orgID string) string {
+	t.Helper()
+
+	envVarName := "TEST_API_KEY"
+
+	// Create deployment
+	var deploymentID uuid.UUID
+	err := ti.conn.QueryRow(ctx, `
+		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, projectID, orgID, "test-user", uuid.New().String()).Scan(&deploymentID)
 	require.NoError(t, err)
-	return sessionToken
+
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO deployment_statuses (deployment_id, status)
+		VALUES ($1, 'completed')
+	`, deploymentID)
+	require.NoError(t, err)
+
+	// Create HTTP tool definition with security referencing "test_api_key" scheme
+	toolURN := "tools:http:test-api:" + uuid.New().String()[:8]
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_tool_definitions (
+			project_id, deployment_id, tool_urn, name, untruncated_name,
+			summary, description, tags, http_method, path,
+			schema_version, schema, server_env_var, security,
+			header_settings, query_settings, path_settings
+		) VALUES (
+			$1, $2, $3, 'test_tool', '', 'Test tool', 'A test tool with security',
+			'{}', 'GET', '/test', '3.0.0', '{}', 'TEST_SERVER_URL',
+			$4, '{}', '{}', '{}'
+		)
+	`, projectID, deploymentID, toolURN, `[{"test_api_key": []}]`)
+	require.NoError(t, err)
+
+	// Create matching http_security row
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_security (
+			key, deployment_id, project_id, type, name, in_placement, env_variables
+		) VALUES ($1, $2, $3, 'apiKey', 'X-Api-Key', 'header', $4)
+	`, "test_api_key", deploymentID, projectID, []string{envVarName})
+	require.NoError(t, err)
+
+	// Create toolset_version linking the tool
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
+		VALUES ($1, 1, $2, '{}')
+	`, toolsetID, []string{toolURN})
+	require.NoError(t, err)
+
+	return envVarName
 }

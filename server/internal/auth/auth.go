@@ -4,17 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"goa.design/goa/v3/security"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"goa.design/goa/v3/security"
 )
 
 type Auth struct {
@@ -26,6 +28,7 @@ type Auth struct {
 }
 
 func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Auth {
+	logger = logger.With(attr.SlogComponent("authorizer"))
 	return &Auth{
 		logger:   logger,
 		db:       db,
@@ -35,21 +38,31 @@ func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Aut
 	}
 }
 
-func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	if schema == nil {
+func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+	if scheme == nil {
 		panic("Goa has not passed a schema") // TODO: figure something out here
 	}
 
-	switch schema.Name {
+	var err error
+	defer func() {
+		s.logAuthContext(ctx, err, scheme.Name)
+	}()
+
+	switch scheme.Name {
 	case constants.KeySecurityScheme:
-		return s.keys.KeyBasedAuth(ctx, key, schema.RequiredScopes)
+		ctx, err = s.keys.KeyBasedAuth(ctx, key, scheme.RequiredScopes)
 	case constants.SessionSecurityScheme:
-		return s.sessions.Authenticate(ctx, key, false)
+		ctx, err = s.sessions.Authenticate(ctx, key)
 	case constants.ProjectSlugSecuritySchema:
-		return s.checkProjectAccess(ctx, s.logger, key)
+		ctx, err = s.checkProjectAccess(ctx, s.logger, key)
 	default:
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme")
+		err = oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme")
 	}
+	if err != nil {
+		return ctx, err
+	}
+
+	return ctx, nil
 }
 
 func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, projectSlug string) (context.Context, error) {
@@ -117,4 +130,48 @@ func (s *Auth) CheckProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	}
 
 	return nil
+}
+
+func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok {
+		return
+	}
+
+	attrs := []any{
+		attr.SlogAuthScheme(scheme),
+		attr.SlogAuthOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogAuthOrganizationSlug(authCtx.OrganizationSlug),
+		attr.SlogAuthAccountType(authCtx.AccountType),
+	}
+	if err != nil {
+		attrs = append(attrs, attr.SlogError(err))
+	}
+	if authCtx.UserID != "" {
+		attrs = append(attrs, attr.SlogAuthUserID(authCtx.UserID))
+	}
+	if authCtx.ExternalUserID != "" {
+		attrs = append(attrs, attr.SlogAuthUserExternalID(authCtx.ExternalUserID))
+	}
+	if authCtx.Email != nil {
+		attrs = append(attrs, attr.SlogAuthUserEmail(*authCtx.Email))
+	}
+	if authCtx.APIKeyID != "" {
+		attrs = append(attrs, attr.SlogAuthAPIKeyID(authCtx.APIKeyID))
+	}
+	if authCtx.SessionID != nil {
+		attrs = append(attrs, attr.SlogAuthSessionID(*authCtx.SessionID))
+	}
+	if authCtx.ProjectID != nil {
+		attrs = append(attrs, attr.SlogAuthProjectID(authCtx.ProjectID.String()))
+	}
+	if authCtx.ProjectSlug != nil {
+		attrs = append(attrs, attr.SlogAuthProjectSlug(*authCtx.ProjectSlug))
+	}
+
+	if err != nil {
+		s.logger.ErrorContext(ctx, fmt.Sprintf("auth scheme check failed (%s)", scheme), attrs...)
+	} else {
+		s.logger.InfoContext(ctx, fmt.Sprintf("auth scheme check passed (%s)", scheme), attrs...)
+	}
 }

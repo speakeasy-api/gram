@@ -4,11 +4,83 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
+
+func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	project := createProjectForDeletion(t, ctx, ti, "audit-delete-project-"+uuid.NewString()[:8])
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
+		ID:           project.ID.String(),
+		ApikeyToken:  nil,
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionProjectDelete)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionProjectDelete), record.Action)
+	require.Equal(t, "project", record.SubjectType)
+	require.Equal(t, project.Name, record.SubjectDisplay)
+	require.Equal(t, project.Slug, record.SubjectSlug)
+	require.Nil(t, record.Metadata)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestProjectsService_DeleteProject_InvalidIDDoesNotCreateAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
+		ID:           "not-a-valid-uuid",
+		ApikeyToken:  nil,
+		SessionToken: nil,
+	})
+	require.Error(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func createProjectForDeletion(t *testing.T, ctx context.Context, ti *testInstance, name string) projectsrepo.Project {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           name,
+		Slug:           name,
+	})
+	require.NoError(t, err)
+
+	return project
+}
 
 func TestProjectsService_DeleteProject(t *testing.T) {
 	t.Parallel()

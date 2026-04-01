@@ -113,9 +113,8 @@ export function FilterSidebar({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          size="sm"
           className={cn(
-            "gap-2",
+            "gap-2 h-10 bg-background border-input",
             activeCount > 0 && "border-primary text-primary",
           )}
         >

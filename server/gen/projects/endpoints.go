@@ -16,13 +16,14 @@ import (
 
 // Endpoints wraps the "projects" service endpoints.
 type Endpoints struct {
-	GetProject          goa.Endpoint
-	CreateProject       goa.Endpoint
-	ListProjects        goa.Endpoint
-	SetLogo             goa.Endpoint
-	ListAllowedOrigins  goa.Endpoint
-	UpsertAllowedOrigin goa.Endpoint
-	DeleteProject       goa.Endpoint
+	GetProject               goa.Endpoint
+	CreateProject            goa.Endpoint
+	ListProjects             goa.Endpoint
+	SetLogo                  goa.Endpoint
+	ListAllowedOrigins       goa.Endpoint
+	UpsertAllowedOrigin      goa.Endpoint
+	DeleteProject            goa.Endpoint
+	SetOrganizationWhitelist goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "projects" service with endpoints.
@@ -30,13 +31,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetProject:          NewGetProjectEndpoint(s, a.APIKeyAuth),
-		CreateProject:       NewCreateProjectEndpoint(s, a.APIKeyAuth),
-		ListProjects:        NewListProjectsEndpoint(s, a.APIKeyAuth),
-		SetLogo:             NewSetLogoEndpoint(s, a.APIKeyAuth),
-		ListAllowedOrigins:  NewListAllowedOriginsEndpoint(s, a.APIKeyAuth),
-		UpsertAllowedOrigin: NewUpsertAllowedOriginEndpoint(s, a.APIKeyAuth),
-		DeleteProject:       NewDeleteProjectEndpoint(s, a.APIKeyAuth),
+		GetProject:               NewGetProjectEndpoint(s, a.APIKeyAuth),
+		CreateProject:            NewCreateProjectEndpoint(s, a.APIKeyAuth),
+		ListProjects:             NewListProjectsEndpoint(s, a.APIKeyAuth),
+		SetLogo:                  NewSetLogoEndpoint(s, a.APIKeyAuth),
+		ListAllowedOrigins:       NewListAllowedOriginsEndpoint(s, a.APIKeyAuth),
+		UpsertAllowedOrigin:      NewUpsertAllowedOriginEndpoint(s, a.APIKeyAuth),
+		DeleteProject:            NewDeleteProjectEndpoint(s, a.APIKeyAuth),
+		SetOrganizationWhitelist: NewSetOrganizationWhitelistEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -49,6 +51,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListAllowedOrigins = m(e.ListAllowedOrigins)
 	e.UpsertAllowedOrigin = m(e.UpsertAllowedOrigin)
 	e.DeleteProject = m(e.DeleteProject)
+	e.SetOrganizationWhitelist = m(e.SetOrganizationWhitelist)
 }
 
 // NewGetProjectEndpoint returns an endpoint function that calls the method
@@ -59,7 +62,7 @@ func NewGetProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -94,7 +97,7 @@ func NewCreateProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -129,7 +132,7 @@ func NewListProjectsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -164,7 +167,7 @@ func NewSetLogoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -223,7 +226,7 @@ func NewListAllowedOriginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -282,7 +285,7 @@ func NewUpsertAllowedOriginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -341,7 +344,7 @@ func NewDeleteProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -365,5 +368,28 @@ func NewDeleteProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return nil, s.DeleteProject(ctx, p)
+	}
+}
+
+// NewSetOrganizationWhitelistEndpoint returns an endpoint function that calls
+// the method "setOrganizationWhitelist" of service "projects".
+func NewSetOrganizationWhitelistEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationWhitelistPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.SetOrganizationWhitelist(ctx, p)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -23,12 +24,15 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -116,11 +120,6 @@ func newStartCommand() *cli.Command {
 			Value:   ":8081",
 			Usage:   "HTTP address to listen on",
 			EnvVars: []string{"GRAM_CONTROL_ADDRESS"},
-		},
-		&cli.StringFlag{
-			Name:    "unsafe-local-env-path",
-			Usage:   "The path to the local environment file used for session auth in local development",
-			EnvVars: []string{"GRAM_UNSAFE_LOCAL_ENV_PATH"},
 		},
 		&cli.StringFlag{
 			Name:     "site-url",
@@ -378,12 +377,14 @@ func newStartCommand() *cli.Command {
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "server"
 			logger := PullLogger(c.Context).With(
+				attr.SlogComponent("server"),
 				attr.SlogServiceName(serviceName),
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
+			slog.SetDefault(logger)
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -459,30 +460,19 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
-			localEnvPath := c.String("unsafe-local-env-path")
-			var sessionManager *sessions.Manager
-			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(
-					logger,
-					db,
-					redisClient,
-					cache.SuffixNone,
-					c.String("speakeasy-server-address"),
-					c.String("speakeasy-secret-key"),
-					pylonClient,
-					posthogClient,
-					billingRepo,
-					workosClient,
-				)
-			} else {
-				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath, billingRepo)
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe session manager: %w", err)
-				}
-
-				sessionManager = s
-			}
+			sessionManager := sessions.NewManager(
+				logger,
+				tracerProvider,
+				db,
+				redisClient,
+				cache.SuffixNone,
+				c.String("speakeasy-server-address"),
+				c.String("speakeasy-secret-key"),
+				pylonClient,
+				posthogClient,
+				billingRepo,
+				workosClient,
+			)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
@@ -522,31 +512,15 @@ func newStartCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
-			}
-
-			{
-				controlServer := control.Server{
-					Address:          c.String("control-address"),
-					Logger:           logger.With(attr.SlogComponent("control")),
-					DisableProfiling: false,
-				}
-
-				temporals := []*o11y.NamedResource[client.Client]{}
-				if temporalEnv != nil {
-					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
-				}
-
-				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
-					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
-					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					temporals,
-				))
-				if err != nil {
-					return fmt.Errorf("failed to start control server: %w", err)
-				}
-
-				shutdownFuncs = append(shutdownFuncs, shutdown)
+				openRouter = openrouter.New(
+					logger,
+					db,
+					c.String("environment"),
+					c.String("openrouter-provisioning-key"),
+					&background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv},
+					productFeatures,
+					billingTracker,
+				)
 			}
 
 			serverURL, err := url.Parse(c.String("server-url"))
@@ -622,27 +596,17 @@ func newStartCommand() *cli.Command {
 
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
-			chatClient := chat.NewAgenticChatClient(
+			completionsClient := openrouter.NewUnifiedClient(
 				logger,
-				tracerProvider,
-				meterProvider,
-				db,
-				env,
-				encryptionClient,
-				cache.NewRedisCacheAdapter(redisClient),
-				guardianPolicy,
-				functionsOrchestrator,
 				openRouter,
-				temporalEnv,
-				telemSvc,
-				assetStorage,
-				billingTracker,
-				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
+				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
+				telemSvc,
 			)
 
-			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, chatClient)
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
@@ -652,22 +616,75 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
+			authorizer := auth.New(logger, db, sessionManager)
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
+			externalOAuthService := oauth.NewExternalOAuthService(logger, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
+
+			mcpService := mcp.NewService(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				sessionManager,
+				chatSessionsManager,
+				env,
+				posthogClient,
+				serverURL,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
+				oauthService,
+				billingTracker,
+				billingRepo,
+				telemSvc,
+				productFeatures,
+				ragService,
+				temporalEnv,
+			)
+
+			chatClient := chat.NewAgenticChatClient(
+				logger,
+				db,
+				env,
+				cache.NewRedisCacheAdapter(redisClient),
+				completionsClient,
+				mcpclient.NewInternalMCPClient(mcpService),
+			)
+
+			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
+			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
+			roleClient, err := newAccessRoleProvider(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to create access role provider: %w", err)
+			}
+
 			mux := goahttp.NewMuxer()
+			mux.Use(func(h http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
+						w.WriteHeader(http.StatusOK)
+						return
+					}
+
+					h.ServeHTTP(w, r)
+				})
+			})
 			mux.Use(func(h http.Handler) http.Handler {
 				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
 			})
-			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
+			mux.Use(middleware.NewRecovery(logger))
+			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
-			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
-			authAuth := auth.New(logger, db, sessionManager)
-
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager))
-			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, temporalEnv))
+			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authorizer, temporalEnv))
+			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				db,
@@ -692,15 +709,12 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			resources.Attach(mux, resources.NewService(logger, db, sessionManager))
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
-			externalOAuthService := oauth.NewExternalOAuthService(logger, db, cache.NewRedisCacheAdapter(redisClient), authAuth, encryptionClient, externalMcpOAuthConfig)
 			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, billingTracker, telemSvc, productFeatures, serverURL))
-			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
-			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalEnv), mcpMetadataService)
+			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage))
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}))
@@ -758,6 +772,7 @@ func newStartCommand() *cli.Command {
 						AgentsService:       agentsWorkerSvc,
 						MCPRegistryClient:   mcpRegistryClient,
 						TelemetryService:    telemSvc,
+						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
@@ -779,6 +794,55 @@ func newStartCommand() *cli.Command {
 			})
 
 			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
+
+			{
+				controlServer := control.Server{
+					Address:          c.String("control-address"),
+					Logger:           logger.With(attr.SlogComponent("control")),
+					DisableProfiling: false,
+				}
+
+				temporals := []*o11y.NamedResource[client.Client]{}
+				if temporalEnv != nil {
+					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
+				}
+
+				listenAddr := srv.Addr
+				if listenAddr == "" {
+					listenAddr = ":8080"
+				}
+				host, port, _ := net.SplitHostPort(listenAddr)
+				if host == "" {
+					host = "localhost"
+				}
+				healthzEndpoint := &o11y.HTTPEndpoint{
+					URL: &url.URL{
+						Scheme: conv.Ternary(tlsEnabled, "https", "http"),
+						Host:   net.JoinHostPort(host, port),
+						Path:   "/healthz",
+					},
+					TLSCertificate: nil,
+				}
+				if tlsEnabled {
+					cert, err := os.ReadFile(c.String("ssl-cert-file"))
+					if err != nil {
+						return fmt.Errorf("failed to read TLS certificate for health check: %w", err)
+					}
+					healthzEndpoint.TLSCertificate = cert
+				}
+				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
+					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
+					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
+					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
+					temporals,
+				))
+				if err != nil {
+					return fmt.Errorf("failed to start control server: %w", err)
+				}
+
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+
 			if tlsEnabled {
 				logger.InfoContext(ctx, "server started with tls", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file")); err != nil && !errors.Is(err, http.ErrServerClosed) {

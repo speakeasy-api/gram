@@ -56,6 +56,26 @@ type Asset struct {
 	Deleted       bool
 }
 
+type AuditLog struct {
+	ID                 uuid.UUID
+	Seq                int64
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ActorID            string
+	ActorType          string
+	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
+	Action             string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName pgtype.Text
+	SubjectSlug        pgtype.Text
+	BeforeSnapshot     []byte
+	AfterSnapshot      []byte
+	Metadata           []byte
+	CreatedAt          pgtype.Timestamptz
+}
+
 type Chat struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
@@ -250,6 +270,7 @@ type ExternalMcpAttachment struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	SelectedRemotes         []string
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz
@@ -385,6 +406,15 @@ type FunctionsAccess struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type HooksServerNameOverride struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	RawServerName string
+	DisplayName   string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type HttpSecurity struct {
@@ -556,15 +586,18 @@ type OrganizationFeature struct {
 }
 
 type OrganizationMetadatum struct {
-	ID              string
-	Name            string
-	Slug            string
-	GramAccountType string
-	SsoConnectionID pgtype.Text
-	WorkosID        pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DisabledAt      pgtype.Timestamptz
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	SsoConnectionID    pgtype.Text
+	WorkosID           pgtype.Text
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
@@ -610,6 +643,23 @@ type PackageVersion struct {
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
 	Deleted      bool
+}
+
+// RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted.
+type PrincipalGrant struct {
+	ID uuid.UUID
+	// The organization this grant belongs to. Grants are always org-scoped.
+	OrganizationID string
+	// URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.
+	PrincipalUrn urn.Principal
+	// Derived from principal_urn. The type prefix, e.g. "user", "role".
+	PrincipalType string
+	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
+	Scope string
+	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
+	Resource  string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
 type Project struct {
@@ -683,22 +733,20 @@ type SlackApp struct {
 	Deleted            bool
 }
 
-type SlackAppConnection struct {
-	SlackTeamID        string
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	AccessToken        string
-	SlackTeamName      string
-	DefaultToolsetSlug pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-}
-
 type SlackAppToolset struct {
 	ID         uuid.UUID
 	SlackAppID uuid.UUID
 	ToolsetID  uuid.UUID
 	CreatedAt  pgtype.Timestamptz
+}
+
+type SlackRegistration struct {
+	ID             uuid.UUID
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+	UserID         uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type SourceEnvironment struct {
@@ -709,20 +757,6 @@ type SourceEnvironment struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
-}
-
-type TeamInvite struct {
-	ExpiresAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	OrganizationID  string
-	Email           string
-	InvitedByUserID pgtype.Text
-	Status          string
-	Token           string
-	ID              uuid.UUID
-	Deleted         bool
 }
 
 type ToolVariation struct {

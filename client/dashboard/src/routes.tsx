@@ -9,6 +9,8 @@ import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
+import ChatSessions from "./pages/chatLogs/ChatLogs";
+import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import Elements from "./pages/elements/Elements";
@@ -17,24 +19,30 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
+import Hooks from "./pages/hooks/Hooks";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import ChatSessions from "./pages/chatLogs/ChatLogs";
 import Logs from "./pages/logs/Logs";
-import Hooks from "./pages/hooks/Hooks";
-import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
+import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
+import OrgAdminSettings from "./pages/org/OrgAdminSettings";
+import OrgApiKeys from "./pages/org/OrgApiKeys";
+import OrgAuditLogs from "./pages/org/OrgAuditLogs";
+import OrgDomains from "./pages/org/OrgDomains";
+import OrgHome from "./pages/org/OrgHome";
+import OrgLogs from "./pages/org/OrgLogs";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
+// OrgTeam is managed externally via Speakeasy IDP for now
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
@@ -245,6 +253,12 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  clis: {
+    title: "CLIs",
+    url: "clis",
+    icon: "terminal",
+    component: CLIs,
+  },
   mcp: {
     title: "MCP",
     url: "mcp",
@@ -327,34 +341,6 @@ const ROUTE_STRUCTURE = {
     url: "settings",
     icon: "settings",
     component: Settings,
-    subPages: {
-      general: {
-        title: "General",
-        url: "general",
-        component: Settings,
-      },
-      apiKeys: {
-        title: "API Keys",
-        url: "api-keys",
-        component: Settings,
-      },
-      logs: {
-        title: "Logging & Telemetry",
-        url: "logs",
-        component: Settings,
-      },
-      domains: {
-        title: "Custom Domain",
-        url: "domains",
-        component: Settings,
-      },
-    },
-  },
-  billing: {
-    title: "Billing",
-    url: "billing",
-    icon: "credit-card",
-    component: Billing,
   },
   docs: {
     title: "Docs",
@@ -420,7 +406,7 @@ export const useRoutes = (overrides?: {
     parent?: string,
   ): AppRoute => {
     if (parent === undefined && !route.url.startsWith("/")) {
-      parent = `/:orgSlug/:projectSlug`;
+      parent = `/:orgSlug/projects/:projectSlug`;
     }
 
     const urlWithParent = `${parent ?? ""}/${route.url}`;
@@ -446,7 +432,7 @@ export const useRoutes = (overrides?: {
               console.warn(
                 `No value provided for ${part}, falling back to home page`,
               );
-              return `/${orgSlug}/${projectSlug}`;
+              return `/${orgSlug}/projects/${projectSlug}`;
             }
             finalParts.push(v);
           }
@@ -530,6 +516,190 @@ export const useRoutes = (overrides?: {
 
   const routes: RoutesWithGoTo = useMemo(
     () => addGoToToRoutes(ROUTE_STRUCTURE),
+    [location.pathname],
+  );
+
+  return routes;
+};
+
+// --- Org-level routes ---
+
+const ORG_ROUTE_STRUCTURE = {
+  home: {
+    title: "Home",
+    url: "",
+    icon: "house",
+    component: OrgHome,
+  },
+  billing: {
+    title: "Billing",
+    url: "billing",
+    icon: "credit-card",
+    component: Billing,
+  },
+  apiKeys: {
+    title: "API Keys",
+    url: "api-keys",
+    icon: "key-round",
+    component: OrgApiKeys,
+  },
+  domains: {
+    title: "Custom Domain",
+    url: "domains",
+    icon: "globe",
+    component: OrgDomains,
+  },
+  logs: {
+    title: "Logging & Telemetry",
+    url: "logs",
+    icon: "file-text",
+    component: OrgLogs,
+  },
+  auditLogs: {
+    title: "Audit Logs",
+    url: "audit-logs",
+    icon: "history",
+    component: OrgAuditLogs,
+  },
+  adminSettings: {
+    title: "Super Admin",
+    url: "admin-settings",
+    icon: "shield-alert",
+    component: OrgAdminSettings,
+  },
+} satisfies Record<string, RouteEntry>;
+
+type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
+type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
+
+export { ORG_ROUTE_STRUCTURE };
+
+export const useOrgRoutes = (): OrgRoutesWithGoTo => {
+  const location = useLocation();
+  const { orgSlug } = useSlugs();
+  const navigate = useNavigate();
+
+  const matchesCurrent = (url: string) => {
+    const urlParts = url.split("/").filter(Boolean);
+    const currentParts = location.pathname.split("/").filter(Boolean);
+
+    if (urlParts.length !== currentParts.length) {
+      return false;
+    }
+
+    return urlParts.every(
+      (part, index) => part === currentParts[index] || part.startsWith(":"),
+    );
+  };
+
+  const addRouteUtilities = (
+    route: AppRouteBasic,
+    parent?: string,
+  ): AppRoute => {
+    if (parent === undefined && !route.url.startsWith("/")) {
+      parent = `/:orgSlug`;
+    }
+
+    const urlWithParent = `${parent ?? ""}/${route.url}`;
+
+    const resolveUrl = (...params: string[]) => {
+      if (route.external) {
+        return route.url;
+      }
+
+      const parts = urlWithParent.split("/").filter(Boolean);
+      const finalParts = [];
+
+      for (const part of parts) {
+        if (part.startsWith(":")) {
+          if (part === ":orgSlug") {
+            finalParts.push(orgSlug);
+          } else {
+            const v = params.shift();
+            if (!v) {
+              console.warn(
+                `No value provided for ${part}, falling back to org home`,
+              );
+              return `/${orgSlug}`;
+            }
+            finalParts.push(v);
+          }
+        } else {
+          finalParts.push(part);
+        }
+      }
+
+      return ("/" + finalParts.join("/")).replace(/\/+/g, "/");
+    };
+
+    const goTo = (...params: string[]) => {
+      navigate(resolveUrl(...params));
+    };
+
+    const linkComponent = ({
+      params = [],
+      queryParams = {},
+      hash,
+      className,
+      children,
+    }: {
+      params?: string[];
+      queryParams?: Record<string, string>;
+      hash?: string;
+      className?: string;
+      children: React.ReactNode;
+    }) => {
+      const queryString = new URLSearchParams(queryParams).toString();
+      const hashString = hash ? `#${hash}` : "";
+      const queryPart = queryString ? `?${queryString}` : "";
+      return (
+        <Link
+          to={`${resolveUrl(...params)}${queryPart}${hashString}`}
+          className={cn("hover:underline", className)}
+        >
+          {children}
+        </Link>
+      );
+    };
+
+    const subPages = route.subPages
+      ? addGoToToRoutes(route.subPages, urlWithParent)
+      : undefined;
+
+    const active =
+      matchesCurrent(urlWithParent) ||
+      !!Object.values(subPages ?? {}).some((subPage) => subPage.active);
+
+    const newRoute: AppRoute = {
+      ...route,
+      active,
+      Icon: route.customIcon
+        ? route.customIcon
+        : (props: Omit<IconProps, "name">) =>
+            route.icon ? <Icon {...props} name={route.icon} /> : null,
+      href: resolveUrl,
+      goTo,
+      Link: linkComponent,
+      ...subPages,
+    };
+
+    return newRoute;
+  };
+
+  const addGoToToRoutes = <T extends AppRoutesBasic>(
+    routes: T,
+    parent?: string,
+  ): TransformRouteToGoTo<T> => {
+    return Object.fromEntries(
+      Object.entries(routes).map(([key, route]) => [
+        key,
+        addRouteUtilities(route, parent),
+      ]),
+    ) as TransformRouteToGoTo<T>;
+  };
+
+  const routes: OrgRoutesWithGoTo = useMemo(
+    () => addGoToToRoutes(ORG_ROUTE_STRUCTURE),
     [location.pathname],
   );
 

@@ -109,14 +109,12 @@ If no deployment ID is provided, redeploys the latest deployment.`,
 					slog.String("logs_url", logsURL),
 				)
 				fmt.Printf("\nView deployment: %s\n", logsURL)
-				openDeploymentURL(logger, ctx, logsURL)
 			case "failed":
 				logger.ErrorContext(ctx, "Deployment failed",
 					slog.String("deployment_id", newID),
 					slog.String("logs_url", logsURL),
 				)
 				fmt.Printf("\nView deployment logs: %s\n", logsURL)
-				openDeploymentURL(logger, ctx, logsURL)
 				return fmt.Errorf("deployment failed")
 			default:
 				logger.InfoContext(ctx, "Deployment is still in progress",

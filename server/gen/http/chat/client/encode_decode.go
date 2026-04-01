@@ -767,14 +767,6 @@ func EncodeCreditUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		if p.ChatSessionsToken != nil {
-			head := *p.ChatSessionsToken
-			req.Header.Set("Gram-Chat-Session", head)
-		}
 		return nil
 	}
 }

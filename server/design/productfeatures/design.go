@@ -20,7 +20,7 @@ var ProductFeaturesResult = ResultType("application/vnd.gram.product-features", 
 var _ = Service("features", func() {
 	Description("Manage product level feature controls.")
 
-	Security(security.Session, security.ProjectSlug)
+	Security(security.Session)
 	shared.DeclareErrorResponses()
 
 	Method("getProductFeatures", func() {
@@ -28,7 +28,6 @@ var _ = Service("features", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		Result(ProductFeaturesResult)
@@ -36,7 +35,6 @@ var _ = Service("features", func() {
 		HTTP(func() {
 			GET("/rpc/productFeatures.get")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -56,13 +54,11 @@ var _ = Service("features", func() {
 			Required("feature_name", "enabled")
 
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		HTTP(func() {
 			POST("/rpc/productFeatures.set")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 

@@ -84,8 +84,15 @@ DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
--- name: DeleteProject :exec
+-- name: DeleteProject :one
 UPDATE projects
 SET deleted_at = clock_timestamp()
 WHERE id = @id
-  AND deleted_at IS NULL;
+  AND deleted_at IS NULL
+RETURNING id;
+
+-- name: SetOrganizationWhitelist :exec
+UPDATE organization_metadata
+SET whitelisted = @whitelisted,
+    updated_at = clock_timestamp()
+WHERE id = @organization_id;

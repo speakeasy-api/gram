@@ -1,5 +1,117 @@
 # server
 
+## 0.34.0
+
+### Minor Changes
+
+- c9d23f8: Adds an API for role, membership and grants management.
+- e177e45: Improve user-facing deployment logs with source processing details and aggregate summary
+
+### Patch Changes
+
+- 0c07035: fix: revert "feat: allow other security schemes when public OAuth is configured"
+- 7978914: Validate that default_environment_id belongs to the caller's project before storing it in MCP metadata
+
+## 0.33.0
+
+### Minor Changes
+
+- 2850644: Allow multiple security schemes even when OAuth servers are configured on public servers
+
+### Patch Changes
+
+- 6160abf: Moved control server initialization after all routes and middleware are attached, and added a /healthz endpoint to the main API mux so the control server can verify the API is actually serving traffic before reporting healthy.
+
+## 0.32.1
+
+### Patch Changes
+
+- 1295324: Strip tools from toolset audit log snapshots
+
+  The Tools field on Toolset can be very large. Cloning the before/after snapshots and nilling out Tools avoids serializing this data into audit log entries where it is not needed.
+
+## 0.32.0
+
+### Minor Changes
+
+- fbb1c43: Introduced faceted search capabilities to the audit logs, allowing users to filter logs based on actor and action attributes.
+
+  A new endpoint, `GET /rpc/auditlogs.listFacets`, is introduced to retrieve available facets for actors and actions. The existing `GET /rpc/auditlogs.list` endpoint is updated to support filtering by these facets.
+
+### Patch Changes
+
+- e97105d: Normalized OpenAPI HTTP auth scheme casing so extraction and stored metadata behave gracefully for variants like Bearer and Basic
+
+## 0.31.0
+
+### Minor Changes
+
+- 658bef4: Adds new API endpoints for access and permissions management.
+
+### Patch Changes
+
+- 0e5f639: Prevent clobbering API Key Headers when Client Credentials exchange is unconfigured
+
+## 0.30.0
+
+### Minor Changes
+
+- 6265f73: Introduced the audit logs API service and supplementary code to start recording audit logs in other services including new URN types to represent various subjects in Gram.
+
+## 0.29.1
+
+### Patch Changes
+
+- 41d507c: Fixed `GET /rpc/chat.creditUsage` authentication so org-scoped credit usage works correctly for customers with multiple projects, requiring only session auth and no longer allowing chat-session access.
+
+## 0.29.0
+
+### Minor Changes
+
+- 9c75407: Updated the Gram Function runners to run with 1GB of memory instead of 512MB providing more headroom for memory-intensive operations.
+
+## 0.28.1
+
+### Patch Changes
+
+- 7aaeb96: Fix playground OAuth discovery to use toolset-level configuration instead of removed tool-definition fields.
+
+  The frontend now detects OAuth requirements from `toolset.oauthProxyServer` and `toolset.externalOauthServer` instead of inspecting individual external MCP tool definitions (whose `requiresOauth` field was removed in a prior PR). The backend `getExternalOAuthConfig()` gains two new resolution paths — OAuth proxy providers with pre-configured client credentials (skipping DCR) and external OAuth server metadata — before falling back to the legacy tool-definition lookup for backward compatibility.
+
+## 0.28.0
+
+### Minor Changes
+
+- 8c72d8c: Renames attribute_filters to filters in searchLogs, and introduces "in" operator.
+
+### Patch Changes
+
+- 3b0c2c9: Modified deployment logging so that non-https server urls in openapi documents are logged as warnings instead of errors. These urls do not block deployment processing. They are ignored when present.
+- d8133af: Suite of hooks improvements
+- 3bbf15a: Adds agent loop support for all tool types (mainly applicable to slack apps)
+- 686fee5: Add gpt-5.4 support in playground.
+
+## 0.27.1
+
+### Patch Changes
+
+- 1765931: Removes the logs enabled flag in the telemetry API responses.
+- e616da7: Add admin-only cache purging functionality
+
+## 0.27.0
+
+### Minor Changes
+
+- 63d10d0: ## Changeset
+
+  External MCP servers now use the same OAuth configuration pathway as all other toolsets — no more special-cased token resolution.
+
+  The "Configure OAuth" button is now enabled for external MCP servers that require OAuth. When discovered OAuth metadata is available, the configuration form can be auto-populated with a single click.
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+
 ## 0.26.1
 
 ### Patch Changes
@@ -297,6 +409,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level
@@ -719,11 +832,13 @@
   ```
 
   Notably:
+
   - The file must export an async function called `handleToolCall` which takes the tool name and input object as parameters.
   - This function must return a `Response` object.
   - You can use any npm packages you like but you must ensure they are included in the zip file.
 
   ## What is currently supported?
+
   - We currently only support TypeScript/JavaScript functions and deploy them into small Firecracker microVMs running Node.js v22.
   - Each function zip file must be a little under 750KiB in size or less than 1MiB when encoded in base64.
   - Third-party dependencies are supported but you must decide how to include in zip archives. You may bundle everything into a single file or include a `package.json` and node_modules directory in the zip file. As long as the total size is under the limit, it should work.

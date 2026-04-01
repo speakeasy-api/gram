@@ -10,42 +10,42 @@
   src: url("/fonts/diatype/ABCDiatype-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: "Diatype";
   src: url("/fonts/diatype/ABCDiatype-Light.woff2") format("woff2");
   font-weight: 300;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: "Diatype Mono";
   src: url("/fonts/diatype-mono/ABCDiatypeMono-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: "Diatype Mono";
   src: url("/fonts/diatype-mono/ABCDiatypeMono-Light.woff2") format("woff2");
   font-weight: 300;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: "Tobias";
   src: url("/fonts/tobias/Tobias-Thin.woff2") format("woff2");
   font-weight: 100;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: "speakeasyAscii";
   src: url("/fonts/speakeasy/speakeasy-ascii.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 
 :root {
@@ -84,4 +84,20 @@
   transition-property: all;
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dotted background scroll animation for catalog cards */
+@keyframes scroll-dots {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 64px 64px;
+  }
+}
+
+.server-card:hover .scroll-dots-target,
+.dot-card:hover .scroll-dots-target {
+  animation: scroll-dots 3s linear infinite;
+  color: oklch(0.553 0.013 58.071 / 0.4);
 }

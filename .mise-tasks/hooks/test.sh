@@ -10,4 +10,5 @@ echo ""
 echo "Plugin directory: ./hooks/plugin-claude"
 echo ""
 
+export GRAM_HOOKS_SERVER_URL=http://localhost:8080
 exec claude --plugin-dir ./hooks/plugin-claude --debug

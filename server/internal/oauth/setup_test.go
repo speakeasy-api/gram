@@ -2,6 +2,8 @@ package oauth_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"log"
 	"log/slog"
 	"net/url"
@@ -22,7 +24,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background())
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -113,6 +115,35 @@ func (e *tokenTestEnv) issueToken(
 	require.NoError(t, err)
 
 	return token, client.ClientID, client.ClientSecret
+}
+
+// expireTokenInCache modifies an existing token's ExpiresAt to be in the past,
+// simulating an expired downstream token without using synctest.
+func (e *tokenTestEnv) expireTokenInCache(
+	t *testing.T,
+	ctx context.Context,
+	toolsetID uuid.UUID,
+	accessToken string,
+	expiresAt time.Time,
+) {
+	t.Helper()
+
+	// Compute the cache key using the hashed access token
+	hash := sha256.Sum256([]byte(accessToken))
+	accessTokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
+	cacheKey := oauth.TokenCacheKey(toolsetID, accessTokenHash) + ":"
+
+	// Get the current token from cache
+	var token oauth.Token
+	err := e.cacheAdapter.Get(ctx, cacheKey, &token)
+	require.NoError(t, err, "failed to get token from cache")
+
+	// Modify the expiry
+	token.ExpiresAt = expiresAt
+
+	// Update the token in cache
+	err = e.cacheAdapter.Update(ctx, cacheKey, token)
+	require.NoError(t, err, "failed to update token in cache")
 }
 
 // oauthServiceTestEnv wraps a full oauth.Service whose internal TokenService

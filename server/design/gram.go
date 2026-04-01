@@ -5,8 +5,10 @@ import (
 	"goa.design/goa/v3/expr"
 
 	_ "github.com/speakeasy-api/gram/server/design/about"
+	_ "github.com/speakeasy-api/gram/server/design/access"
 	_ "github.com/speakeasy-api/gram/server/design/agentworkflows"
 	_ "github.com/speakeasy-api/gram/server/design/assets"
+	_ "github.com/speakeasy-api/gram/server/design/auditlogs"
 	_ "github.com/speakeasy-api/gram/server/design/auth"
 	_ "github.com/speakeasy-api/gram/server/design/chat"
 	_ "github.com/speakeasy-api/gram/server/design/chatsessions"
@@ -38,4 +40,11 @@ var _ = API("gram", func() {
 	Description("Gram is the tools platform for AI agents")
 	Meta("openapi:example", "false")
 	Randomizer(expr.NewDeterministicRandomizer())
+
+	Server("gram", func() {
+		Host("production", func() {
+			Description("Gram production API base URL")
+			URI("https://app.getgram.ai")
+		})
+	})
 })

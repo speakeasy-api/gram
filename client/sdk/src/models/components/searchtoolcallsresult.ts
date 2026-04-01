@@ -17,10 +17,6 @@ import {
  */
 export type SearchToolCallsResult = {
   /**
-   * Whether tool metrics are enabled for the organization
-   */
-  enabled: boolean;
-  /**
    * Cursor for next page
    */
   nextCursor?: string | undefined;
@@ -28,10 +24,6 @@ export type SearchToolCallsResult = {
    * List of tool call summaries
    */
   toolCalls: Array<ToolCallSummary>;
-  /**
-   * Whether tool input/output logging is enabled for the organization
-   */
-  toolIoLogsEnabled: boolean;
 };
 
 /** @internal */
@@ -40,16 +32,13 @@ export const SearchToolCallsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    enabled: z.boolean(),
     next_cursor: z.optional(z.string()),
     tool_calls: z.array(ToolCallSummary$inboundSchema),
-    tool_io_logs_enabled: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "next_cursor": "nextCursor",
       "tool_calls": "toolCalls",
-      "tool_io_logs_enabled": "toolIoLogsEnabled",
     });
   }),
 );

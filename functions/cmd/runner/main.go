@@ -166,6 +166,9 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 		cancel(svc.ErrIdleServerTimeout)
 	}()
 
+	// #nosec G118 -- We want the shutdown context lifetime to be separate
+	// from the main context to ensure that it is not immediately canceled
+	// when the main context is canceled.
 	go func() {
 		<-ctx.Done()
 

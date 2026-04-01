@@ -57,7 +57,7 @@ func NewService(
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	posthogClient PosthogClient) *Service {
-	logger = logger.With(attr.SlogComponent("logs"))
+	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
 
 	// The sessions and chatSessions parameters may be nil for callers that only need
@@ -123,9 +123,14 @@ func (s *Service) CheckLogsEnabled(ctx context.Context, organizationID string) e
 
 // SearchLogs retrieves unified telemetry logs with pagination.
 func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsPayload) (res *telem_gen.SearchLogsResult, err error) {
-	var from, to *string
-	if payload.Filter != nil {
-		from, to = payload.Filter.From, payload.Filter.To
+	// Prefer top-level from/to; fall back to deprecated filter fields.
+	from := payload.From
+	to := payload.To
+	if from == nil && payload.Filter != nil {
+		from = payload.Filter.From
+	}
+	if to == nil && payload.Filter != nil {
+		to = payload.Filter.To
 	}
 
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
@@ -133,15 +138,10 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		return nil, err
 	}
 
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
-	}
-
-	// Extract SearchLogs-specific filter fields
+	// Extract SearchLogs-specific filter fields (deprecated filter path).
 	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID, eventSource string
 	var httpStatusCode int32
 	var gramURNs []string
-	var attributeFilters []repo.AttributeFilter
 	if payload.Filter != nil {
 		// Handle both gram_urn (single) and gram_urns (array) for backwards compatibility
 		gramURNs = resolveGramURNs(payload.Filter.GramUrn, payload.Filter.GramUrns)
@@ -157,8 +157,10 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		userID = conv.PtrValOr(payload.Filter.UserID, "")
 		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
 		eventSource = conv.PtrValOr(payload.Filter.EventSource, "")
-		attributeFilters = toRepoAttributeFilters(payload.Filter.AttributeFilters)
 	}
+
+	// New top-level filters supersede filter.attribute_filters.
+	attributeFilters := toRepoAttributeFilters(payload.Filters)
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
@@ -206,7 +208,6 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	return &telem_gen.SearchLogsResult{
 		Logs:       telemetryLogs,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -233,10 +234,6 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
-	}
-
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	// Extract SearchToolCalls-specific filter fields
@@ -289,10 +286,8 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	return &telem_gen.SearchToolCallsResult{
-		ToolCalls:         toolCalls,
-		Enabled:           true,
-		ToolIoLogsEnabled: s.CheckToolIOLogsEnabled(ctx, params.organizationID),
-		NextCursor:        nextCursor,
+		ToolCalls:  toolCalls,
+		NextCursor: nextCursor,
 	}, nil
 }
 
@@ -306,10 +301,6 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
-	}
-
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	var deploymentID, gramURN, userID, externalUserID string
@@ -363,7 +354,6 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 
 	return &telem_gen.SearchChatsResult{
 		Chats:      chats,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -373,10 +363,6 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
 	if err != nil {
 		return nil, err
-	}
-
-	if !params.enabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
@@ -439,7 +425,6 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 
 	return &telem_gen.SearchUsersResult{
 		Users:      users,
-		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -527,7 +512,6 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 			ChatResolutionAbandoned: int64(metrics.ChatResolutionAbandoned),
 			AvgChatResolutionScore:  sanitizeFloat64(metrics.AvgChatResolutionScore),
 		},
-		Enabled: true,
 	}
 }
 
@@ -577,7 +561,6 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 	projectResult := buildMetricsSummaryResult(*metrics)
 	return &telem_gen.GetUserMetricsSummaryResult{
 		Metrics: projectResult.Metrics,
-		Enabled: true,
 	}, nil
 }
 
@@ -585,7 +568,6 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 type searchParams struct {
 	projectID      string
 	organizationID string
-	enabled        bool
 	limit          int
 	sortOrder      string
 	cursor         string
@@ -603,6 +585,9 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "checking if logs enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	if limit < 1 || limit > 1000 {
@@ -630,7 +615,6 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 	return &searchParams{
 		projectID:      authCtx.ProjectID.String(),
 		organizationID: authCtx.ActiveOrganizationID,
-		enabled:        logsEnabled,
 		limit:          limit,
 		sortOrder:      sortOrder,
 		cursor:         cursorVal,
@@ -713,8 +697,8 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*telem_gen.TelemetryLogRecord
 	}, nil
 }
 
-// toRepoAttributeFilters converts generated Goa attribute filters to repo types.
-func toRepoAttributeFilters(filters []*telem_gen.AttributeFilter) []repo.AttributeFilter {
+// toRepoAttributeFilters converts generated Goa log filters to repo types.
+func toRepoAttributeFilters(filters []*telem_gen.LogFilter) []repo.AttributeFilter {
 	if len(filters) == 0 {
 		return nil
 	}
@@ -724,9 +708,9 @@ func toRepoAttributeFilters(filters []*telem_gen.AttributeFilter) []repo.Attribu
 			continue
 		}
 		result = append(result, repo.AttributeFilter{
-			Path:  f.Path,
-			Op:    f.Op,
-			Value: conv.PtrValOr(f.Value, ""),
+			Path:   f.Path,
+			Op:     f.Operator,
+			Values: f.Values,
 		})
 	}
 	return result
@@ -810,7 +794,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	projectID := authCtx.ProjectID.String()
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
-	toolsetID := conv.PtrValOr(payload.ToolsetID, "")
+	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
 
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
@@ -827,7 +811,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
-		ToolsetID:      toolsetID,
+		ToolsetSlug:    toolsetSlug,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
@@ -839,7 +823,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        comparisonEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
-		ToolsetID:      toolsetID,
+		ToolsetSlug:    toolsetSlug,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -854,7 +838,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			IntervalSeconds: intervalSeconds,
 			ExternalUserID:  externalUserID,
 			APIKeyID:        apiKeyID,
-			ToolsetID:       toolsetID,
+			ToolsetSlug:     toolsetSlug,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -867,7 +851,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
-		ToolsetID:      toolsetID,
+		ToolsetSlug:    toolsetSlug,
 		Limit:          10,
 		SortBy:         "count",
 	})
@@ -881,7 +865,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
-		ToolsetID:      toolsetID,
+		ToolsetSlug:    toolsetSlug,
 		Limit:          10,
 		SortBy:         "failure_rate",
 	})
@@ -897,7 +881,6 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TopToolsByCount:       toToolMetrics(toolsByCount),
 		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
 		IntervalSeconds:       intervalSeconds,
-		Enabled:               true,
 	}, nil
 }
 
@@ -1037,7 +1020,6 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 
 	return &telem_gen.ListFilterOptionsResult{
 		Options: result,
-		Enabled: true,
 	}, nil
 }
 
@@ -1110,7 +1092,8 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, err
 	}
 
-	rows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
+	// Get server summary
+	serverRows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
 		GramProjectID: authCtx.ProjectID.String(),
 		TimeStart:     timeStart,
 		TimeEnd:       timeEnd,
@@ -1119,10 +1102,20 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks summary: %v", err)
 	}
 
-	// Transform rows into response
-	servers := make([]*telem_gen.HooksServerSummary, 0, len(rows))
+	// Get user summary
+	userRows, err := s.chRepo.GetHooksUserSummary(ctx, repo.GetHooksUserSummaryParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks user summary: %v", err)
+	}
+
+	// Transform server rows into response
+	servers := make([]*telem_gen.HooksServerSummary, 0, len(serverRows))
 	var totalEvents, totalSessions int64
-	for _, row := range rows {
+	for _, row := range serverRows {
 		servers = append(servers, &telem_gen.HooksServerSummary{
 			ServerName:   row.ServerName,
 			EventCount:   int64(row.EventCount),   //nolint:gosec // Bounded count
@@ -1132,6 +1125,19 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 			FailureRate:  row.FailureRate,
 		})
 		totalEvents += int64(row.EventCount) //nolint:gosec // Bounded count
+	}
+
+	// Transform user rows into response
+	users := make([]*telem_gen.HooksUserSummary, 0, len(userRows))
+	for _, row := range userRows {
+		users = append(users, &telem_gen.HooksUserSummary{
+			UserEmail:    row.UserEmail,
+			EventCount:   int64(row.EventCount),   //nolint:gosec // Bounded count
+			UniqueTools:  int64(row.UniqueTools),  //nolint:gosec // Bounded count
+			SuccessCount: int64(row.SuccessCount), //nolint:gosec // Bounded count
+			FailureCount: int64(row.FailureCount), //nolint:gosec // Bounded count
+			FailureRate:  row.FailureRate,
+		})
 	}
 
 	// Get unique session count
@@ -1147,8 +1153,64 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 
 	return &telem_gen.GetHooksSummaryResult{
 		Servers:       servers,
+		Users:         users,
 		TotalEvents:   totalEvents,
 		TotalSessions: totalSessions,
-		Enabled:       logsEnabled,
+	}, nil
+}
+
+// ListHooksTraces retrieves hook trace summaries with pagination and filtering.
+// Uses materialized columns for efficient querying while accessing user_email from JSON.
+func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHooksTracesPayload) (res *telem_gen.ListHooksTracesResult, err error) {
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert attribute filters
+	attributeFilters := toRepoAttributeFilters(payload.Filters)
+
+	// Query with limit+1 to detect if there are more results
+	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
+		GramProjectID: params.projectID,
+		TimeStart:     params.timeStart,
+		TimeEnd:       params.timeEnd,
+		Filters:       attributeFilters,
+		SortOrder:     params.sortOrder,
+		Cursor:        params.cursor,
+		Limit:         params.limit + 1,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "error listing hooks traces", attr.SlogError(err))
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hooks traces")
+	}
+
+	// Compute next cursor using limit+1 pattern
+	var nextCursor *string
+	if len(items) > params.limit {
+		nextCursor = &items[params.limit-1].TraceID
+		items = items[:params.limit]
+	}
+
+	// Convert repo models to Goa types
+	traces := make([]*telem_gen.HookTraceSummary, len(items))
+	for i, item := range items {
+		traces[i] = &telem_gen.HookTraceSummary{
+			TraceID:           item.TraceID,
+			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
+			LogCount:          item.LogCount,
+			HookStatus:        item.HookStatus,
+			GramUrn:           item.GramURN,
+			ToolName:          item.ToolName,
+			ToolSource:        item.ToolSource,
+			EventSource:       item.EventSource,
+			UserEmail:         item.UserEmail,
+			HookSource:        item.HookSource,
+		}
+	}
+
+	return &telem_gen.ListHooksTracesResult{
+		Traces:     traces,
+		NextCursor: nextCursor,
 	}, nil
 }

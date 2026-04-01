@@ -8,10 +8,6 @@ import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
-  ExternalMCPToolDefinition,
-  Tool as GeneratedTool,
-} from "@gram/client/models/components";
-import {
   useGetMcpMetadata,
   useListEnvironments,
 } from "@gram/client/react-query";
@@ -27,6 +23,12 @@ import {
 import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
 import { useToolset } from "@/hooks/toolTypes";
 import { z } from "zod/v4";
+import {
+  getOAuthProviderName,
+  getToolsetOAuthMode,
+} from "./playgroundOAuthMode";
+
+export { getToolsetOAuthMode, type OAuthMode } from "./playgroundOAuthMode";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
@@ -34,24 +36,6 @@ interface PlaygroundAuthProps {
 }
 
 const PASSWORD_MASK = "••••••••";
-
-/**
- * Extract OAuth configuration from external MCP tools in the toolset.
- * Returns the first external MCP tool that requires OAuth, or undefined.
- */
-export function getExternalMcpOAuthConfig(
-  rawTools: GeneratedTool[],
-): ExternalMCPToolDefinition | undefined {
-  for (const tool of rawTools) {
-    if (
-      tool.externalMcpToolDefinition?.requiresOauth &&
-      tool.externalMcpToolDefinition.oauthVersion !== "none"
-    ) {
-      return tool.externalMcpToolDefinition;
-    }
-  }
-  return undefined;
-}
 
 const ExternalMcpOAuthStatusResponseSchema = z.object({
   status: z.enum(["authenticated", "needs_auth", "disconnected"]),
@@ -171,15 +155,17 @@ export function getAuthStatus(
 }
 
 /**
- * OAuth connection status component for external MCP tools discovered via MCP protocol.
- * This handles OAuth 2.1 with Dynamic Client Registration (DCR).
+ * OAuth connection status component for toolset-level OAuth configuration.
+ * Handles both custom proxy providers and external OAuth servers.
  */
 function ExternalMcpOAuthConnection({
   toolsetSlug,
-  mcpOAuthConfig,
+  oauthMode,
+  providerName,
 }: {
   toolsetSlug: string;
-  mcpOAuthConfig: ExternalMCPToolDefinition;
+  oauthMode: "custom-proxy" | "external";
+  providerName: string;
 }) {
   const { data: toolset } = useToolset(toolsetSlug);
   const project = useProject();
@@ -201,9 +187,7 @@ function ExternalMcpOAuthConnection({
     data: oauthStatus,
     isLoading: statusLoading,
     refetch: refetchStatus,
-  } = useExternalMcpOAuthStatus(toolset?.id, {
-    slug: mcpOAuthConfig.slug,
-  });
+  } = useExternalMcpOAuthStatus(toolset?.id);
 
   // Disconnect mutation
   const disconnectMutation = useMutation({
@@ -232,14 +216,9 @@ function ExternalMcpOAuthConnection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: getExternalMcpOAuthStatusQueryKey(
-          toolset?.id,
-          mcpOAuthConfig.slug,
-        ),
+        queryKey: getExternalMcpOAuthStatusQueryKey(toolset?.id),
       });
-      toast.success(
-        `Disconnected from ${mcpOAuthConfig.name || mcpOAuthConfig.slug}`,
-      );
+      toast.success(`Disconnected from ${providerName}`);
     },
     onError: () => {
       toast.error("Failed to disconnect");
@@ -248,8 +227,6 @@ function ExternalMcpOAuthConnection({
 
   // Handle connect click - initiates OAuth flow
   const handleConnect = () => {
-    if (!mcpOAuthConfig.oauthAuthorizationEndpoint) return;
-
     if (window.location.origin !== apiUrl) {
       toast.error("OAuth configuration error: redirect origin mismatch");
       return;
@@ -257,7 +234,6 @@ function ExternalMcpOAuthConnection({
 
     const params = new URLSearchParams({
       toolset_id: toolset?.id ?? "",
-      external_mcp_slug: mcpOAuthConfig.slug,
       redirect_uri: window.location.href.split("?")[0],
       project: project.slug,
     });
@@ -298,9 +274,8 @@ function ExternalMcpOAuthConnection({
   };
 
   const isConnected = oauthStatus?.status === "authenticated";
-  const providerName = mcpOAuthConfig.name || mcpOAuthConfig.slug;
   const oauthVersionLabel =
-    mcpOAuthConfig.oauthVersion === "2.1" ? "MCP OAuth 2.1" : "OAuth 2.0";
+    oauthMode === "custom-proxy" ? "MCP OAuth 2.1" : "OAuth";
 
   return (
     <div className="border rounded-md p-3 bg-muted/30">
@@ -362,12 +337,13 @@ export function PlaygroundAuth({
 }: PlaygroundAuthProps) {
   const routes = useRoutes();
 
-  // Check if toolset has external MCP tools that require OAuth (MCP protocol discovery)
-  const mcpOAuthConfig = useMemo(
-    () => getExternalMcpOAuthConfig(toolset.rawTools),
-    [toolset.rawTools],
+  // Check if toolset has OAuth configuration at the toolset level
+  const oauthMode = useMemo(() => getToolsetOAuthMode(toolset), [toolset]);
+  const hasOAuth = oauthMode !== "none";
+  const oauthProviderName = useMemo(
+    () => getOAuthProviderName(toolset),
+    [toolset],
   );
-  const hasExternalMcpOAuth = !!mcpOAuthConfig;
 
   // Use the same environment data fetching as MCPAuthenticationTab
   const { data: environmentsData } = useListEnvironments();
@@ -418,8 +394,8 @@ export function PlaygroundAuth({
     }
   }, [userProvidedValues, onUserProvidedHeadersChange, mcpMetadata]);
 
-  // Show "no auth required" only if there are no env vars AND no MCP OAuth
-  if (envVars.length === 0 && !hasExternalMcpOAuth) {
+  // Show "no auth required" only if there are no env vars AND no OAuth
+  if (envVars.length === 0 && !hasOAuth) {
     return (
       <div className="text-center py-4">
         <Type variant="small" className="text-muted-foreground">
@@ -431,13 +407,15 @@ export function PlaygroundAuth({
 
   return (
     <div className="space-y-3">
-      {/* External MCP OAuth Connection UI (discovered via MCP protocol) */}
-      {hasExternalMcpOAuth && mcpOAuthConfig && (
-        <ExternalMcpOAuthConnection
-          toolsetSlug={toolset.slug}
-          mcpOAuthConfig={mcpOAuthConfig}
-        />
-      )}
+      {/* Toolset-level OAuth Connection UI */}
+      {hasOAuth &&
+        (oauthMode === "custom-proxy" || oauthMode === "external") && (
+          <ExternalMcpOAuthConnection
+            toolsetSlug={toolset.slug}
+            oauthMode={oauthMode}
+            providerName={oauthProviderName}
+          />
+        )}
 
       {/* Environment Variables */}
       {envVars.map((envVar) => {

@@ -20,6 +20,9 @@ type Client struct {
 	// Claude Doer is the HTTP client used to make requests to the claude endpoint.
 	ClaudeDoer goahttp.Doer
 
+	// Logs Doer is the HTTP client used to make requests to the logs endpoint.
+	LogsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -41,6 +44,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ClaudeDoer:          doer,
+		LogsDoer:            doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -68,6 +72,30 @@ func (c *Client) Claude() goa.Endpoint {
 		resp, err := c.ClaudeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("hooks", "claude", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Logs returns an endpoint that makes HTTP requests to the hooks service logs
+// server.
+func (c *Client) Logs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeLogsRequest(c.encoder)
+		decodeResponse = DecodeLogsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildLogsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.LogsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "logs", err)
 		}
 		return decodeResponse(resp)
 	}

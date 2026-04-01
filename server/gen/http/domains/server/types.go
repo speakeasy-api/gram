@@ -1021,32 +1021,29 @@ func NewDeleteDomainGatewayErrorResponseBody(res *goa.ServiceError) *DeleteDomai
 }
 
 // NewGetDomainPayload builds a domains service getDomain endpoint payload.
-func NewGetDomainPayload(sessionToken *string, projectSlugInput *string) *domains.GetDomainPayload {
+func NewGetDomainPayload(sessionToken *string) *domains.GetDomainPayload {
 	v := &domains.GetDomainPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewCreateDomainPayload builds a domains service createDomain endpoint
 // payload.
-func NewCreateDomainPayload(body *CreateDomainRequestBody, sessionToken *string, projectSlugInput *string) *domains.CreateDomainPayload {
+func NewCreateDomainPayload(body *CreateDomainRequestBody, sessionToken *string) *domains.CreateDomainPayload {
 	v := &domains.CreateDomainPayload{
 		Domain: *body.Domain,
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewDeleteDomainPayload builds a domains service deleteDomain endpoint
 // payload.
-func NewDeleteDomainPayload(sessionToken *string, projectSlugInput *string) *domains.DeleteDomainPayload {
+func NewDeleteDomainPayload(sessionToken *string) *domains.DeleteDomainPayload {
 	v := &domains.DeleteDomainPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

@@ -40,6 +40,7 @@ var allowList = map[string]bool{
 	"anthropic/claude-haiku-4.5":    true,
 	"anthropic/claude-sonnet-4":     true,
 	"anthropic/claude-opus-4.5":     true,
+	"openai/gpt-5.4":                true,
 	"openai/gpt-4o":                 true,
 	"openai/gpt-4o-mini":            true,
 	"openai/gpt-5.1-codex":          true,
@@ -101,7 +102,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey stri
 	return &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
-		logger:          logger,
+		logger:          logger.With(attr.SlogComponent("openrouter")),
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
 		orClient:        retryablehttp.NewClient().StandardClient(),

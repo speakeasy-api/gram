@@ -188,7 +188,7 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
-	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	// Extract general OAuth token (no security-key binding)
 	var oauthToken string
 	for _, t := range payload.oauthTokenInputs {
 		if len(t.securityKeys) == 0 && t.Token != "" {
@@ -287,6 +287,8 @@ func handleToolsCall(
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
+		logAttrs.RecordToolsetSlug(payload.toolset)
+		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{

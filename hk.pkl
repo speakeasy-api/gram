@@ -1,10 +1,13 @@
-amends "package://github.com/jdx/hk/releases/download/v1.36.0/hk@1.36.0#/Config.pkl"
-import "package://github.com/jdx/hk/releases/download/v1.36.0/hk@1.36.0#/Builtins.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
   ["pkleval"] = Builtins.pkl
   ["pklfmt"] = Builtins.pkl_format
-  ["gomodtidy"] = Builtins.gomod_tidy
+  ["gomodtidy"] {
+    glob = List("**/go.mod", "**/go.sum", "**/*.go")
+    fix = "go mod tidy"
+  }
   ["gofmt"] {
     glob = "**/*.go"
     check_list_files =
@@ -50,6 +53,7 @@ local linters = new Mapping<String, Step> {
         "**/*.markdown.mdx",
         "**/*.md",
       )
+    exclude = List(".speakeasy/**", "server/gen/**", "client/sdk/**", "pnpm-lock.yaml")
     check = "pnpm oxfmt --check {{files}}"
     fix = "pnpm oxfmt --write {{files}}"
   }

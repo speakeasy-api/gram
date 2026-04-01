@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -46,6 +47,7 @@ type WorkerOptions struct {
 	BillingTracker      billing.Tracker
 	BillingRepository   billing.Repository
 	RedisClient         *redis.Client
+	CacheAdapter        cache.Cache
 	PosthogClient       *posthog.Posthog
 	FunctionsDeployer   functions.Deployer
 	FunctionsVersion    functions.RunnerVersion
@@ -83,6 +85,7 @@ func ForDeploymentProcessing(
 		PosthogClient:       nil,
 		AgentsService:       nil,
 		TelemetryService:    nil,
+		CacheAdapter:        nil,
 	}
 }
 
@@ -113,6 +116,7 @@ func NewTemporalWorker(
 		AgentsService:       nil,
 		MCPRegistryClient:   nil,
 		TelemetryService:    nil,
+		CacheAdapter:        nil,
 	}
 
 	for _, o := range options {
@@ -136,6 +140,7 @@ func NewTemporalWorker(
 			AgentsService:       conv.Default(o.AgentsService, opts.AgentsService),
 			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			TelemetryService:    conv.Default(o.TelemetryService, opts.TelemetryService),
+			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
 		}
 	}
 
@@ -170,6 +175,7 @@ func NewTemporalWorker(
 		opts.MCPRegistryClient,
 		env.Client(),
 		opts.TelemetryService,
+		opts.CacheAdapter,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -202,7 +208,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
 	temporalWorker.RegisterActivity(activities.LoadAgentTools)
 	temporalWorker.RegisterActivity(activities.RecordAgentExecution)
-
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)

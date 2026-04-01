@@ -110,4 +110,4 @@ WHERE tool_variations.id = @id
     WHERE project_tool_variations.project_id = @project_id
   )
   AND tool_variations.deleted IS FALSE
-RETURNING tool_variations.id;
+RETURNING tool_variations.id, tool_variations.src_tool_urn;

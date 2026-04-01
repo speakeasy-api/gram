@@ -56,7 +56,7 @@ export type GetPeriodUsageQueryError =
  * getPeriodUsage usage
  *
  * @remarks
- * Get the usage for a project for a given period
+ * Get the usage for an organization for a given period
  */
 export function useGetPeriodUsage(
   request?: operations.GetPeriodUsageRequest | undefined,
@@ -79,7 +79,7 @@ export function useGetPeriodUsage(
  * getPeriodUsage usage
  *
  * @remarks
- * Get the usage for a project for a given period
+ * Get the usage for an organization for a given period
  */
 export function useGetPeriodUsageSuspense(
   request?: operations.GetPeriodUsageRequest | undefined,
@@ -103,12 +103,7 @@ export function useGetPeriodUsageSuspense(
 
 export function setGetPeriodUsageData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: GetPeriodUsageQueryData,
 ): GetPeriodUsageQueryData | undefined {
   const key = queryKeyGetPeriodUsage(...queryKeyBase);
@@ -119,10 +114,7 @@ export function setGetPeriodUsageData(
 export function invalidateGetPeriodUsage(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

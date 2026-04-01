@@ -30,9 +30,9 @@ export type GetObservabilityOverviewPayload = {
    */
   to: Date;
   /**
-   * Optional toolset/MCP server ID filter
+   * Optional toolset/MCP server slug filter
    */
-  toolsetId?: string | undefined;
+  toolsetSlug?: string | undefined;
 };
 
 /** @internal */
@@ -42,7 +42,7 @@ export type GetObservabilityOverviewPayload$Outbound = {
   from: string;
   include_time_series: boolean;
   to: string;
-  toolset_id?: string | undefined;
+  toolset_slug?: string | undefined;
 };
 
 /** @internal */
@@ -56,14 +56,14 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     includeTimeSeries: z._default(z.boolean(), true),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
-    toolsetId: z.optional(z.string()),
+    toolsetSlug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       apiKeyId: "api_key_id",
       externalUserId: "external_user_id",
       includeTimeSeries: "include_time_series",
-      toolsetId: "toolset_id",
+      toolsetSlug: "toolset_slug",
     });
   }),
 );

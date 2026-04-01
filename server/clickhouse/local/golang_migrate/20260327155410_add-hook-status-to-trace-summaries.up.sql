@@ -1,0 +1,6 @@
+ALTER TABLE `trace_summaries` ADD COLUMN `hook_has_success` SimpleAggregateFunction(max, UInt8);
+ALTER TABLE `trace_summaries` ADD COLUMN `hook_has_failure` SimpleAggregateFunction(max, UInt8);
+-- drop "trace_summaries_mv" view
+DROP VIEW `trace_summaries_mv`;
+-- create "trace_summaries_mv" view
+CREATE MATERIALIZED VIEW `trace_summaries_mv` TO `trace_summaries` AS SELECT trace_id, gram_project_id, any(gram_deployment_id) AS gram_deployment_id, any(gram_function_id) AS gram_function_id, any(gram_urn) AS gram_urn, any(tool_name) AS tool_name, any(tool_source) AS tool_source, any(event_source) AS event_source, any(user_email) AS user_email, any(hook_source) AS hook_source, min(time_unix_nano) AS start_time_unix_nano, toUInt64(count(*)) AS log_count, anyIfState(toInt32OrNull(toString(attributes.http.response.status_code)), toString(attributes.http.response.status_code) != '') AS http_status_code, max(if(toString(attributes.gram.hook.event) = 'PostToolUse', 1, 0)) AS hook_has_success, max(if(toString(attributes.gram.hook.event) = 'PostToolUseFailure', 1, 0)) AS hook_has_failure FROM telemetry_logs WHERE (trace_id IS NOT NULL) AND (trace_id != '') AND (NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')) GROUP BY trace_id, gram_project_id;

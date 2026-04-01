@@ -66,6 +66,10 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
+      - column: principal_grants.principal_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Principal
 
 sql:
   - schema: schema.sql
@@ -97,6 +101,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/auth/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/access/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/access/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -383,5 +397,35 @@ sql:
       go:
         package: "repo"
         out: "../internal/externalmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/hooks/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/hooks/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/audit/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/audit/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/audit/audittest/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/audit/audittest/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

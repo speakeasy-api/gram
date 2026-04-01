@@ -20,24 +20,29 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { assetsCreateSignedChatAttachmentURL } from "@gram/client/funcs/assetsCreateSignedChatAttachmentURL.js";
+import { accessCreateRole } from "@gram/client/funcs/accessCreateRole.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await assetsCreateSignedChatAttachmentURL(gram, {
-    createSignedChatAttachmentURLForm2: {
-      id: "<id>",
-      projectId: "<id>",
+  const res = await accessCreateRole(gram, {
+    createRoleForm: {
+      description: "swerve hm receptor how",
+      grants: [
+        {
+          scope: "mcp:connect",
+        },
+      ],
+      name: "<value>",
     },
   });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("assetsCreateSignedChatAttachmentURL failed:", res.error);
+    console.log("accessCreateRole failed:", res.error);
   }
 }
 

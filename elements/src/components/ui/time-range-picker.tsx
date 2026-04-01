@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react";
 import { CalendarIcon, ChevronDown, Zap } from "lucide-react";
-import { generateObject } from "ai";
+import { generateObject, LanguageModel } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
@@ -233,7 +233,7 @@ async function parseWithAI(
         }),
     });
 
-    const model = openRouter.chat(TIME_RANGE_MODEL);
+    const model = openRouter.chat(TIME_RANGE_MODEL) as LanguageModel;
 
     const result = await generateObject({
       model,
@@ -561,8 +561,9 @@ function TimeRangePicker({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-64 p-0"
-        align="start"
+        className="w-fit max-w-[500px] p-0"
+        align="end"
+        collisionPadding={16}
         onOpenAutoFocus={(e) => {
           // Prevent popover from stealing focus from the input
           e.preventDefault();

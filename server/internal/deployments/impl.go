@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -39,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -440,6 +442,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 			name:                    add.Name,
 			slug:                    string(add.Slug),
 			registryServerSpecifier: add.RegistryServerSpecifier,
+			selectedRemotes:         add.SelectedRemotes,
 		})
 	}
 
@@ -475,6 +478,17 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
 	if err != nil {
 		return nil, err
+	}
+
+	if err := audit.LogDeploymentCreate(ctx, dbtx, audit.LogDeploymentCreateEvent{
+		OrganizationID:   organizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		DeploymentURN:    urn.NewDeployment(newID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment creation audit log").Log(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -623,6 +637,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			name:                    add.Name,
 			slug:                    string(add.Slug),
 			registryServerSpecifier: add.RegistryServerSpecifier,
+			selectedRemotes:         add.SelectedRemotes,
 		})
 	}
 
@@ -718,6 +733,22 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, err
 	}
 
+	if err := audit.LogDeploymentEvolve(ctx, dbtx, audit.LogDeploymentEvolveEvent{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		DeploymentURN: urn.NewDeployment(cloneID),
+
+		Ancestor: previousDeployment,
+		Current:  dep,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment evolve audit log").Log(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").Log(ctx, logger)
 	}
@@ -807,6 +838,21 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
 	if err != nil {
 		return nil, err
+	}
+
+	if err := audit.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		DeploymentURN: urn.NewDeployment(newID),
+
+		SourceDeploymentID: urn.NewDeployment(deploymentID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").Log(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

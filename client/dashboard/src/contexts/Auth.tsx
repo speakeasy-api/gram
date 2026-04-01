@@ -1,5 +1,21 @@
 import { FullPageError } from "@/components/full-page-error";
-import { LINKED_FROM_PARAM } from "@/pages/home/Home";
+import { GramLogo } from "@/components/gram-logo";
+import { PageHeader } from "@/components/page-header";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
+import BookDemo from "@/pages/demo/BookDemo";
 import {
   InfoResponseBody,
   OrganizationEntry,
@@ -7,10 +23,17 @@ import {
 } from "@gram/client/models/components";
 import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
+import { Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Navigate, useNavigate, useSearchParams } from "react-router";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -27,6 +50,7 @@ type Session = Omit<
   session: string;
   organization: OrganizationEntry;
   rawGramAccountType: string; // "raw" -- should not be used directly unless you know what you are doing
+  whitelisted: boolean;
   refetch: () => Promise<Session>;
 };
 
@@ -54,6 +78,8 @@ const emptySession: Session = {
   },
   organizations: [],
   activeOrganizationId: "",
+  hasActiveSubscription: false,
+  whitelisted: false,
   session: "",
   rawGramAccountType: "",
   organization: emptyOrganization,
@@ -97,7 +123,12 @@ export const ProjectProvider = ({
   const { projectSlug } = useSlugs();
   const [project, setProject] = useState<ProjectEntry | null>(null);
 
-  const defaultProject = organization.projects[0];
+  // Fall back to the user's most recently used project, then to the first project
+  const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
+  const preferredProject = preferredSlug
+    ? organization.projects.find((p) => p.slug === preferredSlug)
+    : undefined;
+  const defaultProject = preferredProject ?? organization.projects[0];
 
   const currentProject =
     organization.projects.find((p) => p.slug === projectSlug) ?? defaultProject;
@@ -140,7 +171,7 @@ export const ProjectProvider = ({
 
   const switchProject = async (slug: string) => {
     client.clear();
-    navigate(`/${organization.slug}/${slug}`);
+    navigate(`/${organization.slug}/projects/${slug}`);
   };
 
   const value = Object.assign(currentProject, {
@@ -179,9 +210,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// Paths that don't require authentication — skip the loading shell on these
+// to avoid a brief flash of the authenticated skeleton (e.g. after logout).
+const UNAUTHENTICATED_PATHS = ["/login", "/register", "/book-demo"];
+
+// Paths that are authenticated but don't require org/project slug context.
+const SLUG_EXEMPT_PATHS = ["/slack/register"];
+
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { session, error, status } = useSessionData();
 
   const isLoading = status === "pending";
@@ -193,7 +232,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
   if (isLoading || (!session && !error)) {
-    return null;
+    // Don't show the authenticated app skeleton on unauthenticated routes
+    // (e.g. after logout navigates to /login). The session check will resolve
+    // quickly and render the correct page without a jarring skeleton flash.
+    if (UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))) {
+      return null;
+    }
+    return <AppLoadingShell />;
   }
 
   if (error || !session || !session.session) {
@@ -204,6 +249,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
+  // Show book demo page if organization is not whitelisted
+  // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
+  if (session.activeOrganizationId && !session.whitelisted) {
+    return <BookDemo />;
+  }
+
   if (!session.activeOrganizationId) {
     return (
       <SessionContext.Provider value={session}>
@@ -212,44 +263,78 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
+  // Skip all slug-based redirect logic for exempt paths
+  const isSlugExempt = SLUG_EXEMPT_PATHS.some((p) =>
+    location.pathname.startsWith(p),
+  );
+
+  const pathParts = location.pathname.split("/").filter(Boolean);
+
+  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
+  // If the second segment is a known project slug (and not "projects" or an org-level route),
+  // redirect to the new URL structure.
+  // Known org-level route paths that should not be treated as project slugs
+  const ORG_ROUTE_PATHS = [
+    "billing",
+    "api-keys",
+    "domains",
+    "logs",
+    "projects",
+  ];
+  const isProjectSlug = session.organization?.projects.some(
+    (p) => p.slug === pathParts[1],
+  );
+  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1]);
+  // Redirect if: (1) it's a project slug and not an org route, OR
+  // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
+  // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
+  if (
+    !isSlugExempt &&
+    pathParts.length >= 2 &&
+    pathParts[0] === session.organization?.slug &&
+    pathParts[1] !== "projects" &&
+    isProjectSlug &&
+    (!isOrgRoutePath || pathParts.length >= 3)
+  ) {
+    const rest = pathParts.slice(2).join("/");
+    const newPath = `/${pathParts[0]}/projects/${pathParts[1]}${rest ? `/${rest}` : ""}`;
+    return <Navigate to={newPath + location.search + location.hash} replace />;
+  }
+
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
-    if (!import.meta.env.DEV) {
-      return <Navigate to={redirectParam} replace />;
-    }
+    return <Navigate to={redirectParam} replace />;
+  } else if (isSlugExempt) {
+    // Fall through to render children
   } else if (session.organization && !projectSlug) {
-    // if we're logged in but the URL doesn't have a project slug, redirect to
-    // the default project
-    let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
-
-    if (
-      !preferredProject ||
-      !session.organization.projects.find((p) => p.slug === preferredProject)
-    ) {
-      preferredProject = session.organization.projects[0]!.slug;
-    }
-
-    const paramsToForward = [LINKED_FROM_PARAM];
-    const forwardParams = new URLSearchParams();
-    paramsToForward.forEach((param) => {
-      const value = searchParams.get(param);
-      if (value !== null) {
-        forwardParams.set(param, value);
+    // On an org-level page or bare URL with no project context — that's fine,
+    // unless we're at the root "/" with no org slug either
+    if (!orgSlug || orgSlug !== session.organization.slug) {
+      // If the user has a preferred project, redirect to it instead of org home
+      const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
+      const preferredProject = preferredSlug
+        ? session.organization.projects.find((p) => p.slug === preferredSlug)
+        : undefined;
+      if (preferredProject) {
+        return (
+          <Navigate
+            to={`/${session.organization.slug}/projects/${preferredProject.slug}`}
+            replace
+          />
+        );
       }
-    });
-    const paramsToForwardString = forwardParams.toString();
-
-    return (
-      <Navigate
-        to={`/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`}
-        replace
-      />
-    );
+      // Redirect to org home
+      return <Navigate to={`/${session.organization.slug}`} replace />;
+    }
+    // Otherwise we're on a valid org-level path, fall through
   } else if (session.organization.slug !== orgSlug) {
     // make sure we don't direct to an org we aren't authenticated with
     return (
-      <Navigate to={`/${session.organization.slug}/${projectSlug}`} replace />
+      <Navigate
+        to={`/${session.organization.slug}/projects/${projectSlug}`}
+        replace
+      />
     );
   }
 
@@ -294,6 +379,7 @@ export const useSessionData = () => {
       },
       session: sessionId ?? "",
       rawGramAccountType: result.gramAccountType,
+      whitelisted: result.whitelisted,
       refetch: async () => {
         const newSession = await refetch();
         return newSession.data ? asSession(newSession.data) : emptySession;
@@ -305,6 +391,95 @@ export const useSessionData = () => {
 
   return { session, error, status };
 };
+
+/** Static nav items matching the real sidebar groups — no auth context needed. */
+const LOADING_NAV = {
+  project: [{ label: "Home", icon: "house" as const }],
+  connect: [
+    { label: "Sources", icon: "file-code" as const },
+    { label: "Catalog", icon: "store" as const },
+    { label: "Playground", icon: "message-circle" as const },
+  ],
+  build: [
+    { label: "Chat Elements", icon: "message-circle" as const },
+    { label: "MCP", icon: "network" as const },
+    { label: "Slack", icon: "slack" as const },
+    { label: "CLIs", icon: "terminal" as const },
+  ],
+  observe: [
+    { label: "Insights", icon: "layout-dashboard" as const },
+    { label: "MCP Logs", icon: "file-text" as const },
+    { label: "Chat Sessions", icon: "messages-square" as const },
+    { label: "Hooks", icon: "webhook" as const },
+  ],
+  settings: [{ label: "Settings", icon: "settings" as const }],
+};
+
+/**
+ * Lightweight shell that mirrors the real AppLayout structure,
+ * shown while the auth session is still loading so the user
+ * sees the app chrome immediately instead of a blank screen.
+ */
+const AppLoadingShell = () => (
+  <SidebarProvider
+    style={{ "--sidebar-width": "14rem" } as React.CSSProperties}
+  >
+    <div className="flex flex-col h-screen w-full">
+      {/* Header */}
+      <header className="flex items-center h-14 pl-5 pr-4 border-b bg-white dark:bg-background shrink-0">
+        <div className="flex items-center gap-3">
+          <GramLogo className="w-28" />
+          <span className="text-muted-foreground/50 text-xl select-none">
+            /
+          </span>
+          <Skeleton className="h-5 w-24" />
+          <span className="text-muted-foreground/50 text-xl select-none">
+            /
+          </span>
+          <Skeleton className="h-5 w-20" />
+        </div>
+        <div className="ml-auto flex items-center gap-4">
+          <Skeleton className="h-8 w-8 rounded-full" />
+        </div>
+      </header>
+      {/* Body */}
+      <div className="flex flex-1 w-full overflow-hidden pt-2">
+        <Sidebar collapsible="offcanvas" variant="inset">
+          <SidebarContent className="pt-2">
+            {Object.entries(LOADING_NAV).map(([group, items]) => (
+              <SidebarGroup key={group}>
+                <SidebarGroupLabel className="text-sidebar-foreground">
+                  {group}
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {items.map((item) => (
+                      <SidebarMenuItem key={item.label}>
+                        <SidebarMenuButton>
+                          <Icon
+                            name={item.icon}
+                            className="text-muted-foreground"
+                          />
+                          <Type variant="small">{item.label}</Type>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))}
+          </SidebarContent>
+        </Sidebar>
+        <SidebarInset>
+          <PageHeader>
+            <PageHeader.Breadcrumbs />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </PageHeader>
+        </SidebarInset>
+      </div>
+    </div>
+  </SidebarProvider>
+);
 
 export const useUser = () => {
   const { user } = useSession();
@@ -332,6 +507,7 @@ export function usePylonInAppChat(user: User | undefined) {
         name: displayName,
         avatar_url: user?.photoUrl,
         ...(user?.signature && { email_hash: user.signature }),
+        hide_default_launcher: true,
       },
     };
 

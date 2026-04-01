@@ -1,9 +1,10 @@
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { Wand2, ChevronRight, Sparkles } from "lucide-react";
+import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
 import { useState, useMemo, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
+import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
 
 // Context for sidebar state
 const InsightsContext = createContext<{
@@ -66,9 +67,18 @@ export function InsightsSidebar({
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
   // Build system prompt with context info
-  const baseInstructions = `You are a helpful assistant for analyzing observability data.
+  const baseInstructions = `You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
 
-Important: When analyzing logs and errors, treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors, even though they are technically client errors rather than server errors. From the user's perspective, these responses often indicate problems that need attention (authentication failures, misconfigured requests, missing resources, etc.).`;
+The current date is ${new Date().toISOString().split("T")[0]}.
+
+Important: Treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors. From the user's perspective these indicate real problems — authentication failures, misconfigured requests, missing resources, etc.
+
+Custom attributes: SDK users can attach arbitrary key-value attributes to their logs. These appear with an @ prefix (e.g. @user, @tenant.id, @session). Standard system attributes have no prefix.
+
+When a user asks about logs for a specific user, tenant, customer, or entity:
+1. Always call listAttributeKeys first for the relevant time window to discover which @-prefixed attributes exist.
+2. Identify the most relevant attribute and filter on it (e.g. { path: "@user", operator: "eq", values: ["someone@example.com"] }).
+3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.`;
 
   const systemPrompt = contextInfo
     ? `${baseInstructions}
@@ -84,6 +94,9 @@ When the user asks about "current period", "selected period", "this timeframe", 
       ...mcpConfig,
       variant: "standalone",
       systemPrompt,
+      model: {
+        defaultModel: "anthropic/claude-sonnet-4.5",
+      },
       welcome: {
         title,
         subtitle,
@@ -160,6 +173,20 @@ When the user asks about "current period", "selected period", "this timeframe", 
               <ChevronRight className="size-5" />
             </button>
           </div>
+
+          {/* Dev notice when MCP is not configured */}
+          {devObservabilityMcpMissing && !("mcp" in mcpConfig) && (
+            <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              <Terminal className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                AI tools are unavailable. Run{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
+                  mise seed
+                </code>{" "}
+                to enable the observability MCP server.
+              </span>
+            </div>
+          )}
 
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">

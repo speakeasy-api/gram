@@ -1,0 +1,32 @@
+sequenceDiagram
+    participant Admin as Gram Admin (Dashboard)
+    participant API as Gram Server
+    participant DB as Database
+    participant Slack as Slack API
+
+    Note over Admin,Slack: Phase 1: Create App in Gram
+    Admin->>API: POST /rpc/slack-apps.create<br/>(name, toolsets, icon, system_prompt)
+    API->>DB: INSERT slack_apps (status='unconfigured')
+    API->>DB: INSERT slack_app_toolsets
+    API-->>Admin: App created (id, redirectUrl, requestUrl)
+
+    Note over Admin,Slack: Phase 2: Create App in Slack (manual)
+    Admin->>Admin: Copy manifest from buildSlackManifest()<br/>or use deep link to api.slack.com
+    Admin->>Slack: Create app via Slack UI with manifest
+    Note right of Slack: Manifest includes:<br/>- OAuth redirect → /rpc/slack-apps/{id}/oauth/callback<br/>- Events URL → /rpc/slack-apps/{id}/events<br/>- Bot scopes & event subscriptions
+
+    Note over Admin,Slack: Phase 3: Configure Credentials in Gram
+    Admin->>Slack: Copy client_id, client_secret, signing_secret
+    Admin->>API: POST /rpc/slack-apps.configure<br/>(client_id, client_secret, signing_secret)
+    API->>DB: UPDATE slack_apps SET encrypted secrets,<br/>status='active'
+    API-->>Admin: App configured
+
+    Note over Admin,Slack: Phase 4: Install to Workspace (OAuth)
+    Admin->>Slack: Click "Install to Slack" (buildInviteUrl)
+    Slack-->>Admin: OAuth consent screen
+    Admin->>Slack: Authorize
+    Slack->>API: GET /rpc/slack-apps/{id}/oauth/callback?code=...
+    API->>Slack: POST oauth.v2.access (code, client_id, client_secret)
+    Slack-->>API: access_token, team.id, team.name, bot_user_id
+    API->>DB: UPDATE slack_apps SET<br/>bot_token, team_id, team_name, bot_user_id
+    API-->>Admin: Redirect to dashboard (app fully installed)

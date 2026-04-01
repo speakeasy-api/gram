@@ -124,10 +124,8 @@ export function PlaygroundLogsPanel({
 
   const logs = data?.logs || [];
   // Logs are disabled if we get a 404 error (endpoint returns 404 when disabled)
-  // or if the response explicitly says enabled: false
   const logsDisabled =
-    (error instanceof ServiceError && error.statusCode === 404) ||
-    data?.enabled === false;
+    error instanceof ServiceError && error.statusCode === 404;
 
   return (
     <div className="h-full flex flex-col border-l">

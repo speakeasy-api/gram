@@ -45,6 +45,10 @@ type Client struct {
 	// deleteProject endpoint.
 	DeleteProjectDoer goahttp.Doer
 
+	// SetOrganizationWhitelist Doer is the HTTP client used to make requests to
+	// the setOrganizationWhitelist endpoint.
+	SetOrganizationWhitelistDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -65,18 +69,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetProjectDoer:          doer,
-		CreateProjectDoer:       doer,
-		ListProjectsDoer:        doer,
-		SetLogoDoer:             doer,
-		ListAllowedOriginsDoer:  doer,
-		UpsertAllowedOriginDoer: doer,
-		DeleteProjectDoer:       doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		GetProjectDoer:               doer,
+		CreateProjectDoer:            doer,
+		ListProjectsDoer:             doer,
+		SetLogoDoer:                  doer,
+		ListAllowedOriginsDoer:       doer,
+		UpsertAllowedOriginDoer:      doer,
+		DeleteProjectDoer:            doer,
+		SetOrganizationWhitelistDoer: doer,
+		RestoreResponseBody:          restoreBody,
+		scheme:                       scheme,
+		host:                         host,
+		decoder:                      dec,
+		encoder:                      enc,
 	}
 }
 
@@ -243,6 +248,30 @@ func (c *Client) DeleteProject() goa.Endpoint {
 		resp, err := c.DeleteProjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("projects", "deleteProject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetOrganizationWhitelist returns an endpoint that makes HTTP requests to the
+// projects service setOrganizationWhitelist server.
+func (c *Client) SetOrganizationWhitelist() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetOrganizationWhitelistRequest(c.encoder)
+		decodeResponse = DecodeSetOrganizationWhitelistResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetOrganizationWhitelistRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetOrganizationWhitelistDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("projects", "setOrganizationWhitelist", err)
 		}
 		return decodeResponse(resp)
 	}

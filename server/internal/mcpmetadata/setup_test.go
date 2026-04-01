@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,10 +21,13 @@ import (
 
 var (
 	infra *testenv.Environment
+	// redisDBCounter assigns each parallel test its own Redis DB to prevent
+	// cache key collisions between concurrent test auth setups.
+	redisDBCounter atomic.Int32
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background())
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -60,13 +64,13 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	conn, err := infra.CloneTestDatabase(t, "mcpmetadatatest")
 	require.NoError(t, err)
 
-	redisClient, err := infra.NewRedisClient(t, 0)
+	redisDB := int(redisDBCounter.Add(1) % 16)
+	redisClient, err := infra.NewRedisClient(t, redisDB)
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 

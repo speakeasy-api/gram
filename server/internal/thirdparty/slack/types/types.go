@@ -19,6 +19,10 @@ type SlackEvent struct {
 	EventTime      int64           `json:"event_time"`
 	Authorizations []Authorization `json:"authorizations"`
 	EventContext   string          `json:"event_context"`
+
+	// GramAppID is the Gram-internal slack_apps.id, set by the event handler
+	// before dispatching to Temporal. Not part of the Slack JSON payload.
+	GramAppID string `json:"gram_app_id,omitempty"`
 }
 
 type SlackInnerEvent struct {
@@ -42,7 +46,36 @@ type Authorization struct {
 
 const (
 	AppMentionedThreadCacheExpiry = 24 * time.Hour
+	SlackTokenCacheExpiry         = 30 * time.Minute
 )
+
+// SlackRegistrationToken is cached in Redis to hold in-flight registration tokens.
+// The token is generated when an unmapped Slack user triggers an event, and consumed
+// when they complete registration via the dashboard.
+var _ cache.CacheableObject[SlackRegistrationToken] = (*SlackRegistrationToken)(nil)
+
+type SlackRegistrationToken struct {
+	Token          string `json:"token"`
+	SlackAppID     string `json:"slack_app_id"`
+	SlackAccountID string `json:"slack_account_id"`
+	ChannelID      string `json:"channel_id"`
+}
+
+func SlackTokenCacheKey(token string) string {
+	return "slack_token:" + token
+}
+
+func (t SlackRegistrationToken) CacheKey() string {
+	return SlackTokenCacheKey(t.Token)
+}
+
+func (t SlackRegistrationToken) AdditionalCacheKeys() []string {
+	return []string{}
+}
+
+func (t SlackRegistrationToken) TTL() time.Duration {
+	return SlackTokenCacheExpiry
+}
 
 var _ cache.CacheableObject[AppMentionedThreads] = (*AppMentionedThreads)(nil)
 

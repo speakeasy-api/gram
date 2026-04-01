@@ -4,9 +4,758 @@ info:
   description: Gram is the tools platform for AI agents
   version: 0.0.1
 servers:
-  - url: http://localhost:80
-    description: Default server for gram
+  - url: https://app.getgram.ai
 paths:
+  /rpc/access.createRole:
+    post:
+      description: Create a new custom role.
+      operationId: createRole
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleForm'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+          description: Created response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: createRole access
+      tags:
+        - access
+      x-speakeasy-name-override: createRole
+      x-speakeasy-react-hook:
+        name: CreateRole
+  /rpc/access.deleteRole:
+    delete:
+      description: Delete a custom role (system roles cannot be deleted).
+      operationId: deleteRole
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the role to delete.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the role to delete.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteRole access
+      tags:
+        - access
+      x-speakeasy-name-override: deleteRole
+      x-speakeasy-react-hook:
+        name: DeleteRole
+  /rpc/access.getRole:
+    get:
+      description: Get a role by ID.
+      operationId: getRole
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the role.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the role.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: getRole access
+      tags:
+        - access
+      x-speakeasy-name-override: getRole
+      x-speakeasy-react-hook:
+        name: Role
+  /rpc/access.listMembers:
+    get:
+      description: List all team members with their role assignments.
+      operationId: listMembers
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMembersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listMembers access
+      tags:
+        - access
+      x-speakeasy-name-override: listMembers
+      x-speakeasy-react-hook:
+        name: Members
+  /rpc/access.listRoles:
+    get:
+      description: List all roles for the current organization.
+      operationId: listRoles
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRolesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listRoles access
+      tags:
+        - access
+      x-speakeasy-name-override: listRoles
+      x-speakeasy-react-hook:
+        name: Roles
+  /rpc/access.listScopes:
+    get:
+      description: List all available scopes and their resource types.
+      operationId: listScopes
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListScopesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listScopes access
+      tags:
+        - access
+      x-speakeasy-name-override: listScopes
+      x-speakeasy-react-hook:
+        name: ListScopes
+  /rpc/access.updateMemberRole:
+    put:
+      description: Change a team member's role assignment.
+      operationId: updateMemberRole
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRoleForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessMember'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateMemberRole access
+      tags:
+        - access
+      x-speakeasy-name-override: updateMemberRole
+      x-speakeasy-react-hook:
+        name: UpdateMemberRole
+  /rpc/access.updateRole:
+    put:
+      description: Update an existing custom role.
+      operationId: updateRole
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateRole access
+      tags:
+        - access
+      x-speakeasy-name-override: updateRole
+      x-speakeasy-react-hook:
+        name: UpdateRole
   /rpc/assets.createSignedChatAttachmentURL:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -1355,6 +2104,229 @@ paths:
             schema:
               type: string
               format: binary
+  /rpc/auditlogs.list:
+    get:
+      description: List audit logs across organization and projects.
+      operationId: listAuditLogs
+      parameters:
+        - allowEmptyValue: true
+          description: The cursor for paginating through audit logs.
+          in: query
+          name: cursor
+          schema:
+            description: The cursor for paginating through audit logs.
+            type: string
+        - allowEmptyValue: true
+          description: Project slug to filter audit logs to a specific project.
+          in: query
+          name: project_slug
+          schema:
+            description: Project slug to filter audit logs to a specific project.
+            type: string
+        - allowEmptyValue: true
+          description: Actor ID to filter audit logs to a specific actor.
+          in: query
+          name: actor_id
+          schema:
+            description: Actor ID to filter audit logs to a specific actor.
+            type: string
+        - allowEmptyValue: true
+          description: Action to filter audit logs to a specific action.
+          in: query
+          name: action
+          schema:
+            description: Action to filter audit logs to a specific action.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAuditLogsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: list auditlogs
+      tags:
+        - auditlogs
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: AuditLogs
+  /rpc/auditlogs.listFacets:
+    get:
+      description: List available audit log facet values across organization and projects.
+      operationId: listAuditLogFacets
+      parameters:
+        - allowEmptyValue: true
+          description: Project slug to filter facet values to a specific project.
+          in: query
+          name: project_slug
+          schema:
+            description: Project slug to filter facet values to a specific project.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAuditLogFacetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listFacets auditlogs
+      tags:
+        - auditlogs
+      x-speakeasy-name-override: listFacets
+      x-speakeasy-react-hook:
+        name: AuditLogFacets
   /rpc/auth.callback:
     get:
       description: Handles the authentication callback.
@@ -1901,7 +2873,7 @@ paths:
         name: SwitchScopes
   /rpc/chat.creditUsage:
     get:
-      description: Load a chat by its ID
+      description: Get the total number of chat credits and usage for the current billing period
       operationId: creditUsage
       parameters:
         - allowEmptyValue: true
@@ -1910,20 +2882,6 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
             type: string
       responses:
         "200":
@@ -1987,9 +2945,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - chat_sessions_token_header_Gram-Chat-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: creditUsage chat
       tags:
@@ -3651,13 +4607,6 @@ paths:
           schema:
             description: Session header
             type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -3716,8 +4665,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: deleteDomain domains
       tags:
@@ -3727,7 +4675,7 @@ paths:
         name: deleteDomain
   /rpc/domain.get:
     get:
-      description: Get the custom domain for a project
+      description: Get the custom domain for an organization
       operationId: getDomain
       parameters:
         - allowEmptyValue: true
@@ -3736,13 +4684,6 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "200":
@@ -3806,8 +4747,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: getDomain domains
       tags:
@@ -3817,7 +4757,7 @@ paths:
         name: getDomain
   /rpc/domain.register:
     post:
-      description: Create a custom domain for a organization
+      description: Create a custom domain for an organization
       operationId: registerDomain
       parameters:
         - allowEmptyValue: true
@@ -3826,13 +4766,6 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       requestBody:
         content:
@@ -3898,8 +4831,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: createDomain domains
       tags:
@@ -4895,6 +5827,467 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateEnvironment
+  /rpc/hooks.claude:
+    post:
+      tags:
+        - hooks
+      summary: claude hooks
+      description: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
+      operationId: hooks#claude
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaudeHookPayload'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaudeHookResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /rpc/hooks.deleteServerNameOverride:
+    post:
+      tags:
+        - hooksServerNames
+      summary: delete hooksServerNames
+      description: Delete a server name display override
+      operationId: deleteServerNameOverride
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteRequestBody'
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+  /rpc/hooks.listServerNameOverrides:
+    get:
+      tags:
+        - hooksServerNames
+      summary: list hooksServerNames
+      description: List all server name display overrides for a project
+      operationId: listServerNameOverrides
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServerNameOverride'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+  /rpc/hooks.otel/v1/logs:
+    post:
+      tags:
+        - hooks
+      summary: logs hooks
+      description: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.
+      operationId: hooks#logs
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTELLogsPayload'
+      responses:
+        "202":
+          description: Accepted response.
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+  /rpc/hooks.upsertServerNameOverride:
+    post:
+      tags:
+        - hooksServerNames
+      summary: upsert hooksServerNames
+      description: Create or update a server name display override
+      operationId: upsertServerNameOverride
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerNameOverride'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
   /rpc/instances.get:
     get:
       description: Load all relevant data for an instance of a toolset and environment
@@ -5870,6 +7263,222 @@ paths:
       tags:
         - mcpMetadata
       x-speakeasy-name-override: set
+  /rpc/mcpRegistries.clearCache:
+    delete:
+      description: Clear the registry cache for a specific registry (admin only)
+      operationId: clearMCPRegistryCache
+      parameters:
+        - allowEmptyValue: true
+          description: The registry to clear cache for
+          in: query
+          name: registry_id
+          required: true
+          schema:
+            description: The registry to clear cache for
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: clearCache mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: clearCache
+  /rpc/mcpRegistries.getServerDetails:
+    get:
+      description: Get detailed information about an MCP server including remotes
+      operationId: getMCPServerDetails
+      parameters:
+        - allowEmptyValue: true
+          description: ID of the registry
+          in: query
+          name: registry_id
+          required: true
+          schema:
+            description: ID of the registry
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Server specifier (e.g., 'io.github.user/server')
+          in: query
+          name: server_specifier
+          required: true
+          schema:
+            description: Server specifier (e.g., 'io.github.user/server')
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalMCPServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getServerDetails mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: getServerDetails
   /rpc/mcpRegistries.listCatalog:
     get:
       description: List available MCP servers from configured registries
@@ -5991,6 +7600,105 @@ paths:
       x-speakeasy-name-override: listCatalog
       x-speakeasy-react-hook:
         name: ListMCPCatalog
+  /rpc/mcpRegistries.listRegistries:
+    get:
+      description: List all MCP registries (admin only)
+      operationId: listMCPRegistries
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRegistriesResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listRegistries mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: listRegistries
+      x-speakeasy-react-hook:
+        name: ListMCPRegistries
   /rpc/packages.create:
     post:
       description: Create a new package for a project.
@@ -6530,13 +8238,6 @@ paths:
           schema:
             description: Session header
             type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -6599,8 +8300,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: getProductFeatures features
       tags:
@@ -6617,13 +8317,6 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       requestBody:
         content:
@@ -6689,8 +8382,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: setProductFeature features
       tags:
@@ -7289,6 +8981,88 @@ paths:
       x-speakeasy-name-override: setLogo
       x-speakeasy-react-hook:
         name: setProjectLogo
+  /rpc/projects.setOrganizationWhitelist:
+    post:
+      description: Set organization whitelist status (admin only - requires speakeasy-team API key)
+      operationId: setOrganizationWhitelist
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOrganizationWhitelistRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setOrganizationWhitelist projects
+      tags:
+        - projects
+      x-speakeasy-name-override: setOrganizationWhitelist
   /rpc/projects.upsertAllowedOrigin:
     post:
       description: Upsert an allowed origin for a project.
@@ -8824,6 +10598,112 @@ paths:
       x-speakeasy-name-override: listFilterOptions
       x-speakeasy-react-hook:
         name: ListFilterOptions
+        type: query
+  /rpc/telemetry.listHooksTraces:
+    post:
+      description: List hook traces aggregated by trace_id with user information
+      operationId: listHooksTraces
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListHooksTracesPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListHooksTracesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listHooksTraces telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: listHooksTraces
+      x-speakeasy-react-hook:
+        name: ListHooksTraces
         type: query
   /rpc/telemetry.searchChats:
     post:
@@ -11218,13 +13098,6 @@ paths:
           schema:
             description: Session header
             type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -11287,8 +13160,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: createCheckout usage
       tags:
@@ -11308,13 +13180,6 @@ paths:
           schema:
             description: Session header
             type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -11377,8 +13242,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: createCustomerSession usage
       tags:
@@ -11388,7 +13252,7 @@ paths:
         name: createCustomerSession
   /rpc/usage.getPeriodUsage:
     get:
-      description: Get the usage for a project for a given period
+      description: Get the usage for an organization for a given period
       operationId: getPeriodUsage
       parameters:
         - allowEmptyValue: true
@@ -11397,13 +13261,6 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "200":
@@ -11467,8 +13324,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - {}
       summary: getPeriodUsage usage
       tags:
@@ -12139,6 +13995,34 @@ paths:
         - {}
 components:
   schemas:
+    AccessMember:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Email address.
+        id:
+          type: string
+          description: User ID.
+        joined_at:
+          type: string
+          description: When the member joined the organization.
+          format: date-time
+        name:
+          type: string
+          description: Display name.
+        photo_url:
+          type: string
+          description: Avatar URL.
+        role_id:
+          type: string
+          description: Currently assigned role ID.
+      required:
+        - id
+        - name
+        - email
+        - role_id
+        - joined_at
     AddDeploymentPackageForm:
       type: object
       properties:
@@ -12165,6 +14049,13 @@ components:
           type: string
           description: The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
           example: slack
+        selected_remotes:
+          type: array
+          items:
+            type: string
+          description: URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.
+          example:
+            - https://mcp.example.com/sse
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -12367,34 +14258,67 @@ components:
         - content_length
         - created_at
         - updated_at
-    AttributeFilter:
+    AuditLog:
       type: object
       properties:
-        op:
+        action:
           type: string
-          description: Comparison operator
-          default: eq
-          enum:
-            - eq
-            - not_eq
-            - contains
-            - exists
-            - not_exists
-        path:
+        actor_display_name:
           type: string
-          description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
-          example: '@user.region'
-          pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
-          minLength: 1
-          maxLength: 256
+        actor_id:
+          type: string
+        actor_slug:
+          type: string
+        actor_type:
+          type: string
+        after_snapshot: {}
+        before_snapshot: {}
+        created_at:
+          type: string
+          description: The creation date of the audit log.
+          format: date-time
+        id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        project_id:
+          type: string
+        project_slug:
+          type: string
+        subject_display_name:
+          type: string
+        subject_id:
+          type: string
+        subject_slug:
+          type: string
+        subject_type:
+          type: string
+      required:
+        - id
+        - actor_id
+        - actor_type
+        - action
+        - subject_id
+        - subject_type
+        - created_at
+    AuditLogFacetOption:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: The number of audit logs for this facet value
+          format: int64
+        display_name:
+          type: string
+          description: The display label shown for the facet value
         value:
           type: string
-          description: Value to compare against (ignored for 'exists' and 'not_exists' operators)
-          example: us-east-1
-          maxLength: 1024
-      description: Filter on a log attribute by path.
+          description: The facet value used for filtering
       required:
-        - path
+        - value
+        - display_name
+        - count
     BaseResourceAttributes:
       type: object
       properties:
@@ -12823,6 +14747,8 @@ components:
           type: object
           description: Additional hook-specific data
           additionalProperties: true
+        error:
+          description: The error from the tool (PostToolUseFailure only)
         hook_event_name:
           type: string
           description: The type of hook event
@@ -12831,11 +14757,12 @@ components:
             - PreToolUse
             - PostToolUse
             - PostToolUseFailure
+        is_interrupt:
+          type: boolean
+          description: Whether the failure was caused by user interruption (PostToolUseFailure only)
         session_id:
           type: string
           description: The Claude Code session ID
-        tool_error:
-          description: The error from the tool (PostToolUseFailure only)
         tool_input:
           description: The input to the tool
         tool_name:
@@ -13199,6 +15126,29 @@ components:
         - client_token
         - expires_after
         - status
+    CreateRoleForm:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of what this role can do.
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+          description: Scope grants to assign.
+        member_ids:
+          type: array
+          items:
+            type: string
+          description: Optional member IDs to additionally assign to this role on creation.
+        name:
+          type: string
+          description: Display name for the role.
+      required:
+        - name
+        - description
+        - grants
     CreateSignedChatAttachmentURLForm:
       type: object
       properties:
@@ -13404,6 +15354,14 @@ components:
           description: The ID of the variation that was deleted
       required:
         - variation_id
+    DeleteRequestBody:
+      type: object
+      properties:
+        override_id:
+          type: string
+          description: Override ID to delete
+      required:
+        - override_id
     Deployment:
       type: object
       properties:
@@ -13854,6 +15812,23 @@ components:
         - header_name
         - required
         - secret
+    ExternalMCPRemote:
+      type: object
+      properties:
+        transport_type:
+          type: string
+          description: Transport type (sse or streamable-http)
+          enum:
+            - sse
+            - streamable-http
+        url:
+          type: string
+          description: URL of the remote endpoint
+          format: uri
+      description: A remote endpoint for an MCP server
+      required:
+        - url
+        - transport_type
     ExternalMCPServer:
       type: object
       properties:
@@ -13874,6 +15849,11 @@ components:
           type: string
           description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
           example: io.modelcontextprotocol.anonymous/exa
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPRemote'
+          description: Available remote endpoints for the server
         title:
           type: string
           description: Display name for the server
@@ -14433,9 +16413,6 @@ components:
     GetHooksSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         servers:
           type: array
           items:
@@ -14449,12 +16426,17 @@ components:
           type: integer
           description: Total number of unique sessions
           format: int64
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/HooksUserSummary'
+          description: Aggregated metrics grouped by user
       description: Result of hooks summary query
       required:
         - servers
+        - users
         - total_events
         - total_sessions
-        - enabled
     GetInstanceForm:
       type: object
       properties:
@@ -14549,15 +16531,11 @@ components:
     GetMetricsSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         metrics:
           $ref: '#/components/schemas/ProjectSummary'
       description: Result of metrics summary query
       required:
         - metrics
-        - enabled
     GetObservabilityOverviewPayload:
       type: object
       properties:
@@ -14581,9 +16559,9 @@ components:
           description: End time in ISO 8601 format
           example: "2025-12-19T11:00:00Z"
           format: date-time
-        toolset_id:
+        toolset_slug:
           type: string
-          description: Optional toolset/MCP server ID filter
+          description: Optional toolset/MCP server slug filter
       description: Payload for getting observability overview metrics
       required:
         - from
@@ -14593,9 +16571,6 @@ components:
       properties:
         comparison:
           $ref: '#/components/schemas/ObservabilitySummary'
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         interval_seconds:
           type: integer
           description: The time bucket interval in seconds used for the time series data
@@ -14625,7 +16600,6 @@ components:
         - top_tools_by_count
         - top_tools_by_failure_rate
         - interval_seconds
-        - enabled
     GetProjectForm:
       type: object
       properties:
@@ -14709,15 +16683,11 @@ components:
     GetUserMetricsSummaryResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         metrics:
           $ref: '#/components/schemas/ProjectSummary'
       description: Result of user metrics summary query
       required:
         - metrics
-        - enabled
     GramProductFeatures:
       type: object
       properties:
@@ -14835,6 +16805,51 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    HookTraceSummary:
+      type: object
+      properties:
+        event_source:
+          type: string
+          description: Event source (from materialized column)
+        gram_urn:
+          type: string
+          description: Gram URN associated with this hook trace
+        hook_source:
+          type: string
+          description: Hook source (from attributes.gram.hook.source)
+        hook_status:
+          type: string
+          description: Hook execution status
+          enum:
+            - success
+            - failure
+            - pending
+        log_count:
+          type: integer
+          description: Total number of logs in this trace
+          format: int64
+        start_time_unix_nano:
+          type: string
+          description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+        tool_name:
+          type: string
+          description: Tool name (from materialized column)
+        tool_source:
+          type: string
+          description: Tool call source (from materialized column)
+        trace_id:
+          type: string
+          description: Trace ID (32 hex characters)
+          pattern: ^[a-f0-9]{32}$
+        user_email:
+          type: string
+          description: User email (from attributes.user.email)
+      description: Summary information for a hook trace
+      required:
+        - trace_id
+        - start_time_unix_nano
+        - log_count
+        - gram_urn
     HooksServerSummary:
       type: object
       properties:
@@ -14869,6 +16884,40 @@ components:
         - success_count
         - failure_count
         - failure_rate
+    HooksUserSummary:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          description: Total number of hook events for this user
+          format: int64
+        failure_count:
+          type: integer
+          description: Number of failed tool completions (PostToolUseFailure events)
+          format: int64
+        failure_rate:
+          type: number
+          description: Failure rate as a decimal (0.0 to 1.0)
+          format: double
+        success_count:
+          type: integer
+          description: Number of successful tool completions (PostToolUse events)
+          format: int64
+        unique_tools:
+          type: integer
+          description: Number of unique tools used by this user
+          format: int64
+        user_email:
+          type: string
+          description: User email address
+      description: Aggregated hooks metrics for a single user
+      required:
+        - user_email
+        - event_count
+        - unique_tools
+        - success_count
+        - failure_count
+        - failure_rate
     InfoResponseBody:
       type: object
       properties:
@@ -14876,6 +16925,9 @@ components:
           type: string
         gram_account_type:
           type: string
+        has_active_subscription:
+          type: boolean
+          description: Whether the organization has an active billing subscription
         is_admin:
           type: boolean
         organizations:
@@ -14892,6 +16944,9 @@ components:
           type: string
         user_signature:
           type: string
+        whitelisted:
+          type: boolean
+          description: Whether the organization is whitelisted to access the platform
       required:
         - user_id
         - user_email
@@ -14899,6 +16954,8 @@ components:
         - active_organization_id
         - organizations
         - gram_account_type
+        - has_active_subscription
+        - whitelisted
     InstanceMcpServer:
       type: object
       properties:
@@ -15095,6 +17152,56 @@ components:
       description: Result of listing distinct attribute keys
       required:
         - keys
+    ListAuditLogFacetsForm:
+      type: object
+      properties:
+        project_slug:
+          type: string
+          description: Project slug to filter facet values to a specific project.
+    ListAuditLogFacetsResult:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogFacetOption'
+          description: Available action facets
+        actors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogFacetOption'
+          description: Available actor facets
+      required:
+        - actors
+        - actions
+    ListAuditLogsForm:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Action to filter audit logs to a specific action.
+        actor_id:
+          type: string
+          description: Actor ID to filter audit logs to a specific actor.
+        cursor:
+          type: string
+          description: The cursor for paginating through audit logs.
+        project_slug:
+          type: string
+          description: Project slug to filter audit logs to a specific project.
+    ListAuditLogsResult:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+          description: List of audit logs
+        next_cursor:
+          type: string
+          description: The cursor to be used for the next page of results.
+      required:
+        - logs
     ListCatalogResponseBody:
       type: object
       properties:
@@ -15191,9 +17298,6 @@ components:
     ListFilterOptionsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         options:
           type: array
           items:
@@ -15202,7 +17306,59 @@ components:
       description: Result of listing filter options
       required:
         - options
-        - enabled
+    ListHooksTracesPayload:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: Cursor for pagination (trace_id)
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogFilter'
+          description: Filter conditions for the search query
+        from:
+          type: string
+          description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        limit:
+          type: integer
+          description: Number of items to return (1-1000)
+          default: 50
+          format: int64
+          minimum: 1
+          maximum: 1000
+        sort:
+          type: string
+          description: Sort order
+          default: desc
+          enum:
+            - asc
+            - desc
+        to:
+          type: string
+          description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Payload for listing hook traces
+      required:
+        - from
+        - to
+    ListHooksTracesResult:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Cursor for next page
+        traces:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookTraceSummary'
+          description: List of hook trace summaries
+      description: Result of listing hook traces
+      required:
+        - traces
     ListIntegrationsForm:
       type: object
       properties:
@@ -15229,6 +17385,16 @@ components:
             $ref: '#/components/schemas/Key'
       required:
         - keys
+    ListMembersResult:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessMember'
+          description: The members in your organization.
+      required:
+        - members
     ListPackagesResult:
       type: object
       properties:
@@ -15271,6 +17437,16 @@ components:
           description: The created prompt template
       required:
         - templates
+    ListRegistriesResponseBody:
+      type: object
+      properties:
+        registries:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPRegistry'
+          description: List of MCP registries
+      required:
+        - registries
     ListResourcesResult:
       type: object
       properties:
@@ -15284,6 +17460,26 @@ components:
           description: The list of resources
       required:
         - resources
+    ListRolesResult:
+      type: object
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+          description: The roles in your organization.
+      required:
+        - roles
+    ListScopesResult:
+      type: object
+      properties:
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScopeDefinition'
+          description: The scopes available in access control.
+      required:
+        - scopes
     ListSlackAppsResult:
       type: object
       properties:
@@ -15346,6 +17542,54 @@ components:
       required:
         - package
         - versions
+    LogFilter:
+      type: object
+      properties:
+        operator:
+          type: string
+          description: Comparison operator
+          default: eq
+          enum:
+            - eq
+            - not_eq
+            - contains
+            - exists
+            - not_exists
+            - in
+        path:
+          type: string
+          description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
+          example: '@user.region'
+          pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
+          minLength: 1
+          maxLength: 256
+        values:
+          type: array
+          items:
+            type: string
+          description: Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'.
+          maxItems: 256
+      description: A single filter condition for a log search query.
+      required:
+        - path
+    MCPRegistry:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Registry ID
+          format: uuid
+        name:
+          type: string
+          description: Display name for the registry
+        url:
+          type: string
+          description: URL of the registry
+      description: An MCP registry
+      required:
+        - id
+        - name
+        - url
     McpEnvironmentConfig:
       type: object
       properties:
@@ -15691,6 +17935,134 @@ components:
       required:
         - slug
         - provider_type
+    OTELAttribute:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Attribute key
+        value:
+          $ref: '#/components/schemas/OTELAttributeValue'
+      description: OTEL log attribute with key and typed value
+      required:
+        - key
+        - value
+    OTELAttributeValue:
+      type: object
+      properties:
+        intValue:
+          type: integer
+          description: Integer value
+          format: int64
+        stringValue:
+          type: string
+          description: String value
+      description: OTEL attribute value - supports stringValue or intValue
+    OTELLogBody:
+      type: object
+      properties:
+        stringValue:
+          type: string
+          description: String body value
+      description: OTEL log body
+    OTELLogRecord:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELAttribute'
+          description: Log attributes
+        body:
+          $ref: '#/components/schemas/OTELLogBody'
+        droppedAttributesCount:
+          type: integer
+          description: Number of dropped attributes
+          format: int64
+        observedTimeUnixNano:
+          type: string
+          description: Observed timestamp in nanoseconds
+        timeUnixNano:
+          type: string
+          description: Timestamp in nanoseconds since Unix epoch
+      description: Individual OTEL log record
+      required:
+        - timeUnixNano
+        - observedTimeUnixNano
+        - body
+        - attributes
+    OTELLogsPayload:
+      type: object
+      properties:
+        resourceLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELResourceLog'
+          description: Array of resource logs
+      description: OTEL logs export payload
+      required:
+        - resourceLogs
+    OTELResource:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELResourceAttribute'
+          description: Resource attributes
+        droppedAttributesCount:
+          type: integer
+          description: Number of dropped attributes
+          format: int64
+      description: OTEL resource information
+    OTELResourceAttribute:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Resource attribute key
+        value:
+          $ref: '#/components/schemas/OTELAttributeValue'
+      description: OTEL resource attribute
+      required:
+        - key
+        - value
+    OTELResourceLog:
+      type: object
+      properties:
+        resource:
+          $ref: '#/components/schemas/OTELResource'
+        scopeLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELScopeLog'
+          description: Array of scope logs
+      description: OTEL resource logs container
+      required:
+        - scopeLogs
+    OTELScope:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Scope name
+        version:
+          type: string
+          description: Scope version
+      description: OTEL instrumentation scope
+    OTELScopeLog:
+      type: object
+      properties:
+        logRecords:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELLogRecord'
+          description: Array of log records
+        scope:
+          $ref: '#/components/schemas/OTELScope'
+      description: OTEL scope logs container
+      required:
+        - logRecords
     ObservabilitySummary:
       type: object
       properties:
@@ -16356,6 +18728,94 @@ components:
         - type
         - status_codes
         - content_types
+    Role:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        description:
+          type: string
+          description: Human-readable description.
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+          description: Scope grants assigned to this role.
+        id:
+          type: string
+          description: Unique role identifier.
+        is_system:
+          type: boolean
+          description: Whether this is a built-in system role that cannot be deleted.
+        member_count:
+          type: integer
+          description: Number of members assigned to this role.
+          format: int64
+        name:
+          type: string
+          description: Display name of the role.
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - description
+        - is_system
+        - grants
+        - member_count
+        - created_at
+        - updated_at
+    RoleGrant:
+      type: object
+      properties:
+        resources:
+          type: array
+          items:
+            type: string
+          description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
+        scope:
+          type: string
+          description: The scope slug this grant applies to.
+          enum:
+            - org:read
+            - org:admin
+            - build:read
+            - build:write
+            - mcp:read
+            - mcp:write
+            - mcp:connect
+      required:
+        - scope
+    ScopeDefinition:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What this scope protects.
+        resource_type:
+          type: string
+          description: The type of resource this scope applies to.
+          enum:
+            - org
+            - project
+            - mcp
+        slug:
+          type: string
+          description: Unique scope identifier.
+          enum:
+            - org:read
+            - org:admin
+            - build:read
+            - build:write
+            - mcp:read
+            - mcp:write
+            - mcp:connect
+      required:
+        - slug
+        - description
+        - resource_type
     SearchChatsFilter:
       type: object
       properties:
@@ -16414,24 +18874,15 @@ components:
           items:
             $ref: '#/components/schemas/ChatSummary'
           description: List of chat session summaries
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
       description: Result of searching chat session summaries
       required:
         - chats
-        - enabled
     SearchLogsFilter:
       type: object
       properties:
-        attribute_filters:
-          type: array
-          items:
-            $ref: '#/components/schemas/AttributeFilter'
-          description: Filters on custom log attributes
         deployment_id:
           type: string
           description: Deployment ID filter
@@ -16513,6 +18964,16 @@ components:
           description: Cursor for pagination
         filter:
           $ref: '#/components/schemas/SearchLogsFilter'
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogFilter'
+          description: Filter conditions for the search query
+        from:
+          type: string
+          description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
         limit:
           type: integer
           description: Number of items to return (1-1000)
@@ -16527,13 +18988,15 @@ components:
           enum:
             - asc
             - desc
+        to:
+          type: string
+          description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
       description: Payload for searching telemetry logs
     SearchLogsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         logs:
           type: array
           items:
@@ -16545,7 +19008,6 @@ components:
       description: Result of searching telemetry logs
       required:
         - logs
-        - enabled
     SearchToolCallsFilter:
       type: object
       properties:
@@ -16600,9 +19062,6 @@ components:
     SearchToolCallsResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether tool metrics are enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
@@ -16611,14 +19070,9 @@ components:
           items:
             $ref: '#/components/schemas/ToolCallSummary'
           description: List of tool call summaries
-        tool_io_logs_enabled:
-          type: boolean
-          description: Whether tool input/output logging is enabled for the organization
       description: Result of searching tool call summaries
       required:
         - tool_calls
-        - enabled
-        - tool_io_logs_enabled
     SearchUsersFilter:
       type: object
       properties:
@@ -16675,9 +19129,6 @@ components:
     SearchUsersResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
@@ -16689,7 +19140,6 @@ components:
       description: Result of searching user usage summaries
       required:
         - users
-        - enabled
     SecurityVariable:
       type: object
       properties:
@@ -16874,6 +19324,23 @@ components:
         - content_type
         - content_length
         - last_modified
+    ServerNameOverride:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: User-friendly display name
+        id:
+          type: string
+          description: Override ID
+        raw_server_name:
+          type: string
+          description: Original server name from hooks
+      description: User-defined display name for a hooks server
+      required:
+        - id
+        - raw_server_name
+        - display_name
     ServerVariable:
       type: object
       properties:
@@ -16935,6 +19402,18 @@ components:
           maxLength: 40
       required:
         - toolset_slug
+    SetOrganizationWhitelistRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The ID of the organization to update
+        whitelisted:
+          type: boolean
+          description: Whether the organization should be whitelisted
+      required:
+        - organization_id
+        - whitelisted
     SetProductFeatureRequestBody:
       type: object
       properties:
@@ -17781,6 +20260,18 @@ components:
       required:
         - entries_to_update
         - entries_to_remove
+    UpdateMemberRoleForm:
+      type: object
+      properties:
+        role_id:
+          type: string
+          description: The new role ID to assign.
+        user_id:
+          type: string
+          description: The user ID to update.
+      required:
+        - user_id
+        - role_id
     UpdatePackageForm:
       type: object
       properties:
@@ -17874,6 +20365,30 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
+    UpdateRoleForm:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Updated description.
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+          description: Updated scope grants.
+        id:
+          type: string
+          description: The ID of the role to update.
+        member_ids:
+          type: array
+          items:
+            type: string
+          description: Optional member IDs to additionally assign to this role. Existing assignments are preserved.
+        name:
+          type: string
+          description: Updated display name.
+      required:
+        - id
     UpdateSecurityVariableDisplayNameForm:
       type: object
       properties:
@@ -18205,6 +20720,18 @@ components:
           $ref: '#/components/schemas/ToolVariation'
       required:
         - variation
+    UpsertRequestBody:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: User-friendly display name
+        raw_server_name:
+          type: string
+          description: Original server name from hooks
+      required:
+        - raw_server_name
+        - display_name
     UsageTiers:
       type: object
       properties:
@@ -18520,10 +21047,14 @@ components:
       name: Gram-Session
       in: header
 tags:
+  - name: access
+    description: Manage roles and team member access control.
   - name: agentworkflows
     description: OpenAI Responses API compatible endpoint for running agent workflows.
   - name: assets
     description: Manages assets used by Gram projects.
+  - name: auditlogs
+    description: Manages audit logs in Gram.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: chat
@@ -18540,6 +21071,10 @@ tags:
     description: External MCP registry operations
   - name: functions
     description: Endpoints for working with functions.
+  - name: hooksServerNames
+    description: Manages display name overrides for hooks servers.
+  - name: hooks
+    description: Receives Claude Code hook events for tool usage observability.
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations

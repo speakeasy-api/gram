@@ -31,13 +31,12 @@ var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
 func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	repo *repo.Queries,
 	assetStorage assets.BlobStore,
 ) *ChatMessageCaptureStrategy {
 	return &ChatMessageCaptureStrategy{
 		logger:       logger,
 		db:           db,
-		repo:         repo,
+		repo:         repo.New(db),
 		assetStorage: assetStorage,
 	}
 }

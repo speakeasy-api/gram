@@ -9,16 +9,21 @@ jobs:
   lint-pr:
     name: Lint PR Title and Changesets
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      GIT_REF: ${{ github.ref }}
+      BASE_REF: ${{ github.base_ref }}
+      HEAD_REF: ${{ github.head_ref }}
     steps:
       - name: Validate PR title format
         shell: bash
         run: |
-          if [[ "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "$GIT_REF" ==  "refs/heads/main" ]]; then
             echo "Skipping PR title validation on main."
             exit 0
           fi
 
-          if [[ "${{ github.event.pull_request.title }}" =~ ^(chore|fix|feat|mig)(\([a-zA-Z0-9_-]+\))?!?:\ [a-z] ]]; then
+          if [[ "$PR_TITLE" =~ ^(chore|fix|feat|mig)(\([a-zA-Z0-9_-]+\))?!?:\ [a-z] ]]; then
             echo "PR title format is valid."
           else
             echo "PR title must:"
@@ -33,19 +38,19 @@ jobs:
             echo 'Example: "chore(deps): updated dependency xyz to v2"'
             echo 'Example: "fix(auth)!: changed password hashing algorithm"'
             echo
-            echo "Got: '${{ github.event.pull_request.title }}'"
+            echo "Got: $PR_TITLE"
             exit 1
           fi
 
       - name: Check for significant changes
         id: check
         run: |
-          if [[ "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "$GIT_REF" ==  "refs/heads/main" ]]; then
             echo "Skipping changesets-lint job on main."
             exit 0
           fi
 
-          if [[ "${{ github.event.pull_request.title }}" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
+          if [[ "$PR_TITLE" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
             echo "Skipping changesets-lint job for chore/mig PR."
             exit 0
           fi
@@ -60,14 +65,14 @@ jobs:
       # against the base branch
       - name: Checkout base ref
         if: ${{ steps.check.outputs.lint == 'true' }}
-        run: git fetch origin ${{ github.base_ref }} && git checkout ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF" && git checkout "$BASE_REF"
       - name: Checkout head ref
         if: ${{ steps.check.outputs.lint == 'true' }}
-        run: git fetch origin ${{ github.head_ref }} && git checkout ${{ github.head_ref }}
+        run: git fetch origin "$HEAD_REF" && git checkout "$HEAD_REF"
 
       - name: Setup Mise
         if: ${{ steps.check.outputs.lint == 'true' }}
-        uses: jdx/mise-action@e79ddf65a11cec7b0e882bedced08d6e976efb2d # v3.6.2
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           install: true
           cache: true
@@ -79,7 +84,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ steps.check.outputs.lint == 'true' }}
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |

@@ -1,13 +1,11 @@
-import {
-  ExternalMCPIllustration,
-  MCPPatternIllustration,
-} from "@/components/sources/SourceCardIllustrations";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
+import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
 import { Button } from "@speakeasy-api/moonshine";
+import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
@@ -45,9 +43,6 @@ export function ServerCard({
   );
   const isAdded = !!existingMcp;
 
-  // Generate a slug from the registry specifier for pattern generation
-  const slug = server.registrySpecifier.replace(/[/@]/g, "-");
-
   // Get tool names for the badge tooltip
   const toolNames = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,10 +50,9 @@ export function ServerCard({
     return tools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
 
-  const handleCardClick = () => {
-    if (onToggleSelect) {
-      onToggleSelect();
-    }
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation(); // Prevent click-outside-to-deselect from firing
+    onToggleSelect?.();
   };
 
   return (
@@ -69,67 +63,56 @@ export function ServerCard({
       onClick={handleCardClick}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
-          handleCardClick();
+          e.stopPropagation();
+          onToggleSelect?.();
         }
       }}
-      className={cn(
-        "group bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden",
-        "hover:border-foreground/20 hover:shadow-md transition-all cursor-pointer h-full",
-        isAdded && "border-success/50 ring-1 ring-success/20",
-        isSelected && "border-primary ring-2 ring-primary",
-      )}
     >
-      {/* Illustration header */}
-      <div className="h-36 w-full overflow-hidden border-b relative">
-        {server.iconUrl ? (
-          <ExternalMCPIllustration
-            slug={slug}
-            logoUrl={server.iconUrl}
-            name={displayName}
-          />
-        ) : (
-          <MCPPatternIllustration
-            toolsetSlug={slug}
-            className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
-          />
+      <DotCard
+        className={cn(
+          "cursor-pointer",
+          isAdded && "border-success/50 ring-1 ring-success/20",
         )}
-        {/* Official badge overlay */}
-        {metadata.isOfficial && (
-          <div className="absolute top-2 right-2">
-            <Badge
-              variant="outline"
-              className="bg-background/50 text-foreground backdrop-blur-sm"
-            >
-              Official
-            </Badge>
-          </div>
-        )}
-        {/* Added indicator overlay */}
-        {isAdded && (
-          <div className="absolute top-2 left-2">
-            <Badge
-              variant="outline"
-              className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
-            >
-              Added
-            </Badge>
-          </div>
-        )}
-      </div>
-
-      {/* Content area */}
-      <div className="p-4 flex flex-col flex-1">
+        icon={
+          server.iconUrl ? (
+            <img
+              src={server.iconUrl}
+              alt={displayName}
+              className="w-12 h-12 object-contain"
+            />
+          ) : undefined
+        }
+        overlay={
+          isAdded ? (
+            <div className="absolute top-3.5 left-3.5 z-10">
+              <Badge
+                variant="outline"
+                className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
+              >
+                Added
+              </Badge>
+            </div>
+          ) : undefined
+        }
+      >
         {/* Header row with name and tool badge */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0 flex-1">
-            <Type
-              variant="subheading"
-              as="div"
-              className="truncate text-md group-hover:text-primary transition-colors"
-              title={displayName}
-            >
-              {displayName}
-            </Type>
+            <div className="flex items-center gap-2">
+              <Type
+                variant="subheading"
+                as="div"
+                className="truncate text-md group-hover:text-primary transition-colors"
+                title={displayName}
+              >
+                {displayName}
+              </Type>
+              {metadata.visitorsMonth === 0 && (
+                <Badge variant="outline" className="shrink-0">
+                  New
+                </Badge>
+              )}
+            </div>
             <Type small muted className="truncate">
               v{server.version}
             </Type>
@@ -144,27 +127,30 @@ export function ServerCard({
 
         {/* Footer row with stats and actions */}
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-          {/* Usage stats */}
-          <div className="flex items-center gap-2">
-            {metadata.visitorsMonth > 0 ? (
-              <Type small muted>
-                {metadata.visitorsMonth.toLocaleString()} monthly users
-              </Type>
-            ) : (
-              <Badge variant="outline" className="text-xs">
-                New
-              </Badge>
-            )}
-          </div>
+          {/* Selection indicator */}
+          {isSelected ? (
+            <div className="size-6 rounded-full bg-[#1DA1F2] flex items-center justify-center">
+              <Check className="size-3.5 text-white" strokeWidth={5} />
+            </div>
+          ) : (
+            <div className="size-6 rounded-full border-2 border-muted-foreground/30" />
+          )}
 
           {/* View Details button */}
-          <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
+          <Link
+            to={detailHref}
+            onClick={(e) => e.stopPropagation()}
+            className="ml-auto"
+          >
             <Button variant="secondary" size="sm">
-              <Button.Text>View Details</Button.Text>
+              <Button.Text>View</Button.Text>
+              <Button.RightIcon>
+                <ArrowRight className="w-4 h-4" />
+              </Button.RightIcon>
             </Button>
           </Link>
         </div>
-      </div>
+      </DotCard>
     </div>
   );
 }

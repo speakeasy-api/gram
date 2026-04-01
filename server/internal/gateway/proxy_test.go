@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
@@ -40,30 +38,6 @@ func newTestToolDescriptor() *ToolDescriptor {
 		URN:              urn.NewTool(urn.ToolKindHTTP, "doc", "test_tool"),
 	}
 }
-
-var (
-	infra *testenv.Environment
-)
-
-func TestMain(m *testing.M) {
-	ctx := context.Background()
-
-	res, cleanup, err := testenv.Launch(ctx)
-	if err != nil {
-		log.Fatalf("Failed to launch test infrastructure: %v", err)
-	}
-
-	infra = res
-
-	code := m.Run()
-
-	if err = cleanup(); err != nil {
-		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
-	}
-
-	os.Exit(code)
-}
-
 func TestToolProxy_Do_PathParams(t *testing.T) {
 	t.Parallel()
 

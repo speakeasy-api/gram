@@ -1,7 +1,7 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import { useProductTier } from "@/hooks/useProductTier";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { Button } from "@speakeasy-api/moonshine";
 import { CreditCard, Server } from "lucide-react";
@@ -22,7 +22,7 @@ export function ServerEnableDialog({
   currentlyEnabled = false,
 }: ServerEnableDialogProps) {
   const productTier = useProductTier();
-  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const { data: periodUsage } = useGetPeriodUsage();
 
   const handleConfirm = () => {
@@ -31,7 +31,7 @@ export function ServerEnableDialog({
   };
 
   const handleUpgrade = () => {
-    routes.billing.goTo();
+    orgRoutes.billing.goTo();
     onClose();
   };
 

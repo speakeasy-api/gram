@@ -3,17 +3,23 @@ INSERT INTO organization_metadata (
     id,
     name,
     slug,
-    sso_connection_id
+    sso_connection_id,
+    whitelisted
 ) VALUES (
     @id,
     @name,
     @slug,
-    @sso_connection_id
+    @sso_connection_id,
+    COALESCE(sqlc.narg('whitelisted')::boolean, TRUE)
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     slug = EXCLUDED.slug,
     sso_connection_id = EXCLUDED.sso_connection_id,
+    whitelisted = CASE
+        WHEN sqlc.narg('whitelisted')::boolean IS NOT NULL THEN sqlc.narg('whitelisted')::boolean
+        ELSE organization_metadata.whitelisted
+    END,
     updated_at = clock_timestamp()
 RETURNING *;
 
@@ -79,3 +85,11 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     workos_membership_id = COALESCE(organization_user_relationships.workos_membership_id, EXCLUDED.workos_membership_id),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
+
+-- name: SetOrgWorkosID :one
+UPDATE organization_metadata
+SET workos_id = @workos_id,
+    updated_at = clock_timestamp()
+WHERE id = @organization_id AND
+    workos_id IS NULL
+RETURNING *;

@@ -16,9 +16,9 @@ import (
 
 // Manage custom domains for gram.
 type Service interface {
-	// Get the custom domain for a project
+	// Get the custom domain for an organization
 	GetDomain(context.Context, *GetDomainPayload) (res *CustomDomain, err error)
-	// Create a custom domain for a organization
+	// Create a custom domain for an organization
 	CreateDomain(context.Context, *CreateDomainPayload) (err error)
 	// Delete a custom domain
 	DeleteDomain(context.Context, *DeleteDomainPayload) (err error)
@@ -49,8 +49,7 @@ var MethodNames = [3]string{"getDomain", "createDomain", "deleteDomain"}
 // CreateDomainPayload is the payload type of the domains service createDomain
 // method.
 type CreateDomainPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 	// The custom domain
 	Domain string
 }
@@ -78,14 +77,12 @@ type CustomDomain struct {
 // DeleteDomainPayload is the payload type of the domains service deleteDomain
 // method.
 type DeleteDomainPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // GetDomainPayload is the payload type of the domains service getDomain method.
 type GetDomainPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

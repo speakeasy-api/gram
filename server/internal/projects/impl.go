@@ -23,14 +23,17 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -121,7 +124,16 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.C(oops.CodeForbidden)
 	}
 
-	prj, err := s.repo.CreateProject(ctx, repo.CreateProjectParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	pr := s.repo.WithTx(dbtx)
+	er := s.envRepo.WithTx(dbtx)
+
+	prj, err := pr.CreateProject(ctx, repo.CreateProjectParams{
 		OrganizationID: payload.OrganizationID,
 		Name:           payload.Name,
 		Slug:           conv.ToSlug(payload.Name),
@@ -137,7 +149,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "unexpected error creating project").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
 	}
 
-	_, err = s.envRepo.CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{
+	_, err = er.CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{
 		OrganizationID: payload.OrganizationID,
 		ProjectID:      prj.ID,
 		Name:           "Default",
@@ -146,6 +158,24 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{
+		OrganizationID: payload.OrganizationID,
+		ProjectID:      prj.ID,
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		ProjectName: prj.Name,
+		ProjectSlug: prj.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating project creation audit log").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving project creation").Log(ctx, s.logger)
 	}
 
 	project := &gen.CreateProjectResult{
@@ -214,7 +244,22 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		return nil, oops.E(oops.CodeInvalid, err, "error parsing asset ID").Log(ctx, s.logger)
 	}
 
-	updatedProject, err := s.repo.UploadProjectLogo(ctx, repo.UploadProjectLogoParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	pr := s.repo.WithTx(dbtx)
+
+	existingRow, err := pr.GetProjectByID(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting project").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+
+	existing := toProject(existingRow)
+
+	updatedProject, err := pr.UploadProjectLogo(ctx, repo.UploadProjectLogoParams{
 		ProjectID:   *authCtx.ProjectID,
 		LogoAssetID: uuid.NullUUID{UUID: assetID, Valid: true},
 	})
@@ -222,14 +267,27 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating project logo").Log(ctx, s.logger)
 	}
 
-	projectResponse := &gen.Project{
-		ID:             updatedProject.ID.String(),
-		Name:           updatedProject.Name,
-		Slug:           types.Slug(updatedProject.Slug),
+	projectResponse := toProject(updatedProject)
+
+	if err := audit.LogProjectUpdate(ctx, dbtx, audit.LogProjectUpdateEvent{
 		OrganizationID: updatedProject.OrganizationID,
-		LogoAssetID:    conv.FromNullableUUID(updatedProject.LogoAssetID),
-		CreatedAt:      updatedProject.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      updatedProject.UpdatedAt.Time.Format(time.RFC3339),
+		ProjectID:      updatedProject.ID,
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		ProjectName: updatedProject.Name,
+		ProjectSlug: updatedProject.Slug,
+
+		ProjectSnapshotBefore: existing,
+		ProjectSnapshotAfter:  projectResponse,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating project update audit log").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving project").Log(ctx, s.logger)
 	}
 
 	return &gen.SetProjectLogoResult{
@@ -324,10 +382,74 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeInvalid, nil, "cannot delete the default project")
 	}
 
-	err = s.repo.DeleteProject(ctx, projectID)
+	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error accessing projects").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	pr := s.repo.WithTx(dbtx)
+
+	_, err = pr.DeleteProject(ctx, projectID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil // Return successfully even if the project was already deleted
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error deleting project").Log(ctx, s.logger, attr.SlogProjectID(payload.ID))
 	}
 
+	if err := audit.LogProjectDelete(ctx, dbtx, audit.LogProjectDeleteEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		ProjectName: project.Name,
+		ProjectSlug: project.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error creating project deletion audit log").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error saving project deletion").Log(ctx, s.logger)
+	}
+
 	return nil
+}
+
+func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.SetOrganizationWhitelistPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// Check that the API key is from the speakeasy-team organization
+	const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
+	if authCtx.ActiveOrganizationID != speakeasyTeamOrgID {
+		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+
+	err := s.repo.SetOrganizationWhitelist(ctx, repo.SetOrganizationWhitelistParams{
+		OrganizationID: payload.OrganizationID,
+		Whitelisted:    payload.Whitelisted,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error setting organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	}
+
+	return nil
+}
+
+func toProject(p repo.Project) *gen.Project {
+	return &gen.Project{
+		ID:             p.ID.String(),
+		Name:           p.Name,
+		Slug:           types.Slug(p.Slug),
+		OrganizationID: p.OrganizationID,
+		LogoAssetID:    conv.FromNullableUUID(p.LogoAssetID),
+		CreatedAt:      p.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      p.UpdatedAt.Time.Format(time.RFC3339),
+	}
 }

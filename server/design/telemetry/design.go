@@ -335,6 +335,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getHooksSummary")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetHooksSummary", "type": "query"}`)
 	})
+
+	Method("listHooksTraces", func() {
+		Description("List hook traces aggregated by trace_id with user information")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListHooksTracesPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListHooksTracesResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listHooksTraces")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listHooksTraces")
+		Meta("openapi:extension:x-speakeasy-name-override", "listHooksTraces")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListHooksTraces", "type": "query"}`)
+	})
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
@@ -379,11 +408,10 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 	Attribute("user_id", String, "User ID filter")
 	Attribute("external_user_id", String, "External user ID filter")
 	Attribute("event_source", String, "Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')")
-	Attribute("attribute_filters", ArrayOf(AttributeFilter), "Filters on custom log attributes")
 })
 
-var AttributeFilter = Type("AttributeFilter", func() {
-	Description("Filter on a log attribute by path.")
+var LogFilter = Type("LogFilter", func() {
+	Description("A single filter condition for a log search query.")
 
 	Attribute("path", String, "Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').", func() {
 		// Optional @ prefix for user-defined attributes, then letter/underscore start,
@@ -393,13 +421,12 @@ var AttributeFilter = Type("AttributeFilter", func() {
 		MaxLength(256)
 		Example("@user.region")
 	})
-	Attribute("op", String, "Comparison operator", func() {
-		Enum("eq", "not_eq", "contains", "exists", "not_exists")
+	Attribute("operator", String, "Comparison operator", func() {
+		Enum("eq", "not_eq", "contains", "exists", "not_exists", "in")
 		Default("eq")
 	})
-	Attribute("value", String, "Value to compare against (ignored for 'exists' and 'not_exists' operators)", func() {
-		MaxLength(1024)
-		Example("us-east-1")
+	Attribute("values", ArrayOf(String), "Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'.", func() {
+		MaxLength(256)
 	})
 	Required("path")
 })
@@ -407,7 +434,16 @@ var AttributeFilter = Type("AttributeFilter", func() {
 var SearchLogsPayload = Type("SearchLogsPayload", func() {
 	Description("Payload for searching telemetry logs")
 
-	Attribute("filter", SearchLogsFilter, "Filter criteria for the search")
+	Attribute("from", String, "Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("filters", ArrayOf(LogFilter), "Filter conditions for the search query")
+	Attribute("filter", SearchLogsFilter, "[Deprecated] Use 'filters' and top-level 'from'/'to' instead.")
 	Attribute("cursor", String, "Cursor for pagination")
 	Attribute("sort", String, "Sort order", func() {
 		Enum("asc", "desc")
@@ -425,9 +461,8 @@ var SearchLogsResult = Type("SearchLogsResult", func() {
 
 	Attribute("logs", ArrayOf(TelemetryLogRecord), "List of telemetry log records")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("logs", "enabled")
+	Required("logs")
 })
 
 var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
@@ -495,10 +530,8 @@ var SearchToolCallsResult = Type("SearchToolCallsResult", func() {
 
 	Attribute("tool_calls", ArrayOf(ToolCallSummary), "List of tool call summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
-	Attribute("tool_io_logs_enabled", Boolean, "Whether tool input/output logging is enabled for the organization")
 
-	Required("tool_calls", "enabled", "tool_io_logs_enabled")
+	Required("tool_calls")
 })
 
 var ToolCallSummary = Type("ToolCallSummary", func() {
@@ -563,9 +596,8 @@ var SearchChatsResult = Type("SearchChatsResult", func() {
 
 	Attribute("chats", ArrayOf(ChatSummaryType), "List of chat session summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("chats", "enabled")
+	Required("chats")
 })
 
 var ChatSummaryType = Type("ChatSummary", func() {
@@ -646,9 +678,8 @@ var SearchUsersResult = Type("SearchUsersResult", func() {
 
 	Attribute("users", ArrayOf(UserSummaryType), "List of user usage summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("users", "enabled")
+	Required("users")
 })
 
 var UserSummaryType = Type("UserSummary", func() {
@@ -835,9 +866,8 @@ var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
 	Description("Result of metrics summary query")
 
 	Attribute("metrics", ProjectSummaryType, "Aggregated metrics")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("metrics", "enabled")
+	Required("metrics")
 })
 
 // User metrics types
@@ -863,9 +893,8 @@ var GetUserMetricsSummaryResult = Type("GetUserMetricsSummaryResult", func() {
 	Description("Result of user metrics summary query")
 
 	Attribute("metrics", ProjectSummaryType, "Aggregated metrics for the user")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("metrics", "enabled")
+	Required("metrics")
 })
 
 // Observability Overview types
@@ -883,7 +912,7 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	})
 	Attribute("external_user_id", String, "Optional external user ID filter")
 	Attribute("api_key_id", String, "Optional API key ID filter")
-	Attribute("toolset_id", String, "Optional toolset/MCP server ID filter")
+	Attribute("toolset_slug", String, "Optional toolset/MCP server slug filter")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})
@@ -900,9 +929,8 @@ var GetObservabilityOverviewResult = Type("GetObservabilityOverviewResult", func
 	Attribute("top_tools_by_count", ArrayOf(ToolMetricType), "Top tools by call count")
 	Attribute("top_tools_by_failure_rate", ArrayOf(ToolMetricType), "Top tools by failure rate")
 	Attribute("interval_seconds", Int64, "The time bucket interval in seconds used for the time series data")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds", "enabled")
+	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds")
 })
 
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
@@ -997,9 +1025,8 @@ var ListFilterOptionsResult = Type("ListFilterOptionsResult", func() {
 	Description("Result of listing filter options")
 
 	Attribute("options", ArrayOf(FilterOptionType), "List of filter options")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("options", "enabled")
+	Required("options")
 })
 
 var FilterOptionType = Type("FilterOption", func() {
@@ -1058,11 +1085,11 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 	Description("Result of hooks summary query")
 
 	Attribute("servers", ArrayOf(HooksServerSummaryType), "Aggregated metrics grouped by server")
+	Attribute("users", ArrayOf(HooksUserSummaryType), "Aggregated metrics grouped by user")
 	Attribute("total_events", Int64, "Total number of hook events")
 	Attribute("total_sessions", Int64, "Total number of unique sessions")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("servers", "total_events", "total_sessions", "enabled")
+	Required("servers", "users", "total_events", "total_sessions")
 })
 
 var HooksServerSummaryType = Type("HooksServerSummary", func() {
@@ -1076,4 +1103,80 @@ var HooksServerSummaryType = Type("HooksServerSummary", func() {
 	Attribute("failure_rate", Float64, "Failure rate as a decimal (0.0 to 1.0)")
 
 	Required("server_name", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
+})
+
+var HooksUserSummaryType = Type("HooksUserSummary", func() {
+	Description("Aggregated hooks metrics for a single user")
+
+	Attribute("user_email", String, "User email address")
+	Attribute("event_count", Int64, "Total number of hook events for this user")
+	Attribute("unique_tools", Int64, "Number of unique tools used by this user")
+	Attribute("success_count", Int64, "Number of successful tool completions (PostToolUse events)")
+	Attribute("failure_count", Int64, "Number of failed tool completions (PostToolUseFailure events)")
+	Attribute("failure_rate", Float64, "Failure rate as a decimal (0.0 to 1.0)")
+
+	Required("user_email", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
+})
+
+// List hooks traces types
+
+var ListHooksTracesPayload = Type("ListHooksTracesPayload", func() {
+	Description("Payload for listing hook traces")
+
+	Attribute("from", String, "Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("filters", ArrayOf(LogFilter), "Filter conditions for the search query")
+	Attribute("cursor", String, "Cursor for pagination (trace_id)")
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+
+	Required("from", "to")
+})
+
+var ListHooksTracesResult = Type("ListHooksTracesResult", func() {
+	Description("Result of listing hook traces")
+
+	Attribute("traces", ArrayOf(HookTraceSummary), "List of hook trace summaries")
+	Attribute("next_cursor", String, "Cursor for next page")
+
+	Required("traces")
+})
+
+var HookTraceSummary = Type("HookTraceSummary", func() {
+	Description("Summary information for a hook trace")
+
+	Attribute("trace_id", String, "Trace ID (32 hex characters)", func() {
+		Pattern("^[a-f0-9]{32}$")
+	})
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("log_count", UInt64, "Total number of logs in this trace")
+	Attribute("hook_status", String, "Hook execution status", func() {
+		Enum("success", "failure", "pending")
+	})
+	Attribute("gram_urn", String, "Gram URN associated with this hook trace")
+	Attribute("tool_name", String, "Tool name (from materialized column)")
+	Attribute("tool_source", String, "Tool call source (from materialized column)")
+	Attribute("event_source", String, "Event source (from materialized column)")
+	Attribute("user_email", String, "User email (from attributes.user.email)")
+	Attribute("hook_source", String, "Hook source (from attributes.gram.hook.source)")
+
+	Required(
+		"trace_id",
+		"start_time_unix_nano",
+		"log_count",
+		"gram_urn",
+	)
 })

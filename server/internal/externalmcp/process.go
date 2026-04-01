@@ -48,6 +48,7 @@ type ToolExtractorTaskMCPServer struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	SelectedRemotes         []string
 }
 
 type ToolExtractorTask struct {
@@ -98,7 +99,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	serverDetails, err := te.registryClient.GetServerDetails(ctx, Registry{
 		ID:  registry.ID,
 		URL: registry.Url,
-	}, task.MCP.RegistryServerSpecifier)
+	}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).Log(ctx, logger)
 	}
@@ -127,8 +128,12 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 				attr.SlogOAuthRegistrationEndpoint(oauthDiscovery.RegistrationEndpoint),
 			)
 		case OAuthVersion20:
-			logger.WarnContext(ctx, fmt.Sprintf("[%s] legacy OAuth 2.0; falling back to manual Authorization header", task.MCP.Name))
-			oauthDiscovery = nil
+			requiresOAuth = true
+			logger.InfoContext(ctx, fmt.Sprintf("[%s] discovered OAuth 2.0 (legacy, no dynamic registration)", task.MCP.Name),
+				attr.SlogOAuthVersion(oauthDiscovery.Version),
+				attr.SlogOAuthAuthorizationEndpoint(oauthDiscovery.AuthorizationEndpoint),
+				attr.SlogOAuthTokenEndpoint(oauthDiscovery.TokenEndpoint),
+			)
 
 			authDescription := "Bearer token for authentication (OAuth 2.0 requires static client registration)"
 			serverDetails.Headers = append(serverDetails.Headers, RemoteHeader{

@@ -241,7 +241,20 @@ export function useFilterState() {
   );
 
   const clearFilters = useCallback(() => {
-    setSearchParams({}, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete("category");
+        params.delete("sort");
+        params.delete("auth");
+        params.delete("behavior");
+        params.delete("minUsers");
+        params.delete("updated");
+        params.delete("minTools");
+        return params;
+      },
+      { replace: true },
+    );
   }, [setSearchParams]);
 
   return {

@@ -49,7 +49,7 @@ async function setupClickHouseMigrations() {
     return setClickHouseStrategy("golang-migrate");
   }
 
-  await $`atlas login`;
+  await $({ stdio: "inherit" })`atlas login`;
   return setClickHouseStrategy("atlas");
 }
 

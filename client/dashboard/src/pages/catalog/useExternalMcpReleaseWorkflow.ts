@@ -5,7 +5,10 @@ import {
   useDeploymentLogs,
   useLatestDeployment,
 } from "@gram/client/react-query";
-import type { DeploymentLogEvent } from "@gram/client/models/components";
+import type {
+  DeploymentLogEvent,
+  ExternalMCPRemote,
+} from "@gram/client/models/components";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export function generateSlug(name: string): string {
@@ -16,11 +19,26 @@ export function generateSlug(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export type ReleasePhase = "configure" | "deploying" | "complete" | "error";
+export type ReleasePhase =
+  | "selectRemotes"
+  | "configure"
+  | "deploying"
+  | "complete"
+  | "error";
 
 export interface ServerConfig {
   server: Server;
   name: string;
+  /** For multi-remote servers, track which remotes are selected */
+  selectedRemotes?: ExternalMCPRemote[];
+}
+
+/** Configuration for a server with multiple remotes during the selectRemotes phase */
+export interface MultiRemoteServerConfig {
+  server: Server;
+  name: string;
+  remotes: ExternalMCPRemote[];
+  selectedRemoteUrls: Set<string>;
 }
 
 export interface ServerToolsetStatus {
@@ -38,6 +56,23 @@ interface WorkflowBase {
   reset: () => void;
 }
 
+export interface SelectRemotesPhase extends WorkflowBase {
+  phase: "selectRemotes";
+  /** Servers with multiple remotes that need configuration */
+  multiRemoteConfigs: MultiRemoteServerConfig[];
+  /** Index of the server currently being configured */
+  currentServerIndex: number;
+  /** Update the current server's name or selected remotes */
+  updateCurrentConfig: (updates: {
+    name?: string;
+    selectedRemoteUrls?: Set<string>;
+  }) => void;
+  /** Move to the next multi-remote server, or to configure phase if done */
+  nextServer: () => void;
+  /** Whether the current server can proceed (has at least one remote selected) */
+  canProceed: boolean;
+}
+
 export interface ConfigurePhase extends WorkflowBase {
   phase: "configure";
   serverConfigs: ServerConfig[];
@@ -47,6 +82,8 @@ export interface ConfigurePhase extends WorkflowBase {
   ) => void;
   canDeploy: boolean;
   startDeployment: () => Promise<void>;
+  /** Go back to selectRemotes phase (only available if there were multi-remote servers) */
+  goBack?: () => void;
 }
 
 export interface DeployingPhase extends WorkflowBase {
@@ -69,6 +106,7 @@ export interface ErrorPhase extends WorkflowBase {
 }
 
 export type ExternalMcpReleaseWorkflow =
+  | SelectRemotesPhase
   | ConfigurePhase
   | DeployingPhase
   | CompletePhase
@@ -107,17 +145,50 @@ export function useExternalMcpReleaseWorkflow({
   );
   const [error, setError] = useState<string | undefined>();
 
+  // State for multi-remote server selection
+  const [multiRemoteConfigs, setMultiRemoteConfigs] = useState<
+    MultiRemoteServerConfig[]
+  >([]);
+  const [currentServerIndex, setCurrentServerIndex] = useState(0);
+
   // Track whether we've already transitioned from deploying to complete
   const hasTransitionedRef = useRef(false);
 
-  // Initialize server configs when servers change
+  // Track last processed server index to prevent double-click duplicates
+  const lastProcessedIndexRef = useRef(-1);
+
+  // Initialize server configs when servers change - partition into multi/single remote
   useEffect(() => {
-    setServerConfigs(
-      servers.map((server) => ({
-        server,
-        name: server.title ?? server.registrySpecifier,
-      })),
-    );
+    const multiRemote: MultiRemoteServerConfig[] = [];
+    const singleRemote: ServerConfig[] = [];
+
+    for (const server of servers) {
+      const remotes = server.remotes ?? [];
+      if (remotes.length > 1) {
+        multiRemote.push({
+          server,
+          name: server.title ?? server.registrySpecifier,
+          remotes,
+          selectedRemoteUrls: new Set(),
+        });
+      } else {
+        singleRemote.push({
+          server,
+          name: server.title ?? server.registrySpecifier,
+        });
+      }
+    }
+
+    setMultiRemoteConfigs(multiRemote);
+    setServerConfigs(singleRemote);
+    setCurrentServerIndex(0);
+
+    // Start in selectRemotes phase if there are multi-remote servers
+    if (multiRemote.length > 0) {
+      setPhase("selectRemotes");
+    } else {
+      setPhase("configure");
+    }
   }, [servers]);
 
   // Poll deployment status — pass gramProject for cross-project batch flow
@@ -279,12 +350,87 @@ export function useExternalMcpReleaseWorkflow({
     [],
   );
 
+  // Callbacks for multi-remote selection phase
+  const updateCurrentConfig = useCallback(
+    (updates: { name?: string; selectedRemoteUrls?: Set<string> }) => {
+      setMultiRemoteConfigs((prev) =>
+        prev.map((config, i) => {
+          if (i !== currentServerIndex) return config;
+          return {
+            ...config,
+            ...(updates.name !== undefined && { name: updates.name }),
+            ...(updates.selectedRemoteUrls !== undefined && {
+              selectedRemoteUrls: updates.selectedRemoteUrls,
+            }),
+          };
+        }),
+      );
+    },
+    [currentServerIndex],
+  );
+
+  const canProceed = useMemo(() => {
+    const currentConfig = multiRemoteConfigs[currentServerIndex];
+    if (!currentConfig) return false;
+    return (
+      currentConfig.name.trim() !== "" &&
+      currentConfig.selectedRemoteUrls.size > 0
+    );
+  }, [multiRemoteConfigs, currentServerIndex]);
+
+  const nextServer = useCallback(() => {
+    if (!canProceed) return;
+
+    // Prevent double-click duplicates by checking if this index was already processed
+    if (lastProcessedIndexRef.current === currentServerIndex) return;
+    lastProcessedIndexRef.current = currentServerIndex;
+
+    const currentConfig = multiRemoteConfigs[currentServerIndex];
+    if (currentConfig) {
+      // Add the configured multi-remote server to serverConfigs
+      const selectedRemotes = currentConfig.remotes.filter((r) =>
+        currentConfig.selectedRemoteUrls.has(r.url),
+      );
+      setServerConfigs((prev) => [
+        ...prev,
+        {
+          server: currentConfig.server,
+          name: currentConfig.name,
+          selectedRemotes,
+        },
+      ]);
+    }
+
+    if (currentServerIndex < multiRemoteConfigs.length - 1) {
+      setCurrentServerIndex((prev) => prev + 1);
+    } else {
+      // Done with all multi-remote servers, move to configure phase
+      setPhase("configure");
+    }
+  }, [canProceed, currentServerIndex, multiRemoteConfigs]);
+
   const canDeploy = useMemo(() => {
     return (
       serverConfigs.length > 0 &&
       serverConfigs.every((c) => c.name.trim() !== "")
     );
   }, [serverConfigs]);
+
+  // goBack returns to selectRemotes phase - only available if there were multi-remote servers
+  const goBack = useCallback(() => {
+    // Remove multi-remote servers from serverConfigs (they came from multiRemoteConfigs)
+    setServerConfigs((prev) =>
+      prev.filter((config) => !config.selectedRemotes),
+    );
+    setCurrentServerIndex(0);
+    lastProcessedIndexRef.current = -1; // Reset to allow re-processing
+    setPhase("selectRemotes");
+  }, []);
+
+  // Only provide goBack if we originally had multi-remote servers
+  const hasMultiRemoteServers = useMemo(() => {
+    return servers.some((s) => (s.remotes ?? []).length > 1);
+  }, [servers]);
 
   const startDeployment = useCallback(async () => {
     if (!canDeploy) return;
@@ -310,6 +456,7 @@ export function useExternalMcpReleaseWorkflow({
                 name: config.name,
                 slug,
                 registryServerSpecifier: config.server.registrySpecifier,
+                selectedRemotes: config.selectedRemotes?.map((r) => r.url),
               };
             }),
           },
@@ -337,17 +484,41 @@ export function useExternalMcpReleaseWorkflow({
   }, [canDeploy, client, latestDeployment?.id, projectSlug, serverConfigs]);
 
   const reset = useCallback(() => {
-    setPhase("configure");
     setDeploymentId(undefined);
     setToolsetStatuses([]);
     setError(undefined);
     hasTransitionedRef.current = false;
-    setServerConfigs(
-      servers.map((server) => ({
-        server,
-        name: server.title ?? server.registrySpecifier,
-      })),
-    );
+    setCurrentServerIndex(0);
+
+    // Re-partition servers into multi/single remote
+    const multiRemote: MultiRemoteServerConfig[] = [];
+    const singleRemote: ServerConfig[] = [];
+
+    for (const server of servers) {
+      const remotes = server.remotes ?? [];
+      if (remotes.length > 1) {
+        multiRemote.push({
+          server,
+          name: server.title ?? server.registrySpecifier,
+          remotes,
+          selectedRemoteUrls: new Set(),
+        });
+      } else {
+        singleRemote.push({
+          server,
+          name: server.title ?? server.registrySpecifier,
+        });
+      }
+    }
+
+    setMultiRemoteConfigs(multiRemote);
+    setServerConfigs(singleRemote);
+
+    if (multiRemote.length > 0) {
+      setPhase("selectRemotes");
+    } else {
+      setPhase("configure");
+    }
   }, [servers]);
 
   const base: WorkflowBase = {
@@ -357,6 +528,16 @@ export function useExternalMcpReleaseWorkflow({
   };
 
   switch (phase) {
+    case "selectRemotes":
+      return {
+        phase,
+        multiRemoteConfigs,
+        currentServerIndex,
+        updateCurrentConfig,
+        nextServer,
+        canProceed,
+        ...base,
+      };
     case "configure":
       return {
         phase,
@@ -364,6 +545,7 @@ export function useExternalMcpReleaseWorkflow({
         updateServerConfig,
         canDeploy,
         startDeployment,
+        goBack: hasMultiRemoteServers ? goBack : undefined,
         ...base,
       };
     case "deploying":

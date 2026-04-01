@@ -13,10 +13,6 @@ import { FilterOption, FilterOption$inboundSchema } from "./filteroption.js";
  */
 export type ListFilterOptionsResult = {
   /**
-   * Whether telemetry is enabled for the organization
-   */
-  enabled: boolean;
-  /**
    * List of filter options
    */
   options: Array<FilterOption>;
@@ -27,7 +23,6 @@ export const ListFilterOptionsResult$inboundSchema: z.ZodMiniType<
   ListFilterOptionsResult,
   unknown
 > = z.object({
-  enabled: z.boolean(),
   options: z.array(FilterOption$inboundSchema),
 });
 

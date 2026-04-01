@@ -1679,6 +1679,228 @@ func DecodeDeleteProjectResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildSetOrganizationWhitelistRequest instantiates a HTTP request object with
+// method and path set to call the "projects" service
+// "setOrganizationWhitelist" endpoint
+func (c *Client) BuildSetOrganizationWhitelistRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetOrganizationWhitelistProjectsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "setOrganizationWhitelist", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetOrganizationWhitelistRequest returns an encoder for requests sent
+// to the projects setOrganizationWhitelist server.
+func EncodeSetOrganizationWhitelistRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.SetOrganizationWhitelistPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "setOrganizationWhitelist", "*projects.SetOrganizationWhitelistPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewSetOrganizationWhitelistRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("projects", "setOrganizationWhitelist", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetOrganizationWhitelistResponse returns a decoder for responses
+// returned by the projects setOrganizationWhitelist endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetOrganizationWhitelistResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetOrganizationWhitelistResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetOrganizationWhitelistUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+			}
+			err = ValidateSetOrganizationWhitelistUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+			}
+			return nil, NewSetOrganizationWhitelistUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetOrganizationWhitelistForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+			}
+			err = ValidateSetOrganizationWhitelistForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+			}
+			return nil, NewSetOrganizationWhitelistForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetOrganizationWhitelistBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+			}
+			err = ValidateSetOrganizationWhitelistBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+			}
+			return nil, NewSetOrganizationWhitelistBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetOrganizationWhitelistNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+			}
+			err = ValidateSetOrganizationWhitelistNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+			}
+			return nil, NewSetOrganizationWhitelistNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetOrganizationWhitelistConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+			}
+			err = ValidateSetOrganizationWhitelistConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+			}
+			return nil, NewSetOrganizationWhitelistConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetOrganizationWhitelistUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+			}
+			err = ValidateSetOrganizationWhitelistUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+			}
+			return nil, NewSetOrganizationWhitelistUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetOrganizationWhitelistInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+			}
+			err = ValidateSetOrganizationWhitelistInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+			}
+			return nil, NewSetOrganizationWhitelistInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetOrganizationWhitelistInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+				}
+				err = ValidateSetOrganizationWhitelistInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+				}
+				return nil, NewSetOrganizationWhitelistInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetOrganizationWhitelistUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+				}
+				err = ValidateSetOrganizationWhitelistUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+				}
+				return nil, NewSetOrganizationWhitelistUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "setOrganizationWhitelist", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetOrganizationWhitelistGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setOrganizationWhitelist", err)
+			}
+			err = ValidateSetOrganizationWhitelistGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setOrganizationWhitelist", err)
+			}
+			return nil, NewSetOrganizationWhitelistGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "setOrganizationWhitelist", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalProjectResponseBodyToProjectsProject builds a value of type
 // *projects.Project from a value of type *ProjectResponseBody.
 func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *projects.Project {

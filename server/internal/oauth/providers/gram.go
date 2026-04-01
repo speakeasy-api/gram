@@ -37,6 +37,7 @@ func (p *GramProvider) ExchangeToken(
 	provider repo.OauthProxyProvider,
 	toolset *toolsets_repo.Toolset,
 	serverURL *url.URL,
+	_ string,
 ) (*TokenExchangeResult, error) {
 	// Exchange code for ID token from Speakeasy
 	idToken, err := p.sessions.ExchangeTokenFromSpeakeasy(ctx, code)

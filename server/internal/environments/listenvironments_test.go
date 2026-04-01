@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 )
 
 func TestEnvironmentsService_ListEnvironments(t *testing.T) {
@@ -15,6 +16,8 @@ func TestEnvironmentsService_ListEnvironments(t *testing.T) {
 		t.Parallel()
 
 		ctx, ti := newTestEnvironmentService(t)
+		beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+		require.NoError(t, err)
 
 		result, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 			SessionToken:     nil,
@@ -23,12 +26,17 @@ func TestEnvironmentsService_ListEnvironments(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Empty(t, result.Environments)
+		afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount, afterCount)
 	})
 
 	t.Run("list environments after creating some", func(t *testing.T) {
 		t.Parallel()
 
 		ctx, ti := newTestEnvironmentService(t)
+		beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
+		require.NoError(t, err)
 
 		// Create first environment
 		env1, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
@@ -62,6 +70,9 @@ func TestEnvironmentsService_ListEnvironments(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Len(t, result.Environments, 2)
+		afterCreateCount, err := audittest.AuditLogCount(ctx, ti.conn)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount+2, afterCreateCount)
 
 		// Check that both environments are returned
 		envIDs := []string{result.Environments[0].ID, result.Environments[1].ID}
@@ -83,5 +94,9 @@ func TestEnvironmentsService_ListEnvironments(t *testing.T) {
 				require.Empty(t, env.Entries)
 			}
 		}
+
+		postListCount, err := audittest.AuditLogCount(ctx, ti.conn)
+		require.NoError(t, err)
+		require.Equal(t, beforeCount+2, postListCount)
 	})
 }

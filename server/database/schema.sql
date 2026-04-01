@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO. Will be replaced by workos_org_id.
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
 
+  whitelisted boolean NOT NULL DEFAULT TRUE,
+  free_trial_started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  free_trial_ends_at timestamptz NOT NULL DEFAULT clock_timestamp() + INTERVAL '14 days',
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   disabled_at timestamptz,
@@ -214,7 +218,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   project_id uuid,
   created_by_user_id TEXT NOT NULL,
 
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 255),
   key_prefix TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -868,24 +872,6 @@ CREATE TABLE IF NOT EXISTS chat_resolution_messages (
   CONSTRAINT chat_resolution_messages_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS slack_app_connections (
-  slack_team_id TEXT NOT NULL,
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  access_token TEXT NOT NULL,
-  slack_team_name TEXT NOT NULL,
-  default_toolset_slug TEXT CHECK (
-    default_toolset_slug IS NULL OR (default_toolset_slug <> '' AND CHAR_LENGTH(default_toolset_slug) <= 40)
-  ),
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT slack_auth_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT slack_auth_connections_slack_team_id_key PRIMARY KEY (slack_team_id),
-  CONSTRAINT slack_auth_connections_organization_id_project_id_key UNIQUE (organization_id, project_id)
-);
-
 CREATE TABLE IF NOT EXISTS slack_apps (
   -- Column order optimized for alignment (PG110)
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -913,7 +899,7 @@ CREATE TABLE IF NOT EXISTS slack_apps (
 CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_project_name_key
   ON slack_apps (project_id, name) WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_slack_team_id_key
+CREATE INDEX IF NOT EXISTS slack_apps_slack_team_id_idx
   ON slack_apps (slack_team_id) WHERE deleted IS FALSE AND slack_team_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS slack_app_toolsets (
@@ -925,6 +911,19 @@ CREATE TABLE IF NOT EXISTS slack_app_toolsets (
   CONSTRAINT slack_app_toolsets_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
   CONSTRAINT slack_app_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
   CONSTRAINT slack_app_toolsets_slack_app_id_toolset_id_key UNIQUE (slack_app_id, toolset_id)
+);
+
+CREATE TABLE IF NOT EXISTS slack_registrations (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  slack_app_id uuid NOT NULL,
+  slack_account_id TEXT NOT NULL,
+  user_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_registrations_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
+  CONSTRAINT slack_registrations_slack_app_id_slack_account_id_key UNIQUE (slack_app_id, slack_account_id)
 );
 
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
@@ -1285,6 +1284,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
   registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
+  selected_remotes TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1449,30 +1449,90 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
 ON user_oauth_tokens (user_id, organization_id, toolset_id)
 WHERE deleted IS FALSE;
 
--- Team invites for organization member management
-CREATE TABLE IF NOT EXISTS team_invites (
-  expires_at timestamptz NOT NULL,
+
+-- Server display name overrides for hooks dashboard
+CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  raw_server_name TEXT NOT NULL CHECK (raw_server_name <> ''),
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  organization_id TEXT NOT NULL,
-  email TEXT NOT NULL CHECK (email <> '' AND CHAR_LENGTH(email) <= 255),
-  invited_by_user_id TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')),
-  token TEXT NOT NULL CHECK (token <> ''),
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT team_invites_pkey PRIMARY KEY (id),
-  CONSTRAINT team_invites_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT team_invites_invited_by_user_id_fkey FOREIGN KEY (invited_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+  CONSTRAINT hooks_overrides_unique_raw UNIQUE (project_id, raw_server_name)
 );
 
--- Unique constraint on organization + email for non-deleted pending invites
-CREATE UNIQUE INDEX IF NOT EXISTS team_invites_organization_id_email_pending_key
-ON team_invites (organization_id, email)
-WHERE deleted IS FALSE AND status = 'pending';
+CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
 
--- Index for looking up invites by token (unconditional to prevent token reuse)
-CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
-ON team_invites (token);
+-- The sentinel value '*' for resource means "all resources" (wildcard).
+-- This avoids NULL semantics and enables pure index-only scans on the
+-- unique B-tree index for permission checks:
+CREATE TABLE IF NOT EXISTS principal_grants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  principal_urn TEXT NOT NULL,
+  principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
+  scope TEXT NOT NULL,
+  resource TEXT NOT NULL DEFAULT '*',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
+  CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT principal_grants_org_principal_scope_resource_key UNIQUE (organization_id, principal_urn, scope, resource)
+);
+
+COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted.';
+COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
+COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.';
+COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
+COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
+COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  seq BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+
+  -- actor_id, action and subject_id are authoritative strings describing the
+  -- who, what and on what of an audited event. Other fields are denormalized
+  -- for convenient querying and display purposes, but the URNs are the source
+  -- of truth.
+
+  actor_id TEXT NOT NULL,
+  actor_type TEXT NOT NULL,
+  actor_display_name TEXT,
+  actor_slug TEXT,
+  
+  action TEXT NOT NULL,
+
+  subject_id TEXT NOT NULL,
+  subject_type TEXT NOT NULL,
+  subject_display_name TEXT,
+  subject_slug TEXT,
+
+  -- for update operations these can be useful for storing the before/after
+  -- state of a subject so that a diff can be generated later on.
+  before_snapshot JSONB,
+  after_snapshot JSONB,
+
+  -- arbitrary bag of additional metadata that doesn't fit into the above
+  -- fields.
+  metadata JSONB,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
+  -- Foreign key constraints on project_id and organization_id are intentionally
+  -- omitted to retain authorative event data even if related projects or orgs
+  -- are later deleted.
+);
+
+CREATE INDEX IF NOT EXISTS audit_logs_organization_id_seq_idx
+ON audit_logs (organization_id, seq DESC);
+
+CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
+ON audit_logs (organization_id, project_id, seq DESC);

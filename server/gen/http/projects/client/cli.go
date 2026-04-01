@@ -275,3 +275,29 @@ func BuildDeleteProjectPayload(projectsDeleteProjectID string, projectsDeletePro
 
 	return v, nil
 }
+
+// BuildSetOrganizationWhitelistPayload builds the payload for the projects
+// setOrganizationWhitelist endpoint from CLI flags.
+func BuildSetOrganizationWhitelistPayload(projectsSetOrganizationWhitelistBody string, projectsSetOrganizationWhitelistApikeyToken string) (*projects.SetOrganizationWhitelistPayload, error) {
+	var err error
+	var body SetOrganizationWhitelistRequestBody
+	{
+		err = json.Unmarshal([]byte(projectsSetOrganizationWhitelistBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"whitelisted\": false\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if projectsSetOrganizationWhitelistApikeyToken != "" {
+			apikeyToken = &projectsSetOrganizationWhitelistApikeyToken
+		}
+	}
+	v := &projects.SetOrganizationWhitelistPayload{
+		OrganizationID: body.OrganizationID,
+		Whitelisted:    body.Whitelisted,
+	}
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}

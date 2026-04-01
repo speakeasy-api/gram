@@ -143,18 +143,14 @@ func TestExchangeRefreshToken_ExpiredDownstreamToken(t *testing.T) {
 	ctx := t.Context()
 	env := newTokenTestEnv(t)
 	toolsetID := uuid.New()
-	upstreamExpiry := time.Now().Add(24 * time.Hour)
-
-	// Set a very short downstream token expiration
-	env.tokenService.SetTokenExpiration(500 * time.Millisecond)
+	upstreamExpiry := time.Now().Add(365 * 24 * time.Hour)
 
 	token, clientID, clientSecret := env.issueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
-	// Wait for the downstream access token to expire
-	time.Sleep(1 * time.Second)
+	// Directly expire the token in cache to simulate 31 days passing
+	env.expireTokenInCache(t, ctx, toolsetID, token.AccessToken, time.Now().Add(-1*time.Hour))
 
-	// Access token should be expired
 	_, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
 	require.ErrorIs(t, err, oauth.ErrExpiredAccessToken)
 

@@ -1,5 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
+import { DetailHero } from "@/components/detail-hero";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import {
   InstallPageConfigForm,
@@ -9,7 +10,6 @@ import {
 import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
-import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
 import { ToolList } from "@/components/tool-list";
 import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
@@ -17,7 +17,13 @@ import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -66,7 +72,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
@@ -162,33 +168,12 @@ export function MCPDetailPage() {
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
 
-  // Update URL hash when tab changes
-  useEffect(() => {
-    if (activeTab) {
-      window.location.hash = activeTab;
-    }
-  }, [activeTab]);
-
-  // Listen for hash changes (e.g., browser back/forward)
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.slice(1);
-      const validTabs = [
-        "overview",
-        "tools",
-        "resources",
-        "prompts",
-        "settings",
-        "authentication",
-      ];
-      if (hash && validTabs.includes(hash)) {
-        setActiveTab(hash);
-      }
-    };
-
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    const url = new URL(window.location.href);
+    url.hash = value;
+    window.history.replaceState(null, "", url.toString());
+  };
 
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
@@ -242,78 +227,15 @@ export function MCPDetailPage() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth noPadding>
-        {/* Hero Header with Animation - full width */}
-        <div className="relative w-full h-64 overflow-hidden">
-          <MCPHeroIllustration
-            toolsetSlug={toolset.slug}
-            className="saturate-[.3]"
-          />
-
-          {/* Overlay for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
-            <div className="flex items-end justify-between">
-              <Stack gap={2}>
-                <div className="flex items-center gap-3 ml-1">
-                  <Heading variant="h1" className="text-background">
-                    {toolset.name}
-                  </Heading>
-                  {statusBadge}
-                </div>
-                <div className="flex items-center gap-2 ml-1">
-                  <Type className="max-w-2xl truncate !text-background/70">
-                    {mcpUrl}
-                  </Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={() => {
-                      if (mcpUrl) {
-                        navigator.clipboard.writeText(mcpUrl);
-                        toast.success("URL copied to clipboard");
-                      }
-                    }}
-                    className="shrink-0 text-background/70 hover:text-background"
-                  >
-                    <Button.LeftIcon>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect
-                          width="14"
-                          height="14"
-                          x="8"
-                          y="8"
-                          rx="2"
-                          ry="2"
-                        />
-                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                      </svg>
-                    </Button.LeftIcon>
-                    <Button.Text className="sr-only">Copy URL</Button.Text>
-                  </Button>
-                </div>
-              </Stack>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
-            <Stack direction="horizontal" gap={2} className="justify-end">
+      <Page.Body fullWidth noPadding className="gap-0">
+        <DetailHero
+          actions={
+            <>
               <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
                 <Button
                   variant="secondary"
                   size="md"
-                  className="bg-background/10 hover:bg-background/20 text-background hover:text-background border-background/20"
+                  className="bg-background hover:bg-accent border-border"
                 >
                   <Button.LeftIcon>
                     <Play className="w-4 h-4" />
@@ -322,60 +244,75 @@ export function MCPDetailPage() {
                 </Button>
               </routes.playground.Link>
               <MCPEnableButton toolset={toolset} />
+            </>
+          }
+        >
+          <div className="flex items-end justify-between">
+            <Stack gap={2}>
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1">{toolset.name}</Heading>
+                {statusBadge}
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Type className="max-w-2xl truncate text-muted-foreground">
+                  {mcpUrl}
+                </Type>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => {
+                    if (mcpUrl) {
+                      navigator.clipboard.writeText(mcpUrl);
+                      toast.success("URL copied to clipboard");
+                    }
+                  }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <Button.LeftIcon>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                    </svg>
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Copy URL</Button.Text>
+                </Button>
+              </div>
             </Stack>
           </div>
-        </div>
+        </DetailHero>
 
         {/* Sub-navigation tabs */}
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={handleTabChange}
           className="w-full flex-1 flex flex-col"
         >
           <div className="border-b">
             <div className="max-w-[1270px] mx-auto px-8">
               <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
-                <TabsTrigger
-                  value="overview"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="tools"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Tools
-                </TabsTrigger>
-                <TabsTrigger
-                  value="resources"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Resources
-                </TabsTrigger>
-                <TabsTrigger
-                  value="prompts"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Prompts
-                </TabsTrigger>
-                <TabsTrigger
-                  value="authentication"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
+                <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
+                <PageTabsTrigger value="tools">Tools</PageTabsTrigger>
+                <PageTabsTrigger value="resources">Resources</PageTabsTrigger>
+                <PageTabsTrigger value="prompts">Prompts</PageTabsTrigger>
+                <PageTabsTrigger value="authentication">
                   <span className="flex items-center gap-1.5">
                     Authentication
                     {missingRequiredEnvVars > 0 && (
                       <AlertTriangle className="h-3.5 w-3.5 text-warning" />
                     )}
                   </span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="settings"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Settings
-                </TabsTrigger>
+                </PageTabsTrigger>
+                <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
           </div>
@@ -446,10 +383,10 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
   return (
     <>
       <Button
-        variant="secondary"
+        variant="primary"
         onClick={() => setIsServerEnableDialogOpen(true)}
       >
-        {toolset.mcpEnabled ? "ENABLED" : "ENABLE"}
+        {toolset.mcpEnabled ? "DISABLE" : "ENABLE"}
       </Button>
       <ServerEnableDialog
         isOpen={isServerEnableDialogOpen}
@@ -497,7 +434,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
             Your server is private. To share with external users, you must make
-            it public.
+            it public in the server settings.
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
@@ -610,6 +547,8 @@ function GenerateInstructionsButton({
 Best practices:
 DO: Focus on cross-feature relationships (how tools work together, required sequences), document operational patterns and workflows, be explicit about constraints and limitations, keep it short like a quick-reference card.
 DO NOT: Duplicate individual tool descriptions, include marketing claims, try to change model personality, write lengthy prose.
+
+Keep the total output under ${INSTRUCTIONS_SOFT_LIMIT} characters.
 
 Server details:
 ${JSON.stringify({ name: toolset.name, tools: tools.map((t) => ({ name: t.name, description: t.description })) }, null, 2)}
@@ -1040,6 +979,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           await client.deployments.evolveDeployment({
             evolveForm: {
               deploymentId: deployment.id,
+              nonBlocking: true,
               excludeExternalMcps: [externalMcpSlug],
             },
           });
@@ -1813,6 +1753,16 @@ function OAuthDetailsModal({
                       {toolset.oauthProxyServer.slug}
                     </CodeBlock>
                   </div>
+                  {toolset.oauthProxyServer.audience && (
+                    <div>
+                      <Type small className="font-medium text-muted-foreground">
+                        Audience:
+                      </Type>
+                      <CodeBlock className="mt-1">
+                        {toolset.oauthProxyServer.audience}
+                      </CodeBlock>
+                    </div>
+                  )}
                 </Stack>
               </>
             )}
@@ -2113,10 +2063,50 @@ function OAuthTabModal({
   toolset: Toolset;
   onSuccess: () => void;
 }) {
+  // Extract discovered OAuth metadata from external MCP tools.
+  // Uses rawTools because proxy-type tools are filtered out of toolset.tools.
+  // Builds metadata matching the format the old server-side fallback produced:
+  // issuer = Gram's MCP URL, upstream endpoints passed through, plus standard
+  // response_types_supported, grant_types_supported, code_challenge_methods_supported.
+  const discoveredOAuth = useMemo(() => {
+    const baseURL = getServerURL();
+    const mcpSlug = toolset.mcpSlug;
+    for (const tool of toolset.rawTools) {
+      const def = tool.externalMcpToolDefinition;
+      if (!def?.requiresOauth) continue;
+
+      if (!def.oauthAuthorizationEndpoint && !def.oauthTokenEndpoint) continue;
+
+      const metadata: Record<string, unknown> = {
+        issuer: `${baseURL}/mcp/${mcpSlug}`,
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code", "refresh_token"],
+        code_challenge_methods_supported: ["S256"],
+      };
+      if (def.oauthAuthorizationEndpoint)
+        metadata.authorization_endpoint = def.oauthAuthorizationEndpoint;
+      if (def.oauthTokenEndpoint)
+        metadata.token_endpoint = def.oauthTokenEndpoint;
+      if (def.oauthRegistrationEndpoint)
+        metadata.registration_endpoint = def.oauthRegistrationEndpoint;
+      if (def.oauthScopesSupported?.length)
+        metadata.scopes_supported = def.oauthScopesSupported;
+
+      return {
+        slug: def.slug,
+        name: def.registryServerName,
+        version: def.oauthVersion,
+        metadata,
+      };
+    }
+    return null;
+  }, [toolset.rawTools, toolset.mcpSlug]);
+
   const [activeTab, setActiveTab] = useState("external");
   const [externalSlug, setExternalSlug] = useState("");
   const [metadataJson, setMetadataJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState<Record<string, boolean>>({});
   const telemetry = useTelemetry();
 
   // OAuth Proxy form state
@@ -2132,6 +2122,28 @@ function OAuthTabModal({
   );
   const [proxyAudience, setProxyAudience] = useState("");
   const [proxyError, setProxyError] = useState<string | null>(null);
+
+  const applyDiscoveredOAuth = useCallback(
+    (tab: "external" | "proxy") => {
+      if (!discoveredOAuth) return;
+      if (tab === "external") {
+        setExternalSlug(discoveredOAuth.slug);
+        setMetadataJson(JSON.stringify(discoveredOAuth.metadata, null, 2));
+        setJsonError(null);
+      } else {
+        setProxySlug(discoveredOAuth.slug);
+        const m = discoveredOAuth.metadata;
+        if (typeof m.authorization_endpoint === "string")
+          setProxyAuthorizationEndpoint(m.authorization_endpoint);
+        if (typeof m.token_endpoint === "string")
+          setProxyTokenEndpoint(m.token_endpoint);
+        if (Array.isArray(m.scopes_supported))
+          setProxyScopes(m.scopes_supported.join(", "));
+      }
+      setPrefilled((prev) => ({ ...prev, [tab]: true }));
+    },
+    [discoveredOAuth],
+  );
 
   const hasMultipleOAuth2AuthCode =
     toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
@@ -2306,6 +2318,27 @@ function OAuthTabModal({
                   </Type>
                 </div>
               )}
+              {discoveredOAuth && !prefilled.external && (
+                <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <Type small className="font-medium">
+                      OAuth detected from {discoveredOAuth.name}
+                    </Type>
+                    <Type muted small className="mt-1">
+                      We discovered OAuth {discoveredOAuth.version} metadata
+                      from this server. You can use it to pre-fill the form
+                      below.
+                    </Type>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => applyDiscoveredOAuth("external")}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              )}
               <div>
                 <Type className="font-medium mb-2">
                   External OAuth Server Configuration
@@ -2392,6 +2425,28 @@ function OAuthTabModal({
                     Book a meeting
                   </Link>
                 </Type>
+
+                {discoveredOAuth && !prefilled.proxy && (
+                  <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
+                    <div>
+                      <Type small className="font-medium">
+                        OAuth detected from {discoveredOAuth.name}
+                      </Type>
+                      <Type muted small className="mt-1">
+                        We discovered OAuth {discoveredOAuth.version} metadata
+                        from this server. You can use it to pre-fill the
+                        endpoints below.
+                      </Type>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => applyDiscoveredOAuth("proxy")}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                )}
 
                 {proxyError && (
                   <Type className="!text-red-500 text-sm mb-4">

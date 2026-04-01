@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 
@@ -28,7 +29,11 @@ func NewPostSlackMessageActivity(logger *slog.Logger, client *client.SlackClient
 }
 
 func (s *PostSlackMessage) Do(ctx context.Context, input PostSlackMessageInput) error {
-	authInfo, err := s.slackClient.GetAppAuthInfo(ctx, input.Event.TeamID)
+	gramAppID, err := uuid.Parse(input.Event.GramAppID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid gram app ID on event").Log(ctx, s.logger)
+	}
+	authInfo, err := s.slackClient.GetAppAuthInfoByID(ctx, gramAppID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error getting app auth info").Log(ctx, s.logger)
 	}

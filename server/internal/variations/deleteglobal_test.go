@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/variations"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -33,6 +35,8 @@ func TestVariationsService_DeleteGlobal_Success(t *testing.T) {
 	}))
 	require.NoError(t, err, "upsert variation should not error")
 	require.NotNil(t, created, "created variation should not be nil")
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
 
 	// Now delete the variation
 	result, err := ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
@@ -57,16 +61,35 @@ func TestVariationsService_DeleteGlobal_Success(t *testing.T) {
 	for _, v := range listResult.Variations {
 		require.NotEqual(t, created.Variation.ID, v.ID, "deleted variation should not appear in list")
 	}
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionVariationDeleteGlobal), record.Action)
+	require.Equal(t, "variation", record.SubjectType)
+	require.Equal(t, "delete-test-tool", record.SubjectDisplay)
+	require.Empty(t, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.Nil(t, record.AfterSnapshot)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "tools:http:test:delete-test-tool", metadata["src_tool_urn"])
 }
 
 func TestVariationsService_DeleteGlobal_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
 
 	// Try to delete a non-existent variation
 	nonExistentID := uuid.New().String()
-	_, err := ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
+	_, err = ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -74,15 +97,21 @@ func TestVariationsService_DeleteGlobal_NotFound(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not found")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_DeleteGlobal_InvalidUUID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
 
 	// Try to delete with invalid UUID
-	_, err := ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
+	_, err = ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -90,15 +119,21 @@ func TestVariationsService_DeleteGlobal_InvalidUUID(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_DeleteGlobal_EmptyUUID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
 
 	// Try to delete with empty UUID
-	_, err := ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
+	_, err = ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -106,15 +141,21 @@ func TestVariationsService_DeleteGlobal_EmptyUUID(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_DeleteGlobal_NilUUID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
 
 	// Try to delete with nil UUID (zero value)
-	_, err := ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
+	_, err = ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -122,17 +163,23 @@ func TestVariationsService_DeleteGlobal_NilUUID(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_DeleteGlobal_Unauthorized(t *testing.T) {
 	t.Parallel()
 
-	_, ti := newTestVariationsService(t)
+	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
 
 	// Test with context that has no auth context
-	ctx := t.Context()
+	ctxWithoutAuth := t.Context()
 
-	_, err := ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
+	_, err = ti.service.DeleteGlobal(ctxWithoutAuth, &gen.DeleteGlobalPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -140,15 +187,21 @@ func TestVariationsService_DeleteGlobal_Unauthorized(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_DeleteGlobal_NoProjectID(t *testing.T) {
 	t.Parallel()
 
-	_, ti := newTestVariationsService(t)
+	ctx, ti := newTestVariationsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
 
 	// Create context with auth but no project ID
-	ctx := t.Context()
+	ctx = t.Context()
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID: "test-org",
 		UserID:               "test-user",
@@ -162,7 +215,7 @@ func TestVariationsService_DeleteGlobal_NoProjectID(t *testing.T) {
 	}
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
+	_, err = ti.service.DeleteGlobal(ctx, &gen.DeleteGlobalPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -170,6 +223,10 @@ func TestVariationsService_DeleteGlobal_NoProjectID(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionVariationDeleteGlobal)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestVariationsService_DeleteGlobal_MultipleDeleteSameID(t *testing.T) {

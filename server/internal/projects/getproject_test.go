@@ -61,16 +61,11 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it rejects without active organization", func(t *testing.T) {
 		t.Parallel()
 
-		_, ti := newTestProjectsService(t)
+		ctx, ti := newTestProjectsService(t)
 
-		// Create auth context without organization ID
-		ctx, err := ti.sessionManager.Authenticate(context.Background(), "", true)
-		require.NoError(t, err)
-
+		// Get the existing auth context and clear the organization ID
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-
-		// Clear the organization ID
 		authCtx.ActiveOrganizationID = ""
 
 		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
@@ -114,18 +109,11 @@ func TestProjectsService_GetProject(t *testing.T) {
 		// Store the project slug from the first context
 		projectSlug := *authCtx.ProjectSlug
 
-		// Create a new auth context with a different organization
-		ctx2, err := ti.sessionManager.Authenticate(context.Background(), "", true)
-		require.NoError(t, err)
+		// Modify the auth context to simulate a different organization
+		authCtx.ActiveOrganizationID = "different-org-id"
 
-		authCtx2, ok := contextvalues.GetAuthContext(ctx2)
-		require.True(t, ok)
-
-		// Change the organization ID to simulate a different organization
-		authCtx2.ActiveOrganizationID = "different-org-id"
-
-		// Try to get the project from the first context using the second context
-		result, err := ti.service.GetProject(ctx2, &gen.GetProjectPayload{
+		// Try to get the project using a different organization context
+		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
 			Slug: types.Slug(projectSlug),
 		})
 

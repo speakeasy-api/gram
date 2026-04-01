@@ -3,6 +3,7 @@
   "printWidth": 80,
   "experimentalSortPackageJson": false,
   "ignorePatterns": [
+    "**/CHANGELOG.md",
     "/.speakeasy/**",
     "/client/dashboard/index.html",
     "/client/dashboard/public/external/**",

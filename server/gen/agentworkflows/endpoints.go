@@ -49,7 +49,7 @@ func NewCreateResponseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"chat"},
 		}
 		var key string
@@ -84,7 +84,7 @@ func NewGetResponseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"chat"},
 		}
 		var key string
@@ -119,7 +119,7 @@ func NewDeleteResponseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
 			RequiredScopes: []string{"chat"},
 		}
 		var key string

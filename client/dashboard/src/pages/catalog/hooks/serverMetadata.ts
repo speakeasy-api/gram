@@ -192,10 +192,12 @@ function isWithinRange(date: Date | undefined, range: string): boolean {
 
 /**
  * Filter and sort servers based on the current filter state.
+ * Optionally applies a search query for client-side filtering.
  */
 export function filterAndSortServers(
   servers: Server[],
   filterState: FilterState,
+  searchQuery?: string,
 ): Server[] {
   // Parse metadata for all servers
   const serversWithMeta = servers.map((server) => ({
@@ -205,6 +207,21 @@ export function filterAndSortServers(
   }));
 
   let filtered = serversWithMeta;
+
+  // Apply search filter (client-side)
+  if (searchQuery && searchQuery.trim() !== "") {
+    const query = searchQuery.toLowerCase().trim();
+    filtered = filtered.filter((s) => {
+      const title = (s.server.title ?? "").toLowerCase();
+      const specifier = s.server.registrySpecifier.toLowerCase();
+      const description = (s.server.description ?? "").toLowerCase();
+      return (
+        title.includes(query) ||
+        specifier.includes(query) ||
+        description.includes(query)
+      );
+    });
+  }
 
   // Apply category filter
   if (filterState.category === "popular") {

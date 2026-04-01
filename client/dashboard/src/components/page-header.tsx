@@ -83,10 +83,13 @@ function PageHeaderBreadcrumbs({
   };
 
   // Build breadcrumb elements from URL segments
+  // For project-level pages (/:orgSlug/projects/:projectSlug/...), strip 3 leading segments
+  // For org-level pages (/:orgSlug/...), strip 1 leading segment (just the orgSlug)
+  const segmentsToStrip = projectSlug ? 3 : 1;
   const visibleElements = location.pathname
     .split("/")
     .filter(Boolean) // Remove empty strings
-    .slice(2) // Remove the two leading elements (org slug and project slug)
+    .slice(segmentsToStrip)
     .filter((segment) => !skipSegments.includes(segment)) // Skip specified segments
     .map((segment, index, segments) => {
       const url = "/" + segments.slice(0, index + 1).join("/");
@@ -121,7 +124,11 @@ function PageHeaderBreadcrumbs({
               <span>{elem.display}</span>
             ) : (
               <Link
-                to={`/${orgSlug}/${projectSlug}${elem.url}`}
+                to={
+                  projectSlug
+                    ? `/${orgSlug}/projects/${projectSlug}${elem.url}`
+                    : `/${orgSlug}${elem.url}`
+                }
                 className="text-muted-foreground hover:text-foreground trans"
               >
                 {elem.display}

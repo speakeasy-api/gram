@@ -35,7 +35,7 @@ export function TraceRow({
     <div className="border-b border-border/50 last:border-b-0">
       {/* Parent trace row */}
       <div
-        className="flex items-center gap-3 px-5 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
+        className="flex items-center gap-3 px-8 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={onToggle}
       >
         {/* Timestamp */}

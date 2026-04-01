@@ -66,7 +66,7 @@ func NewUnifiedClient(
 	telemetryService TelemetryService,
 ) *ChatClient {
 	return &ChatClient{
-		logger:                 logger,
+		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
 		httpClient:             cleanhttp.DefaultPooledClient(),
 		provisioner:            provisioner,
 		messageCaptureStrategy: captureStrategy,
