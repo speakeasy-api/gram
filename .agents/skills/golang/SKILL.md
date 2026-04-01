@@ -19,6 +19,8 @@ This codebases uses features from Go 1.25 and above.
 - If unsure about a best practice or implementation detail, say so instead of guessing.
 - Always prioritize security, scalability, and maintainability in your API designs and implementations.
 - Avoid editing any source files that have a "DO NOT EDIT" comment at start of them.
+- Store dependencies on service structs via constructor-based dependency injection. Do NOT hide dependencies in session manager state.
+- Avoid shallow helpers that are just a one-line wrapper around another method, especially when they are only used once.
 - When using a slog logger, always use the context-aware methods: `DebugContext`, `InfoContext`, `WarnContext`, `ErrorContext`.
 - When logging errors make sure to always include them in the log payload using `slog.String("error", err)`. Example: `logger.ErrorContext(ctx, "failed to write to database", slog.String("error", err))`.
 - Any functions or methods that relate to making API calls or database queries or working with timers should take a `context.Context` value as their first argument.
@@ -96,6 +98,194 @@ func (s *Service) ListAssets(ctx context.Context, payload *gen.ListAssetsPayload
 ```
 
 If you are creating a new Goa service, then make sure to attach it to the http server in `server/cmd/gram/start.go`.
+
+## Dependency injection
+
+- Always inject dependencies directly into service structs via the constructor.
+- Do NOT use a session manager to stash dependencies that the service needs later.
+- When a service needs database access, inject the DB connection or repo and initialize query helpers when needed.
+- Do NOT store `repo.Queries` directly on a service struct for a new service.
+
+<bad-example>
+
+```go
+type Service struct {
+    queries *repo.Queries
+}
+
+func NewService(db *pgxpool.Pool) *Service {
+    return &Service{
+        queries: repo.New(db),
+    }
+}
+```
+
+This makes the service depend on a concrete query helper instance up front, which is not the pattern we want for new services.
+
+</bad-example>
+
+<good-example>
+
+```go
+type Service struct {
+    db *pgxpool.Pool
+}
+
+func NewService(db *pgxpool.Pool) *Service {
+    return &Service{db: db}
+}
+
+func (s *Service) ListWidgets(ctx context.Context) ([]repo.Widget, error) {
+    queries := repo.New(s.db)
+
+    widgets, err := queries.ListWidgets(ctx)
+    if err != nil {
+        return nil, fmt.Errorf("list widgets: %w", err)
+    }
+
+    return widgets, nil
+}
+```
+
+This keeps the service dependency simple and avoids baking `repo.Queries` into the service shape.
+
+</good-example>
+
+## Auth context assumptions
+
+- When reading `authctx`, assume `ActiveOrganisationID` is present.
+- Do NOT add defensive empty checks for `ActiveOrganisationID` unless there is a concrete code path proving otherwise.
+
+<bad-example>
+
+```go
+authCtx := authctx.From(ctx)
+if authCtx.ActiveOrganisationID == uuid.Nil {
+    return nil, oops.E(oops.CodeUnauthorized, nil, "missing active organisation")
+}
+```
+
+This is unnecessary defensive code and adds noise around an invariant that should already hold.
+
+</bad-example>
+
+<good-example>
+
+```go
+authCtx := authctx.From(ctx)
+orgID := authCtx.ActiveOrganisationID
+```
+
+</good-example>
+
+## Third-party clients
+
+- Constructors for third-party clients should always return a usable client implementation.
+- Avoid designs where internal code has to repeatedly check whether a client is `nil` before calling it.
+- Provide a stub or no-op implementation that can be initialized in local development and tests.
+- Do NOT expose third-party request/response types from your wrapper to the rest of our codebase. Define our own types at the boundary.
+
+<bad-example>
+
+```go
+type Service struct {
+    client *vendor.Client
+}
+
+func NewService(cfg Config) *Service {
+    if cfg.APIKey == "" {
+        return &Service{}
+    }
+
+    return &Service{client: vendor.New(cfg.APIKey)}
+}
+
+func (s *Service) Send(ctx context.Context, req *vendor.Request) error {
+    if s.client == nil {
+        return nil
+    }
+
+    return s.client.Send(ctx, req)
+}
+```
+
+This leaks vendor types into internal code and spreads `nil` handling into runtime call paths.
+
+</bad-example>
+
+<good-example>
+
+```go
+type Client interface {
+    Send(ctx context.Context, message Message) error
+}
+
+type Message struct {
+    To      string
+    Subject string
+    Body    string
+}
+
+type noopClient struct{}
+
+func (noopClient) Send(context.Context, Message) error { return nil }
+
+func NewClient(cfg Config) Client {
+    if cfg.APIKey == "" {
+        return noopClient{}
+    }
+
+    return &client{vendor: vendor.New(cfg.APIKey)}
+}
+```
+
+This keeps the abstraction clean: callers always receive a valid client, local dev can use the stub, and vendor types stay inside the wrapper.
+
+</good-example>
+
+## Function shape
+
+- Avoid helper functions and methods that only forward to another method with no meaningful logic.
+- Avoid extracting single-use one-liners into separate methods just for indirection.
+- Prefer inlining trivial behavior at the call site unless the extracted function adds reuse, naming value, or non-trivial logic.
+
+<bad-example>
+
+```go
+func (s *Service) listWidgets(ctx context.Context) ([]repo.Widget, error) {
+    return s.repo.ListWidgets(ctx)
+}
+
+func (s *Service) List(ctx context.Context) error {
+    widgets, err := s.listWidgets(ctx)
+    if err != nil {
+        return err
+    }
+
+    _ = widgets
+    return nil
+}
+```
+
+The wrapper adds no abstraction and is only used once.
+
+</bad-example>
+
+<good-example>
+
+```go
+func (s *Service) List(ctx context.Context) error {
+    widgets, err := s.repo.ListWidgets(ctx)
+    if err != nil {
+        return err
+    }
+
+    _ = widgets
+    return nil
+}
+```
+
+</good-example>
 
 ## Error handling
 
@@ -294,6 +484,43 @@ defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 ## Testing
 
 - When writing assertions, use `github.com/stretchr/testify/require` exclusively.
+- In tests, use `t.Context()` instead of `context.Background()`.
 - IMPORTANT: avoid using `t.Run` to create subtests. Prefer writing separate test functions instead.
 - All test setup which includes spinning up databases, caches and background workers must go in `setup_test.go` files. Look for these across the codebase for inspiration and guidance.
 - NEVER write bare SQL queries in tests to insert test data. Always use SQLc queries and create ones to support testing if necessary. Although more preferrably orchestrate the various services to create the necessary state for testing.
+- Use `github.com/stretchr/testify/mock` for mocking third-party libraries in tests instead of ad hoc fakes around vendor types.
+
+<bad-example>
+
+```go
+ctx := context.Background()
+```
+
+This loses the test lifecycle context that Go now provides directly on `*testing.T`.
+
+</bad-example>
+
+<good-example>
+
+```go
+ctx := t.Context()
+```
+
+</good-example>
+
+<good-example>
+
+```go
+type mockEmailClient struct {
+    mock.Mock
+}
+
+func (m *mockEmailClient) Send(ctx context.Context, message Message) error {
+    args := m.Called(ctx, message)
+    return args.Error(0)
+}
+```
+
+Use `testify/mock` when mocking integrations so expectations stay explicit and consistent across tests.
+
+</good-example>
