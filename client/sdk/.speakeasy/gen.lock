@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 30afee6b85794943b1c62bfaf6f0b02f
+  docChecksum: 890af547a5bdf83aa14c85aa4069369d
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.17
-  configChecksum: ae0e1cd0cee4fb6ec57562e489943e34
+  releaseVersion: 0.32.18
+  configChecksum: 19c10aeb8e9d37da7bf963bce0635aa8
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -167,6 +167,10 @@ trackedFiles:
     last_write_checksum: sha1:6413aeb4482c72ada977215ba9599509551de263
   docs/models/components/creditusageresponsebody.md:
     last_write_checksum: sha1:34bbdfb51d51d5942a0c7f19f4d3fd408867dc64
+  docs/models/components/cursorhookpayload.md:
+    last_write_checksum: sha1:e58db614e11101637175b09bc2de73e441932f60
+  docs/models/components/cursorhookresult.md:
+    last_write_checksum: sha1:e1e5df116f30a73a8c2055353de5324971ba53b1
   docs/models/components/customdomain.md:
     last_write_checksum: sha1:408cf80dec9f85399ba97808d4742548dc857798
   docs/models/components/deleteglobaltoolvariationresult.md:
@@ -1037,6 +1041,10 @@ trackedFiles:
     last_write_checksum: sha1:d4dc1f5cd35b48ee47957f682f1ad657f0cdcad1
   docs/models/operations/getusermetricssummarysecurityoption2.md:
     last_write_checksum: sha1:b15a0cb73ae463e5e0a6d861957fc2874cd1c855
+  docs/models/operations/hooksnumbercursorrequest.md:
+    last_write_checksum: sha1:2566d56a8fe47f8c625cbbec942123d26181b866
+  docs/models/operations/hooksnumbercursorsecurity.md:
+    last_write_checksum: sha1:a111411fdeb6fd7d0224a332c1853bd55ccf2c45
   docs/models/operations/hooksnumberlogsrequest.md:
     last_write_checksum: sha1:5f3ffbef78d03e1b5fa564832dd104b4a1888798
   docs/models/operations/hooksnumberlogssecurity.md:
@@ -1546,7 +1554,7 @@ trackedFiles:
   docs/sdks/features/README.md:
     last_write_checksum: sha1:79ab0259791f46a8d2ecd959a4ee69dd4551bea5
   docs/sdks/hooks/README.md:
-    last_write_checksum: sha1:8cb24d8ace458ded17f66d1588f19b0afe0ada8a
+    last_write_checksum: sha1:97614bc7ff356d8bd115dbd36e457c7b680a9092
   docs/sdks/hooksservernames/README.md:
     last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
@@ -1599,11 +1607,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:6792803b5f1e7d7f76e816d95e6a1f3ea383fc46
+    last_write_checksum: sha1:c8f6a3c4ffc701abef2e91e1d097157e23cb697e
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:5d033aa3e89c646035bc67cef5b81d70ab278e27
+    last_write_checksum: sha1:b98c5f57b234983e8053faa629c17db61ed968c9
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1827,6 +1835,8 @@ trackedFiles:
     pristine_git_object: 680533ea7917230ef71927dfe370d54d02598082
   src/funcs/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:d2a72cb590c74f9878eee245be17ec020f991dd2
+  src/funcs/hooksHooksNumberCursor.ts:
+    last_write_checksum: sha1:3c3b9361c278122cf994dea1f9723790c0a78b06
   src/funcs/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
   src/funcs/hooksServerNamesDeleteServerNameOverride.ts:
@@ -2101,7 +2111,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:41405a97b4886dc84796e21db7206eb5ad291803
+    last_write_checksum: sha1:580b5f2faecd2ce058c5b16dbfa28640d4bcc5c7
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2311,6 +2321,10 @@ trackedFiles:
     id: 54eee7097f6b
     last_write_checksum: sha1:4dadf315b4b01174dc91b836b05d74186fbe65e0
     pristine_git_object: 087b1ed2f1f241f72f016744c7abdf7f0d647852
+  src/models/components/cursorhookpayload.ts:
+    last_write_checksum: sha1:41de0c32cf785cb67d9a29007770454c7a927f10
+  src/models/components/cursorhookresult.ts:
+    last_write_checksum: sha1:e19dfcfc5a734e842ebae2b852c4298ef7000090
   src/models/components/customdomain.ts:
     id: 0931e77e04a5
     last_write_checksum: sha1:8793582a898d08c48da8a062952def456132e664
@@ -2479,7 +2493,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:efe5d07602725175e988f3c3b1e8897649e404b7
+    last_write_checksum: sha1:50e7e432cc364a2aae2c6d0748c85525c4b2f1d3
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3207,11 +3221,13 @@ trackedFiles:
     pristine_git_object: c847d55d0e1a60c6f2aafe8e29c62fe699a75588
   src/models/operations/getusermetricssummary.ts:
     last_write_checksum: sha1:ce121229f9e0be0fe1eeba1361ab61bf384d3785
+  src/models/operations/hooksnumbercursor.ts:
+    last_write_checksum: sha1:16bd35acfd65f1e23d0bf088ecab54fd8758a057
   src/models/operations/hooksnumberlogs.ts:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:55e38002a8e58c8da271d87c00460a805bd3dff3
+    last_write_checksum: sha1:5d66d5d1345e634c62905fc4e46bd22a95090566
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3733,6 +3749,8 @@ trackedFiles:
     pristine_git_object: 48f56cd5f501f734c3428170db837bbe2568246f
   src/react-query/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:65daa7cbd33c503edad39c7ca638137b35727049
+  src/react-query/hooksHooksNumberCursor.ts:
+    last_write_checksum: sha1:8908df760d02edc946c833ae6454c191f7c97c93
   src/react-query/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:71f93fe368921c0b23f8da768c8d6b424852bb96
   src/react-query/hooksServerNamesDeleteServerNameOverride.ts:
@@ -3745,7 +3763,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:1fe3365cc320d4a0922b6104687eb4cadf0f0080
+    last_write_checksum: sha1:d688859349695d496e391a5d058ee2fb2d9e3f81
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -4196,7 +4214,7 @@ trackedFiles:
     last_write_checksum: sha1:f9453df020a022530a0fb97a2e7099343c930b13
     pristine_git_object: 3b4e49a565f809818b5f48673f81835a7d83f884
   src/sdk/hooks.ts:
-    last_write_checksum: sha1:10d8205f23245a643949abb21b313f55d21f163d
+    last_write_checksum: sha1:cba2c0a04747313c22798423da3402397b8a8c45
   src/sdk/hooksservernames.ts:
     last_write_checksum: sha1:46e1603a1bda6de118b0cfbf7ce1590e01a38c42
   src/sdk/index.ts:
@@ -6023,6 +6041,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  hooks#cursor:
+    speakeasy-default-hooks#cursor:
+      requestBody:
+        application/json: {"hook_event_name": "<value>"}
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
