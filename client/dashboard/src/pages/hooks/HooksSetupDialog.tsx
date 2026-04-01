@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ExternalLink, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HookSourceIcon } from "./HookSourceIcon";
 
 function ClaudeInstallContent() {
@@ -171,11 +171,17 @@ const providers: { id: Provider; label: string; source: string }[] = [
 export function HooksSetupDialog({
   open,
   onOpenChange,
+  defaultProvider = "claude",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultProvider?: Provider;
 }) {
-  const [selected, setSelected] = useState<Provider>("claude");
+  const [selected, setSelected] = useState<Provider>(defaultProvider);
+
+  useEffect(() => {
+    setSelected(defaultProvider);
+  }, [defaultProvider]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

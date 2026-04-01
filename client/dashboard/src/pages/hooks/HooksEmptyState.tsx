@@ -120,6 +120,9 @@ function ProviderCard({
 
 export function HooksEmptyState() {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
+  const [setupProvider, setSetupProvider] = useState<"claude" | "cursor">(
+    "claude",
+  );
   const [showFeatureRequestModal, setShowFeatureRequestModal] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>("");
 
@@ -130,6 +133,7 @@ export function HooksEmptyState() {
       return;
     }
 
+    setSetupProvider(provider as "claude" | "cursor");
     setShowSetupDialog(true);
   };
 
@@ -183,6 +187,7 @@ export function HooksEmptyState() {
       <HooksSetupDialog
         open={showSetupDialog}
         onOpenChange={setShowSetupDialog}
+        defaultProvider={setupProvider}
       />
 
       {/* Feature Request Modal */}
