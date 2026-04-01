@@ -144,7 +144,6 @@ export default function ChatLogs() {
   const urlTo = searchParams.get("to");
   const urlSearch = searchParams.get("search");
   const urlStatus = searchParams.get("status");
-  const urlSource = searchParams.get("source");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
 
@@ -169,7 +168,6 @@ export default function ChatLogs() {
 
   const searchQuery = urlSearch ?? "";
   const resolutionStatus = urlStatus ?? "";
-  const source = urlSource ?? "";
 
   // Calculate the time range for the query
   const timeRange = useMemo(() => {
@@ -241,13 +239,6 @@ export default function ChatLogs() {
     [updateSearchParams],
   );
 
-  const setSource = useCallback(
-    (value: string) => {
-      updateSearchParams({ source: value || null });
-    },
-    [updateSearchParams],
-  );
-
   const setSortField = useCallback(
     (value: SortField) => {
       updateSearchParams({ sort: value === "chronological" ? null : value });
@@ -272,7 +263,6 @@ export default function ChatLogs() {
         {
           search: searchQuery || undefined,
           resolutionStatus: resolutionStatus || undefined,
-          source: source || undefined,
           from: timeRange.from,
           to: timeRange.to,
           sortBy: toApiSortBy(sortField),
@@ -349,8 +339,6 @@ export default function ChatLogs() {
         setSearchQuery={setSearchQuery}
         resolutionStatus={resolutionStatus}
         setResolutionStatus={setResolutionStatus}
-        source={source}
-        setSource={setSource}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
@@ -383,8 +371,6 @@ function ChatLogsContent({
   setSearchQuery,
   resolutionStatus,
   setResolutionStatus,
-  source,
-  setSource,
   sortField,
   setSortField,
   sortOrder,
@@ -411,8 +397,6 @@ function ChatLogsContent({
   setSearchQuery: (value: string) => void;
   resolutionStatus: string;
   setResolutionStatus: (value: string) => void;
-  source: string;
-  setSource: (value: string) => void;
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
@@ -483,8 +467,6 @@ function ChatLogsContent({
                     onSearchQueryChange={setSearchQuery}
                     resolutionStatus={resolutionStatus}
                     onResolutionStatusChange={setResolutionStatus}
-                    source={source}
-                    onSourceChange={setSource}
                   />
                   <div className="flex items-center gap-3 ml-auto shrink-0">
                     {/* Sort segmented control: label + dropdown + direction button */}

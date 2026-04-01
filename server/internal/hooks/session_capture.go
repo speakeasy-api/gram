@@ -15,6 +15,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // sessionIDToUUID converts a Claude Code session_id string to a deterministic UUID.
@@ -92,15 +93,15 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		return
 	}
 
-	// TODO Check if session capture is enabled for this org
-	// enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
-	// if err != nil {
-	// 	s.logger.WarnContext(ctx, "check session_capture feature flag", attr.SlogError(err))
-	// 	return
-	// }
-	// if !enabled {
-	// 	return
-	// }
+	// Check if session capture is enabled for this org
+	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
+	if err != nil {
+		s.logger.WarnContext(ctx, "check session_capture feature flag", attr.SlogError(err))
+		return
+	}
+	if !enabled {
+		return
+	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {

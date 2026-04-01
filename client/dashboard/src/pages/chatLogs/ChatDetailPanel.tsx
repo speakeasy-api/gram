@@ -10,6 +10,7 @@ import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useEffect, useMemo } from "react";
 import { CircularProgress } from "./CircularProgress";
+import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -432,6 +433,22 @@ export function ChatDetailPanel({
                   {chat.externalUserId || "anonymous"}
                 </div>
               </div>
+              {chat.source && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Source:
+                  </div>
+                  <div className="text-sm font-medium flex items-center gap-2">
+                    {chat.source.toLowerCase().includes("claude") ||
+                    chat.source.toLowerCase().includes("cursor") ? (
+                      <HookSourceIcon source={chat.source} className="size-4" />
+                    ) : (
+                      <Icon name="globe" className="size-4 opacity-60" />
+                    )}
+                    {chat.source}
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="text-xs text-muted-foreground mb-1">
                   Duration:
@@ -528,70 +545,70 @@ export function ChatDetailPanel({
                           const parsedToolCalls = JSON.parse(
                             message.toolCalls,
                           ) as ToolCall[];
-                          return Array.isArray(parsedToolCalls) ? (
-                            parsedToolCalls.map((tc, idx: number) => (
-                              <div
-                                key={tc.id || idx}
-                                className="flex items-start gap-3"
-                              >
-                                <div className="size-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                                  <Icon
-                                    name="zap"
-                                    className="size-4 text-primary-foreground"
-                                  />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm font-semibold">
-                                      Tool Call
-                                    </span>
-                                    {tc.id && (
-                                      <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
-                                        {tc.id}
-                                      </code>
-                                    )}
-                                    <span className="text-xs text-muted-foreground">
-                                      {message.createdAt &&
-                                        format(
-                                          new Date(message.createdAt),
-                                          "HH:mm:ss",
-                                        )}
-                                    </span>
+                          return Array.isArray(parsedToolCalls)
+                            ? parsedToolCalls.map((tc, idx: number) => (
+                                <div
+                                  key={tc.id || idx}
+                                  className="flex items-start gap-3"
+                                >
+                                  <div className="size-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                                    <Icon
+                                      name="zap"
+                                      className="size-4 text-primary-foreground"
+                                    />
                                   </div>
-                                  <div className="rounded-lg text-sm overflow-hidden bg-background border">
-                                    <div className="p-3 border-b bg-muted/30">
-                                      <div className="flex items-center gap-2">
-                                        <Icon
-                                          name="zap"
-                                          className="size-4 text-primary"
-                                        />
-                                        <span className="font-semibold">
-                                          {tc.function?.name ||
-                                            tc.name ||
-                                            "Tool Call"}
-                                        </span>
-                                      </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-sm font-semibold">
+                                        Tool Call
+                                      </span>
+                                      {tc.id && (
+                                        <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                                          {tc.id}
+                                        </code>
+                                      )}
+                                      <span className="text-xs text-muted-foreground">
+                                        {message.createdAt &&
+                                          format(
+                                            new Date(message.createdAt),
+                                            "HH:mm:ss",
+                                          )}
+                                      </span>
                                     </div>
-                                    {tc.function?.arguments && (
-                                      <CodeBlock
-                                        content={
-                                          typeof tc.function.arguments ===
-                                          "string"
-                                            ? tc.function.arguments
-                                            : JSON.stringify(
-                                                tc.function.arguments,
-                                                null,
-                                                2,
-                                              )
-                                        }
-                                        maxHeight={300}
-                                      />
-                                    )}
+                                    <div className="rounded-lg text-sm overflow-hidden bg-background border">
+                                      <div className="p-3 border-b bg-muted/30">
+                                        <div className="flex items-center gap-2">
+                                          <Icon
+                                            name="zap"
+                                            className="size-4 text-primary"
+                                          />
+                                          <span className="font-semibold">
+                                            {tc.function?.name ||
+                                              tc.name ||
+                                              "Tool Call"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {tc.function?.arguments && (
+                                        <CodeBlock
+                                          content={
+                                            typeof tc.function.arguments ===
+                                            "string"
+                                              ? tc.function.arguments
+                                              : JSON.stringify(
+                                                  tc.function.arguments,
+                                                  null,
+                                                  2,
+                                                )
+                                          }
+                                          maxHeight={300}
+                                        />
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))
-                          ) : null;
+                              ))
+                            : null;
                         } catch {
                           return null;
                         }
@@ -631,10 +648,7 @@ export function ChatDetailPanel({
                             )}
                             <span className="text-xs text-muted-foreground">
                               {message.createdAt &&
-                                format(
-                                  new Date(message.createdAt),
-                                  "HH:mm:ss",
-                                )}
+                                format(new Date(message.createdAt), "HH:mm:ss")}
                             </span>
                           </div>
                           <div

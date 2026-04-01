@@ -12,5 +12,5 @@ echo ""
 
 
 
-export GRAM_HOOKS_SERVER_URL=https://recent-patrica-unmonastically.ngrok-free.dev #http://localhost:8080
+export GRAM_HOOKS_SERVER_URL=http://localhost:8080
 exec claude --plugin-dir ./hooks/plugin-claude-test --debug
