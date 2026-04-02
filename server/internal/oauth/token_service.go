@@ -242,7 +242,7 @@ func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.
 	if time.Now().After(token.ExpiresAt) {
 		// Don't delete — the refresh token may still be valid and the client
 		// can exchange it for a new token pair.
-		return nil, ErrExpiredAccessToken
+		return token, ErrExpiredAccessToken
 	}
 
 	for _, externalSecret := range token.ExternalSecrets {

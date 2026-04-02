@@ -60,7 +60,7 @@ linters:
       - path: _test\.go|internal/testenv/|cmd/
         linters:
           - forbidigo
-      - path: _test\.go
+      - path: _test\.go|internal/oauthtest
         linters:
           - exhaustruct
           - gosec
