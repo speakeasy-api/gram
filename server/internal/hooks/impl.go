@@ -362,16 +362,18 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	s.writeCursorHookToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
-	switch payload.HookEventName {
-	case "preToolUse":
-		allow := "allow"
-		return &gen.CursorHookResult{ //nolint:exhaustruct // optional fields
-			Permission: &allow,
-		}, nil
-	default:
-		return &gen.CursorHookResult{ //nolint:exhaustruct // optional fields
-		}, nil
+	result := &gen.CursorHookResult{
+		Permission:        nil,
+		UserMessage:       nil,
+		AdditionalContext: nil,
 	}
+
+	if payload.HookEventName == "preToolUse" {
+		allow := "allow"
+		result.Permission = &allow
+	}
+
+	return result, nil
 }
 
 // generateTraceID generates a W3C-compliant trace ID (32 hex characters)
