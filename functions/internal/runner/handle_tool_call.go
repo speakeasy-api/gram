@@ -112,6 +112,10 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 			http.StatusInternalServerError,
 		)
 	}
+	waitch := make(chan error, 1)
+	go func() {
+		waitch <- cmd.Wait()
+	}()
 
 	// Open the FIFO for reading in a separate goroutine to avoid blocking
 	// indefinitely.
@@ -135,6 +139,17 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 		return svc.NewTemporaryError(
 			fmt.Errorf("timed out waiting for sub-process: %w", ctx.Err()),
 			http.StatusRequestTimeout,
+		)
+	case err := <-waitch:
+		if err == nil {
+			return svc.NewPermanentError(
+				fmt.Errorf("sub-process exited before opening response pipe"),
+				http.StatusInternalServerError,
+			)
+		}
+		return svc.NewPermanentError(
+			fmt.Errorf("sub-process exited before opening response pipe: %w", err),
+			http.StatusInternalServerError,
 		)
 	case err := <-errch:
 		return svc.Fault(
@@ -185,7 +200,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 		s.logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 	}
 
-	err = cmd.Wait()
+	err = <-waitch
 	executionTime := time.Since(startTime).Seconds()
 
 	// Write resource usage as trailers after response body is sent

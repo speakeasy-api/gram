@@ -87,7 +87,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 
 	enc := testenv.NewEncryptionClient(t)
-	funcs := testenv.NewFunctionsTestOrchestrator(t)
+	funcs := testenv.NewFunctionsTestOrchestrator(t, assetStorage)
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	f := &feature.InMemory{}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -83,7 +84,8 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 	cacheImpl := cache.NewRedisCacheAdapter(redisClient)
 
 	// Create stub functions caller (Orchestrator implements ToolCaller)
-	funcs := testenv.NewFunctionsTestOrchestrator(t)
+	assetStorage := assetstest.NewTestBlobStore(t)
+	funcs := testenv.NewFunctionsTestOrchestrator(t, assetStorage)
 
 	// Create auth service
 	authService := auth.New(logger, conn, sessionManager)

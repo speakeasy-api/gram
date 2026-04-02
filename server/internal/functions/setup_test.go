@@ -75,11 +75,11 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	enc := testenv.NewEncryptionClient(t)
-	funcs := testenv.NewFunctionsTestOrchestrator(t)
 
 	f := &feature.InMemory{}
 
 	assetStorage := assetstest.NewTestBlobStore(t)
+	funcs := testenv.NewFunctionsTestOrchestrator(t, assetStorage)
 	tigrisStore := assets.NewTigrisStore(assetStorage)
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
