@@ -246,7 +246,7 @@ Example with Google Gemini:
 ```ts
 import { google } from '@ai-sdk/google';
 
-const googleGemini = google('gemini-3-pro-preview');
+const googleGemini = google('gemini-3.1-pro-preview');
 
 const config: ElementsConfig = {
   {other options}
