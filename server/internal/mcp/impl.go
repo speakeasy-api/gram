@@ -436,15 +436,20 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
 			if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
 				s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-				oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+				var refreshedToken *oauth.Token
+				refreshedToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
 				if err != nil {
 					s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+				} else {
+					oauthToken = refreshedToken
 				}
 			}
 			if err != nil {
 				s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
 			} else {
 				s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+			}
+			if oauthToken != nil {
 				for _, externalSecret := range oauthToken.ExternalSecrets {
 					tokenInputs = append(tokenInputs, oauthTokenInputs{
 						securityKeys: externalSecret.SecurityKeys,
@@ -643,7 +648,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 		// OAuth at the server level (proxy or external). If so, require the
 		// user to have provided a token — otherwise the 401 + WWW-Authenticate
 		// must be sent so MCP clients can initiate the OAuth flow.
-		oauthRequired := toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid
+		oauthRequired := toolset.McpIsPublic && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid)
 		if oauthRequired {
 			for _, t := range payload.oauthTokenInputs {
 				if t.Token != "" {
