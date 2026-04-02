@@ -19,10 +19,6 @@ export type Role = {
    * Scope grants assigned to this role.
    */
   grants: Array<RoleGrant>;
-	/**
-	 * Role slug.
-	 */
-	slug: string;
   /**
    * Whether this is a built-in system role that cannot be deleted.
    */
@@ -35,6 +31,10 @@ export type Role = {
    * Display name of the role.
    */
   name: string;
+  /**
+   * Role slug.
+   */
+  slug: string;
   updatedAt: Date;
 };
 
@@ -47,10 +47,10 @@ export const Role$inboundSchema: z.ZodMiniType<Role, unknown> = z.pipe(
     ),
     description: z.string(),
     grants: z.array(RoleGrant$inboundSchema),
-		slug: z.string(),
     is_system: z.boolean(),
     member_count: z.int(),
     name: z.string(),
+    slug: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
