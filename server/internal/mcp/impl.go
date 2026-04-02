@@ -414,9 +414,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Token extraction — best effort for public MCPs with OAuth.
-	// We collect tokens if present but don't return 401 here. Per-tool security
-	// checks in the RPC handlers will enforce auth requirements and return
-	// SecurityUnsatisfiedError which gets translated to HTTP 401 + WWW-Authenticate.
+	// We collect tokens if present but don't return 401 here.
+	// checkToolsetSecurity below enforces auth requirements and returns
+	// false when unsatisfied, which triggers the 401 + WWW-Authenticate response.
 	//
 	// Private MCPs still enforce identity auth at this level since that's user
 	// identity, not per-tool security.
@@ -436,15 +436,26 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
 			if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
 				s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-				oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+				var refreshedToken *oauth.Token
+				refreshedToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
 				if err != nil {
 					s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+				} else {
+					oauthToken = refreshedToken
 				}
 			}
 			if err != nil {
 				s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
 			} else {
 				s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+			}
+			// Collect upstream secrets so checkToolsetSecurity knows the user
+			// authenticated. We skip this when the Gram access token itself has
+			// expired (ErrExpiredAccessToken) — an expired token must not grant
+			// access. We still collect when only the upstream credentials expired
+			// (ErrExpiredExternalSecrets) because the user's Gram session is
+			// valid; the upstream refresh is best-effort.
+			if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
 				for _, externalSecret := range oauthToken.ExternalSecrets {
 					tokenInputs = append(tokenInputs, oauthTokenInputs{
 						securityKeys: externalSecret.SecurityKeys,
@@ -639,6 +650,19 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 
 	schemes := describeToolSecurity(described.SecurityVariables)
 	if len(schemes) == 0 {
+		// No per-tool security annotations, but the toolset may still require
+		// OAuth at the server level (proxy or external). If so, require the
+		// user to have provided a token — otherwise the 401 + WWW-Authenticate
+		// must be sent so MCP clients can initiate the OAuth flow.
+		oauthRequired := toolset.McpIsPublic && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid)
+		if oauthRequired {
+			for _, t := range payload.oauthTokenInputs {
+				if t.Token != "" {
+					return true, nil
+				}
+			}
+			return false, nil
+		}
 		return true, nil
 	}
 

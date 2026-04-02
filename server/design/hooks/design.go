@@ -51,6 +51,34 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
 })
 
+// Cursor hook payload
+var CursorHookPayload = Type("CursorHookPayload", func() {
+	Description("Payload for Cursor hook events")
+	Required("hook_event_name")
+	Attribute("hook_event_name", String, "The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)")
+	Attribute("conversation_id", String, "The Cursor conversation ID")
+	Attribute("generation_id", String, "The Cursor generation ID")
+	Attribute("model", String, "The model being used")
+	Attribute("cursor_version", String, "The Cursor IDE version")
+	Attribute("user_email", String, "Email of the authenticated Cursor user, if available")
+	Attribute("session_id", String, "The session ID from Cursor")
+	Attribute("tool_name", String, "The name of the tool")
+	Attribute("tool_use_id", String, "The unique ID for this tool use")
+	Attribute("tool_input", Any, "The input to the tool")
+	Attribute("tool_response", Any, "The response from the tool (postToolUse only)")
+	Attribute("error", Any, "The error from the tool (postToolUseFailure only)")
+	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption")
+	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+})
+
+// Cursor hook result
+var CursorHookResult = Type("CursorHookResult", func() {
+	Description("Result for Cursor hook events")
+	Attribute("permission", String, "Permission decision for preToolUse: allow or deny")
+	Attribute("user_message", String, "Message to display to the user")
+	Attribute("additional_context", String, "Additional context to inject into the conversation")
+})
+
 // Server name override types
 var ServerNameOverride = Type("ServerNameOverride", func() {
 	Description("User-defined display name for a hooks server")
@@ -61,7 +89,7 @@ var ServerNameOverride = Type("ServerNameOverride", func() {
 })
 
 var _ = Service("hooks", func() {
-	Description("Receives Claude Code hook events for tool usage observability.")
+	Description("Receives hook events from coding assistants for tool usage observability.")
 
 	shared.DeclareErrorResponses()
 
@@ -75,11 +103,33 @@ var _ = Service("hooks", func() {
 		})
 	})
 
+	Method("cursor", func() {
+		Description("Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(CursorHookPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CursorHookResult)
+
+		HTTP(func() {
+			POST("/rpc/hooks.cursor")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+		})
+	})
+
 	Method("logs", func() {
 		Description("Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("hooks") // NOTE: This is the ONLY endpoint that should allow the hooks scope
+			Scope("hooks")
 		})
 
 		Payload(func() {

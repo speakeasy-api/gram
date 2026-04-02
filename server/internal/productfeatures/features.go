@@ -12,6 +12,7 @@ type Feature string
 const (
 	FeatureLogs           Feature = "logs"
 	FeatureToolIOLogs     Feature = "tool_io_logs"
+	FeatureRBAC           Feature = "rbac"
 	FeatureSessionCapture Feature = "session_capture"
 )
 

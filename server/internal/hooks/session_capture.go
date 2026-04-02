@@ -18,6 +18,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
+// isConversationEvent returns true if the event is a conversation capture event (not a tool call).
+func isConversationEvent(eventName string) bool {
+	switch eventName {
+	case "UserPromptSubmit", "Stop":
+		return true
+	default:
+		return false
+	}
+}
+
 // sessionIDToUUID converts a Claude Code session_id string to a deterministic UUID.
 // Uses UUIDv5 with a fixed namespace so the same session_id always maps to the same UUID.
 func sessionIDToUUID(sessionID string) uuid.UUID {

@@ -26,7 +26,7 @@ import Register from "./pages/login/Register";
 import Logs from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
-import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
+import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
@@ -42,7 +42,7 @@ import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
-// OrgTeam is managed externally via Speakeasy IDP for now
+import Access from "./pages/access/Access";
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
@@ -264,7 +264,7 @@ const ROUTE_STRUCTURE = {
     url: "mcp",
     icon: "network",
     component: MCPRoot,
-    indexComponent: MCPOverview,
+    indexComponent: MCPPage,
     subPages: {
       builtIn: {
         title: "Built-in MCP",
@@ -560,6 +560,24 @@ const ORG_ROUTE_STRUCTURE = {
     url: "audit-logs",
     icon: "history",
     component: OrgAuditLogs,
+  },
+  access: {
+    title: "Roles & Permissions",
+    url: "access",
+    icon: "shield",
+    component: Access,
+    subPages: {
+      roles: {
+        title: "Roles & Permissions",
+        url: "roles",
+        component: Access,
+      },
+      members: {
+        title: "Roles & Permissions",
+        url: "members",
+        component: Access,
+      },
+    },
   },
   adminSettings: {
     title: "Super Admin",

@@ -65,6 +65,58 @@ func BuildClaudePayload(hooksClaudeBody string) (*hooks.ClaudeHookPayload, error
 	return v, nil
 }
 
+// BuildCursorPayload builds the payload for the hooks cursor endpoint from CLI
+// flags.
+func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string) (*hooks.CursorPayload, error) {
+	var err error
+	var body CursorRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksCursorBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"is_interrupt\": false,\n      \"model\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksCursorApikeyToken != "" {
+			apikeyToken = &hooksCursorApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksCursorProjectSlugInput != "" {
+			projectSlugInput = &hooksCursorProjectSlugInput
+		}
+	}
+	v := &hooks.CursorPayload{
+		HookEventName:  body.HookEventName,
+		ConversationID: body.ConversationID,
+		GenerationID:   body.GenerationID,
+		Model:          body.Model,
+		CursorVersion:  body.CursorVersion,
+		UserEmail:      body.UserEmail,
+		SessionID:      body.SessionID,
+		ToolName:       body.ToolName,
+		ToolUseID:      body.ToolUseID,
+		ToolInput:      body.ToolInput,
+		ToolResponse:   body.ToolResponse,
+		Error:          body.Error,
+		IsInterrupt:    body.IsInterrupt,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
 // flags.
 func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {

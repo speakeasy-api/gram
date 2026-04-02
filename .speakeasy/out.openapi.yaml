@@ -5901,6 +5901,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /rpc/hooks.cursor:
+    post:
+      tags:
+        - hooks
+      summary: cursor hooks
+      description: Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.
+      operationId: hooks#cursor
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CursorHookPayload'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CursorHookResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
   /rpc/hooks.deleteServerNameOverride:
     post:
       tags:
@@ -15349,6 +15442,65 @@ components:
       required:
         - credits_used
         - monthly_credits
+    CursorHookPayload:
+      type: object
+      properties:
+        additional_data:
+          type: object
+          description: Additional hook-specific data
+          additionalProperties: true
+        conversation_id:
+          type: string
+          description: The Cursor conversation ID
+        cursor_version:
+          type: string
+          description: The Cursor IDE version
+        error:
+          description: The error from the tool (postToolUseFailure only)
+        generation_id:
+          type: string
+          description: The Cursor generation ID
+        hook_event_name:
+          type: string
+          description: The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+        is_interrupt:
+          type: boolean
+          description: Whether the failure was caused by user interruption
+        model:
+          type: string
+          description: The model being used
+        session_id:
+          type: string
+          description: The session ID from Cursor
+        tool_input:
+          description: The input to the tool
+        tool_name:
+          type: string
+          description: The name of the tool
+        tool_response:
+          description: The response from the tool (postToolUse only)
+        tool_use_id:
+          type: string
+          description: The unique ID for this tool use
+        user_email:
+          type: string
+          description: Email of the authenticated Cursor user, if available
+      description: Payload for Cursor hook events
+      required:
+        - hook_event_name
+    CursorHookResult:
+      type: object
+      properties:
+        additional_context:
+          type: string
+          description: Additional context to inject into the conversation
+        permission:
+          type: string
+          description: 'Permission decision for preToolUse: allow or deny'
+        user_message:
+          type: string
+          description: Message to display to the user
+      description: Result for Cursor hook events
     CustomDomain:
       type: object
       properties:
@@ -21128,7 +21280,7 @@ tags:
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks
-    description: Receives Claude Code hook events for tool usage observability.
+    description: Receives hook events from coding assistants for tool usage observability.
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations

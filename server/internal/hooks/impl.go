@@ -402,6 +402,39 @@ func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.Cla
 	}, nil
 }
 
+// Cursor is the endpoint for Cursor hook events
+func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+
+	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Cursor: %s", payload.HookEventName),
+		attr.SlogEvent("cursor_hook"),
+		attr.SlogValueAny(map[string]any{
+			"hookEventName": payload.HookEventName,
+			"toolName":      payload.ToolName,
+		}),
+	)
+
+	s.writeCursorHookToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	result := &gen.CursorHookResult{
+		Permission:        nil,
+		UserMessage:       nil,
+		AdditionalContext: nil,
+	}
+
+	switch payload.HookEventName {
+	case "preToolUse":
+		result.Permission = new("allow")
+	default:
+		// nothing to do
+	}
+
+	return result, nil
+}
+
 // generateTraceID generates a W3C-compliant trace ID (32 hex characters)
 func generateTraceID() string {
 	b := make([]byte, 16)
