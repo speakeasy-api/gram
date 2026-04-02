@@ -320,7 +320,7 @@ export function MCPDetailPage() {
           {/* Tab Content */}
           <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
             <TabsContent value="overview" className="mt-0 w-full">
-              <MCPOverviewTab toolset={toolset} />
+              <MCPOverviewTab toolset={toolset} onTabChange={handleTabChange} />
             </TabsContent>
 
             <TabsContent value="tools" className="mt-0 w-full">
@@ -402,7 +402,13 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 /**
  * Overview Tab - Hosted URL and Installation instructions
  */
-function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
+function MCPOverviewTab({
+  toolset,
+  onTabChange,
+}: {
+  toolset: Toolset;
+  onTabChange: (tab: string) => void;
+}) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
@@ -434,7 +440,14 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
             Your server is private. To share with external users, you must make
-            it public in the server settings.
+            it public in the{" "}
+            <button
+              className="underline appearance-none"
+              onClick={() => onTabChange("settings")}
+            >
+              server settings
+            </button>
+            .
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
