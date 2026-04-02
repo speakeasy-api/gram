@@ -23,6 +23,8 @@ func TestService_UpdateRole(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 	name := "Platform Builder"
 	description := "Updated description"
 
@@ -33,7 +35,7 @@ func TestService_UpdateRole(t *testing.T) {
 		Name:        &name,
 		Description: &description,
 	}).Return(&thirdpartyworkos.Role{
-		ID:          "role_custom",
+		ID:          "custom-builder",
 		Name:        name,
 		Slug:        "custom-builder",
 		Description: description,
@@ -67,17 +69,17 @@ func TestService_UpdateRole(t *testing.T) {
 
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-old")
 	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:          "role_custom",
+		Slug:        "custom-builder",
 		Name:        &name,
 		Description: &description,
 		Grants: []*gen.RoleGrant{
 			{Scope: string(access.ScopeBuildWrite), Resources: []string{"project-1", "project-2"}},
 			{Scope: string(access.ScopeMCPConnect), Resources: nil},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "role_custom", role.ID)
+	require.Equal(t, "custom-builder", role.Slug)
 	require.Equal(t, name, role.Name)
 	require.Equal(t, description, role.Description)
 	require.False(t, role.IsSystem)
@@ -96,7 +98,7 @@ func TestService_UpdateRole_NotFound(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
 
-	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_missing"})
+	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{Slug: "missing-role"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "role not found")
 }
@@ -111,7 +113,7 @@ func TestService_UpdateRole_WorkOSUpdateFailure(t *testing.T) {
 	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{}, nil).Once()
 	ti.roles.On("UpdateRole", mock.Anything, "org_workos_test", "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return((*thirdpartyworkos.Role)(nil), errors.New("workos unavailable")).Once()
 
-	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_custom"})
+	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{Slug: "custom-builder"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "update role in workos")
 }
@@ -138,7 +140,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 		Name:        &name,
 		Description: &description,
 	}).Return(&thirdpartyworkos.Role{
-		ID:          "role_custom",
+		ID:          "custom-builder",
 		Name:        name,
 		Slug:        "custom-builder",
 		Description: description,
@@ -153,7 +155,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-old")
 
 	updated, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:          "role_custom",
+		Slug:        "custom-builder",
 		Name:        &name,
 		Description: &description,
 		Grants: []*gen.RoleGrant{{

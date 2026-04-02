@@ -58,7 +58,7 @@ export class Access extends ClientSDK {
    * getRole access
    *
    * @remarks
-   * Get a role by ID.
+   * Get a role by slug.
    */
   async getRole(
     request: operations.GetRoleRequest,

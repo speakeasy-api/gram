@@ -35,9 +35,9 @@ func TestService_GetRole(t *testing.T) {
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeMCPConnect, access.WildcardResource)
 
-	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
+	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{Slug: "custom-builder"})
 	require.NoError(t, err)
-	require.Equal(t, "role_custom", role.ID)
+	require.Equal(t, "custom-builder", role.Slug)
 	require.Equal(t, "Custom Builder", role.Name)
 	require.Equal(t, "Can build selected resources", role.Description)
 	require.False(t, role.IsSystem)
@@ -60,7 +60,7 @@ func TestService_GetRole_NotFound(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
 
-	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_missing"})
+	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{Slug: "missing-role"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "role not found")
 }
@@ -90,7 +90,7 @@ func TestService_GetRole_OrganizationNotLinkedToWorkOS(t *testing.T) {
 		APIKeyScopes:          authCtx.APIKeyScopes,
 	})
 
-	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
+	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{Slug: "custom-builder"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "organization is not linked to WorkOS")
 }
@@ -101,7 +101,7 @@ func TestService_GetRole_WorkOSListRolesFailure(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role(nil), errors.New("workos unavailable")).Once()
 
-	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
+	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{Slug: "custom-builder"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "list roles from workos")
 }

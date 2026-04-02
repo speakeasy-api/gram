@@ -284,7 +284,7 @@ func EncodeGetRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 			req.Header.Set("Gram-Session", head)
 		}
 		values := req.URL.Query()
-		values.Add("id", p.ID)
+		values.Add("slug", p.Slug)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -997,7 +997,7 @@ func EncodeDeleteRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			req.Header.Set("Gram-Session", head)
 		}
 		values := req.URL.Query()
-		values.Add("id", p.ID)
+		values.Add("slug", p.Slug)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1899,7 +1899,7 @@ func DecodeUpdateMemberRoleResponse(decoder func(*http.Response) goahttp.Decoder
 // from a value of type *RoleResponseBody.
 func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 	res := &access.Role{
-		ID:          *v.ID,
+		Slug:        *v.Slug,
 		Name:        *v.Name,
 		Description: *v.Description,
 		IsSystem:    *v.IsSystem,
@@ -1988,7 +1988,7 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 		Name:     *v.Name,
 		Email:    *v.Email,
 		PhotoURL: v.PhotoURL,
-		RoleID:   *v.RoleID,
+		RoleSlug: *v.RoleSlug,
 		JoinedAt: *v.JoinedAt,
 	}
 

@@ -20,10 +20,6 @@ export type UpdateRoleForm = {
    */
   grants?: Array<RoleGrant> | undefined;
   /**
-   * The ID of the role to update.
-   */
-  id: string;
-  /**
    * Optional member IDs to additionally assign to this role. Existing assignments are preserved.
    */
   memberIds?: Array<string> | undefined;
@@ -31,15 +27,19 @@ export type UpdateRoleForm = {
    * Updated display name.
    */
   name?: string | undefined;
+  /**
+   * The slug of the role to update.
+   */
+  slug: string;
 };
 
 /** @internal */
 export type UpdateRoleForm$Outbound = {
   description?: string | undefined;
   grants?: Array<RoleGrant$Outbound> | undefined;
-  id: string;
   member_ids?: Array<string> | undefined;
   name?: string | undefined;
+  slug: string;
 };
 
 /** @internal */
@@ -50,9 +50,9 @@ export const UpdateRoleForm$outboundSchema: z.ZodMiniType<
   z.object({
     description: z.optional(z.string()),
     grants: z.optional(z.array(RoleGrant$outboundSchema)),
-    id: z.string(),
     memberIds: z.optional(z.array(z.string())),
     name: z.optional(z.string()),
+    slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {

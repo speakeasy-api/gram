@@ -28,8 +28,8 @@ type CreateRoleRequestBody struct {
 // UpdateRoleRequestBody is the type of the "access" service "updateRole"
 // endpoint HTTP request body.
 type UpdateRoleRequestBody struct {
-	// The ID of the role to update.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The slug of the role to update.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Updated display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Updated description.
@@ -46,8 +46,8 @@ type UpdateRoleRequestBody struct {
 type UpdateMemberRoleRequestBody struct {
 	// The user ID to update.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// The new role ID to assign.
-	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// The new role slug to assign.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 }
 
 // ListRolesResponseBody is the type of the "access" service "listRoles"
@@ -60,8 +60,8 @@ type ListRolesResponseBody struct {
 // GetRoleResponseBody is the type of the "access" service "getRole" endpoint
 // HTTP response body.
 type GetRoleResponseBody struct {
-	// Unique role identifier.
-	ID string `form:"id" json:"id" xml:"id"`
+	// Role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Human-readable description.
@@ -79,8 +79,8 @@ type GetRoleResponseBody struct {
 // CreateRoleResponseBody is the type of the "access" service "createRole"
 // endpoint HTTP response body.
 type CreateRoleResponseBody struct {
-	// Unique role identifier.
-	ID string `form:"id" json:"id" xml:"id"`
+	// Role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Human-readable description.
@@ -98,8 +98,8 @@ type CreateRoleResponseBody struct {
 // UpdateRoleResponseBody is the type of the "access" service "updateRole"
 // endpoint HTTP response body.
 type UpdateRoleResponseBody struct {
-	// Unique role identifier.
-	ID string `form:"id" json:"id" xml:"id"`
+	// Role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Human-readable description.
@@ -139,8 +139,8 @@ type UpdateMemberRoleResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// Currently assigned role ID.
-	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// Currently assigned role slug.
+	RoleSlug string `form:"role_slug" json:"role_slug" xml:"role_slug"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 }
@@ -1590,8 +1590,8 @@ type UpdateMemberRoleGatewayErrorResponseBody struct {
 
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
-	// Unique role identifier.
-	ID string `form:"id" json:"id" xml:"id"`
+	// Role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Human-readable description.
@@ -1635,8 +1635,8 @@ type AccessMemberResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// Currently assigned role ID.
-	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// Currently assigned role slug.
+	RoleSlug string `form:"role_slug" json:"role_slug" xml:"role_slug"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 }
@@ -1673,7 +1673,7 @@ func NewListRolesResponseBody(res *access.ListRolesResult) *ListRolesResponseBod
 // "getRole" endpoint of the "access" service.
 func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 	body := &GetRoleResponseBody{
-		ID:          res.ID,
+		Slug:        res.Slug,
 		Name:        res.Name,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
@@ -1700,7 +1700,7 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 // the "createRole" endpoint of the "access" service.
 func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 	body := &CreateRoleResponseBody{
-		ID:          res.ID,
+		Slug:        res.Slug,
 		Name:        res.Name,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
@@ -1727,7 +1727,7 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 // the "updateRole" endpoint of the "access" service.
 func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 	body := &UpdateRoleResponseBody{
-		ID:          res.ID,
+		Slug:        res.Slug,
 		Name:        res.Name,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
@@ -1796,7 +1796,7 @@ func NewUpdateMemberRoleResponseBody(res *access.AccessMember) *UpdateMemberRole
 		Name:     res.Name,
 		Email:    res.Email,
 		PhotoURL: res.PhotoURL,
-		RoleID:   res.RoleID,
+		RoleSlug: res.RoleSlug,
 		JoinedAt: res.JoinedAt,
 	}
 	return body
@@ -2934,9 +2934,9 @@ func NewListRolesPayload(apikeyToken *string, sessionToken *string) *access.List
 }
 
 // NewGetRolePayload builds a access service getRole endpoint payload.
-func NewGetRolePayload(id string, apikeyToken *string, sessionToken *string) *access.GetRolePayload {
+func NewGetRolePayload(slug string, apikeyToken *string, sessionToken *string) *access.GetRolePayload {
 	v := &access.GetRolePayload{}
-	v.ID = id
+	v.Slug = slug
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -2972,7 +2972,7 @@ func NewCreateRolePayload(body *CreateRoleRequestBody, apikeyToken *string, sess
 // NewUpdateRolePayload builds a access service updateRole endpoint payload.
 func NewUpdateRolePayload(body *UpdateRoleRequestBody, apikeyToken *string, sessionToken *string) *access.UpdateRolePayload {
 	v := &access.UpdateRolePayload{
-		ID:          *body.ID,
+		Slug:        *body.Slug,
 		Name:        body.Name,
 		Description: body.Description,
 	}
@@ -2999,9 +2999,9 @@ func NewUpdateRolePayload(body *UpdateRoleRequestBody, apikeyToken *string, sess
 }
 
 // NewDeleteRolePayload builds a access service deleteRole endpoint payload.
-func NewDeleteRolePayload(id string, apikeyToken *string, sessionToken *string) *access.DeleteRolePayload {
+func NewDeleteRolePayload(slug string, apikeyToken *string, sessionToken *string) *access.DeleteRolePayload {
 	v := &access.DeleteRolePayload{}
-	v.ID = id
+	v.Slug = slug
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -3030,8 +3030,8 @@ func NewListMembersPayload(apikeyToken *string, sessionToken *string) *access.Li
 // payload.
 func NewUpdateMemberRolePayload(body *UpdateMemberRoleRequestBody, apikeyToken *string, sessionToken *string) *access.UpdateMemberRolePayload {
 	v := &access.UpdateMemberRolePayload{
-		UserID: *body.UserID,
-		RoleID: *body.RoleID,
+		UserID:   *body.UserID,
+		RoleSlug: *body.RoleSlug,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -3064,8 +3064,8 @@ func ValidateCreateRoleRequestBody(body *CreateRoleRequestBody) (err error) {
 // ValidateUpdateRoleRequestBody runs the validations defined on
 // UpdateRoleRequestBody
 func ValidateUpdateRoleRequestBody(body *UpdateRoleRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	for _, e := range body.Grants {
 		if e != nil {
@@ -3083,8 +3083,8 @@ func ValidateUpdateMemberRoleRequestBody(body *UpdateMemberRoleRequestBody) (err
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
-	if body.RoleID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	if body.RoleSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_slug", "body"))
 	}
 	return
 }

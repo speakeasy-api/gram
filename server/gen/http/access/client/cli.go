@@ -39,10 +39,10 @@ func BuildListRolesPayload(accessListRolesApikeyToken string, accessListRolesSes
 
 // BuildGetRolePayload builds the payload for the access getRole endpoint from
 // CLI flags.
-func BuildGetRolePayload(accessGetRoleID string, accessGetRoleApikeyToken string, accessGetRoleSessionToken string) (*access.GetRolePayload, error) {
-	var id string
+func BuildGetRolePayload(accessGetRoleSlug string, accessGetRoleApikeyToken string, accessGetRoleSessionToken string) (*access.GetRolePayload, error) {
+	var slug string
 	{
-		id = accessGetRoleID
+		slug = accessGetRoleSlug
 	}
 	var apikeyToken *string
 	{
@@ -57,7 +57,7 @@ func BuildGetRolePayload(accessGetRoleID string, accessGetRoleApikeyToken string
 		}
 	}
 	v := &access.GetRolePayload{}
-	v.ID = id
+	v.Slug = slug
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -136,7 +136,7 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 	{
 		err = json.Unmarshal([]byte(accessUpdateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
 		}
 		for _, e := range body.Grants {
 			if e != nil {
@@ -162,7 +162,7 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 		}
 	}
 	v := &access.UpdateRolePayload{
-		ID:          body.ID,
+		Slug:        body.Slug,
 		Name:        body.Name,
 		Description: body.Description,
 	}
@@ -190,10 +190,10 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 
 // BuildDeleteRolePayload builds the payload for the access deleteRole endpoint
 // from CLI flags.
-func BuildDeleteRolePayload(accessDeleteRoleID string, accessDeleteRoleApikeyToken string, accessDeleteRoleSessionToken string) (*access.DeleteRolePayload, error) {
-	var id string
+func BuildDeleteRolePayload(accessDeleteRoleSlug string, accessDeleteRoleApikeyToken string, accessDeleteRoleSessionToken string) (*access.DeleteRolePayload, error) {
+	var slug string
 	{
-		id = accessDeleteRoleID
+		slug = accessDeleteRoleSlug
 	}
 	var apikeyToken *string
 	{
@@ -208,7 +208,7 @@ func BuildDeleteRolePayload(accessDeleteRoleID string, accessDeleteRoleApikeyTok
 		}
 	}
 	v := &access.DeleteRolePayload{}
-	v.ID = id
+	v.Slug = slug
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -267,7 +267,7 @@ func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdat
 	{
 		err = json.Unmarshal([]byte(accessUpdateMemberRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -283,8 +283,8 @@ func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdat
 		}
 	}
 	v := &access.UpdateMemberRolePayload{
-		UserID: body.UserID,
-		RoleID: body.RoleID,
+		UserID:   body.UserID,
+		RoleSlug: body.RoleSlug,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

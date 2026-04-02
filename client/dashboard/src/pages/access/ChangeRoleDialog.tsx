@@ -52,7 +52,7 @@ export function ChangeRoleDialog({
     setSelectedRole(undefined);
   }, [member]);
 
-  const currentRole = selectedRole ?? member?.roleId;
+  const currentRole = selectedRole ?? member?.roleSlug;
 
   const handleUpdate = () => {
     if (!member || !currentRole) return;
@@ -60,7 +60,7 @@ export function ChangeRoleDialog({
       request: {
         updateMemberRoleForm: {
           userId: member.id,
-          roleId: currentRole,
+          roleSlug: currentRole,
         },
       },
     });
@@ -112,7 +112,7 @@ export function ChangeRoleDialog({
                   </SelectTrigger>
                   <SelectContent>
                     {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
+                      <SelectItem key={role.slug} value={role.slug}>
                         {role.name}
                       </SelectItem>
                     ))}
@@ -130,7 +130,7 @@ export function ChangeRoleDialog({
                 disabled={
                   updateMemberRole.isPending ||
                   !currentRole ||
-                  currentRole === member?.roleId
+                  currentRole === member?.roleSlug
                 }
               >
                 {updateMemberRole.isPending && (

@@ -44,7 +44,7 @@ export function buildRoleQuery(
 } {
   return {
     queryKey: queryKeyRole({
-      id: request.id,
+      slug: request.slug,
       gramKey: request.gramKey,
       gramSession: request.gramSession,
     }),
@@ -72,7 +72,7 @@ export function buildRoleQuery(
 
 export function queryKeyRole(
   parameters: {
-    id: string;
+    slug: string;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

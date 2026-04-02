@@ -28,8 +28,8 @@ export function MembersTab() {
   const members = membersData?.members ?? [];
   const roles = rolesData?.roles ?? [];
 
-  const getRoleName = (roleId: string) =>
-    roles.find((r) => r.id === roleId)?.name ?? "Unknown";
+  const getRoleName = (roleSlug: string) =>
+    roles.find((r) => r.slug === roleSlug)?.name ?? "Unknown";
 
   const columns: Column<AccessMember>[] = [
     {
@@ -67,7 +67,7 @@ export function MembersTab() {
       header: "Role",
       width: "140px",
       render: (member) => (
-        <Type variant="body">{getRoleName(member.roleId)}</Type>
+        <Type variant="body">{getRoleName(member.roleSlug)}</Type>
       ),
     },
     {

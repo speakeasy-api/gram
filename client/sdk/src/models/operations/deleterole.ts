@@ -12,9 +12,9 @@ export type DeleteRoleSecurity = {
 
 export type DeleteRoleRequest = {
   /**
-   * The ID of the role to delete.
+   * The slug of the role to delete.
    */
-  id: string;
+  slug: string;
   /**
    * API Key header
    */
@@ -58,7 +58,7 @@ export function deleteRoleSecurityToJSON(
 
 /** @internal */
 export type DeleteRoleRequest$Outbound = {
-  id: string;
+  slug: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -69,7 +69,7 @@ export const DeleteRoleRequest$outboundSchema: z.ZodMiniType<
   DeleteRoleRequest
 > = z.pipe(
   z.object({
-    id: z.string(),
+    slug: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

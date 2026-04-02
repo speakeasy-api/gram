@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * getRole access
  *
  * @remarks
- * Get a role by ID.
+ * Get a role by slug.
  */
 export function accessGetRole(
   client: GramCore,
@@ -96,7 +96,7 @@ async function $do(
   const path = pathToFunc("/rpc/access.getRole")();
 
   const query = encodeFormQuery({
-    "id": payload.id,
+    "slug": payload.slug,
   });
 
   const headers = new Headers(compactMap({

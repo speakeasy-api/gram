@@ -7,9 +7,9 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdateMemberRoleForm = {
   /**
-   * The new role ID to assign.
+   * The new role slug to assign.
    */
-  roleId: string;
+  roleSlug: string;
   /**
    * The user ID to update.
    */
@@ -18,7 +18,7 @@ export type UpdateMemberRoleForm = {
 
 /** @internal */
 export type UpdateMemberRoleForm$Outbound = {
-  role_id: string;
+  role_slug: string;
   user_id: string;
 };
 
@@ -28,12 +28,12 @@ export const UpdateMemberRoleForm$outboundSchema: z.ZodMiniType<
   UpdateMemberRoleForm
 > = z.pipe(
   z.object({
-    roleId: z.string(),
+    roleSlug: z.string(),
     userId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      roleId: "role_id",
+      roleSlug: "role_slug",
       userId: "user_id",
     });
   }),

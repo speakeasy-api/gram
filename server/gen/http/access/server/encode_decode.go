@@ -242,14 +242,14 @@ func DecodeGetRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 	return func(r *http.Request) (*access.GetRolePayload, error) {
 		var payload *access.GetRolePayload
 		var (
-			id           string
+			slug         string
 			apikeyToken  *string
 			sessionToken *string
 			err          error
 		)
-		id = r.URL.Query().Get("id")
-		if id == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		slug = r.URL.Query().Get("slug")
+		if slug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -262,7 +262,7 @@ func DecodeGetRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetRolePayload(id, apikeyToken, sessionToken)
+		payload = NewGetRolePayload(slug, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -903,14 +903,14 @@ func DecodeDeleteRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*access.DeleteRolePayload, error) {
 		var payload *access.DeleteRolePayload
 		var (
-			id           string
+			slug         string
 			apikeyToken  *string
 			sessionToken *string
 			err          error
 		)
-		id = r.URL.Query().Get("id")
-		if id == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		slug = r.URL.Query().Get("slug")
+		if slug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -923,7 +923,7 @@ func DecodeDeleteRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeleteRolePayload(id, apikeyToken, sessionToken)
+		payload = NewDeleteRolePayload(slug, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1738,7 +1738,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 // from a value of type *access.Role.
 func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
 	res := &RoleResponseBody{
-		ID:          v.ID,
+		Slug:        v.Slug,
 		Name:        v.Name,
 		Description: v.Description,
 		IsSystem:    v.IsSystem,
@@ -1815,7 +1815,7 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		Name:     v.Name,
 		Email:    v.Email,
 		PhotoURL: v.PhotoURL,
-		RoleID:   v.RoleID,
+		RoleSlug: v.RoleSlug,
 		JoinedAt: v.JoinedAt,
 	}
 

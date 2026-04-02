@@ -51,7 +51,7 @@ export type RoleQueryError =
  * getRole access
  *
  * @remarks
- * Get a role by ID.
+ * Get a role by slug.
  */
 export function useRole(
   request: operations.GetRoleRequest,
@@ -74,7 +74,7 @@ export function useRole(
  * getRole access
  *
  * @remarks
- * Get a role by ID.
+ * Get a role by slug.
  */
 export function useRoleSuspense(
   request: operations.GetRoleRequest,
@@ -97,7 +97,7 @@ export function setRoleData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      id: string;
+      slug: string;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -113,7 +113,7 @@ export function invalidateRole(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      id: string;
+      slug: string;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

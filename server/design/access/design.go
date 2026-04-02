@@ -39,15 +39,15 @@ var _ = Service("access", func() {
 	})
 
 	Method("getRole", func() {
-		Description("Get a role by ID.")
+		Description("Get a role by slug.")
 		Security(security.ByKey, func() {
 			Scope("consumer")
 		})
 		Security(security.Session)
 
 		Payload(func() {
-			Attribute("id", String, "The ID of the role.")
-			Required("id")
+			Attribute("slug", String, "The slug of the role.")
+			Required("slug")
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -56,7 +56,7 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			GET("/rpc/access.getRole")
-			Param("id")
+			Param("slug")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
@@ -129,15 +129,15 @@ var _ = Service("access", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Attribute("id", String, "The ID of the role to delete.")
-			Required("id")
+			Attribute("slug", String, "The slug of the role to delete.")
+			Required("slug")
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
 		HTTP(func() {
 			DELETE("/rpc/access.deleteRole")
-			Param("id")
+			Param("slug")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusNoContent)
@@ -242,9 +242,9 @@ var RoleGrantModel = Type("RoleGrant", func() {
 })
 
 var RoleModel = Type("Role", func() {
-	Required("id", "name", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
+	Required("slug", "name", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
 
-	Attribute("id", String, "Unique role identifier.")
+	Attribute("slug", String, "Role slug.")
 	Attribute("name", String, "Display name of the role.")
 	Attribute("description", String, "Human-readable description.")
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
@@ -292,9 +292,9 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 })
 
 var UpdateRoleForm = Type("UpdateRoleForm", func() {
-	Required("id")
+	Required("slug")
 
-	Attribute("id", String, "The ID of the role to update.")
+	Attribute("slug", String, "The slug of the role to update.")
 	Attribute("name", String, "Updated display name.")
 	Attribute("description", String, "Updated description.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Updated scope grants.")
@@ -302,13 +302,13 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "name", "email", "role_id", "joined_at")
+	Required("id", "name", "email", "role_slug", "joined_at")
 
 	Attribute("id", String, "User ID.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")
-	Attribute("role_id", String, "Currently assigned role ID.")
+	Attribute("role_slug", String, "Currently assigned role slug.")
 	Attribute("joined_at", String, func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
@@ -321,8 +321,8 @@ var ListMembersResult = Type("ListMembersResult", func() {
 })
 
 var UpdateMemberRoleForm = Type("UpdateMemberRoleForm", func() {
-	Required("user_id", "role_id")
+	Required("user_id", "role_slug")
 
 	Attribute("user_id", String, "The user ID to update.")
-	Attribute("role_id", String, "The new role ID to assign.")
+	Attribute("role_slug", String, "The new role slug to assign.")
 })

@@ -108,12 +108,12 @@ paths:
       operationId: deleteRole
       parameters:
         - allowEmptyValue: true
-          description: The ID of the role to delete.
+          description: The slug of the role to delete.
           in: query
-          name: id
+          name: slug
           required: true
           schema:
-            description: The ID of the role to delete.
+            description: The slug of the role to delete.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -198,16 +198,16 @@ paths:
         name: DeleteRole
   /rpc/access.getRole:
     get:
-      description: Get a role by ID.
+      description: Get a role by slug.
       operationId: getRole
       parameters:
         - allowEmptyValue: true
-          description: The ID of the role.
+          description: The slug of the role.
           in: query
-          name: id
+          name: slug
           required: true
           schema:
-            description: The ID of the role.
+            description: The slug of the role.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -14107,14 +14107,14 @@ components:
         photo_url:
           type: string
           description: Avatar URL.
-        role_id:
+        role_slug:
           type: string
-          description: Currently assigned role ID.
+          description: Currently assigned role slug.
       required:
         - id
         - name
         - email
-        - role_id
+        - role_slug
         - joined_at
     AddDeploymentPackageForm:
       type: object
@@ -18894,9 +18894,6 @@ components:
           items:
             $ref: '#/components/schemas/RoleGrant'
           description: Scope grants assigned to this role.
-        id:
-          type: string
-          description: Unique role identifier.
         is_system:
           type: boolean
           description: Whether this is a built-in system role that cannot be deleted.
@@ -18907,11 +18904,14 @@ components:
         name:
           type: string
           description: Display name of the role.
+        slug:
+          type: string
+          description: Role slug.
         updated_at:
           type: string
           format: date-time
       required:
-        - id
+        - slug
         - name
         - description
         - is_system
@@ -20415,15 +20415,15 @@ components:
     UpdateMemberRoleForm:
       type: object
       properties:
-        role_id:
+        role_slug:
           type: string
-          description: The new role ID to assign.
+          description: The new role slug to assign.
         user_id:
           type: string
           description: The user ID to update.
       required:
         - user_id
-        - role_id
+        - role_slug
     UpdatePackageForm:
       type: object
       properties:
@@ -20528,9 +20528,6 @@ components:
           items:
             $ref: '#/components/schemas/RoleGrant'
           description: Updated scope grants.
-        id:
-          type: string
-          description: The ID of the role to update.
         member_ids:
           type: array
           items:
@@ -20539,8 +20536,11 @@ components:
         name:
           type: string
           description: Updated display name.
+        slug:
+          type: string
+          description: The slug of the role to update.
       required:
-        - id
+        - slug
     UpdateSecurityVariableDisplayNameForm:
       type: object
       properties:

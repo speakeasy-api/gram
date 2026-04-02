@@ -52,7 +52,7 @@ import { useRole } from "@gram/client/react-query/accessGetRole.js";
 
 export function Example() {
   const { data, error, status } = useRole({
-    id: "<id>",
+    slug: "<value>",
   });
 
   // Render the UI here...
@@ -72,7 +72,7 @@ export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
   const { data, error, status } = useRole(
     {
-      id: "<id>",
+      slug: "<value>",
     },
     {
       // TanStack Query options:
@@ -298,7 +298,7 @@ export function App() {
 
 function Example() {
   const { data } = useRoleSuspense({
-    id: "<id>",
+    slug: "<value>",
   });
 
   // Render the UI here...
@@ -326,7 +326,7 @@ export default async function Page() {
   const gram = new GramCore();
 
   await prefetchRole(queryClient, gram, {
-    id: "<id>",
+    slug: "<value>",
   });
 
   return (

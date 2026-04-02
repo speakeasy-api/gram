@@ -30,9 +30,9 @@ export type AccessMember = {
    */
   photoUrl?: string | undefined;
   /**
-   * Currently assigned role ID.
+   * Currently assigned role slug.
    */
-  roleId: string;
+  roleSlug: string;
 };
 
 /** @internal */
@@ -47,13 +47,13 @@ export const AccessMember$inboundSchema: z.ZodMiniType<AccessMember, unknown> =
       ),
       name: z.string(),
       photo_url: z.optional(z.string()),
-      role_id: z.string(),
+      role_slug: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
         "joined_at": "joinedAt",
         "photo_url": "photoUrl",
-        "role_id": "roleId",
+        "role_slug": "roleSlug",
       });
     }),
   );
