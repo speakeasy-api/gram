@@ -22,6 +22,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/projects/server"
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -32,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -44,11 +46,16 @@ type Service struct {
 	envRepo  *envrepo.Queries
 	sessions *sessions.Manager
 	auth     *auth.Auth
+	features featureChecker
+}
+
+type featureChecker interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, features featureChecker) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
@@ -59,6 +66,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		envRepo:  envrepo.New(db),
 		sessions: sessions,
 		auth:     auth.New(logger, db, sessions),
+		features: features,
 	}
 }
 
@@ -73,7 +81,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, err
+	}
+
+	ctx, err = access.LoadIntoContext(ctx, s.logger, s.db)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnexpected, err, "error loading access grants").Log(ctx, s.logger)
+	}
+
+	return ctx, nil
 }
 
 func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload) (*gen.GetProjectResult, error) {
@@ -94,6 +112,14 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: proj.ID.String()}); err != nil {
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, err
+	}
+
 	return &gen.GetProjectResult{
 		Project: &gen.Project{
 			ID:             proj.ID.String(),
@@ -111,6 +137,14 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if payload.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
+	}
+
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: payload.OrganizationID}); err != nil {
+		return nil, err
 	}
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
@@ -199,6 +233,10 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if payload.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
+	}
+
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("get session user info: %w", err)
@@ -219,8 +257,27 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, fmt.Errorf("list projects by organization %s: %w", payload.OrganizationID, err)
 	}
 
+	projectIDs := make([]string, 0, len(projects))
+	for _, project := range projects {
+		projectIDs = append(projectIDs, project.ID.String())
+	}
+
+	allowedProjectIDs, err := s.filterByAccess(ctx, access.ScopeBuildRead, projectIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	allowedProjects := make(map[string]struct{}, len(allowedProjectIDs))
+	for _, projectID := range allowedProjectIDs {
+		allowedProjects[projectID] = struct{}{}
+	}
+
 	entries := make([]*gen.ProjectEntry, 0, len(projects))
 	for _, project := range projects {
+		if _, ok := allowedProjects[project.ID.String()]; !ok {
+			continue
+		}
+
 		entries = append(entries, &gen.ProjectEntry{
 			ID:   project.ID.String(),
 			Name: project.Name,
@@ -237,6 +294,10 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	assetID, err := uuid.Parse(payload.AssetID)
@@ -301,6 +362,10 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	allowedOrigins, err := s.repo.ListAllowedOriginsByProjectID(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing allowed origins").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -327,6 +392,10 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	// Use the status from payload or default to "pending"
@@ -365,6 +434,10 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	projectID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid project id").Log(ctx, s.logger)
+	}
+
+	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return err
 	}
 
 	err = s.auth.CheckProjectAccess(ctx, s.logger, projectID)
@@ -454,5 +527,51 @@ func toProject(p repo.Project) *gen.Project {
 		LogoAssetID:    conv.FromNullableUUID(p.LogoAssetID),
 		CreatedAt:      p.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      p.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+func (s *Service) requireAccess(ctx context.Context, checks ...access.Check) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, s.logger)
+	}
+	if !enabled {
+		return nil
+	}
+	if err := access.Require(ctx, checks...); err != nil {
+		return mapAccessError(err)
+	}
+	return nil
+}
+
+func (s *Service) filterByAccess(ctx context.Context, scope access.Scope, resourceIDs []string) ([]string, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, s.logger)
+	}
+	if !enabled {
+		return resourceIDs, nil
+	}
+	resourceIDs, err = access.Filter(ctx, scope, resourceIDs)
+	if err != nil {
+		return nil, mapAccessError(err)
+	}
+	return resourceIDs, nil
+}
+
+func mapAccessError(err error) error {
+	switch {
+	case errors.Is(err, access.ErrMissingGrants), errors.Is(err, access.ErrDenied):
+		return oops.C(oops.CodeForbidden)
+	default:
+		return oops.E(oops.CodeUnexpected, err, "error checking project access")
 	}
 }

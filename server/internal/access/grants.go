@@ -21,13 +21,13 @@ type RoleGrant struct {
 
 const WildcardResource = "*"
 
-type grantRow struct {
+type Grant struct {
 	Scope    Scope
 	Resource string
 }
 
 type Grants struct {
-	rows []grantRow
+	rows []Grant
 }
 
 func (g *Grants) hasAccess(scope Scope, resourceID string) bool {

@@ -410,6 +410,7 @@ GET /rpc/auth.info                      638ms     8ms      6
 > ⚠️ **The slow endpoint table MUST use a code block with aligned columns. Never use bullet points.**
 
 If all endpoints are fast, use instead:
+
 ```
 ⚡ *Latency* — All endpoints healthy. p50: Xms · p95: Xms · p99: Xms 🟢
 ```

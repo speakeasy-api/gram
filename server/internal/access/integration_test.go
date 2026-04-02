@@ -1,7 +1,6 @@
 package access_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +12,7 @@ import (
 func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := enterpriseCtx(t.Context())
 	conn := newTestDB(t)
 	organizationID := "org_access_require_integration"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_require_integration")
@@ -41,7 +40,7 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := enterpriseCtx(t.Context())
 	conn := newTestDB(t)
 	organizationID := "org_access_filter_integration"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_filter_integration")

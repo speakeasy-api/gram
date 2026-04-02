@@ -9,6 +9,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -19,11 +20,12 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it returns project successfully", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t)
+		ctx, ti := newTestProjectsService(t, true)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		require.NotNil(t, authCtx.ProjectSlug)
+		ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
 
 		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
 			Slug: types.Slug(*authCtx.ProjectSlug),
@@ -41,10 +43,50 @@ func TestProjectsService_GetProject(t *testing.T) {
 		assert.NotEmpty(t, result.Project.UpdatedAt)
 	})
 
+	t.Run("it skips RBAC when feature is disabled", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestProjectsService(t, false)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectSlug)
+
+		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
+			Slug: types.Slug(*authCtx.ProjectSlug),
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.NotNil(t, result.Project)
+	})
+
+	t.Run("it returns not found when build read access is missing", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestProjectsService(t, true)
+		ctx = access.GrantsToContext(ctx, &access.Grants{})
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectSlug)
+
+		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
+			Slug: types.Slug(*authCtx.ProjectSlug),
+		})
+
+		require.Error(t, err)
+		assert.Nil(t, result)
+
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		assert.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	})
+
 	t.Run("it rejects without auth context", func(t *testing.T) {
 		t.Parallel()
 
-		_, ti := newTestProjectsService(t)
+		_, ti := newTestProjectsService(t, true)
 
 		result, err := ti.service.GetProject(context.Background(), &gen.GetProjectPayload{
 			Slug: "some-slug",
@@ -61,7 +103,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it rejects without active organization", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t)
+		ctx, ti := newTestProjectsService(t, true)
 
 		// Get the existing auth context and clear the organization ID
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -83,7 +125,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it returns not found for non-existent project", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t)
+		ctx, ti := newTestProjectsService(t, true)
 
 		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
 			Slug: "non-existent-project-slug",
@@ -100,11 +142,12 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it returns not found for project in different organization", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t)
+		ctx, ti := newTestProjectsService(t, true)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		require.NotNil(t, authCtx.ProjectSlug)
+		ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
 
 		// Store the project slug from the first context
 		projectSlug := *authCtx.ProjectSlug
