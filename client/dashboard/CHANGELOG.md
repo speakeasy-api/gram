@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.36.3
+
+### Patch Changes
+
+- 3831ca8: Improve initial page load performance by prefetching key queries in parallel with auth, adding preconnect hints, and switching font-display to swap.
+- 19fcd09: when searching mcp logs show available attribute keys
+
 ## 0.36.2
 
 ### Patch Changes
