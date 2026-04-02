@@ -68,8 +68,8 @@ export function CreateRoleDialog({
   const { data: membersData } = useMembers();
   const members = membersData?.members ?? [];
   const { data: rolesData } = useRoles();
-  const roleNameById = new Map(
-    (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
+  const roleNameBySlug = new Map(
+    (rolesData?.roles ?? []).map((r) => [r.slug, r.name]),
   );
   const { data: scopesData } = useListScopes();
 
@@ -92,7 +92,7 @@ export function CreateRoleDialog({
     setDescription(editingRole.description);
     setGrants(grantsFromRole(editingRole));
     const assignedIds = new Set(
-      members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
+      members.filter((m) => m.roleSlug === editingRole.slug).map((m) => m.id),
     );
     setSelectedMembers(assignedIds);
     setInitialized(true);
@@ -204,7 +204,7 @@ export function CreateRoleDialog({
       updateRole.mutate({
         request: {
           updateRoleForm: {
-            id: editingRole.id,
+            slug: editingRole.slug,
             name,
             description,
             grants: sdkGrants,
@@ -450,7 +450,7 @@ export function CreateRoleDialog({
               <div className="mt-3 border border-border rounded-md divide-y divide-border">
                 {members.map((member) => {
                   const alreadyHasRole =
-                    isEditing && member.roleId === editingRole?.id;
+                    isEditing && member.roleSlug === editingRole?.slug;
                   return (
                     <label
                       key={member.id}
@@ -489,37 +489,38 @@ export function CreateRoleDialog({
                           <Type variant="body" className="font-medium text-sm">
                             {member.name}
                           </Type>
-                          {member.roleId && roleNameById.get(member.roleId) && (
-                            <div className="flex items-center gap-1">
-                              <Badge
-                                variant="outline"
-                                size="sm"
-                                className={cn(
-                                  "font-mono text-[10px] uppercase",
-                                  selectedMembers.has(member.id) &&
-                                    member.roleId !== editingRole?.id &&
-                                    name.trim() &&
-                                    "line-through opacity-60",
-                                )}
-                              >
-                                {roleNameById.get(member.roleId)}
-                              </Badge>
-                              {selectedMembers.has(member.id) &&
-                                member.roleId !== editingRole?.id &&
-                                name.trim() && (
-                                  <>
-                                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                                    <Badge
-                                      variant="outline"
-                                      size="sm"
-                                      className="font-mono text-[10px] uppercase border-primary text-primary"
-                                    >
-                                      {name}
-                                    </Badge>
-                                  </>
-                                )}
-                            </div>
-                          )}
+                          {member.roleSlug &&
+                            roleNameBySlug.get(member.roleSlug) && (
+                              <div className="flex items-center gap-1">
+                                <Badge
+                                  variant="outline"
+                                  size="sm"
+                                  className={cn(
+                                    "font-mono text-[10px] uppercase",
+                                    selectedMembers.has(member.id) &&
+                                      member.roleSlug !== editingRole?.slug &&
+                                      name.trim() &&
+                                      "line-through opacity-60",
+                                  )}
+                                >
+                                  {roleNameBySlug.get(member.roleSlug)}
+                                </Badge>
+                                {selectedMembers.has(member.id) &&
+                                  member.roleSlug !== editingRole?.slug &&
+                                  name.trim() && (
+                                    <>
+                                      <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                      <Badge
+                                        variant="outline"
+                                        size="sm"
+                                        className="font-mono text-[10px] uppercase border-primary text-primary"
+                                      >
+                                        {name}
+                                      </Badge>
+                                    </>
+                                  )}
+                              </div>
+                            )}
                         </div>
                         <Type
                           variant="body"

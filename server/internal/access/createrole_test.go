@@ -125,7 +125,7 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "role_existing", role.ID)
+	require.Equal(t, "org-custom-builder", role.Slug)
 	require.Equal(t, "Custom Builder", role.Name)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))

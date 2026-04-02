@@ -116,7 +116,7 @@ func ParseEndpoint(
 		accessListRolesSessionTokenFlag = accessListRolesFlags.String("session-token", "", "")
 
 		accessGetRoleFlags            = flag.NewFlagSet("get-role", flag.ExitOnError)
-		accessGetRoleIDFlag           = accessGetRoleFlags.String("id", "REQUIRED", "")
+		accessGetRoleSlugFlag         = accessGetRoleFlags.String("slug", "REQUIRED", "")
 		accessGetRoleApikeyTokenFlag  = accessGetRoleFlags.String("apikey-token", "", "")
 		accessGetRoleSessionTokenFlag = accessGetRoleFlags.String("session-token", "", "")
 
@@ -131,7 +131,7 @@ func ParseEndpoint(
 		accessUpdateRoleSessionTokenFlag = accessUpdateRoleFlags.String("session-token", "", "")
 
 		accessDeleteRoleFlags            = flag.NewFlagSet("delete-role", flag.ExitOnError)
-		accessDeleteRoleIDFlag           = accessDeleteRoleFlags.String("id", "REQUIRED", "")
+		accessDeleteRoleSlugFlag         = accessDeleteRoleFlags.String("slug", "REQUIRED", "")
 		accessDeleteRoleApikeyTokenFlag  = accessDeleteRoleFlags.String("apikey-token", "", "")
 		accessDeleteRoleSessionTokenFlag = accessDeleteRoleFlags.String("session-token", "", "")
 
@@ -1789,7 +1789,7 @@ func ParseEndpoint(
 				data, err = accessc.BuildListRolesPayload(*accessListRolesApikeyTokenFlag, *accessListRolesSessionTokenFlag)
 			case "get-role":
 				endpoint = c.GetRole()
-				data, err = accessc.BuildGetRolePayload(*accessGetRoleIDFlag, *accessGetRoleApikeyTokenFlag, *accessGetRoleSessionTokenFlag)
+				data, err = accessc.BuildGetRolePayload(*accessGetRoleSlugFlag, *accessGetRoleApikeyTokenFlag, *accessGetRoleSessionTokenFlag)
 			case "create-role":
 				endpoint = c.CreateRole()
 				data, err = accessc.BuildCreateRolePayload(*accessCreateRoleBodyFlag, *accessCreateRoleApikeyTokenFlag, *accessCreateRoleSessionTokenFlag)
@@ -1798,7 +1798,7 @@ func ParseEndpoint(
 				data, err = accessc.BuildUpdateRolePayload(*accessUpdateRoleBodyFlag, *accessUpdateRoleApikeyTokenFlag, *accessUpdateRoleSessionTokenFlag)
 			case "delete-role":
 				endpoint = c.DeleteRole()
-				data, err = accessc.BuildDeleteRolePayload(*accessDeleteRoleIDFlag, *accessDeleteRoleApikeyTokenFlag, *accessDeleteRoleSessionTokenFlag)
+				data, err = accessc.BuildDeleteRolePayload(*accessDeleteRoleSlugFlag, *accessDeleteRoleApikeyTokenFlag, *accessDeleteRoleSessionTokenFlag)
 			case "list-scopes":
 				endpoint = c.ListScopes()
 				data, err = accessc.BuildListScopesPayload(*accessListScopesApikeyTokenFlag, *accessListScopesSessionTokenFlag)
@@ -2366,7 +2366,7 @@ func accessUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-roles: List all roles for the current organization.`)
-	fmt.Fprintln(os.Stderr, `    get-role: Get a role by ID.`)
+	fmt.Fprintln(os.Stderr, `    get-role: Get a role by slug.`)
 	fmt.Fprintln(os.Stderr, `    create-role: Create a new custom role.`)
 	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
 	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
@@ -2400,23 +2400,23 @@ func accessListRolesUsage() {
 func accessGetRoleUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access get-role", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -slug STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get a role by ID.`)
+	fmt.Fprintln(os.Stderr, `Get a role by slug.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-role --id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-role --slug \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessCreateRoleUsage() {
@@ -2460,13 +2460,13 @@ func accessUpdateRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessDeleteRoleUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access delete-role", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -slug STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
@@ -2476,13 +2476,13 @@ func accessDeleteRoleUsage() {
 	fmt.Fprintln(os.Stderr, `Delete a custom role (system roles cannot be deleted).`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-role --id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-role --slug \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessListScopesUsage() {
@@ -2544,7 +2544,7 @@ func accessUpdateMemberRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-role --body '{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-role --body '{\n      \"role_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // agentworkflowsUsage displays the usage of the agentworkflows command and its

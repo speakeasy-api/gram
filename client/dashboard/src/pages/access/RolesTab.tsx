@@ -104,7 +104,9 @@ export function RolesTab() {
             {!role.isSystem && (
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => deleteRole.mutate({ request: { id: role.id } })}
+                onSelect={() =>
+                  deleteRole.mutate({ request: { slug: role.slug } })
+                }
               >
                 Delete
               </DropdownMenuItem>
@@ -140,7 +142,7 @@ export function RolesTab() {
         <Table
           columns={columns}
           data={roles}
-          rowKey={(row) => row.id}
+          rowKey={(row) => row.slug}
           className="mt-4"
         />
       )}

@@ -18,7 +18,7 @@ import (
 type Service interface {
 	// List all roles for the current organization.
 	ListRoles(context.Context, *ListRolesPayload) (res *ListRolesResult, err error)
-	// Get a role by ID.
+	// Get a role by slug.
 	GetRole(context.Context, *GetRolePayload) (res *Role, err error)
 	// Create a new custom role.
 	CreateRole(context.Context, *CreateRolePayload) (res *Role, err error)
@@ -67,8 +67,8 @@ type AccessMember struct {
 	Email string
 	// Avatar URL.
 	PhotoURL *string
-	// Currently assigned role ID.
-	RoleID string
+	// Currently assigned role slug.
+	RoleSlug string
 	// When the member joined the organization.
 	JoinedAt string
 }
@@ -91,16 +91,16 @@ type CreateRolePayload struct {
 // DeleteRolePayload is the payload type of the access service deleteRole
 // method.
 type DeleteRolePayload struct {
-	// The ID of the role to delete.
-	ID           string
+	// The slug of the role to delete.
+	Slug         string
 	ApikeyToken  *string
 	SessionToken *string
 }
 
 // GetRolePayload is the payload type of the access service getRole method.
 type GetRolePayload struct {
-	// The ID of the role.
-	ID           string
+	// The slug of the role.
+	Slug         string
 	ApikeyToken  *string
 	SessionToken *string
 }
@@ -146,8 +146,8 @@ type ListScopesResult struct {
 
 // Role is the result type of the access service getRole method.
 type Role struct {
-	// Unique role identifier.
-	ID string
+	// Role slug.
+	Slug string
 	// Display name of the role.
 	Name string
 	// Human-readable description.
@@ -186,8 +186,8 @@ type UpdateMemberRolePayload struct {
 	SessionToken *string
 	// The user ID to update.
 	UserID string
-	// The new role ID to assign.
-	RoleID string
+	// The new role slug to assign.
+	RoleSlug string
 }
 
 // UpdateRolePayload is the payload type of the access service updateRole
@@ -195,8 +195,8 @@ type UpdateMemberRolePayload struct {
 type UpdateRolePayload struct {
 	ApikeyToken  *string
 	SessionToken *string
-	// The ID of the role to update.
-	ID string
+	// The slug of the role to update.
+	Slug string
 	// Updated display name.
 	Name *string
 	// Updated description.

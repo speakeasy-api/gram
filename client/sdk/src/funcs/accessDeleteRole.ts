@@ -94,9 +94,9 @@ async function $do(
 
   const path = pathToFunc("/rpc/access.deleteRole")();
 
-  const query = encodeFormQuery({
-    "id": payload.id,
-  });
+	const query = encodeFormQuery({
+		"slug": payload.slug,
+	});
 
   const headers = new Headers(compactMap({
     Accept: "application/json",

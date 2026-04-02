@@ -19,10 +19,10 @@ export type UpdateRoleForm = {
    * Updated scope grants.
    */
   grants?: Array<RoleGrant> | undefined;
-  /**
-   * The ID of the role to update.
-   */
-  id: string;
+	/**
+	 * The slug of the role to update.
+	 */
+	slug: string;
   /**
    * Optional member IDs to additionally assign to this role. Existing assignments are preserved.
    */
@@ -37,7 +37,7 @@ export type UpdateRoleForm = {
 export type UpdateRoleForm$Outbound = {
   description?: string | undefined;
   grants?: Array<RoleGrant$Outbound> | undefined;
-  id: string;
+	slug: string;
   member_ids?: Array<string> | undefined;
   name?: string | undefined;
 };
@@ -50,7 +50,7 @@ export const UpdateRoleForm$outboundSchema: z.ZodMiniType<
   z.object({
     description: z.optional(z.string()),
     grants: z.optional(z.array(RoleGrant$outboundSchema)),
-    id: z.string(),
+		slug: z.string(),
     memberIds: z.optional(z.array(z.string())),
     name: z.optional(z.string()),
   }),

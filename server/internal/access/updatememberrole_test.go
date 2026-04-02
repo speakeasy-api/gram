@@ -41,12 +41,12 @@ func TestService_UpdateMemberRole(t *testing.T) {
 	}, nil).Once()
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
-	member, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: "role_builder"})
+	member, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleSlug: "custom-builder"})
 	require.NoError(t, err)
 	require.Equal(t, "local_user_1", member.ID)
 	require.Equal(t, "Ada Lovelace", member.Name)
 	require.Equal(t, "ada@example.com", member.Email)
-	require.Equal(t, "role_builder", member.RoleID)
+	require.Equal(t, "custom-builder", member.RoleSlug)
 	require.Nil(t, member.PhotoURL)
 	require.Equal(t, mockMembershipTimestamp, member.JoinedAt)
 }
@@ -57,7 +57,7 @@ func TestService_UpdateMemberRole_RoleNotFound(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
 
-	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: "role_missing"})
+	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleSlug: "missing-role"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "role not found")
 }
@@ -74,7 +74,7 @@ func TestService_UpdateMemberRole_MemberNotFound(t *testing.T) {
 	}, nil).Once()
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
-	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "user_missing", RoleID: "role_builder"})
+	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "user_missing", RoleSlug: "custom-builder"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "member is not connected locally")
 }
@@ -92,7 +92,7 @@ func TestService_UpdateMemberRole_WorkOSMembershipNotFound(t *testing.T) {
 	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{}, nil).Once()
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
-	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: "role_builder"})
+	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleSlug: "custom-builder"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "member not found")
 }
@@ -113,7 +113,7 @@ func TestService_UpdateMemberRole_WorkOSFailure(t *testing.T) {
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "custom-builder").Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
-	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: "role_builder"})
+	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleSlug: "custom-builder"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "update member role in workos")
 }
@@ -147,7 +147,7 @@ func TestService_UpdateMemberRole_AuditLog(t *testing.T) {
 	}, nil).Once()
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
-	member, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: "role_builder"})
+	member, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleSlug: "custom-builder"})
 	require.NoError(t, err)
 	require.NotNil(t, member)
 
@@ -164,8 +164,8 @@ func TestService_UpdateMemberRole_AuditLog(t *testing.T) {
 	require.NoError(t, err)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
-	require.Equal(t, "role_admin", beforeSnapshot["RoleID"])
-	require.Equal(t, "role_builder", afterSnapshot["RoleID"])
+	require.Equal(t, "admin", beforeSnapshot["RoleSlug"])
+	require.Equal(t, "custom-builder", afterSnapshot["RoleSlug"])
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessMemberRoleUpdate)
 	require.NoError(t, err)

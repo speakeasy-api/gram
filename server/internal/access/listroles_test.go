@@ -40,12 +40,12 @@ func TestService_ListRoles(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Roles, 2)
 
-	rolesByID := make(map[string]*gen.Role, len(result.Roles))
+	rolesBySlug := make(map[string]*gen.Role, len(result.Roles))
 	for _, role := range result.Roles {
-		rolesByID[role.ID] = role
+		rolesBySlug[role.Slug] = role
 	}
 
-	adminRole := rolesByID["role_admin"]
+	adminRole := rolesBySlug["admin"]
 	require.NotNil(t, adminRole)
 	require.Equal(t, "Admin", adminRole.Name)
 	require.True(t, adminRole.IsSystem)
@@ -56,7 +56,7 @@ func TestService_ListRoles(t *testing.T) {
 	require.Equal(t, string(access.ScopeOrgAdmin), adminRole.Grants[0].Scope)
 	require.Nil(t, adminRole.Grants[0].Resources)
 
-	customRole := rolesByID["role_custom"]
+	customRole := rolesBySlug["custom-builder"]
 	require.NotNil(t, customRole)
 	require.Equal(t, "Custom Builder", customRole.Name)
 	require.False(t, customRole.IsSystem)

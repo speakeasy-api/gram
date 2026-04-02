@@ -11,10 +11,10 @@ export type GetRoleSecurity = {
 };
 
 export type GetRoleRequest = {
-  /**
-   * The ID of the role.
-   */
-  id: string;
+	/**
+	 * The slug of the role.
+	 */
+	slug: string;
   /**
    * API Key header
    */
@@ -56,7 +56,7 @@ export function getRoleSecurityToJSON(
 
 /** @internal */
 export type GetRoleRequest$Outbound = {
-  id: string;
+	slug: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -67,7 +67,7 @@ export const GetRoleRequest$outboundSchema: z.ZodMiniType<
   GetRoleRequest
 > = z.pipe(
   z.object({
-    id: z.string(),
+		slug: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

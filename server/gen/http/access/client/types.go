@@ -28,8 +28,8 @@ type CreateRoleRequestBody struct {
 // UpdateRoleRequestBody is the type of the "access" service "updateRole"
 // endpoint HTTP request body.
 type UpdateRoleRequestBody struct {
-	// The ID of the role to update.
-	ID string `form:"id" json:"id" xml:"id"`
+	// The slug of the role to update.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Updated display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Updated description.
@@ -46,8 +46,8 @@ type UpdateRoleRequestBody struct {
 type UpdateMemberRoleRequestBody struct {
 	// The user ID to update.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
-	// The new role ID to assign.
-	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// The new role slug to assign.
+	RoleSlug string `form:"role_slug" json:"role_slug" xml:"role_slug"`
 }
 
 // ListRolesResponseBody is the type of the "access" service "listRoles"
@@ -60,8 +60,8 @@ type ListRolesResponseBody struct {
 // GetRoleResponseBody is the type of the "access" service "getRole" endpoint
 // HTTP response body.
 type GetRoleResponseBody struct {
-	// Unique role identifier.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Human-readable description.
@@ -79,8 +79,8 @@ type GetRoleResponseBody struct {
 // CreateRoleResponseBody is the type of the "access" service "createRole"
 // endpoint HTTP response body.
 type CreateRoleResponseBody struct {
-	// Unique role identifier.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Human-readable description.
@@ -98,8 +98,8 @@ type CreateRoleResponseBody struct {
 // UpdateRoleResponseBody is the type of the "access" service "updateRole"
 // endpoint HTTP response body.
 type UpdateRoleResponseBody struct {
-	// Unique role identifier.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Human-readable description.
@@ -139,8 +139,8 @@ type UpdateMemberRoleResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// Currently assigned role ID.
-	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// Currently assigned role slug.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
 }
@@ -1590,8 +1590,8 @@ type UpdateMemberRoleGatewayErrorResponseBody struct {
 
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
-	// Unique role identifier.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Human-readable description.
@@ -1644,8 +1644,8 @@ type AccessMemberResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// Currently assigned role ID.
-	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// Currently assigned role slug.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
 }
@@ -1682,7 +1682,7 @@ func NewCreateRoleRequestBody(p *access.CreateRolePayload) *CreateRoleRequestBod
 // the "updateRole" endpoint of the "access" service.
 func NewUpdateRoleRequestBody(p *access.UpdateRolePayload) *UpdateRoleRequestBody {
 	body := &UpdateRoleRequestBody{
-		ID:          p.ID,
+		Slug:        p.Slug,
 		Name:        p.Name,
 		Description: p.Description,
 	}
@@ -1709,8 +1709,8 @@ func NewUpdateRoleRequestBody(p *access.UpdateRolePayload) *UpdateRoleRequestBod
 // of the "updateMemberRole" endpoint of the "access" service.
 func NewUpdateMemberRoleRequestBody(p *access.UpdateMemberRolePayload) *UpdateMemberRoleRequestBody {
 	body := &UpdateMemberRoleRequestBody{
-		UserID: p.UserID,
-		RoleID: p.RoleID,
+		UserID:   p.UserID,
+		RoleSlug: p.RoleSlug,
 	}
 	return body
 }
@@ -1884,7 +1884,7 @@ func NewListRolesGatewayError(body *ListRolesGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewGetRoleRoleOK(body *GetRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
+		Slug:        *body.Slug,
 		Name:        *body.Name,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
@@ -2054,7 +2054,7 @@ func NewGetRoleGatewayError(body *GetRoleGatewayErrorResponseBody) *goa.ServiceE
 // result from a HTTP "Created" response.
 func NewCreateRoleRoleCreated(body *CreateRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
+		Slug:        *body.Slug,
 		Name:        *body.Name,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
@@ -2228,7 +2228,7 @@ func NewCreateRoleGatewayError(body *CreateRoleGatewayErrorResponseBody) *goa.Se
 // from a HTTP "OK" response.
 func NewUpdateRoleRoleOK(body *UpdateRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
+		Slug:        *body.Slug,
 		Name:        *body.Name,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
@@ -2888,7 +2888,7 @@ func NewUpdateMemberRoleAccessMemberOK(body *UpdateMemberRoleResponseBody) *acce
 		Name:     *body.Name,
 		Email:    *body.Email,
 		PhotoURL: body.PhotoURL,
-		RoleID:   *body.RoleID,
+		RoleSlug: *body.RoleSlug,
 		JoinedAt: *body.JoinedAt,
 	}
 
@@ -3064,8 +3064,8 @@ func ValidateListRolesResponseBody(body *ListRolesResponseBody) (err error) {
 // ValidateGetRoleResponseBody runs the validations defined on
 // GetRoleResponseBody
 func ValidateGetRoleResponseBody(body *GetRoleResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -3107,8 +3107,8 @@ func ValidateGetRoleResponseBody(body *GetRoleResponseBody) (err error) {
 // ValidateCreateRoleResponseBody runs the validations defined on
 // CreateRoleResponseBody
 func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -3150,8 +3150,8 @@ func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
 // ValidateUpdateRoleResponseBody runs the validations defined on
 // UpdateRoleResponseBody
 func ValidateUpdateRoleResponseBody(body *UpdateRoleResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -3234,8 +3234,8 @@ func ValidateUpdateMemberRoleResponseBody(body *UpdateMemberRoleResponseBody) (e
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
 	}
-	if body.RoleID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	if body.RoleSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_slug", "body"))
 	}
 	if body.JoinedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("joined_at", "body"))
@@ -5168,8 +5168,8 @@ func ValidateUpdateMemberRoleGatewayErrorResponseBody(body *UpdateMemberRoleGate
 
 // ValidateRoleResponseBody runs the validations defined on RoleResponseBody
 func ValidateRoleResponseBody(body *RoleResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -5268,8 +5268,8 @@ func ValidateAccessMemberResponseBody(body *AccessMemberResponseBody) (err error
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
 	}
-	if body.RoleID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	if body.RoleSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_slug", "body"))
 	}
 	if body.JoinedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("joined_at", "body"))

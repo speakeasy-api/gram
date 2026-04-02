@@ -31,7 +31,7 @@ func TestService_DeleteRole(t *testing.T) {
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeMCPConnect, access.WildcardResource)
 
-	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
+	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{Slug: "custom-builder"})
 	require.NoError(t, err)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
@@ -44,7 +44,7 @@ func TestService_DeleteRole_NotFound(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
 
-	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_missing"})
+	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{Slug: "missing-role"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "role not found")
 }
@@ -57,7 +57,7 @@ func TestService_DeleteRole_SystemRole(t *testing.T) {
 		mockSystemRole("role_admin", "Admin", "admin"),
 	}, nil).Once()
 
-	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_admin"})
+	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{Slug: "admin"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "system roles cannot be deleted")
 }
@@ -75,7 +75,7 @@ func TestService_DeleteRole_WorkOSDeleteFailure(t *testing.T) {
 	ti.roles.On("DeleteRole", mock.Anything, "org_workos_test", "custom-builder").Return(errors.New("workos unavailable")).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
 
-	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
+	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{Slug: "custom-builder"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "delete role in workos")
 
@@ -100,7 +100,7 @@ func TestService_DeleteRole_AuditLog(t *testing.T) {
 	ti.roles.On("DeleteRole", mock.Anything, "org_workos_test", "custom-builder").Return(nil).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
 
-	err = ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
+	err = ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{Slug: "custom-builder"})
 	require.NoError(t, err)
 
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessRoleDelete)

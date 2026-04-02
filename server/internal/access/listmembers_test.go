@@ -22,10 +22,6 @@ func TestService_ListMembers(t *testing.T) {
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-		mockRole("role_builder", "Builder", "custom-builder", ""),
-	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
 		mockMember("org_workos_test", "membership_1", "user_1", "admin"),
 		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
@@ -46,12 +42,12 @@ func TestService_ListMembers(t *testing.T) {
 
 	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
 	require.Equal(t, "ada@example.com", byID["local_user_1"].Email)
-	require.Equal(t, "role_admin", byID["local_user_1"].RoleID)
+	require.Equal(t, "admin", byID["local_user_1"].RoleSlug)
 	require.Nil(t, byID["local_user_1"].PhotoURL)
 	require.Equal(t, "2024-11-15T15:04:05Z", byID["local_user_1"].JoinedAt)
 
 	require.Equal(t, "Grace", byID["local_user_2"].Name)
-	require.Equal(t, "role_builder", byID["local_user_2"].RoleID)
+	require.Equal(t, "custom-builder", byID["local_user_2"].RoleSlug)
 }
 
 func TestService_ListMembers_WorkOSUsersFailure(t *testing.T) {
@@ -62,9 +58,6 @@ func TestService_ListMembers_WorkOSUsersFailure(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
 		mockMember("org_workos_test", "membership_1", "user_1", "admin"),
 	}, nil).Once()

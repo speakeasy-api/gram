@@ -131,7 +131,7 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
-		attr.AccessRoleID(payload.ID),
+		attr.AccessRoleID(payload.Slug),
 	)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
@@ -139,7 +139,7 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
 	}
 
-	role, ok := findRoleByID(wRoles, payload.ID)
+	role, ok := findRoleBySlug(wRoles, payload.Slug)
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 	}
@@ -214,7 +214,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
-		attr.AccessRoleID(wr.ID),
+		attr.AccessRoleID(wr.Slug),
 	)
 
 	// Stop before assigning members if grant sync fails. That can leave behind a
@@ -272,7 +272,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName:  ac.Email,
 		ActorSlug:         nil,
-		RoleID:            wr.ID,
+		RoleID:            wr.Slug,
 		RoleName:          createdRole.Name,
 		RoleSlug:          wr.Slug,
 		RoleSnapshotAfter: createdRole,
@@ -293,12 +293,12 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessRoleID(payload.ID),
+		attr.SlogAccessRoleID(payload.Slug),
 	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
-		attr.AccessRoleID(payload.ID),
+		attr.AccessRoleID(payload.Slug),
 	)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
@@ -306,7 +306,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
 	}
 
-	currentRole, ok := findRoleByID(wRoles, payload.ID)
+	currentRole, ok := findRoleBySlug(wRoles, payload.Slug)
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
 	}
@@ -396,7 +396,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName:   ac.Email,
 		ActorSlug:          nil,
-		RoleID:             updatedRole.ID,
+		RoleID:             updatedRole.Slug,
 		RoleName:           updatedRoleView.Name,
 		RoleSlug:           updatedRole.Slug,
 		RoleSnapshotBefore: existingRole,
@@ -418,12 +418,12 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessRoleID(payload.ID),
+		attr.SlogAccessRoleID(payload.Slug),
 	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
-		attr.AccessRoleID(payload.ID),
+		attr.AccessRoleID(payload.Slug),
 	)
 
 	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
@@ -431,7 +431,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 		return oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
 	}
 
-	currentRole, ok := findRoleByID(wRoles, payload.ID)
+	currentRole, ok := findRoleBySlug(wRoles, payload.Slug)
 	if !ok {
 		return oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
 	}
@@ -461,7 +461,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-		RoleID:           currentRole.ID,
+		RoleID:           currentRole.Slug,
 		RoleName:         currentRole.Name,
 		RoleSlug:         currentRole.Slug,
 	}); err != nil {
@@ -507,15 +507,6 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		attr.UserID(ac.UserID),
 	)
 
-	roles, err := s.roles.ListRoles(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
-	}
-	roleIDBySlug := make(map[string]string, len(roles))
-	for _, role := range roles {
-		roleIDBySlug[role.Slug] = role.ID
-	}
-
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
@@ -555,7 +546,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 			Name:     conv.Default(cm.User.DisplayName, formatUserName(user)),
 			Email:    user.Email,
 			PhotoURL: conv.FromPGText[string](cm.User.PhotoUrl),
-			RoleID:   roleIDBySlug[member.RoleSlug],
+			RoleSlug: member.RoleSlug,
 			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		})
 	}
@@ -574,13 +565,13 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 		attr.SlogAccessMemberID(payload.UserID),
-		attr.SlogAccessRoleID(payload.RoleID),
+		attr.SlogAccessRoleID(payload.RoleSlug),
 	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessMemberID(payload.UserID),
-		attr.AccessRoleID(payload.RoleID),
+		attr.AccessRoleID(payload.RoleSlug),
 	)
 
 	roles, err := s.roles.ListRoles(ctx, workosOrgID)
@@ -590,7 +581,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 
 	roleSlug := ""
 	for _, role := range roles {
-		if role.ID == payload.RoleID {
+		if role.Slug == payload.RoleSlug {
 			roleSlug = role.Slug
 			break
 		}
@@ -619,11 +610,6 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
-	}
-
-	roleIDBySlug := make(map[string]string, len(roles))
-	for _, role := range roles {
-		roleIDBySlug[role.Slug] = role.ID
 	}
 
 	membershipID := ""
@@ -658,7 +644,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		Name:     formatUserName(user),
 		Email:    user.Email,
 		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-		RoleID:   roleIDBySlug[existingMember.RoleSlug],
+		RoleSlug: existingMember.RoleSlug,
 		JoinedAt: conv.Default(existingMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}
 	afterMember := &gen.AccessMember{
@@ -666,7 +652,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		Name:     formatUserName(user),
 		Email:    user.Email,
 		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-		RoleID:   payload.RoleID,
+		RoleSlug: payload.RoleSlug,
 		JoinedAt: conv.Default(updatedMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}
 
@@ -806,9 +792,9 @@ func (s *Service) connectedMembers(ctx context.Context, organizationID string) (
 	return connectedMembers, nil
 }
 
-func findRoleByID(roles []workos.Role, id string) (workos.Role, bool) {
+func findRoleBySlug(roles []workos.Role, slug string) (workos.Role, bool) {
 	for _, role := range roles {
-		if role.ID == id {
+		if role.Slug == slug {
 			return role, true
 		}
 	}
@@ -824,7 +810,7 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 	}
 
 	return &gen.Role{
-		ID:          role.ID,
+		Slug:        role.Slug,
 		Name:        role.Name,
 		Description: role.Description,
 		IsSystem:    isSystemRole(role.Slug),
