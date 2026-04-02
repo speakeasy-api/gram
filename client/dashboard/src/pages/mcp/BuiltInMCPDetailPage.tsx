@@ -9,6 +9,7 @@ import { useSlugs } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Switch } from "@/components/ui/switch";
+import { MOCK_REGISTRY_SKILLS } from "@/pages/context/mock-data";
 import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { useParams } from "react-router";
@@ -68,7 +69,12 @@ type DocsMcpTool = {
   description: string;
   configurable?: boolean;
   defaultEnabled: boolean;
-  parameters?: Array<{ name: string; type: string; description: string }>;
+  parameters?: Array<{
+    name: string;
+    type: string;
+    description: string;
+    enumValues?: Array<{ value: string; label: string }>;
+  }>;
 };
 
 const DOCS_MCP_TOOLS: DocsMcpTool[] = [
@@ -176,6 +182,12 @@ const DOCS_MCP_TOOLS: DocsMcpTool[] = [
         type: "enum",
         description:
           "Skill identifier — dynamically populated from all active SKILL.md files",
+        enumValues: MOCK_REGISTRY_SKILLS.filter(
+          (s) => s.status === "active",
+        ).map((s) => ({
+          value: s.id,
+          label: `${s.name} — ${s.description}`,
+        })),
       },
     ],
   },
@@ -584,7 +596,7 @@ function DocsMCPToolRow({
                 {tool.parameters.map((param) => (
                   <tr
                     key={param.name}
-                    className="border-b border-neutral-softest last:border-b-0"
+                    className="border-b border-neutral-softest last:border-b-0 align-top"
                   >
                     <td className="px-3 py-2 font-mono text-foreground">
                       {param.name}
@@ -593,7 +605,27 @@ function DocsMCPToolRow({
                       {param.type}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
-                      {param.description}
+                      <div>{param.description}</div>
+                      {param.enumValues && param.enumValues.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <div className="text-xs font-medium text-foreground">
+                            Possible values:
+                          </div>
+                          {param.enumValues.map((ev) => (
+                            <div
+                              key={ev.value}
+                              className="flex gap-2 text-xs py-1 px-2 rounded bg-muted/30"
+                            >
+                              <code className="font-mono text-foreground shrink-0">
+                                {ev.value}
+                              </code>
+                              <span className="text-muted-foreground">
+                                {ev.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
