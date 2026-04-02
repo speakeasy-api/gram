@@ -1075,6 +1075,8 @@ export type DraftDocument = {
   updatedAt: string;
   /** Existing file path if this is an edit, null if new doc */
   filePath: string | null;
+  /** For new docs: proposed location in the corpus */
+  proposedPath?: string;
   /** For edits: the original content */
   originalContent?: string;
   /** The proposed content */
@@ -1206,6 +1208,7 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
     createdAt: "2026-04-02T11:00:00Z",
     updatedAt: "2026-04-02T11:00:00Z",
     filePath: null,
+    proposedPath: "guides/advanced/rate-limiting.md",
     content:
       "# Rate Limiting Best Practices\n\nThis guide covers rate limiting strategies for MCP servers on Gram.\n\n## Default Limits\n\n- 100 requests/minute per API key\n- 1000 tool calls/hour per session\n\n## Custom Limits\n\nConfigure per-toolset limits in the environment settings.\n\n## Handling 429 Responses\n\nWhen rate limited, clients receive a `429` status with a `Retry-After` header.\n\n## Monitoring\n\nTrack rate limit usage in the Observability dashboard.",
     upvotes: 11,
@@ -1233,6 +1236,7 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
     createdAt: "2026-04-02T13:00:00Z",
     updatedAt: "2026-04-02T13:00:00Z",
     filePath: null,
+    proposedPath: "guides/troubleshooting.md",
     content:
       "# Troubleshooting Common MCP Connection Issues\n\nBased on patterns observed across 89 support sessions.\n\n## Connection Refused\n\nCheck that the server URL is correct and the server is running.\n\n## Authentication Failures\n\nVerify API keys haven't expired. Check OAuth token refresh.\n\n## Timeout Errors\n\nIncrease the client timeout setting. Default is 30s.\n\n## SSL Certificate Errors\n\nEnsure your custom domain has a valid certificate.",
     upvotes: 19,
@@ -1257,6 +1261,82 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
         content: "Can we add a section on firewall/proxy issues too?",
         createdAt: "2026-04-02T14:00:00Z",
         upvotes: 6,
+      },
+    ],
+  },
+  {
+    id: "draft-6",
+    title: "Add external-partner role to access control config",
+    author: "dave",
+    authorType: "human",
+    createdAt: "2026-04-02T14:30:00Z",
+    updatedAt: "2026-04-02T14:30:00Z",
+    filePath: ".docs-mcp.json",
+    originalContent: JSON.stringify(
+      {
+        version: "1",
+        strategy: {
+          chunk_by: "h2",
+          max_chunk_size: 12000,
+          min_chunk_size: 200,
+        },
+        accessControl: [
+          {
+            role: "developer",
+            allowedTaxonomy: { language: ["typescript", "python", "go"] },
+          },
+          {
+            role: "support",
+            allowedTaxonomy: { language: ["typescript", "python"] },
+            deniedPaths: ["guides/advanced/*"],
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    content: JSON.stringify(
+      {
+        version: "1",
+        strategy: {
+          chunk_by: "h2",
+          max_chunk_size: 12000,
+          min_chunk_size: 200,
+        },
+        accessControl: [
+          {
+            role: "developer",
+            allowedTaxonomy: { language: ["typescript", "python", "go"] },
+          },
+          {
+            role: "support",
+            allowedTaxonomy: { language: ["typescript", "python"] },
+            deniedPaths: ["guides/advanced/*"],
+          },
+          {
+            role: "external-partner",
+            allowedTaxonomy: { language: ["typescript"] },
+            deniedPaths: ["api-reference/*", "guides/advanced/*"],
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    upvotes: 6,
+    downvotes: 0,
+    userVote: "up",
+    status: "open",
+    labels: ["config", "access-control"],
+    comments: [
+      {
+        id: "c10",
+        author: "alice",
+        authorType: "human",
+        content:
+          "Makes sense — partners shouldn't see our internal API docs or advanced guides.",
+        createdAt: "2026-04-02T15:00:00Z",
+        upvotes: 4,
       },
     ],
   },

@@ -502,12 +502,19 @@ function DraftDocumentCard({
             {isEdit ? (
               <span className="font-mono text-xs">{draft.filePath}</span>
             ) : (
-              <Badge
-                variant="outline"
-                className="border-emerald-500/50 text-emerald-600 bg-emerald-500/10 text-[10px] px-1.5 py-0"
-              >
-                New Doc
-              </Badge>
+              <>
+                <Badge
+                  variant="outline"
+                  className="border-emerald-500/50 text-emerald-600 bg-emerald-500/10 text-[10px] px-1.5 py-0"
+                >
+                  New Doc
+                </Badge>
+                {draft.proposedPath && (
+                  <span className="font-mono text-xs">
+                    → {draft.proposedPath}
+                  </span>
+                )}
+              </>
             )}
           </div>
 
