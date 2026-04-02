@@ -1608,39 +1608,145 @@ function SourceBadge({
 
 // ── Feedback Section ──────────────────────────────────────────────────────
 
+const INITIAL_COMMENTS_SHOWN = 2;
+
 function FeedbackSection({ feedback }: { feedback: DocFeedback }) {
+  const [showAllComments, setShowAllComments] = useState(false);
+  const score = feedback.upvotes - feedback.downvotes;
+
+  const sortedComments = [...feedback.comments].sort(
+    (a, b) => b.upvotes - b.downvotes - (a.upvotes - a.downvotes),
+  );
+  const visibleComments = showAllComments
+    ? sortedComments
+    : sortedComments.slice(0, INITIAL_COMMENTS_SHOWN);
+  const hiddenCount = sortedComments.length - INITIAL_COMMENTS_SHOWN;
+
   return (
-    <div className="px-4 py-3 border-t border-border space-y-2">
-      <Type small muted className="font-medium block">
-        Feedback
-      </Type>
-      <div className="flex items-center gap-3">
-        <Button
-          size="sm"
-          variant={feedback.userVote === "up" ? "default" : "outline"}
-          className="h-7 px-2 gap-1.5"
-        >
-          <ThumbsUpIcon className="h-3.5 w-3.5" />
-          <span className="text-xs">{feedback.upvotes}</span>
-        </Button>
-        <Button
-          size="sm"
-          variant={feedback.userVote === "down" ? "default" : "outline"}
-          className="h-7 px-2 gap-1.5"
-        >
-          <ThumbsDownIcon className="h-3.5 w-3.5" />
-          <span className="text-xs">{feedback.downvotes}</span>
-        </Button>
+    <div className="border-t border-border">
+      {/* Vote bar + labels */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border">
+        <div className="flex items-center gap-1.5">
+          <button
+            className={cn(
+              "p-0.5 rounded transition-colors",
+              feedback.userVote === "up"
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <ThumbsUpIcon className="h-3.5 w-3.5" />
+          </button>
+          <span
+            className={cn(
+              "text-xs font-bold tabular-nums",
+              score > 0
+                ? "text-primary"
+                : score < 0
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+            )}
+          >
+            {score}
+          </span>
+          <button
+            className={cn(
+              "p-0.5 rounded transition-colors",
+              feedback.userVote === "down"
+                ? "text-destructive"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <ThumbsDownIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {feedback.upvotes} upvote{feedback.upvotes !== 1 && "s"}
+        </span>
+        {feedback.labels.length > 0 && (
+          <div className="flex flex-wrap gap-1 ml-auto">
+            {feedback.labels.map((label) => (
+              <Badge key={label} variant="secondary" className="text-[10px]">
+                {label}
+              </Badge>
+            ))}
+          </div>
+        )}
       </div>
-      {feedback.labels.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {feedback.labels.map((label) => (
-            <Badge key={label} variant="secondary">
-              {label}
-            </Badge>
+
+      {/* Comments list */}
+      {sortedComments.length > 0 && (
+        <div className="divide-y divide-border">
+          {visibleComments.map((comment) => (
+            <FeedbackCommentRow key={comment.id} comment={comment} />
           ))}
+          {!showAllComments && hiddenCount > 0 && (
+            <button
+              onClick={() => setShowAllComments(true)}
+              className="w-full px-4 py-2 text-xs text-primary hover:bg-muted/30 transition-colors text-left"
+            >
+              Load {hiddenCount} more comment{hiddenCount !== 1 && "s"}...
+            </button>
+          )}
         </div>
       )}
+
+      {/* Add comment */}
+      <div className="flex items-center gap-2 px-4 py-2 border-t border-border">
+        <div className="flex-1 rounded-md border border-border bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground">
+          Add feedback...
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackCommentRow({
+  comment,
+}: {
+  comment: DocFeedback["comments"][number];
+}) {
+  const score = comment.upvotes - comment.downvotes;
+  return (
+    <div className="flex gap-2.5 px-4 py-2.5">
+      {/* Mini vote column */}
+      <div className="flex flex-col items-center gap-0 pt-0.5 shrink-0">
+        <button className="text-muted-foreground hover:text-foreground transition-colors">
+          <ThumbsUpIcon className="h-3 w-3" />
+        </button>
+        <span
+          className={cn(
+            "text-[10px] font-bold tabular-nums",
+            score > 0
+              ? "text-primary"
+              : score < 0
+                ? "text-destructive"
+                : "text-muted-foreground",
+          )}
+        >
+          {score}
+        </span>
+        <button className="text-muted-foreground hover:text-foreground transition-colors">
+          <ThumbsDownIcon className="h-3 w-3" />
+        </button>
+      </div>
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 text-xs mb-0.5">
+          <span className="font-medium text-foreground">{comment.author}</span>
+          {comment.authorType === "agent" && (
+            <Badge variant="default" className="text-[10px] px-1 py-0">
+              Agent
+            </Badge>
+          )}
+          <span className="text-muted-foreground">
+            {formatRelativeTime(comment.createdAt)}
+          </span>
+        </div>
+        <Type small className="text-foreground">
+          {comment.content}
+        </Type>
+      </div>
     </div>
   );
 }
