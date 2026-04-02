@@ -94,8 +94,9 @@ func TestServePublicOAuth_ProxyNoSecurityDefs_ValidToken_Succeeds(t *testing.T) 
 	require.NotNil(t, authCtx.ProjectID)
 
 	result := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:     "proxy-nosec-tok",
-		IsPublic: true,
+		Slug:         "proxy-nosec-tok",
+		IsPublic:     true,
+		ProviderType: "custom",
 	})
 
 	mcpSlug := result.Toolset.McpSlug.String
