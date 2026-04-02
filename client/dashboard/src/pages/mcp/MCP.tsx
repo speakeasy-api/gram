@@ -25,6 +25,12 @@ const BUILT_IN_SERVERS = [
       "Search and analyze your project's MCP server logs, tool calls, and agent sessions.",
     slug: "logs",
   },
+  {
+    name: "Docs MCP",
+    description:
+      "Search documentation, skills, and context. Powered by your documentation corpus.",
+    slug: "docs-mcp",
+  },
 ];
 
 export function MCPRoot() {
