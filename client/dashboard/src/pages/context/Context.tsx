@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon, ResizablePanel } from "@speakeasy-api/moonshine";
 import {
   ChevronDownIcon,
   MessageSquareIcon,
@@ -61,24 +61,22 @@ export function ContextRoot() {
   return <Outlet />;
 }
 
+const RESIZABLE_PANEL_CLASS =
+  "[&>[role='separator']]:w-px [&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:border-0 [&>[role='separator']]:hover:bg-primary [&>[role='separator']]:relative [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:cursor-col-resize";
+
 export default function ContextPage() {
   const totalDrafts = useMemo(() => countDrafts(MOCK_CONTEXT_TREE), []);
 
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Context</Page.Section.Title>
-          <Page.Section.Description>
-            Manage documentation, skills, and MCP search configuration for your
-            project.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <Tabs defaultValue="content">
-              <TabsList className="bg-transparent p-0 h-auto border-b border-border rounded-none w-full justify-start items-stretch">
+      <Page.Body fullWidth noPadding>
+        <Tabs defaultValue="content" className="flex flex-col h-full">
+          <div className="border-b">
+            <div className="px-8">
+              <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none items-stretch">
                 <PageTabsTrigger value="content">Content</PageTabsTrigger>
                 <PageTabsTrigger value="pending-changes">
                   Pending Changes
@@ -93,21 +91,30 @@ export default function ContextPage() {
                   Observability
                 </PageTabsTrigger>
               </TabsList>
-              <TabsContent value="content" className="pt-4">
-                <ContentTab />
-              </TabsContent>
-              <TabsContent value="pending-changes" className="pt-4">
-                <PendingChangesTab />
-              </TabsContent>
-              <TabsContent value="skills" className="pt-4">
-                <SkillsTab />
-              </TabsContent>
-              <TabsContent value="observability" className="pt-4">
-                <ObservabilityTab />
-              </TabsContent>
-            </Tabs>
-          </Page.Section.Body>
-        </Page.Section>
+            </div>
+          </div>
+          <TabsContent value="content" className="flex-1 min-h-0">
+            <ContentTab />
+          </TabsContent>
+          <TabsContent
+            value="pending-changes"
+            className="flex-1 min-h-0 p-8 overflow-y-auto"
+          >
+            <PendingChangesTab />
+          </TabsContent>
+          <TabsContent
+            value="skills"
+            className="flex-1 min-h-0 p-8 overflow-y-auto"
+          >
+            <SkillsTab />
+          </TabsContent>
+          <TabsContent
+            value="observability"
+            className="flex-1 min-h-0 p-8 overflow-y-auto"
+          >
+            <ObservabilityTab />
+          </TabsContent>
+        </Tabs>
       </Page.Body>
     </Page>
   );
@@ -119,7 +126,6 @@ function ContentTab() {
   const [selectedFile, setSelectedFile] = useState<ContextFile | null>(null);
   const [selectedPath, setSelectedPath] = useState<string[]>([]);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
-  const [layout, setLayout] = useState<"horizontal" | "vertical">("horizontal");
 
   const effectiveConfig = getEffectiveConfig(MOCK_CONTEXT_TREE, selectedPath);
   const selectedFolder = resolvePath(MOCK_CONTEXT_TREE, selectedPath);
@@ -134,46 +140,23 @@ function ContentTab() {
     setSelectedPath(path);
   };
 
-  const isHorizontal = layout === "horizontal";
-
   return (
     <>
-      <div
-        className={cn(
-          "flex",
-          isHorizontal ? "flex-row gap-0" : "flex-col gap-4",
-        )}
+      <ResizablePanel
+        direction="horizontal"
+        className={cn("h-full", RESIZABLE_PANEL_CLASS)}
       >
         {/* Left: tree explorer */}
-        <div
-          className={cn(
-            "shrink-0 border-border",
-            isHorizontal
-              ? "w-[280px] border-r pr-0 overflow-y-auto max-h-[calc(100vh-220px)]"
-              : "w-full border-b pb-4",
-          )}
-        >
-          <div className="flex items-center justify-between px-2 pb-2">
-            <Type
-              small
-              muted
-              className="font-medium uppercase tracking-wider text-xs"
-            >
-              Files
-            </Type>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() =>
-                  setLayout(isHorizontal ? "vertical" : "horizontal")
-                }
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                title={isHorizontal ? "Stack vertically" : "Split horizontally"}
+        <ResizablePanel.Pane minSize={12} defaultSize={18} maxSize={30}>
+          <div className="h-full flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+              <Type
+                small
+                muted
+                className="font-medium uppercase tracking-wider text-xs"
               >
-                <Icon
-                  name={isHorizontal ? "rows-3" : "columns-2"}
-                  className="h-3.5 w-3.5"
-                />
-              </button>
+                Files
+              </Type>
               <button
                 onClick={() => setAddRepoOpen(true)}
                 className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
@@ -182,30 +165,46 @@ function ContentTab() {
                 <Icon name="plus" className="h-3.5 w-3.5" />
               </button>
             </div>
+            <div className="flex-1 overflow-y-auto py-1">
+              <TreeNode
+                node={MOCK_CONTEXT_TREE}
+                depth={0}
+                selectedFile={selectedFile}
+                onFileSelect={handleFileSelect}
+                onFolderSelect={handleFolderSelect}
+                parentPath={[]}
+              />
+            </div>
           </div>
-          <TreeNode
-            node={MOCK_CONTEXT_TREE}
-            depth={0}
-            selectedFile={selectedFile}
-            onFileSelect={handleFileSelect}
-            onFolderSelect={handleFolderSelect}
-            parentPath={[]}
-          />
-        </div>
+        </ResizablePanel.Pane>
 
         {/* Right: detail view */}
-        <div className={cn("flex-1 min-w-0", isHorizontal && "pl-4")}>
-          {selectedFile ? (
-            <FileDetail file={selectedFile} />
-          ) : selectedFolder ? (
-            <FolderDetail
-              folder={selectedFolder}
-              path={selectedPath}
-              config={effectiveConfig}
-            />
-          ) : null}
-        </div>
-      </div>
+        <ResizablePanel.Pane minSize={40}>
+          <div className="h-full overflow-y-auto p-6">
+            {selectedFile ? (
+              <FileDetail file={selectedFile} />
+            ) : selectedFolder ? (
+              <FolderDetail
+                folder={selectedFolder}
+                path={selectedPath}
+                config={effectiveConfig}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center space-y-2">
+                  <Icon
+                    name="file-text"
+                    className="h-10 w-10 mx-auto text-muted-foreground/30"
+                  />
+                  <Type small muted>
+                    Select a file or folder to view details
+                  </Type>
+                </div>
+              </div>
+            )}
+          </div>
+        </ResizablePanel.Pane>
+      </ResizablePanel>
 
       <AddRepoDialog
         open={addRepoOpen}
