@@ -56,10 +56,10 @@ export type ListInvitesQueryError =
  * listInvites organizations
  *
  * @remarks
- * List WorkOS invitations for an organization.
+ * List pending WorkOS invitations for the active organization.
  */
 export function useListInvites(
-  request: operations.ListInvitesRequest,
+  request?: operations.ListInvitesRequest | undefined,
   security?: operations.ListInvitesSecurity | undefined,
   options?: QueryHookOptions<ListInvitesQueryData, ListInvitesQueryError>,
 ): UseQueryResult<ListInvitesQueryData, ListInvitesQueryError> {
@@ -79,10 +79,10 @@ export function useListInvites(
  * listInvites organizations
  *
  * @remarks
- * List WorkOS invitations for an organization.
+ * List pending WorkOS invitations for the active organization.
  */
 export function useListInvitesSuspense(
-  request: operations.ListInvitesRequest,
+  request?: operations.ListInvitesRequest | undefined,
   security?: operations.ListInvitesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListInvitesQueryData,
@@ -103,9 +103,7 @@ export function useListInvitesSuspense(
 
 export function setListInvitesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: { organizationId: string; gramSession?: string | undefined },
-  ],
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: ListInvitesQueryData,
 ): ListInvitesQueryData | undefined {
   const key = queryKeyListInvites(...queryKeyBase);
@@ -116,7 +114,7 @@ export function setListInvitesData(
 export function invalidateListInvites(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { organizationId: string; gramSession?: string | undefined }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

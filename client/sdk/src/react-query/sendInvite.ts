@@ -51,7 +51,7 @@ export type SendInviteMutationError =
  * sendInvite organizations
  *
  * @remarks
- * Send a WorkOS invitation to join an organization.
+ * Send a WorkOS invitation for the active organization.
  */
 export function useSendInviteMutation(
   options?: MutationHookOptions<

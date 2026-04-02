@@ -56,10 +56,10 @@ export type ListOrganizationUsersQueryError =
  * listUsers organizations
  *
  * @remarks
- * List users in an organization from Gram organization_user_relationships.
+ * List users in the active organization from Gram organization_user_relationships.
  */
 export function useListOrganizationUsers(
-  request: operations.ListOrganizationUsersRequest,
+  request?: operations.ListOrganizationUsersRequest | undefined,
   security?: operations.ListOrganizationUsersSecurity | undefined,
   options?: QueryHookOptions<
     ListOrganizationUsersQueryData,
@@ -85,10 +85,10 @@ export function useListOrganizationUsers(
  * listUsers organizations
  *
  * @remarks
- * List users in an organization from Gram organization_user_relationships.
+ * List users in the active organization from Gram organization_user_relationships.
  */
 export function useListOrganizationUsersSuspense(
-  request: operations.ListOrganizationUsersRequest,
+  request?: operations.ListOrganizationUsersRequest | undefined,
   security?: operations.ListOrganizationUsersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListOrganizationUsersQueryData,
@@ -112,9 +112,7 @@ export function useListOrganizationUsersSuspense(
 
 export function setListOrganizationUsersData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: { organizationId: string; gramSession?: string | undefined },
-  ],
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: ListOrganizationUsersQueryData,
 ): ListOrganizationUsersQueryData | undefined {
   const key = queryKeyListOrganizationUsers(...queryKeyBase);
@@ -125,7 +123,7 @@ export function setListOrganizationUsersData(
 export function invalidateListOrganizationUsers(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { organizationId: string; gramSession?: string | undefined }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

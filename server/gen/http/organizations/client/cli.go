@@ -22,7 +22,7 @@ func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSen
 	{
 		err = json.Unmarshal([]byte(organizationsSendInviteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"role_slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"role_slug\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -32,9 +32,8 @@ func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSen
 		}
 	}
 	v := &organizations.SendInvitePayload{
-		OrganizationID: body.OrganizationID,
-		Email:          body.Email,
-		RoleSlug:       body.RoleSlug,
+		Email:    body.Email,
+		RoleSlug: body.RoleSlug,
 	}
 	v.SessionToken = sessionToken
 
@@ -63,11 +62,7 @@ func BuildRevokeInvitePayload(organizationsRevokeInviteInvitationID string, orga
 
 // BuildListInvitesPayload builds the payload for the organizations listInvites
 // endpoint from CLI flags.
-func BuildListInvitesPayload(organizationsListInvitesOrganizationID string, organizationsListInvitesSessionToken string) (*organizations.ListInvitesPayload, error) {
-	var organizationID string
-	{
-		organizationID = organizationsListInvitesOrganizationID
-	}
+func BuildListInvitesPayload(organizationsListInvitesSessionToken string) (*organizations.ListInvitesPayload, error) {
 	var sessionToken *string
 	{
 		if organizationsListInvitesSessionToken != "" {
@@ -75,27 +70,6 @@ func BuildListInvitesPayload(organizationsListInvitesOrganizationID string, orga
 		}
 	}
 	v := &organizations.ListInvitesPayload{}
-	v.OrganizationID = organizationID
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildGetInviteByIDPayload builds the payload for the organizations
-// getInviteByID endpoint from CLI flags.
-func BuildGetInviteByIDPayload(organizationsGetInviteByIDInvitationID string, organizationsGetInviteByIDSessionToken string) (*organizations.GetInviteByIDPayload, error) {
-	var invitationID string
-	{
-		invitationID = organizationsGetInviteByIDInvitationID
-	}
-	var sessionToken *string
-	{
-		if organizationsGetInviteByIDSessionToken != "" {
-			sessionToken = &organizationsGetInviteByIDSessionToken
-		}
-	}
-	v := &organizations.GetInviteByIDPayload{}
-	v.InvitationID = invitationID
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -116,11 +90,7 @@ func BuildGetInviteByTokenPayload(organizationsGetInviteByTokenToken string) (*o
 
 // BuildListUsersPayload builds the payload for the organizations listUsers
 // endpoint from CLI flags.
-func BuildListUsersPayload(organizationsListUsersOrganizationID string, organizationsListUsersSessionToken string) (*organizations.ListUsersPayload, error) {
-	var organizationID string
-	{
-		organizationID = organizationsListUsersOrganizationID
-	}
+func BuildListUsersPayload(organizationsListUsersSessionToken string) (*organizations.ListUsersPayload, error) {
 	var sessionToken *string
 	{
 		if organizationsListUsersSessionToken != "" {
@@ -128,7 +98,6 @@ func BuildListUsersPayload(organizationsListUsersOrganizationID string, organiza
 		}
 	}
 	v := &organizations.ListUsersPayload{}
-	v.OrganizationID = organizationID
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -136,11 +105,7 @@ func BuildListUsersPayload(organizationsListUsersOrganizationID string, organiza
 
 // BuildRemoveUserPayload builds the payload for the organizations removeUser
 // endpoint from CLI flags.
-func BuildRemoveUserPayload(organizationsRemoveUserOrganizationID string, organizationsRemoveUserUserID string, organizationsRemoveUserSessionToken string) (*organizations.RemoveUserPayload, error) {
-	var organizationID string
-	{
-		organizationID = organizationsRemoveUserOrganizationID
-	}
+func BuildRemoveUserPayload(organizationsRemoveUserUserID string, organizationsRemoveUserSessionToken string) (*organizations.RemoveUserPayload, error) {
 	var userID string
 	{
 		userID = organizationsRemoveUserUserID
@@ -152,7 +117,6 @@ func BuildRemoveUserPayload(organizationsRemoveUserOrganizationID string, organi
 		}
 	}
 	v := &organizations.RemoveUserPayload{}
-	v.OrganizationID = organizationID
 	v.UserID = userID
 	v.SessionToken = sessionToken
 

@@ -35,26 +35,15 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 	Required("id", "email", "state", "organization_id", "created_at", "updated_at")
 })
 
-// OrganizationInvitationAccept is returned for getInviteByToken: includes redirect URL, never echoes the secret token.
+// OrganizationInvitationAccept is the public accept-flow view: enough to render copy and redirect,
+// without WorkOS invitation IDs, org IDs, or audit timestamps.
 var OrganizationInvitationAccept = Type("OrganizationInvitationAccept", func() {
-	Attribute("id", String, "WorkOS invitation ID.")
 	Attribute("email", String, "Invitee email address.")
 	Attribute("state", String, "Invitation lifecycle state.", func() {
 		Enum("pending", "accepted", "expired", "revoked")
 	})
-	Attribute("organization_id", String, "WorkOS organization ID.")
-	Attribute("expires_at", String, "When the invitation expires.", func() {
-		Format(FormatDateTime)
-	})
-	Attribute("accept_invitation_url", String, "URL to complete acceptance in WorkOS.")
-	Attribute("created_at", String, func() {
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Format(FormatDateTime)
-	})
-
-	Required("id", "email", "state", "organization_id", "accept_invitation_url", "created_at", "updated_at")
+	Attribute("accept_invitation_url", String, "URL to complete acceptance in WorkOS (may be empty when not actionable).")
+	Required("email", "state", "accept_invitation_url")
 })
 
 // OrganizationUser is a row from organization_user_relationships (active members).
@@ -89,13 +78,12 @@ var _ = Service("organizations", func() {
 	shared.DeclareErrorResponses()
 
 	Method("sendInvite", func() {
-		Description("Send a WorkOS invitation to join an organization.")
+		Description("Send a WorkOS invitation for the active organization.")
 
 		Payload(func() {
-			Attribute("organization_id", String, "Gram organization ID to invite into.")
 			Attribute("email", String, "Email address to invite.")
 			Attribute("role_slug", String, "Optional WorkOS role slug for the invitee.")
-			Required("organization_id", "email")
+			Required("email")
 			security.SessionPayload()
 		})
 
@@ -134,11 +122,9 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("listInvites", func() {
-		Description("List WorkOS invitations for an organization.")
+		Description("List pending WorkOS invitations for the active organization.")
 
 		Payload(func() {
-			Attribute("organization_id", String, "Gram organization ID.")
-			Required("organization_id")
 			security.SessionPayload()
 		})
 
@@ -146,7 +132,6 @@ var _ = Service("organizations", func() {
 
 		HTTP(func() {
 			GET("/rpc/organizations.listInvites")
-			Param("organization_id")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -154,29 +139,6 @@ var _ = Service("organizations", func() {
 		Meta("openapi:operationId", "listInvites")
 		Meta("openapi:extension:x-speakeasy-name-override", "listInvites")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListInvites"}`)
-	})
-
-	Method("getInviteByID", func() {
-		Description("Get a WorkOS invitation by ID.")
-
-		Payload(func() {
-			Attribute("invitation_id", String, "WorkOS invitation ID.")
-			Required("invitation_id")
-			security.SessionPayload()
-		})
-
-		Result(OrganizationInvitation)
-
-		HTTP(func() {
-			GET("/rpc/organizations.getInviteByID")
-			Param("invitation_id")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getInviteByID")
-		Meta("openapi:extension:x-speakeasy-name-override", "getInviteByID")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetInviteByID"}`)
 	})
 
 	Method("getInviteByToken", func() {
@@ -203,11 +165,9 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("listUsers", func() {
-		Description("List users in an organization from Gram organization_user_relationships.")
+		Description("List users in the active organization from Gram organization_user_relationships.")
 
 		Payload(func() {
-			Attribute("organization_id", String, "Gram organization ID.")
-			Required("organization_id")
 			security.SessionPayload()
 		})
 
@@ -215,7 +175,6 @@ var _ = Service("organizations", func() {
 
 		HTTP(func() {
 			GET("/rpc/organizations.listUsers")
-			Param("organization_id")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -226,18 +185,16 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("removeUser", func() {
-		Description("Remove a user from an organization in Gram and delete their WorkOS organization membership.")
+		Description("Remove a user from the active organization in Gram and delete their WorkOS organization membership.")
 
 		Payload(func() {
-			Attribute("organization_id", String, "Gram organization ID.")
 			Attribute("user_id", String, "Gram user ID to remove.")
-			Required("organization_id", "user_id")
+			Required("user_id")
 			security.SessionPayload()
 		})
 
 		HTTP(func() {
 			DELETE("/rpc/organizations.removeUser")
-			Param("organization_id")
 			Param("user_id")
 			security.SessionHeader()
 			Response(StatusNoContent)

@@ -7699,95 +7699,6 @@ paths:
             x-speakeasy-name-override: listRegistries
             x-speakeasy-react-hook:
                 name: ListMCPRegistries
-    /rpc/organizations.getInviteByID:
-        get:
-            description: Get a WorkOS invitation by ID.
-            operationId: getInviteByID
-            parameters:
-                - allowEmptyValue: true
-                  description: WorkOS invitation ID.
-                  in: query
-                  name: invitation_id
-                  required: true
-                  schema:
-                    description: WorkOS invitation ID.
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/OrganizationInvitation'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: getInviteByID organizations
-            tags:
-                - organizations
-            x-speakeasy-name-override: getInviteByID
-            x-speakeasy-react-hook:
-                name: GetInviteByID
     /rpc/organizations.getInviteByToken:
         get:
             description: Resolve a WorkOS invitation from its token (e.g. accept-flow).
@@ -7870,17 +7781,9 @@ paths:
                 name: GetInviteByToken
     /rpc/organizations.listInvites:
         get:
-            description: List WorkOS invitations for an organization.
+            description: List pending WorkOS invitations for the active organization.
             operationId: listInvites
             parameters:
-                - allowEmptyValue: true
-                  description: Gram organization ID.
-                  in: query
-                  name: organization_id
-                  required: true
-                  schema:
-                    description: Gram organization ID.
-                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -7959,17 +7862,9 @@ paths:
                 name: ListInvites
     /rpc/organizations.listUsers:
         get:
-            description: List users in an organization from Gram organization_user_relationships.
+            description: List users in the active organization from Gram organization_user_relationships.
             operationId: listOrganizationUsers
             parameters:
-                - allowEmptyValue: true
-                  description: Gram organization ID.
-                  in: query
-                  name: organization_id
-                  required: true
-                  schema:
-                    description: Gram organization ID.
-                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -8048,17 +7943,9 @@ paths:
                 name: ListOrganizationUsers
     /rpc/organizations.removeUser:
         delete:
-            description: Remove a user from an organization in Gram and delete their WorkOS organization membership.
+            description: Remove a user from the active organization in Gram and delete their WorkOS organization membership.
             operationId: removeOrganizationUser
             parameters:
-                - allowEmptyValue: true
-                  description: Gram organization ID.
-                  in: query
-                  name: organization_id
-                  required: true
-                  schema:
-                    description: Gram organization ID.
-                    type: string
                 - allowEmptyValue: true
                   description: Gram user ID to remove.
                   in: query
@@ -8226,7 +8113,7 @@ paths:
                 name: RevokeInvite
     /rpc/organizations.sendInvite:
         post:
-            description: Send a WorkOS invitation to join an organization.
+            description: Send a WorkOS invitation for the active organization.
             operationId: sendInvite
             parameters:
                 - allowEmptyValue: true
@@ -18892,23 +18779,10 @@ components:
             properties:
                 accept_invitation_url:
                     type: string
-                    description: URL to complete acceptance in WorkOS.
-                created_at:
-                    type: string
-                    format: date-time
+                    description: URL to complete acceptance in WorkOS (may be empty when not actionable).
                 email:
                     type: string
                     description: Invitee email address.
-                expires_at:
-                    type: string
-                    description: When the invitation expires.
-                    format: date-time
-                id:
-                    type: string
-                    description: WorkOS invitation ID.
-                organization_id:
-                    type: string
-                    description: WorkOS organization ID.
                 state:
                     type: string
                     description: Invitation lifecycle state.
@@ -18917,17 +18791,10 @@ components:
                         - accepted
                         - expired
                         - revoked
-                updated_at:
-                    type: string
-                    format: date-time
             required:
-                - id
                 - email
                 - state
-                - organization_id
                 - accept_invitation_url
-                - created_at
-                - updated_at
         OrganizationUser:
             type: object
             properties:
@@ -19991,14 +19858,10 @@ components:
                 email:
                     type: string
                     description: Email address to invite.
-                organization_id:
-                    type: string
-                    description: Gram organization ID to invite into.
                 role_slug:
                     type: string
                     description: Optional WorkOS role slug for the invitee.
             required:
-                - organization_id
                 - email
         ServeChatAttachmentForm:
             type: object

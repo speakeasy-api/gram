@@ -50,7 +50,7 @@ export type RemoveOrganizationUserMutationError =
  * removeUser organizations
  *
  * @remarks
- * Remove a user from an organization in Gram and delete their WorkOS organization membership.
+ * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
  */
 export function useRemoveOrganizationUserMutation(
   options?: MutationHookOptions<

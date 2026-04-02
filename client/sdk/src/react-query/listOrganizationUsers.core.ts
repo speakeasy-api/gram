@@ -19,7 +19,7 @@ export type ListOrganizationUsersQueryData = components.ListUsersResult;
 export function prefetchListOrganizationUsers(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListOrganizationUsersRequest,
+  request?: operations.ListOrganizationUsersRequest | undefined,
   security?: operations.ListOrganizationUsersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchListOrganizationUsers(
 
 export function buildListOrganizationUsersQuery(
   client$: GramCore,
-  request: operations.ListOrganizationUsersRequest,
+  request?: operations.ListOrganizationUsersRequest | undefined,
   security?: operations.ListOrganizationUsersSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -46,8 +46,7 @@ export function buildListOrganizationUsersQuery(
 } {
   return {
     queryKey: queryKeyListOrganizationUsers({
-      organizationId: request.organizationId,
-      gramSession: request.gramSession,
+      gramSession: request?.gramSession,
     }),
     queryFn: async function listOrganizationUsersQueryFn(
       ctx,
@@ -74,7 +73,7 @@ export function buildListOrganizationUsersQuery(
 }
 
 export function queryKeyListOrganizationUsers(
-  parameters: { organizationId: string; gramSession?: string | undefined },
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "organizations", "listUsers", parameters];
 }

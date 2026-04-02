@@ -19,7 +19,6 @@ type Endpoints struct {
 	SendInvite       goa.Endpoint
 	RevokeInvite     goa.Endpoint
 	ListInvites      goa.Endpoint
-	GetInviteByID    goa.Endpoint
 	GetInviteByToken goa.Endpoint
 	ListUsers        goa.Endpoint
 	RemoveUser       goa.Endpoint
@@ -33,7 +32,6 @@ func NewEndpoints(s Service) *Endpoints {
 		SendInvite:       NewSendInviteEndpoint(s, a.APIKeyAuth),
 		RevokeInvite:     NewRevokeInviteEndpoint(s, a.APIKeyAuth),
 		ListInvites:      NewListInvitesEndpoint(s, a.APIKeyAuth),
-		GetInviteByID:    NewGetInviteByIDEndpoint(s, a.APIKeyAuth),
 		GetInviteByToken: NewGetInviteByTokenEndpoint(s),
 		ListUsers:        NewListUsersEndpoint(s, a.APIKeyAuth),
 		RemoveUser:       NewRemoveUserEndpoint(s, a.APIKeyAuth),
@@ -46,7 +44,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SendInvite = m(e.SendInvite)
 	e.RevokeInvite = m(e.RevokeInvite)
 	e.ListInvites = m(e.ListInvites)
-	e.GetInviteByID = m(e.GetInviteByID)
 	e.GetInviteByToken = m(e.GetInviteByToken)
 	e.ListUsers = m(e.ListUsers)
 	e.RemoveUser = m(e.RemoveUser)
@@ -118,29 +115,6 @@ func NewListInvitesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.ListInvites(ctx, p)
-	}
-}
-
-// NewGetInviteByIDEndpoint returns an endpoint function that calls the method
-// "getInviteByID" of service "organizations".
-func NewGetInviteByIDEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetInviteByIDPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.GetInviteByID(ctx, p)
 	}
 }
 

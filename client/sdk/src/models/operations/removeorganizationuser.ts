@@ -11,10 +11,6 @@ export type RemoveOrganizationUserSecurity = {
 
 export type RemoveOrganizationUserRequest = {
   /**
-   * Gram organization ID.
-   */
-  organizationId: string;
-  /**
    * Gram user ID to remove.
    */
   userId: string;
@@ -56,7 +52,6 @@ export function removeOrganizationUserSecurityToJSON(
 
 /** @internal */
 export type RemoveOrganizationUserRequest$Outbound = {
-  organization_id: string;
   user_id: string;
   "Gram-Session"?: string | undefined;
 };
@@ -67,13 +62,11 @@ export const RemoveOrganizationUserRequest$outboundSchema: z.ZodMiniType<
   RemoveOrganizationUserRequest
 > = z.pipe(
   z.object({
-    organizationId: z.string(),
     userId: z.string(),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      organizationId: "organization_id",
       userId: "user_id",
       gramSession: "Gram-Session",
     });

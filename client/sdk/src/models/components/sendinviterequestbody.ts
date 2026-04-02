@@ -11,10 +11,6 @@ export type SendInviteRequestBody = {
    */
   email: string;
   /**
-   * Gram organization ID to invite into.
-   */
-  organizationId: string;
-  /**
    * Optional WorkOS role slug for the invitee.
    */
   roleSlug?: string | undefined;
@@ -23,7 +19,6 @@ export type SendInviteRequestBody = {
 /** @internal */
 export type SendInviteRequestBody$Outbound = {
   email: string;
-  organization_id: string;
   role_slug?: string | undefined;
 };
 
@@ -34,12 +29,10 @@ export const SendInviteRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     email: z.string(),
-    organizationId: z.string(),
     roleSlug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      organizationId: "organization_id",
       roleSlug: "role_slug",
     });
   }),

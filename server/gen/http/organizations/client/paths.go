@@ -22,11 +22,6 @@ func ListInvitesOrganizationsPath() string {
 	return "/rpc/organizations.listInvites"
 }
 
-// GetInviteByIDOrganizationsPath returns the URL path to the organizations service getInviteByID HTTP endpoint.
-func GetInviteByIDOrganizationsPath() string {
-	return "/rpc/organizations.getInviteByID"
-}
-
 // GetInviteByTokenOrganizationsPath returns the URL path to the organizations service getInviteByToken HTTP endpoint.
 func GetInviteByTokenOrganizationsPath() string {
 	return "/rpc/organizations.getInviteByToken"

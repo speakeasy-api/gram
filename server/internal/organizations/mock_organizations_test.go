@@ -77,18 +77,6 @@ func (m *MockOrganizationProvider) FindInvitationByToken(ctx context.Context, to
 	return nil, nil
 }
 
-func (m *MockOrganizationProvider) GetInvitation(ctx context.Context, invitationID string) (*thirdpartyworkos.Invitation, error) {
-	args := m.Called(ctx, invitationID)
-	if err := args.Error(1); err != nil {
-		inv, _ := args.Get(0).(*thirdpartyworkos.Invitation)
-		return inv, mockErr(args, 1)
-	}
-	if invitation, ok := args.Get(0).(*thirdpartyworkos.Invitation); ok {
-		return invitation, nil
-	}
-	return nil, nil
-}
-
 func (m *MockOrganizationProvider) ListUsers(ctx context.Context, orgID string) ([]thirdpartyworkos.User, error) {
 	args := m.Called(ctx, orgID)
 	if err := args.Error(1); err != nil {

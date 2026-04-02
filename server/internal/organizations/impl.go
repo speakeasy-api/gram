@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/organizations/server"
@@ -33,7 +35,6 @@ type OrganizationProvider interface {
 	ListInvitations(ctx context.Context, orgID string) ([]workos.Invitation, error)
 	RevokeInvitation(ctx context.Context, invitationID string) (*workos.Invitation, error)
 	FindInvitationByToken(ctx context.Context, token string) (*workos.Invitation, error)
-	GetInvitation(ctx context.Context, invitationID string) (*workos.Invitation, error)
 }
 
 type Service struct {
@@ -80,6 +81,11 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, err
 	}
 
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+	)
+
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
@@ -97,7 +103,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 
 	invite, err := s.orgs.SendInvitation(ctx, opts)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "send invitation").Log(ctx, logger)
 	}
 
 	out := invitationToGen(invite)
@@ -114,6 +120,12 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		return err
 	}
 
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogOrganizationInviteID(payload.InvitationID),
+	)
+
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
@@ -121,38 +133,159 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 
 	_, err = s.orgs.RevokeInvitation(ctx, payload.InvitationID)
 	if err != nil {
-		return err
+		return oops.E(oops.CodeUnexpected, err, "revoke invitation").Log(ctx, logger)
 	}
 
 	return nil
 }
 
-func (s *Service) ListInvites(context.Context, *gen.ListInvitesPayload) (*gen.ListInvitesResult, error) {
-	return nil, errNotImplemented
+func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*gen.ListInvitesResult, error) {
+	ac, workosOrgID, err := s.orgContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+	)
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	invites, err := s.orgs.ListInvitations(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list invitations").Log(ctx, logger)
+	}
+
+	out := make([]*gen.OrganizationInvitation, 0, len(invites))
+	for _, invite := range invites {
+		if invite.State != workos.InvitationStatePending {
+			continue
+		}
+		out = append(out, invitationToGen(&invite))
+	}
+	return &gen.ListInvitesResult{Invitations: out}, nil
 }
 
-func (s *Service) GetInviteByID(context.Context, *gen.GetInviteByIDPayload) (*gen.OrganizationInvitation, error) {
-	return nil, errNotImplemented
+func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteByTokenPayload) (*gen.OrganizationInvitationAccept, error) {
+	ac, _, err := s.orgContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+	)
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	invite, err := s.orgs.FindInvitationByToken(ctx, payload.Token)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "find invitation by token").Log(ctx, logger)
+	}
+
+	return invitationToGenAccept(invite), nil
 }
 
-func (s *Service) GetInviteByToken(context.Context, *gen.GetInviteByTokenPayload) (*gen.OrganizationInvitationAccept, error) {
-	return nil, errNotImplemented
+// ListUsers returns Gram organization members from organization_user_relationships.
+// That table is the in-app source of truth for roster and RemoveUser; WorkOS owns
+// invite/membership lifecycle but the dashboard "team" list should match what Gram authorizes.
+func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.ListUsersResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if ac.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+	)
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	rows, err := orgrepo.New(s.db).ListOrganizationUsers(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization users").Log(ctx, logger)
+	}
+
+	out := make([]*gen.OrganizationUser, 0, len(rows))
+	for i := range rows {
+		out = append(out, organizationUserToGen(&rows[i]))
+	}
+	return &gen.ListUsersResult{Users: out}, nil
 }
 
-func (s *Service) ListUsers(context.Context, *gen.ListUsersPayload) (*gen.ListUsersResult, error) {
-	return nil, errNotImplemented
-}
+func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload) error {
+	ac, workosOrgID, err := s.orgContext(ctx)
+	if err != nil {
+		return err
+	}
 
-func (s *Service) RemoveUser(context.Context, *gen.RemoveUserPayload) error {
-	return errNotImplemented
-}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+	)
 
-var errNotImplemented = errors.New("not implemented")
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := orgrepo.New(tx)
+
+	member, err := qtx.HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         payload.UserID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check organization membership").Log(ctx, logger)
+	}
+	if !member {
+		return oops.E(oops.CodeNotFound, nil, "user is not a member of this organization").Log(ctx, logger)
+	}
+
+	if err := qtx.DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         payload.UserID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete organization user relationship").Log(ctx, logger)
+	}
+
+	if err := s.orgs.RemoveUser(ctx, workosOrgID, payload.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove user").Log(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+	}
+
+	return nil
+}
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil {
-		return nil, errors.New("missing auth context")
+		return nil, oops.E(oops.CodeUnauthorized, errors.New("missing auth context"), "missing auth context").Log(ctx, s.logger)
 	}
 
 	return ac, nil
@@ -162,6 +295,10 @@ func (s *Service) orgContext(ctx context.Context) (*contextvalues.AuthContext, s
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if ac.ActiveOrganizationID == "" {
+		return nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
@@ -210,13 +347,35 @@ func invitationToGenAccept(inv *workos.Invitation) *gen.OrganizationInvitationAc
 		return nil
 	}
 	return &gen.OrganizationInvitationAccept{
-		ID:                  inv.ID,
 		Email:               inv.Email,
 		State:               string(inv.State),
-		OrganizationID:      inv.OrganizationID,
-		ExpiresAt:           optionalTimeString(inv.ExpiresAt),
 		AcceptInvitationURL: inv.AcceptInvitationURL,
-		CreatedAt:           inv.CreatedAt,
-		UpdatedAt:           inv.UpdatedAt,
+	}
+}
+
+func organizationUserToGen(row *orgrepo.OrganizationUserRelationship) *gen.OrganizationUser {
+	if row == nil {
+		return nil
+	}
+	var workosMem *string
+	if row.WorkosMembershipID.Valid {
+		s := row.WorkosMembershipID.String
+		workosMem = &s
+	}
+	createdAt := ""
+	if row.CreatedAt.Valid {
+		createdAt = row.CreatedAt.Time.UTC().Format(time.RFC3339)
+	}
+	updatedAt := ""
+	if row.UpdatedAt.Valid {
+		updatedAt = row.UpdatedAt.Time.UTC().Format(time.RFC3339)
+	}
+	return &gen.OrganizationUser{
+		ID:                 strconv.FormatInt(row.ID, 10),
+		OrganizationID:     row.OrganizationID,
+		UserID:             row.UserID,
+		WorkosMembershipID: workosMem,
+		CreatedAt:          createdAt,
+		UpdatedAt:          updatedAt,
 	}
 }

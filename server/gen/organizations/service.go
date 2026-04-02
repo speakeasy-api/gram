@@ -16,19 +16,18 @@ import (
 
 // Organization membership, invitations, and directory.
 type Service interface {
-	// Send a WorkOS invitation to join an organization.
+	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)
 	// Revoke a pending WorkOS invitation.
 	RevokeInvite(context.Context, *RevokeInvitePayload) (err error)
-	// List WorkOS invitations for an organization.
+	// List pending WorkOS invitations for the active organization.
 	ListInvites(context.Context, *ListInvitesPayload) (res *ListInvitesResult, err error)
-	// Get a WorkOS invitation by ID.
-	GetInviteByID(context.Context, *GetInviteByIDPayload) (res *OrganizationInvitation, err error)
 	// Resolve a WorkOS invitation from its token (e.g. accept-flow).
 	GetInviteByToken(context.Context, *GetInviteByTokenPayload) (res *OrganizationInvitationAccept, err error)
-	// List users in an organization from Gram organization_user_relationships.
+	// List users in the active organization from Gram
+	// organization_user_relationships.
 	ListUsers(context.Context, *ListUsersPayload) (res *ListUsersResult, err error)
-	// Remove a user from an organization in Gram and delete their WorkOS
+	// Remove a user from the active organization in Gram and delete their WorkOS
 	// organization membership.
 	RemoveUser(context.Context, *RemoveUserPayload) (err error)
 }
@@ -53,15 +52,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"sendInvite", "revokeInvite", "listInvites", "getInviteByID", "getInviteByToken", "listUsers", "removeUser"}
-
-// GetInviteByIDPayload is the payload type of the organizations service
-// getInviteByID method.
-type GetInviteByIDPayload struct {
-	// WorkOS invitation ID.
-	InvitationID string
-	SessionToken *string
-}
+var MethodNames = [6]string{"sendInvite", "revokeInvite", "listInvites", "getInviteByToken", "listUsers", "removeUser"}
 
 // GetInviteByTokenPayload is the payload type of the organizations service
 // getInviteByToken method.
@@ -73,9 +64,7 @@ type GetInviteByTokenPayload struct {
 // ListInvitesPayload is the payload type of the organizations service
 // listInvites method.
 type ListInvitesPayload struct {
-	// Gram organization ID.
-	OrganizationID string
-	SessionToken   *string
+	SessionToken *string
 }
 
 // ListInvitesResult is the result type of the organizations service
@@ -88,9 +77,7 @@ type ListInvitesResult struct {
 // ListUsersPayload is the payload type of the organizations service listUsers
 // method.
 type ListUsersPayload struct {
-	// Gram organization ID.
-	OrganizationID string
-	SessionToken   *string
+	SessionToken *string
 }
 
 // ListUsersResult is the result type of the organizations service listUsers
@@ -128,20 +115,12 @@ type OrganizationInvitation struct {
 // OrganizationInvitationAccept is the result type of the organizations service
 // getInviteByToken method.
 type OrganizationInvitationAccept struct {
-	// WorkOS invitation ID.
-	ID string
 	// Invitee email address.
 	Email string
 	// Invitation lifecycle state.
 	State string
-	// WorkOS organization ID.
-	OrganizationID string
-	// When the invitation expires.
-	ExpiresAt *string
-	// URL to complete acceptance in WorkOS.
+	// URL to complete acceptance in WorkOS (may be empty when not actionable).
 	AcceptInvitationURL string
-	CreatedAt           string
-	UpdatedAt           string
 }
 
 type OrganizationUser struct {
@@ -160,8 +139,6 @@ type OrganizationUser struct {
 // RemoveUserPayload is the payload type of the organizations service
 // removeUser method.
 type RemoveUserPayload struct {
-	// Gram organization ID.
-	OrganizationID string
 	// Gram user ID to remove.
 	UserID       string
 	SessionToken *string
@@ -178,8 +155,6 @@ type RevokeInvitePayload struct {
 // SendInvitePayload is the payload type of the organizations service
 // sendInvite method.
 type SendInvitePayload struct {
-	// Gram organization ID to invite into.
-	OrganizationID string
 	// Email address to invite.
 	Email string
 	// Optional WorkOS role slug for the invitee.

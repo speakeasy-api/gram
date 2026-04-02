@@ -18,19 +18,17 @@ type Client struct {
 	SendInviteEndpoint       goa.Endpoint
 	RevokeInviteEndpoint     goa.Endpoint
 	ListInvitesEndpoint      goa.Endpoint
-	GetInviteByIDEndpoint    goa.Endpoint
 	GetInviteByTokenEndpoint goa.Endpoint
 	ListUsersEndpoint        goa.Endpoint
 	RemoveUserEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "organizations" service client given the endpoints.
-func NewClient(sendInvite, revokeInvite, listInvites, getInviteByID, getInviteByToken, listUsers, removeUser goa.Endpoint) *Client {
+func NewClient(sendInvite, revokeInvite, listInvites, getInviteByToken, listUsers, removeUser goa.Endpoint) *Client {
 	return &Client{
 		SendInviteEndpoint:       sendInvite,
 		RevokeInviteEndpoint:     revokeInvite,
 		ListInvitesEndpoint:      listInvites,
-		GetInviteByIDEndpoint:    getInviteByID,
 		GetInviteByTokenEndpoint: getInviteByToken,
 		ListUsersEndpoint:        listUsers,
 		RemoveUserEndpoint:       removeUser,
@@ -98,29 +96,6 @@ func (c *Client) ListInvites(ctx context.Context, p *ListInvitesPayload) (res *L
 		return
 	}
 	return ires.(*ListInvitesResult), nil
-}
-
-// GetInviteByID calls the "getInviteByID" endpoint of the "organizations"
-// service.
-// GetInviteByID may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) GetInviteByID(ctx context.Context, p *GetInviteByIDPayload) (res *OrganizationInvitation, err error) {
-	var ires any
-	ires, err = c.GetInviteByIDEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*OrganizationInvitation), nil
 }
 
 // GetInviteByToken calls the "getInviteByToken" endpoint of the

@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -31,11 +31,11 @@ import { Result } from "../types/fp.js";
  * listUsers organizations
  *
  * @remarks
- * List users in an organization from Gram organization_user_relationships.
+ * List users in the active organization from Gram organization_user_relationships.
  */
 export function organizationsListUsers(
   client: GramCore,
-  request: operations.ListOrganizationUsersRequest,
+  request?: operations.ListOrganizationUsersRequest | undefined,
   security?: operations.ListOrganizationUsersSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function organizationsListUsers(
 
 async function $do(
   client: GramCore,
-  request: operations.ListOrganizationUsersRequest,
+  request?: operations.ListOrganizationUsersRequest | undefined,
   security?: operations.ListOrganizationUsersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -85,7 +85,10 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.ListOrganizationUsersRequest$outboundSchema, value),
+      z.parse(
+        z.optional(operations.ListOrganizationUsersRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -96,13 +99,9 @@ async function $do(
 
   const path = pathToFunc("/rpc/organizations.listUsers")();
 
-  const query = encodeFormQuery({
-    "organization_id": payload.organization_id,
-  });
-
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -139,7 +138,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

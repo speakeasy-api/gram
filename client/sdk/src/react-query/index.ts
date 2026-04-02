@@ -52,7 +52,6 @@ export * from "./fetchOpenAPIv3FromURL.js";
 export * from "./getCreditUsage.js";
 export * from "./getDomain.js";
 export * from "./getHooksSummary.js";
-export * from "./getInviteByID.js";
 export * from "./getInviteByToken.js";
 export * from "./getMcpMetadata.js";
 export * from "./getObservabilityOverview.js";

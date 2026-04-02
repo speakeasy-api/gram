@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * removeUser organizations
  *
  * @remarks
- * Remove a user from an organization in Gram and delete their WorkOS organization membership.
+ * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
  */
 export function organizationsRemoveUser(
   client: GramCore,
@@ -96,7 +96,6 @@ async function $do(
   const path = pathToFunc("/rpc/organizations.removeUser")();
 
   const query = encodeFormQuery({
-    "organization_id": payload.organization_id,
     "user_id": payload.user_id,
   });
 

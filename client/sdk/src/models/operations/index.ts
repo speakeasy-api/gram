@@ -48,7 +48,6 @@ export * from "./getdeploymentlogs.js";
 export * from "./getdomain.js";
 export * from "./gethookssummary.js";
 export * from "./getinstance.js";
-export * from "./getinvitebyid.js";
 export * from "./getinvitebytoken.js";
 export * from "./getlatestdeployment.js";
 export * from "./getmcpmetadata.js";

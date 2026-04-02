@@ -22,7 +22,6 @@ type Server struct {
 	SendInvite       http.Handler
 	RevokeInvite     http.Handler
 	ListInvites      http.Handler
-	GetInviteByID    http.Handler
 	GetInviteByToken http.Handler
 	ListUsers        http.Handler
 	RemoveUser       http.Handler
@@ -58,7 +57,6 @@ func New(
 			{"SendInvite", "POST", "/rpc/organizations.sendInvite"},
 			{"RevokeInvite", "DELETE", "/rpc/organizations.revokeInvite"},
 			{"ListInvites", "GET", "/rpc/organizations.listInvites"},
-			{"GetInviteByID", "GET", "/rpc/organizations.getInviteByID"},
 			{"GetInviteByToken", "GET", "/rpc/organizations.getInviteByToken"},
 			{"ListUsers", "GET", "/rpc/organizations.listUsers"},
 			{"RemoveUser", "DELETE", "/rpc/organizations.removeUser"},
@@ -66,7 +64,6 @@ func New(
 		SendInvite:       NewSendInviteHandler(e.SendInvite, mux, decoder, encoder, errhandler, formatter),
 		RevokeInvite:     NewRevokeInviteHandler(e.RevokeInvite, mux, decoder, encoder, errhandler, formatter),
 		ListInvites:      NewListInvitesHandler(e.ListInvites, mux, decoder, encoder, errhandler, formatter),
-		GetInviteByID:    NewGetInviteByIDHandler(e.GetInviteByID, mux, decoder, encoder, errhandler, formatter),
 		GetInviteByToken: NewGetInviteByTokenHandler(e.GetInviteByToken, mux, decoder, encoder, errhandler, formatter),
 		ListUsers:        NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
 		RemoveUser:       NewRemoveUserHandler(e.RemoveUser, mux, decoder, encoder, errhandler, formatter),
@@ -81,7 +78,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SendInvite = m(s.SendInvite)
 	s.RevokeInvite = m(s.RevokeInvite)
 	s.ListInvites = m(s.ListInvites)
-	s.GetInviteByID = m(s.GetInviteByID)
 	s.GetInviteByToken = m(s.GetInviteByToken)
 	s.ListUsers = m(s.ListUsers)
 	s.RemoveUser = m(s.RemoveUser)
@@ -95,7 +91,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSendInviteHandler(mux, h.SendInvite)
 	MountRevokeInviteHandler(mux, h.RevokeInvite)
 	MountListInvitesHandler(mux, h.ListInvites)
-	MountGetInviteByIDHandler(mux, h.GetInviteByID)
 	MountGetInviteByTokenHandler(mux, h.GetInviteByToken)
 	MountListUsersHandler(mux, h.ListUsers)
 	MountRemoveUserHandler(mux, h.RemoveUser)
@@ -242,59 +237,6 @@ func NewListInvitesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listInvites")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountGetInviteByIDHandler configures the mux to serve the "organizations"
-// service "getInviteByID" endpoint.
-func MountGetInviteByIDHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/organizations.getInviteByID", f)
-}
-
-// NewGetInviteByIDHandler creates a HTTP handler which loads the HTTP request
-// and calls the "organizations" service "getInviteByID" endpoint.
-func NewGetInviteByIDHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetInviteByIDRequest(mux, decoder)
-		encodeResponse = EncodeGetInviteByIDResponse(encoder)
-		encodeError    = EncodeGetInviteByIDError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getInviteByID")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

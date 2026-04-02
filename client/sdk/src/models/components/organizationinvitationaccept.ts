@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Invitation lifecycle state.
  */
-export const OrganizationInvitationAcceptState = {
+export const State = {
   Pending: "pending",
   Accepted: "accepted",
   Expired: "expired",
@@ -21,43 +21,25 @@ export const OrganizationInvitationAcceptState = {
 /**
  * Invitation lifecycle state.
  */
-export type OrganizationInvitationAcceptState = ClosedEnum<
-  typeof OrganizationInvitationAcceptState
->;
+export type State = ClosedEnum<typeof State>;
 
 export type OrganizationInvitationAccept = {
   /**
-   * URL to complete acceptance in WorkOS.
+   * URL to complete acceptance in WorkOS (may be empty when not actionable).
    */
   acceptInvitationUrl: string;
-  createdAt: Date;
   /**
    * Invitee email address.
    */
   email: string;
   /**
-   * When the invitation expires.
-   */
-  expiresAt?: Date | undefined;
-  /**
-   * WorkOS invitation ID.
-   */
-  id: string;
-  /**
-   * WorkOS organization ID.
-   */
-  organizationId: string;
-  /**
    * Invitation lifecycle state.
    */
-  state: OrganizationInvitationAcceptState;
-  updatedAt: Date;
+  state: State;
 };
 
 /** @internal */
-export const OrganizationInvitationAcceptState$inboundSchema: z.ZodMiniEnum<
-  typeof OrganizationInvitationAcceptState
-> = z.enum(OrganizationInvitationAcceptState);
+export const State$inboundSchema: z.ZodMiniEnum<typeof State> = z.enum(State);
 
 /** @internal */
 export const OrganizationInvitationAccept$inboundSchema: z.ZodMiniType<
@@ -66,29 +48,12 @@ export const OrganizationInvitationAccept$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     accept_invitation_url: z.string(),
-    created_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
-    ),
     email: z.string(),
-    expires_at: z.optional(
-      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    ),
-    id: z.string(),
-    organization_id: z.string(),
-    state: OrganizationInvitationAcceptState$inboundSchema,
-    updated_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
-    ),
+    state: State$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "accept_invitation_url": "acceptInvitationUrl",
-      "created_at": "createdAt",
-      "expires_at": "expiresAt",
-      "organization_id": "organizationId",
-      "updated_at": "updatedAt",
     });
   }),
 );

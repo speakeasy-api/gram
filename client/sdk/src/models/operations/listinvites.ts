@@ -11,10 +11,6 @@ export type ListInvitesSecurity = {
 
 export type ListInvitesRequest = {
   /**
-   * Gram organization ID.
-   */
-  organizationId: string;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -50,7 +46,6 @@ export function listInvitesSecurityToJSON(
 
 /** @internal */
 export type ListInvitesRequest$Outbound = {
-  organization_id: string;
   "Gram-Session"?: string | undefined;
 };
 
@@ -60,12 +55,10 @@ export const ListInvitesRequest$outboundSchema: z.ZodMiniType<
   ListInvitesRequest
 > = z.pipe(
   z.object({
-    organizationId: z.string(),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      organizationId: "organization_id",
       gramSession: "Gram-Session",
     });
   }),

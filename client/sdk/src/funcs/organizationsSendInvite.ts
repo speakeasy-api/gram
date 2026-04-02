@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * sendInvite organizations
  *
  * @remarks
- * Send a WorkOS invitation to join an organization.
+ * Send a WorkOS invitation for the active organization.
  */
 export function organizationsSendInvite(
   client: GramCore,

@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -31,11 +31,11 @@ import { Result } from "../types/fp.js";
  * listInvites organizations
  *
  * @remarks
- * List WorkOS invitations for an organization.
+ * List pending WorkOS invitations for the active organization.
  */
 export function organizationsListInvites(
   client: GramCore,
-  request: operations.ListInvitesRequest,
+  request?: operations.ListInvitesRequest | undefined,
   security?: operations.ListInvitesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function organizationsListInvites(
 
 async function $do(
   client: GramCore,
-  request: operations.ListInvitesRequest,
+  request?: operations.ListInvitesRequest | undefined,
   security?: operations.ListInvitesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -84,7 +84,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.ListInvitesRequest$outboundSchema, value),
+    (value) =>
+      z.parse(z.optional(operations.ListInvitesRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -95,13 +96,9 @@ async function $do(
 
   const path = pathToFunc("/rpc/organizations.listInvites")();
 
-  const query = encodeFormQuery({
-    "organization_id": payload.organization_id,
-  });
-
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -138,7 +135,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
