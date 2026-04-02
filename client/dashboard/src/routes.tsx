@@ -342,12 +342,6 @@ const ROUTE_STRUCTURE = {
     icon: "settings",
     component: Settings,
   },
-  billing: {
-    title: "Billing",
-    url: "billing",
-    icon: "credit-card",
-    component: Billing,
-  },
   docs: {
     title: "Docs",
     url: "https://docs.getgram.ai",
