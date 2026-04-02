@@ -368,9 +368,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		AdditionalContext: nil,
 	}
 
-	if payload.HookEventName == "preToolUse" {
-		allow := "allow"
-		result.Permission = &allow
+	switch payload.HookEventName {
+	case "preToolUse":
+		result.Permission = new("allow")
+	default:
+		// nothing to do
 	}
 
 	return result, nil
