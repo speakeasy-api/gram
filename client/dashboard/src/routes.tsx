@@ -47,6 +47,7 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SourceDetails from "./pages/sources/SourceDetails";
+import ContextPage, { ContextRoot } from "./pages/context/Context";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
@@ -223,6 +224,13 @@ const ROUTE_STRUCTURE = {
         indexComponent: Catalog,
       },
     },
+  },
+  context: {
+    title: "Context",
+    url: "context",
+    icon: "library",
+    component: ContextRoot,
+    indexComponent: ContextPage,
   },
   catalog: {
     title: "Catalog",
