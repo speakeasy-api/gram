@@ -1,7 +1,6 @@
 package organizations_test
 
 import (
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -52,5 +51,5 @@ func TestService_RevokeInvite_NotFound(t *testing.T) {
 		InvitationID: "test-invitation-id",
 	})
 	require.Error(t, err)
-	require.True(t, errors.Is(err, notFound), "expected not-found error, got %v", err)
+	require.ErrorIs(t, err, notFound)
 }

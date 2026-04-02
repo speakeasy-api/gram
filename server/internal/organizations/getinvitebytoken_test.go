@@ -1,7 +1,6 @@
 package organizations_test
 
 import (
-	"errors"
 	"fmt"
 	"testing"
 
@@ -56,6 +55,6 @@ func TestService_GetInviteByToken_NotFound(t *testing.T) {
 		Token: "test-token",
 	})
 	require.Error(t, err)
-	require.True(t, errors.Is(err, notFound), "expected not-found error, got %v", err)
+	require.ErrorIs(t, err, notFound)
 	require.Nil(t, res)
 }

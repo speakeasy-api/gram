@@ -80,7 +80,7 @@ func (m *MockOrganizationProvider) FindInvitationByToken(ctx context.Context, to
 func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error {
 	args := m.Called(ctx, workosMembershipID)
 	if err := args.Error(0); err != nil {
-		return err
+		return fmt.Errorf("mock DeleteOrganizationMembership: %w", err)
 	}
 	return nil
 }

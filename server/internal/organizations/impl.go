@@ -113,6 +113,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		OrganizationID: workosOrgID,
 		InviterUserID:  inviterWorkosUserID,
 		ExpiresInDays:  defaultInviteExpiryDays,
+		RoleSlug:       "",
 	}
 	if payload.RoleSlug != nil && *payload.RoleSlug != "" {
 		opts.RoleSlug = *payload.RoleSlug
@@ -269,7 +270,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := orgrepo.New(tx)
 
@@ -299,7 +300,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		s.logger.DebugContext(ctx, "skipping WorkOS membership delete: no workos_membership_id on relationship",
 			attr.SlogOrganizationID(ac.ActiveOrganizationID),
 			attr.SlogUserID(payload.UserID),
-			slog.String("workos.organization_id", workosOrgID),
+			attr.SlogWorkOSOrganizationID(workosOrgID),
 		)
 	}
 
@@ -417,7 +418,7 @@ func (s *Service) gramUserIDForWorkosID(ctx context.Context, workosUserID string
 		}
 		s.logger.WarnContext(ctx, "lookup gram user by workos user id",
 			attr.SlogError(err),
-			slog.String("workos.user_id", workosUserID),
+			attr.SlogWorkOSUserID(workosUserID),
 		)
 		return nil
 	}
