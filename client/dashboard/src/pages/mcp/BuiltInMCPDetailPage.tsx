@@ -8,6 +8,7 @@ import { useSlugs } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
 import { Link } from "@/components/ui/link";
 import { useRoutes } from "@/routes";
+import { Switch } from "@/components/ui/switch";
 import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { useParams } from "react-router";
@@ -62,16 +63,121 @@ const BUILT_IN_TOOLS = [
   },
 ];
 
-const DOCS_MCP_TOOLS = [
+type DocsMcpTool = {
+  name: string;
+  description: string;
+  configurable?: boolean;
+  defaultEnabled: boolean;
+  parameters?: Array<{ name: string; type: string; description: string }>;
+};
+
+const DOCS_MCP_TOOLS: DocsMcpTool[] = [
   {
-    name: "docs_search",
+    name: "search_docs",
     description:
-      "Search the documentation corpus. Returns ranked chunks matching the query, with optional taxonomy filters.",
+      "Performs hybrid search (semantic + keyword). Tool name and description are user-configurable. Parameters are dynamically generated with valid taxonomy injected as JSON Schema enums. Supports stateless cursor pagination. Returns fallback hints on zero results.",
+    configurable: true,
+    defaultEnabled: true,
+    parameters: [
+      {
+        name: "query",
+        type: "string",
+        description: "Natural language search query",
+      },
+      {
+        name: "language",
+        type: "enum",
+        description: "Filter by language taxonomy (dynamically populated)",
+      },
+      {
+        name: "scope",
+        type: "enum",
+        description: "Filter by scope taxonomy (dynamically populated)",
+      },
+      {
+        name: "cursor",
+        type: "string",
+        description: "Pagination cursor from previous response",
+      },
+      {
+        name: "limit",
+        type: "integer",
+        description: "Max results per page (default 10)",
+      },
+    ],
+  },
+  {
+    name: "get_doc",
+    description:
+      "Returns a specific chunk by ID, plus context: N neighboring chunks for surrounding detail. Useful for drilling into a search result.",
+    configurable: true,
+    defaultEnabled: true,
+    parameters: [
+      {
+        name: "chunk_id",
+        type: "string",
+        description: "The chunk identifier from a search result",
+      },
+      {
+        name: "context_chunks",
+        type: "integer",
+        description: "Number of neighboring chunks to include (default 2)",
+      },
+    ],
+  },
+  {
+    name: "annotate",
+    description:
+      "Attach a local note to a document that persists across sessions and appears automatically on future searches. Annotations are per-user.",
+    configurable: true,
+    defaultEnabled: true,
+    parameters: [
+      {
+        name: "chunk_id",
+        type: "string",
+        description: "The chunk or document to annotate",
+      },
+      { name: "content", type: "string", description: "The annotation text" },
+    ],
+  },
+  {
+    name: "feedback",
+    description:
+      "Submit feedback on a document: upvote, downvote, or label. Feedback is aggregated and visible to doc authors in the Gram UI.",
+    configurable: true,
+    defaultEnabled: true,
+    parameters: [
+      {
+        name: "chunk_id",
+        type: "string",
+        description: "The chunk or document to provide feedback on",
+      },
+      {
+        name: "vote",
+        type: "enum (up | down)",
+        description: "Upvote or downvote the document",
+      },
+      {
+        name: "labels",
+        type: "string[]",
+        description: "Labels to attach (e.g. 'outdated', 'helpful')",
+      },
+    ],
   },
   {
     name: "RemoteSkill",
     description:
-      "Invoke a skill by ID. Returns the full skill document. The skillID parameter is an enum of all available skills.",
+      "Invoke a skill by ID. Returns the full skill document. The skillID parameter is a large enum of all available skills with their descriptions, always present in the agent context.",
+    configurable: true,
+    defaultEnabled: true,
+    parameters: [
+      {
+        name: "skillID",
+        type: "enum",
+        description:
+          "Skill identifier — dynamically populated from all active SKILL.md files",
+      },
+    ],
   },
 ];
 
@@ -227,7 +333,7 @@ function DocsMCPDetailPage() {
               />
             </TabsContent>
             <TabsContent value="tools" className="mt-0 w-full">
-              <ToolsListSection title="Docs MCP" tools={DOCS_MCP_TOOLS} />
+              <DocsMCPToolsSection />
             </TabsContent>
             <TabsContent value="content" className="mt-0 w-full">
               <DocsMCPContentTab contextHref={routes.context.href()} />
@@ -358,6 +464,147 @@ function StatBox({ label, value }: { label: string; value: string }) {
 }
 
 // ── Shared components ─────────────────────────────────────────────────────
+
+function DocsMCPToolsSection() {
+  const [enabledTools, setEnabledTools] = useState<Record<string, boolean>>(
+    () =>
+      Object.fromEntries(DOCS_MCP_TOOLS.map((t) => [t.name, t.defaultEnabled])),
+  );
+
+  const toggleTool = (name: string) => {
+    setEnabledTools((prev) => ({ ...prev, [name]: !prev[name] }));
+  };
+
+  const enabledCount = Object.values(enabledTools).filter(Boolean).length;
+
+  return (
+    <Stack className="mb-4">
+      <Stack
+        direction="horizontal"
+        justify="space-between"
+        align="center"
+        className="mb-4"
+      >
+        <Stack gap={1}>
+          <Heading variant="h3">Tools</Heading>
+          <Type muted small>
+            {enabledCount} of {DOCS_MCP_TOOLS.length} tools enabled. Disabled
+            tools will not be exposed to connecting agents.
+          </Type>
+        </Stack>
+      </Stack>
+
+      <div className="border border-neutral-softest rounded-lg overflow-hidden w-full">
+        <div className="bg-surface-secondary-default flex items-center pl-4 pr-3 py-4 border-b border-neutral-softest">
+          <p className="text-sm leading-6 text-foreground">Docs MCP</p>
+        </div>
+
+        {DOCS_MCP_TOOLS.map((tool) => (
+          <DocsMCPToolRow
+            key={tool.name}
+            tool={tool}
+            enabled={enabledTools[tool.name] ?? true}
+            onToggle={() => toggleTool(tool.name)}
+          />
+        ))}
+      </div>
+    </Stack>
+  );
+}
+
+function DocsMCPToolRow({
+  tool,
+  enabled,
+  onToggle,
+}: {
+  tool: DocsMcpTool;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border-b border-neutral-softest last:border-b-0">
+      <div className="flex items-center pl-4 pr-3 py-4 gap-3">
+        <div className="flex flex-col min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p
+              className={cn(
+                "text-sm leading-6 font-medium",
+                enabled ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {tool.name}
+            </p>
+            {tool.configurable && (
+              <Badge variant="information">
+                <Badge.Text>Configurable</Badge.Text>
+              </Badge>
+            )}
+          </div>
+          <p
+            className={cn(
+              "text-sm leading-6",
+              enabled ? "text-muted-foreground" : "text-muted-foreground/50",
+            )}
+          >
+            {tool.description}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {tool.parameters && tool.parameters.length > 0 && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {expanded ? "Hide" : "Show"} params ({tool.parameters.length})
+            </button>
+          )}
+          <Switch checked={enabled} onCheckedChange={onToggle} />
+        </div>
+      </div>
+      {expanded && tool.parameters && (
+        <div className="px-4 pb-4">
+          <div className="rounded-md border border-neutral-softest overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-surface-secondary-default border-b border-neutral-softest">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Parameter
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Type
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Description
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {tool.parameters.map((param) => (
+                  <tr
+                    key={param.name}
+                    className="border-b border-neutral-softest last:border-b-0"
+                  >
+                    <td className="px-3 py-2 font-mono text-foreground">
+                      {param.name}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {param.type}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {param.description}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
   return (
