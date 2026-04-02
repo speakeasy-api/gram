@@ -33,6 +33,10 @@ export type OrganizationInvitationAccept = {
    */
   email: string;
   /**
+   * Gram organization display name when the org is linked in Gram; empty if unknown.
+   */
+  organizationName: string;
+  /**
    * Invitation lifecycle state.
    */
   state: State;
@@ -49,11 +53,13 @@ export const OrganizationInvitationAccept$inboundSchema: z.ZodMiniType<
   z.object({
     accept_invitation_url: z.string(),
     email: z.string(),
+    organization_name: z.string(),
     state: State$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "accept_invitation_url": "acceptInvitationUrl",
+      "organization_name": "organizationName",
     });
   }),
 );

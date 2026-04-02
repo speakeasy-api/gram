@@ -44,11 +44,11 @@ export type OrganizationInvitation = {
    */
   id: string;
   /**
-   * WorkOS user ID of the inviter.
+   * Gram user ID of the inviter, when known.
    */
   inviterUserId?: string | undefined;
   /**
-   * WorkOS organization ID.
+   * Gram organization ID.
    */
   organizationId: string;
   /**
