@@ -32,7 +32,7 @@ type CollectPlatformUsageMetrics struct {
 
 func NewCollectPlatformUsageMetrics(logger *slog.Logger, db *pgxpool.Pool) *CollectPlatformUsageMetrics {
 	return &CollectPlatformUsageMetrics{
-		logger: logger.With(attr.SlogComponent("collect-platform-usage-metrics")),
+		logger: logger.With(attr.SlogComponent("collect_platform_usage_metrics")),
 		db:     db,
 		repo:   repo.New(db),
 	}
@@ -78,7 +78,7 @@ type FirePlatformUsageMetrics struct {
 
 func NewFirePlatformUsageMetrics(logger *slog.Logger, billingTracker billing.Tracker) *FirePlatformUsageMetrics {
 	return &FirePlatformUsageMetrics{
-		logger:         logger.With(attr.SlogComponent("fire-platform-usage-metrics")),
+		logger:         logger.With(attr.SlogComponent("fire_platform_usage_metrics")),
 		billingTracker: billingTracker,
 	}
 }
@@ -115,7 +115,7 @@ type FreeTierReportingUsageMetrics struct {
 
 func NewFreeTierReportingMetrics(logger *slog.Logger, db *pgxpool.Pool, billingRepository billing.Repository, posthogClient *posthog.Posthog) *FreeTierReportingUsageMetrics {
 	return &FreeTierReportingUsageMetrics{
-		logger:            logger.With(attr.SlogComponent("free-tier-reporting-usage-metrics")),
+		logger:            logger.With(attr.SlogComponent("free_tier_reporting_usage_metrics")),
 		billingRepository: billingRepository,
 		orgRepo:           orgRepo.New(db),
 		repo:              repo.New(db),

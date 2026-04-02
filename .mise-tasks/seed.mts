@@ -303,6 +303,10 @@ async function seed() {
     log.info(
       `${verb} MCP Logs toolset '${mcpLogsToolset.slug}' for project '${projectSlug}' (mcp_url = ${mcpLogsToolset.mcpURL})`,
     );
+
+    await $`mise set --file mise.local.toml \
+      VITE_GRAM_OBSERVABILITY_MCP_URL=${mcpLogsToolset.mcpURL}`;
+    log.info(`Set VITE_GRAM_OBSERVABILITY_MCP_URL in mise.local.toml`);
   }
 
   // Seed a default environment for each project
@@ -1522,7 +1526,6 @@ async function seedObservabilityData(init: {
         "gram.project.id": projectId,
         "gen_ai.conversation.id": sessionId,
         "gen_ai.tool_call.id": toolUseId,
-        "http.response.status_code": isFailure ? 500 : 200,
       };
       if (userEmail) postToolAttrs["user.email"] = userEmail;
       if (mcpServer) postToolAttrs["gram.tool_call.source"] = mcpServer;

@@ -111,6 +111,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		Email:                 nil,
 		AccountType:           "",
 		HasActiveSubscription: false,
+		Whitelisted:           false,
 		APIKeyScopes:          nil,
 	}
 

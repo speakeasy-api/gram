@@ -66,6 +66,9 @@ export default defineConfig(({ command }) => {
         },
       },
     },
+    worker: {
+      format: "es",
+    },
     esbuild: {
       target: "es2022",
     },

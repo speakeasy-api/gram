@@ -333,39 +333,6 @@ func TestResult_UnmarshalJSON(t *testing.T) {
 	})
 }
 
-func TestBatchedRawRequest_UnmarshalJSON(t *testing.T) {
-	t.Parallel()
-
-	t.Run("unmarshals_array_of_requests", func(t *testing.T) {
-		t.Parallel()
-		data := []byte(`[{"jsonrpc": "2.0", "id": 1, "method": "test1"}, {"jsonrpc": "2.0", "id": 2, "method": "test2"}]`)
-		var batch batchedRawRequest
-		err := json.Unmarshal(data, &batch)
-		require.NoError(t, err)
-		require.Len(t, batch, 2)
-		require.Equal(t, "test1", batch[0].Method)
-		require.Equal(t, "test2", batch[1].Method)
-	})
-
-	t.Run("unmarshals_single_request_as_batch_of_one", func(t *testing.T) {
-		t.Parallel()
-		data := []byte(`{"jsonrpc": "2.0", "id": 1, "method": "single"}`)
-		var batch batchedRawRequest
-		err := json.Unmarshal(data, &batch)
-		require.NoError(t, err)
-		require.Len(t, batch, 1)
-		require.Equal(t, "single", batch[0].Method)
-	})
-
-	t.Run("returns_error_for_invalid_json", func(t *testing.T) {
-		t.Parallel()
-		data := []byte(`{invalid}`)
-		var batch batchedRawRequest
-		err := json.Unmarshal(data, &batch)
-		require.Error(t, err)
-	})
-}
-
 func TestRpcError_MarshalJSON(t *testing.T) {
 	t.Parallel()
 

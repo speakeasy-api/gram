@@ -31,7 +31,7 @@ type ExecuteToolCall struct {
 
 func NewExecuteToolCall(logger *slog.Logger, agentsService *agents.Service) *ExecuteToolCall {
 	return &ExecuteToolCall{
-		logger:        logger.With(attr.SlogComponent("execute-tool-call-activity")),
+		logger:        logger.With(attr.SlogComponent("execute_tool_call")),
 		agentsService: agentsService,
 	}
 }

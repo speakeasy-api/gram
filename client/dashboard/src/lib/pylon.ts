@@ -1,6 +1,8 @@
 /**
  * Pylon widget initialization
- * This module loads the Pylon chat widget script dynamically
+ * This module loads the Pylon chat widget script dynamically.
+ * The default launcher bubble is hidden via CSS — chat is triggered
+ * from the "Support" button in the header instead.
  */
 
 const PYLON_APP_ID = "f9cade16-8d3c-4826-9a2a-034fad495102";
@@ -18,6 +20,7 @@ declare global {
         name: string;
         avatar_url?: string;
         email_hash?: string;
+        hide_default_launcher?: boolean;
       };
     };
   }
@@ -27,6 +30,12 @@ declare global {
  * Initialize the Pylon widget by injecting the script tag
  */
 export function initializePylon(): void {
+  // Hide the default Pylon chat bubble so it doesn't overlap the
+  // playground composer. Inject the style before the script loads.
+  const style = document.createElement("style");
+  style.textContent = `#pylon-chat-bubble { display: none !important; }`;
+  document.head.appendChild(style);
+
   // Set up the Pylon queue before the script loads
   const queue: unknown[] = [];
   const enqueue = (args: unknown) => {

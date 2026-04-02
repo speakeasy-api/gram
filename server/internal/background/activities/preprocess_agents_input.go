@@ -44,7 +44,7 @@ type PreprocessAgentsInput struct {
 
 func NewPreprocessAgentsInput(logger *slog.Logger, agentsService *agents.Service, temporalClient client.Client) *PreprocessAgentsInput {
 	return &PreprocessAgentsInput{
-		logger:         logger.With(attr.SlogComponent("preprocess-agents-input-activity")),
+		logger:         logger.With(attr.SlogComponent("preprocess_agents_input_activity")),
 		agentsService:  agentsService,
 		temporalClient: temporalClient,
 	}

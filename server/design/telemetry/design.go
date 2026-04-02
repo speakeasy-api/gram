@@ -335,6 +335,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getHooksSummary")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetHooksSummary", "type": "query"}`)
 	})
+
+	Method("listHooksTraces", func() {
+		Description("List hook traces aggregated by trace_id with user information")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListHooksTracesPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListHooksTracesResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listHooksTraces")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listHooksTraces")
+		Meta("openapi:extension:x-speakeasy-name-override", "listHooksTraces")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListHooksTraces", "type": "query"}`)
+	})
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
@@ -1087,4 +1116,67 @@ var HooksUserSummaryType = Type("HooksUserSummary", func() {
 	Attribute("failure_rate", Float64, "Failure rate as a decimal (0.0 to 1.0)")
 
 	Required("user_email", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
+})
+
+// List hooks traces types
+
+var ListHooksTracesPayload = Type("ListHooksTracesPayload", func() {
+	Description("Payload for listing hook traces")
+
+	Attribute("from", String, "Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("filters", ArrayOf(LogFilter), "Filter conditions for the search query")
+	Attribute("cursor", String, "Cursor for pagination (trace_id)")
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+
+	Required("from", "to")
+})
+
+var ListHooksTracesResult = Type("ListHooksTracesResult", func() {
+	Description("Result of listing hook traces")
+
+	Attribute("traces", ArrayOf(HookTraceSummary), "List of hook trace summaries")
+	Attribute("next_cursor", String, "Cursor for next page")
+
+	Required("traces")
+})
+
+var HookTraceSummary = Type("HookTraceSummary", func() {
+	Description("Summary information for a hook trace")
+
+	Attribute("trace_id", String, "Trace ID (32 hex characters)", func() {
+		Pattern("^[a-f0-9]{32}$")
+	})
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("log_count", UInt64, "Total number of logs in this trace")
+	Attribute("hook_status", String, "Hook execution status", func() {
+		Enum("success", "failure", "pending")
+	})
+	Attribute("gram_urn", String, "Gram URN associated with this hook trace")
+	Attribute("tool_name", String, "Tool name (from materialized column)")
+	Attribute("tool_source", String, "Tool call source (from materialized column)")
+	Attribute("event_source", String, "Event source (from materialized column)")
+	Attribute("user_email", String, "User email (from attributes.user.email)")
+	Attribute("hook_source", String, "Hook source (from attributes.gram.hook.source)")
+
+	Required(
+		"trace_id",
+		"start_time_unix_nano",
+		"log_count",
+		"gram_urn",
+	)
 })

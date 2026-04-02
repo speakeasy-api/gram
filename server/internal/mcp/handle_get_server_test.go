@@ -21,6 +21,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 	// Create metadata service using the same dependencies
 	metadataService := mcpmetadata.NewService(
 		testInstance.logger,
+		testInstance.tracerProvider,
 		testInstance.conn,
 		testInstance.sessionManager,
 		testInstance.serverURL,

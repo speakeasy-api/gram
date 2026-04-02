@@ -188,13 +188,6 @@ func (q *Queries) RemoveResourceFromGrants(ctx context.Context, arg RemoveResour
 	return result.RowsAffected(), nil
 }
 
-type SeedOrgRoleGrantsParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scope          string
-	Resource       string
-}
-
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
 VALUES ($1, $2, $3, $4)

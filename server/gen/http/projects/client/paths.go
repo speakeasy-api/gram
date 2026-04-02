@@ -41,3 +41,8 @@ func UpsertAllowedOriginProjectsPath() string {
 func DeleteProjectProjectsPath() string {
 	return "/rpc/projects.delete"
 }
+
+// SetOrganizationWhitelistProjectsPath returns the URL path to the projects service setOrganizationWhitelist HTTP endpoint.
+func SetOrganizationWhitelistProjectsPath() string {
+	return "/rpc/projects.setOrganizationWhitelist"
+}

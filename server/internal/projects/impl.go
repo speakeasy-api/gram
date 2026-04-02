@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -55,11 +55,11 @@ type featureChecker interface {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, features featureChecker) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, features featureChecker) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
 		logger:   logger,
 		db:       db,
 		repo:     repo.New(db),
@@ -442,8 +442,11 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	}
 
 	project, err := s.repo.GetProjectByID(ctx, projectID)
-	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "cannot delete the default project").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "error retrieving project").Log(ctx, s.logger)
 	}
 
 	// The first project (ordered by id ASC) is the default project
@@ -483,6 +486,29 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error saving project deletion").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.SetOrganizationWhitelistPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// Check that the API key is from the speakeasy-team organization
+	const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
+	if authCtx.ActiveOrganizationID != speakeasyTeamOrgID {
+		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+
+	err := s.repo.SetOrganizationWhitelist(ctx, repo.SetOrganizationWhitelistParams{
+		OrganizationID: payload.OrganizationID,
+		Whitelisted:    payload.Whitelisted,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error setting organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
 
 	return nil

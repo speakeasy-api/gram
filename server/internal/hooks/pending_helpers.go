@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -120,11 +121,22 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	if payload.ToolUseID != nil {
 		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
 	}
+	// Stringify ToolInput and ToolResponse to prevent JSON path explosion in ClickHouse
+	// When these are stored as nested objects, ClickHouse auto-unflattens dotted keys
+	// which creates an explosion of attribute keys in the attributes JSON column
 	if payload.ToolInput != nil {
-		attrs[attr.GenAIToolCallArgumentsKey] = payload.ToolInput
+		if jsonBytes, err := json.Marshal(payload.ToolInput); err == nil {
+			attrs[attr.GenAIToolCallArgumentsKey] = string(jsonBytes)
+		} else {
+			s.logger.WarnContext(ctx, "Failed to marshal ToolInput", attr.SlogError(err))
+		}
 	}
 	if payload.ToolResponse != nil {
-		attrs[attr.GenAIToolCallResultKey] = payload.ToolResponse
+		if jsonBytes, err := json.Marshal(payload.ToolResponse); err == nil {
+			attrs[attr.GenAIToolCallResultKey] = string(jsonBytes)
+		} else {
+			s.logger.WarnContext(ctx, "Failed to marshal ToolResponse", attr.SlogError(err))
+		}
 	}
 
 	return attrs

@@ -79,7 +79,7 @@ var _ billing.Repository = (*Client)(nil)
 
 func NewClient(polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
 	return &Client{
-		logger:             logger.With(attr.SlogComponent("polar-usage")),
+		logger:             logger.With(attr.SlogComponent("polar_usage")),
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/polar"),
 		polar:              polarClient,
 		httpClient:         &http.Client{Timeout: 30 * time.Second},
@@ -590,9 +590,13 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	if customer != nil {
 		var toolCallMeter, serverMeter, creditMeter *polarComponents.CustomerStateMeter
 
-		if len(customer.ActiveSubscriptions) >= 1 {
-			usage.HasActiveSubscription = true
+		// Use extractCustomerTier for subscription check so auth and usage
+		// paths share the same logic.
+		_, hasActiveSub, err := p.extractCustomerTier(ctx, customer)
+		if err != nil {
+			return nil, fmt.Errorf("extract customer tier: %w", err)
 		}
+		usage.HasActiveSubscription = hasActiveSub
 
 		for _, meter := range customer.ActiveMeters {
 			if meter.MeterID == p.catalog.MeterIDToolCalls {

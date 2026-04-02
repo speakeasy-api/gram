@@ -1,5 +1,55 @@
 # server
 
+## 0.34.1
+
+### Patch Changes
+
+- 9f179d5: Ensure `DeleteProject` returns idempotent success for non-existent project.
+- a1c64a1: Fix toolset cache not being invalidated when a template is deleted.
+- a64842e: Removes grants api endpoints (replaced by roles management).
+
+## 0.34.0
+
+### Minor Changes
+
+- c9d23f8: Adds an API for role, membership and grants management.
+- e177e45: Improve user-facing deployment logs with source processing details and aggregate summary
+
+### Patch Changes
+
+- 0c07035: fix: revert "feat: allow other security schemes when public OAuth is configured"
+- 7978914: Validate that default_environment_id belongs to the caller's project before storing it in MCP metadata
+
+## 0.33.0
+
+### Minor Changes
+
+- 2850644: Allow multiple security schemes even when OAuth servers are configured on public servers
+
+### Patch Changes
+
+- 6160abf: Moved control server initialization after all routes and middleware are attached, and added a /healthz endpoint to the main API mux so the control server can verify the API is actually serving traffic before reporting healthy.
+
+## 0.32.1
+
+### Patch Changes
+
+- 1295324: Strip tools from toolset audit log snapshots
+
+  The Tools field on Toolset can be very large. Cloning the before/after snapshots and nilling out Tools avoids serializing this data into audit log entries where it is not needed.
+
+## 0.32.0
+
+### Minor Changes
+
+- fbb1c43: Introduced faceted search capabilities to the audit logs, allowing users to filter logs based on actor and action attributes.
+
+  A new endpoint, `GET /rpc/auditlogs.listFacets`, is introduced to retrieve available facets for actors and actions. The existing `GET /rpc/auditlogs.list` endpoint is updated to support filtering by these facets.
+
+### Patch Changes
+
+- e97105d: Normalized OpenAPI HTTP auth scheme casing so extraction and stored metadata behave gracefully for variants like Bearer and Basic
+
 ## 0.31.0
 
 ### Minor Changes

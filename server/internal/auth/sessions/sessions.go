@@ -4,9 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"time"
 
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -23,20 +28,23 @@ import (
 
 type Manager struct {
 	logger                 *slog.Logger
+	tracer                 trace.Tracer
 	sessionCache           cache.TypedCacheObject[Session]
 	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
 	speakeasyServerAddress string
 	speakeasySecretKey     string
+	speakeasyClient        *http.Client
 	orgRepo                *orgRepo.Queries
 	userRepo               *userRepo.Queries
 	pylon                  *pylon.Pylon
 	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	billingRepo            billing.Repository
-	workos                 *workos.WorkOS
+	workos                 *workos.Client
 }
 
 func NewManager(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	suffix cache.Suffix,
@@ -45,16 +53,25 @@ func NewManager(
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
-	workos *workos.WorkOS,
+	workos *workos.Client,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
+	speakeasyClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: otelhttp.NewTransport(
+			cleanhttp.DefaultPooledTransport(),
+			otelhttp.WithTracerProvider(tracerProvider),
+		),
+	}
 
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),
+		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
 		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,
+		speakeasyClient:        speakeasyClient,
 		orgRepo:                orgRepo.New(db),
 		userRepo:               userRepo.New(db),
 		pylon:                  pylon,
@@ -85,6 +102,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		Email:                 nil,
 		AccountType:           "",
 		HasActiveSubscription: false,
+		Whitelisted:           false,
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		APIKeyID:              "",
@@ -110,6 +128,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 
 	authCtx.AccountType = orgMetadata.GramAccountType
 	authCtx.HasActiveSubscription = orgMetadata.HasActiveSubscription
+	authCtx.Whitelisted = orgMetadata.Whitelisted
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 

@@ -83,8 +83,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
 const FreeTierExceededNotification = () => {
   const productTier = useProductTier();
+  // Only fetch usage data for free-tier users — this notification is
+  // irrelevant for paid/enterprise tiers and the request takes ~3s.
   const { data: usage } = useGetPeriodUsage(undefined, undefined, {
     throwOnError: false,
+    enabled: productTier === "base",
   });
   const orgRoutes = useOrgRoutes();
 

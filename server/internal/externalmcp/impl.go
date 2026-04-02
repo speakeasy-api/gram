@@ -43,7 +43,7 @@ var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient) *Service {
-	logger = logger.With(attr.SlogComponent("externalmcp"))
+	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalmcp"),

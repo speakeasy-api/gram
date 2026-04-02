@@ -2,7 +2,7 @@
 
 {
   "name": "@gram/client",
-  "version": "0.32.5",
+  "version": "0.32.17",
   "exports": {
     ".": "./src/index.ts",    
     "./models/errors": "./src/models/errors/index.ts",    

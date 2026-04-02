@@ -6,7 +6,8 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { DeploymentExternalMCP } from "@gram/client/models/components";
-import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
+import { useLatestDeployment } from "@/hooks/toolTypes";
+import { useListToolsets } from "@gram/client/react-query";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import {
   ArrowRight,

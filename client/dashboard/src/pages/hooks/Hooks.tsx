@@ -1,5 +1,4 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { useOrgRoutes } from "@/routes";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
@@ -13,19 +12,20 @@ import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
+import { useOrgRoutes } from "@/routes";
 import {
   getPresetRange,
   TimeRangePicker,
   type DateRangePreset,
 } from "@gram-ai/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
-import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
+import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
 import type {
   GetHooksSummaryResult,
   HooksServerSummary,
+  HookTraceSummary as HookTrace,
   LogFilter,
   TelemetryLogRecord,
-  ToolCallSummary,
 } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -55,11 +55,6 @@ const validPresets: DateRangePreset[] = [
 
 function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
-}
-
-interface HookTrace extends ToolCallSummary {
-  userEmail?: string;
-  hookSource?: string;
 }
 
 // Generic filter chip that displays one thing but filters on multiple values
@@ -291,9 +286,9 @@ function HooksContent() {
     return filters.length > 0 ? filters : undefined;
   }, [activeFilters, hideLocalToolCalls]);
 
-  // Fetch hooks logs with infinite scroll
+  // Fetch hooks traces with infinite scroll (pre-aggregated by backend)
   const {
-    data: logsData,
+    data: tracesData,
     error,
     fetchNextPage,
     hasNextPage,
@@ -304,7 +299,7 @@ function HooksContent() {
   } = useLogsEnabledErrorCheck(
     useInfiniteQuery({
       queryKey: [
-        "hooks-logs",
+        "hooks-traces",
         activeFilters,
         hideLocalToolCalls,
         from.toISOString(),
@@ -312,12 +307,11 @@ function HooksContent() {
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
-          telemetrySearchLogs(client, {
-            searchLogsPayload: {
+          telemetryListHooksTraces(client, {
+            listHooksTracesPayload: {
               from,
               to,
               filters: logFilters,
-              filter: { eventSource: "hook" },
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -330,77 +324,10 @@ function HooksContent() {
     }),
   );
 
-  const logs = logsData?.pages.flatMap((page) => page.logs) ?? [];
-
-  // Group logs by trace ID to create ToolCallSummary objects with extra metadata
+  // No more client-side grouping - traces are pre-aggregated by backend
   const groupedTraces = useMemo(() => {
-    const traceMap = new Map<string, HookTrace>();
-
-    for (const log of logs) {
-      const traceId = log.traceId;
-      if (!traceId) continue;
-
-      const existing = traceMap.get(traceId);
-      if (existing) {
-        // Update existing trace
-        existing.logCount++;
-
-        // Update status based on hook event
-        const hookEvent = log.attributes?.gram?.hook?.event as
-          | string
-          | undefined;
-        if (hookEvent === "PostToolUseFailure") {
-          existing.httpStatusCode = 500; // Mark as failure
-        } else if (hookEvent === "PostToolUse" && !existing.httpStatusCode) {
-          existing.httpStatusCode = 200; // Mark as success
-        }
-
-        // Track earliest timestamp
-        if (BigInt(log.timeUnixNano) < BigInt(existing.startTimeUnixNano)) {
-          existing.startTimeUnixNano = log.timeUnixNano;
-        }
-      } else {
-        // Create new trace summary
-        const hookEvent = log.attributes?.gram?.hook?.event as
-          | string
-          | undefined;
-        const toolName = log.attributes?.gram?.tool?.name as string | undefined;
-        const serverName = log.attributes?.gram?.tool_call?.source as
-          | string
-          | undefined;
-        const userEmail = log.attributes?.user?.email as string | undefined;
-        const hookSource = log.attributes?.gram?.hook?.source as
-          | string
-          | undefined;
-
-        // Determine initial status
-        let httpStatusCode: number | undefined;
-        if (hookEvent === "PostToolUseFailure") {
-          httpStatusCode = 500;
-        } else if (hookEvent === "PostToolUse") {
-          httpStatusCode = 200;
-        }
-
-        traceMap.set(traceId, {
-          traceId,
-          gramUrn: toolName || "",
-          toolName: toolName,
-          toolSource: serverName,
-          logCount: 1,
-          startTimeUnixNano: log.timeUnixNano,
-          httpStatusCode,
-          eventSource: "hook",
-          userEmail,
-          hookSource,
-        });
-      }
-    }
-
-    // Sort by timestamp descending
-    return Array.from(traceMap.values()).sort((a, b) =>
-      a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
-    );
-  }, [logsData]);
+    return tracesData?.pages.flatMap((page) => page.traces) ?? [];
+  }, [tracesData]);
 
   // Add a filter chip
   const addFilter = useCallback(
@@ -1432,13 +1359,13 @@ function HookTraceRow({
   }, [displayServerName]);
 
   const statusConfig = useMemo(() => {
-    if (trace.httpStatusCode === 500) {
+    if (trace.hookStatus === "failure") {
       return {
         color: "text-destructive",
         bgColor: "bg-destructive/10",
         label: "Failure",
       };
-    } else if (trace.httpStatusCode === 200) {
+    } else if (trace.hookStatus === "success") {
       return {
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
@@ -1450,7 +1377,7 @@ function HookTraceRow({
       bgColor: "bg-muted",
       label: "Pending",
     };
-  }, [trace.httpStatusCode]);
+  }, [trace.hookStatus]);
 
   return (
     <div className="border-b border-border/50 last:border-b-0">

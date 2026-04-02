@@ -16,6 +16,10 @@ func (n *StubToolMetricsClient) ListToolTraces(_ context.Context, _ repo.ListToo
 	return nil, nil
 }
 
+func (n *StubToolMetricsClient) ListHooksTraces(_ context.Context, _ repo.ListHooksTracesParams) ([]repo.HookTraceSummary, error) {
+	return nil, nil
+}
+
 func (n *StubToolMetricsClient) ListChats(_ context.Context, _ repo.ListChatsParams) ([]repo.ChatSummary, error) {
 	return nil, nil
 }

@@ -2,14 +2,29 @@
 
 //MISE description="Setup WorkOS AuthKit OIDC credentials for the mock IDP"
 //MISE hide=true
+//USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
 import { $, question } from "zx";
 
 const WORKOS_ISSUER = "https://convenient-daydream-57-development.authkit.app/";
 
 async function run() {
+  if (
+    process.env["OIDC_SKIPPED"] === "true" &&
+    process.env["usage_restart"] !== "true"
+  ) {
+    console.log(
+      "⏭️  WorkOS OIDC setup previously skipped. Mock IDP will run in mock mode. Run with `mise run zero:workos --restart` to restart the onboarding process.",
+    );
+    process.exit(0);
+  }
+
   const issuer = process.env["OIDC_ISSUER"];
-  if (typeof issuer === "string" && issuer !== "unset") {
+  if (
+    typeof issuer === "string" &&
+    issuer !== "unset" &&
+    process.env["usage_restart"] !== "true"
+  ) {
     console.log("✅ WorkOS OIDC credentials are already configured.");
     process.exit(0);
   }
@@ -21,10 +36,11 @@ async function run() {
     "💬 If you don't have WorkOS access, skip this step and the mock IDP will use a hardcoded test user instead.",
   );
 
-  const answer = await question("💬 Do you want to configure WorkOS? [y/N] ", {
-    choices: ["y", "N"],
-  });
-  if (answer.toLowerCase() !== "y") {
+  const clientId = await question(
+    "💬 Paste your WorkOS Client ID or press enter to skip: ",
+  );
+  if (!clientId) {
+    await $`mise set --file mise.local.toml OIDC_SKIPPED=true`;
     console.log("⏭️  Skipping WorkOS setup. Mock IDP will run in mock mode.");
     process.exit(0);
   }
@@ -37,12 +53,6 @@ async function run() {
   console.log(`\thttp://${host}:${port}/v1/speakeasy_provider/oidc/callback`);
   console.log();
 
-  const clientId = await question("💬 Paste your WorkOS Client ID: ");
-  if (!clientId) {
-    console.log("❌ Client ID is required.");
-    process.exit(1);
-  }
-
   const clientSecret = await question("💬 Paste your WorkOS Client Secret: ");
   if (!clientSecret) {
     console.log("❌ Client Secret is required.");
@@ -50,6 +60,7 @@ async function run() {
   }
 
   await $`touch mise.local.toml`;
+  await $`mise unset --file mise.local.toml OIDC_SKIPPED`;
   await $`mise set --file mise.local.toml OIDC_ISSUER=${WORKOS_ISSUER}`;
   await $`mise set --file mise.local.toml OIDC_CLIENT_ID=${clientId}`;
   await $`mise set --file mise.local.toml OIDC_CLIENT_SECRET=${clientSecret}`;

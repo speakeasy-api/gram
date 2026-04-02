@@ -3,6 +3,8 @@ import { getServerURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
 import { HTTPClient } from "@gram/client/lib/http.js";
+import { buildLatestDeploymentQuery } from "@gram/client/react-query/latestDeployment.core.js";
+import { buildListToolsetsQuery } from "@gram/client/react-query/listToolsets.core.js";
 import { GramProvider } from "@gram/client/react-query/index.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useRef } from "react";
@@ -101,6 +103,13 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
       serverURL: getServerURL(),
       httpClient,
     });
+
+    // Prefetch key queries immediately so they run in parallel with auth.info
+    // instead of waiting for auth to resolve before components mount and fire them.
+    if (projectSlug) {
+      queryClient.prefetchQuery(buildLatestDeploymentQuery(gram));
+      queryClient.prefetchQuery(buildListToolsetsQuery(gram));
+    }
 
     return gram;
   }, [projectSlug]);

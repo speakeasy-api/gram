@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import BookDemo from "@/pages/demo/BookDemo";
 import {
   InfoResponseBody,
   OrganizationEntry,
@@ -22,8 +23,8 @@ import {
 } from "@gram/client/models/components";
 import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
-import { useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -49,6 +50,7 @@ type Session = Omit<
   session: string;
   organization: OrganizationEntry;
   rawGramAccountType: string; // "raw" -- should not be used directly unless you know what you are doing
+  whitelisted: boolean;
   refetch: () => Promise<Session>;
 };
 
@@ -76,6 +78,8 @@ const emptySession: Session = {
   },
   organizations: [],
   activeOrganizationId: "",
+  hasActiveSubscription: false,
+  whitelisted: false,
   session: "",
   rawGramAccountType: "",
   organization: emptyOrganization,
@@ -208,7 +212,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 // Paths that don't require authentication — skip the loading shell on these
 // to avoid a brief flash of the authenticated skeleton (e.g. after logout).
-const UNAUTHENTICATED_PATHS = ["/login", "/register"];
+const UNAUTHENTICATED_PATHS = ["/login", "/register", "/book-demo"];
 
 // Paths that are authenticated but don't require org/project slug context.
 const SLUG_EXEMPT_PATHS = ["/slack/register"];
@@ -243,6 +247,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
         {children}
       </SessionContext.Provider>
     );
+  }
+
+  // Show book demo page if organization is not whitelisted
+  // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
+  if (session.activeOrganizationId && !session.whitelisted) {
+    return <BookDemo />;
   }
 
   if (!session.activeOrganizationId) {
@@ -369,6 +379,7 @@ export const useSessionData = () => {
       },
       session: sessionId ?? "",
       rawGramAccountType: result.gramAccountType,
+      whitelisted: result.whitelisted,
       refetch: async () => {
         const newSession = await refetch();
         return newSession.data ? asSession(newSession.data) : emptySession;
@@ -496,6 +507,7 @@ export function usePylonInAppChat(user: User | undefined) {
         name: displayName,
         avatar_url: user?.photoUrl,
         ...(user?.signature && { email_hash: user.signature }),
+        hide_default_launcher: true,
       },
     };
 

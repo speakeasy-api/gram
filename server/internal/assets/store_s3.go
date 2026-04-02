@@ -74,7 +74,7 @@ func NewS3BlobStore(ctx context.Context, logger *slog.Logger, bucketURI string, 
 	}
 
 	return &S3BlobStore{
-		logger:       logger.With(attr.SlogComponent("blob-store-s3")),
+		logger:       logger.With(attr.SlogComponent("blob_store_s3")),
 		client:       client,
 		bucket:       uri.Hostname(),
 		bucketURI:    uri,

@@ -13,14 +13,14 @@ import {
 /**
  * Sort order
  */
-export const Sort = {
+export const SearchChatsPayloadSort = {
   Asc: "asc",
   Desc: "desc",
 } as const;
 /**
  * Sort order
  */
-export type Sort = ClosedEnum<typeof Sort>;
+export type SearchChatsPayloadSort = ClosedEnum<typeof SearchChatsPayloadSort>;
 
 /**
  * Payload for searching chat session summaries
@@ -41,11 +41,13 @@ export type SearchChatsPayload = {
   /**
    * Sort order
    */
-  sort?: Sort | undefined;
+  sort?: SearchChatsPayloadSort | undefined;
 };
 
 /** @internal */
-export const Sort$outboundSchema: z.ZodMiniEnum<typeof Sort> = z.enum(Sort);
+export const SearchChatsPayloadSort$outboundSchema: z.ZodMiniEnum<
+  typeof SearchChatsPayloadSort
+> = z.enum(SearchChatsPayloadSort);
 
 /** @internal */
 export type SearchChatsPayload$Outbound = {
@@ -63,7 +65,7 @@ export const SearchChatsPayload$outboundSchema: z.ZodMiniType<
   cursor: z.optional(z.string()),
   filter: z.optional(SearchChatsFilter$outboundSchema),
   limit: z._default(z.int(), 50),
-  sort: z._default(Sort$outboundSchema, "desc"),
+  sort: z._default(SearchChatsPayloadSort$outboundSchema, "desc"),
 });
 
 export function searchChatsPayloadToJSON(

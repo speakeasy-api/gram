@@ -1,5 +1,49 @@
 # dashboard
 
+## 0.36.3
+
+### Patch Changes
+
+- 3831ca8: Improve initial page load performance by prefetching key queries in parallel with auth, adding preconnect hints, and switching font-display to swap.
+- 19fcd09: when searching mcp logs show available attribute keys
+
+## 0.36.2
+
+### Patch Changes
+
+- b0f341b: Fix Pylon chat widget overlapping playground send button by hiding the default launcher and adding toggle support to the Get Support button.
+- c54bf04: Clean up defunct observability seed tool logic
+
+## 0.36.1
+
+### Patch Changes
+
+- 2b7754e: Align built-in MCP detail page header and install section with standard MCP detail page styling
+
+## 0.36.0
+
+### Minor Changes
+
+- 7710d31: Introduced a diff viewer that highlights the changes in audit subjects for update events.
+
+  This establishes a baseline UX for understanding the changes happening in orgs/projects. In future iterations, some of the changes will be promoted to natural language bullet points under each audit log message.
+
+  Additionally this change adds a preprocessing step to rename toolset:_ audit events to mcp:_ since "toolsets" are no longer a visible primitive on the dashboard.
+
+### Patch Changes
+
+- ba94c5a: Make deployment interactions non-blocking by passing `nonBlocking: true` to create/evolve API calls. The UI now polls for deployment completion instead of blocking the request, preventing timeouts on long-running deployments. Added error handling for polling failures so the UI shows an error state instead of getting stuck on a permanent spinner.
+
+## 0.35.0
+
+### Minor Changes
+
+- c4d9bdd: Introduced a new "Audit Logs" page to the organization dashboard, allowing Gram users to view a history of actions taken within the organization.
+
+### Patch Changes
+
+- 3d28f83: Fixes bug with server selection in logs page.
+
 ## 0.34.3
 
 ### Patch Changes

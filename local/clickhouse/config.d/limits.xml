@@ -2,7 +2,7 @@
 <!-- Server-level limits for low-memory development -->
 <clickhouse>
     <!-- Hard total server memory cap (bytes) -->
-    <max_server_memory_usage>1073741824</max_server_memory_usage> <!-- 1 GB -->
+    <max_server_memory_usage>0</max_server_memory_usage> <!-- 0 = auto (90% of container RAM) -->
 
     <!-- Reduce cache sizes relative to available RAM -->
     <cache_size_to_ram_max_ratio>0.20</cache_size_to_ram_max_ratio>

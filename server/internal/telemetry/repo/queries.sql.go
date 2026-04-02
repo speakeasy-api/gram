@@ -1301,19 +1301,18 @@ type GetHooksSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams) ([]HooksServerSummaryRow, error) {
 	sb := sq.Select(
-		"ifNull(toString(attributes.`gram.tool_call.source`), 'local') as server_name",
+		"if(tool_source = '', 'local', tool_source) as server_name",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
-		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
-		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUseFailure') as failure_count",
+		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
+		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		GroupBy("server_name").
 		OrderBy("event_count DESC")
 
@@ -1409,19 +1408,18 @@ type GetHooksUserSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSummaryParams) ([]HooksUserSummaryRow, error) {
 	sb := sq.Select(
-		"ifNull(toString(attributes.`user.email`), 'Unknown') as user_email",
+		"if(user_email = '', 'Unknown', user_email) as user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
-		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
-		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUseFailure') as failure_count",
+		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
+		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		GroupBy("user_email").
 		OrderBy("event_count DESC")
 
@@ -1450,4 +1448,133 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 	}
 
 	return summaries, nil
+}
+
+// ListHooksTracesParams contains the parameters for listing hook traces.
+type ListHooksTracesParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+	Filters       []AttributeFilter
+	SortOrder     string
+	Cursor        string // trace_id to paginate from
+	Limit         int
+}
+
+// ListHooksTraces retrieves aggregated hook trace summaries grouped by trace_id.
+// This query directly accesses telemetry_logs to fetch user_email from attributes JSON,
+// while using materialized columns for tool_name, tool_source, and event_source.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams) ([]HookTraceSummary, error) {
+	sb := sq.Select(
+		"trace_id",
+		"min(start_time_unix_nano) as start_time_unix_nano",
+		"sum(log_count) as log_count",
+		"any(gram_urn) as gram_urn",
+		"tool_name",
+		"tool_source",
+		"event_source",
+		"user_email",
+		"hook_source",
+		"multiIf(max(hook_has_failure) = 1, 'failure', max(hook_has_success) = 1, 'success', 'pending') as hook_status",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Having("start_time_unix_nano >= ?", arg.TimeStart).
+		Having("start_time_unix_nano <= ?", arg.TimeEnd).
+		Where("trace_id IS NOT NULL AND trace_id != ''")
+
+	// Apply arbitrary attribute filters
+	for _, filter := range arg.Filters {
+		materializedCol, isMaterialized := materializedColumns[filter.Path]
+		var columnRef string
+		if isMaterialized {
+			columnRef = materializedCol
+		} else {
+			// Not materialized - access via attributes JSON
+			columnRef = fmt.Sprintf("toString(attributes.`%s`)", filter.Path)
+		}
+
+		switch filter.Op {
+		case "eq":
+			if len(filter.Values) > 0 {
+				sb = sb.Where(squirrel.Eq{columnRef: filter.Values[0]})
+			}
+		case "not_eq":
+			if len(filter.Values) > 0 {
+				sb = sb.Where(squirrel.NotEq{columnRef: filter.Values[0]})
+			}
+		case "contains":
+			if len(filter.Values) > 0 {
+				sb = sb.Where(fmt.Sprintf("position(%s, ?) > 0", columnRef), filter.Values[0])
+			}
+		case "in":
+			if len(filter.Values) > 0 {
+				sb = sb.Where(squirrel.Eq{columnRef: filter.Values})
+			}
+		case "exists":
+			if isMaterialized {
+				sb = sb.Where(fmt.Sprintf("%s IS NOT NULL AND %s != ''", columnRef, columnRef))
+			} else {
+				sb = sb.Where(fmt.Sprintf("has(JSONExtractKeys(attributes), '%s')", filter.Path))
+			}
+		case "not_exists":
+			if isMaterialized {
+				sb = sb.Where(squirrel.Or{
+					squirrel.Eq{columnRef: nil},
+					squirrel.Eq{columnRef: ""},
+				})
+			} else {
+				sb = sb.Where(fmt.Sprintf("NOT has(JSONExtractKeys(attributes), '%s')", filter.Path))
+			}
+		}
+	}
+
+	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source")
+
+	// Pagination based on trace_id cursor
+	if arg.Cursor != "" {
+		if arg.SortOrder == "asc" {
+			sb = sb.Having("start_time_unix_nano > (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_project_id = ? AND trace_id = ?)", arg.GramProjectID, arg.Cursor)
+		} else {
+			sb = sb.Having("start_time_unix_nano < (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_project_id = ? AND trace_id = ?)", arg.GramProjectID, arg.Cursor)
+		}
+	}
+
+	// Apply ordering
+	if arg.SortOrder == "asc" {
+		sb = sb.OrderBy("start_time_unix_nano ASC")
+	} else {
+		sb = sb.OrderBy("start_time_unix_nano DESC")
+	}
+
+	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list hooks traces query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var traces []HookTraceSummary
+	for rows.Next() {
+		var trace HookTraceSummary
+		if err = rows.ScanStruct(&trace); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		traces = append(traces, trace)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return traces, nil
 }

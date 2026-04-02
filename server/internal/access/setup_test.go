@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -19,6 +18,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var (
@@ -45,6 +45,7 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	service *access.Service
 	conn    *pgxpool.Pool
+	roles   *MockRoleProvider
 }
 
 func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
@@ -66,38 +67,25 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
 
-	svc := access.NewService(logger, tracerProvider, conn, sessionManager)
+	_, err = orgrepo.New(conn).SetOrgWorkosID(ctx, orgrepo.SetOrgWorkosIDParams{
+		WorkosID:       conv.PtrToPGText(conv.PtrEmpty("org_workos_test")),
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	roles := newMockRoleProvider(t)
+
+	svc := access.NewService(logger, tracerProvider, conn, sessionManager, roles)
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
+		roles:   roles,
 	}
-}
-
-// upsertGrant is a test helper that upserts a single grant via the batch API.
-func upsertGrant(t *testing.T, ctx context.Context, svc *access.Service, principalUrnStr, scope, resource string) *gen.Grant {
-	t.Helper()
-
-	principal, err := urn.ParsePrincipal(principalUrnStr)
-	require.NoError(t, err)
-
-	result, err := svc.UpsertGrants(ctx, &gen.UpsertGrantsPayload{
-		Grants: []*gen.GrantEntry{
-			{PrincipalUrn: principal, Scope: scope, Resource: resource},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Grants, 1)
-
-	return result.Grants[0]
-}
-
-func mustParsePrincipal(t *testing.T, s string) urn.Principal {
-	t.Helper()
-	p, err := urn.ParsePrincipal(s)
-	require.NoError(t, err)
-	return p
 }
 
 func enterpriseCtx() context.Context {
@@ -135,6 +123,44 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
 		Resource:       resource,
+	})
+	require.NoError(t, err)
+}
+
+func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal) []accessrepo.PrincipalGrant {
+	t.Helper()
+
+	grants, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   principal.String(),
+	})
+	require.NoError(t, err)
+
+	return grants
+}
+
+func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, email string, displayName string, workosUserID string, workosMembershipID string) {
+	t.Helper()
+
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		WorkosID: conv.PtrToPGText(conv.PtrEmpty(workosUserID)),
+		ID:       userID,
+	})
+	require.NoError(t, err)
+
+	err = orgrepo.New(conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
+		OrganizationID:     organizationID,
+		UserID:             userID,
+		WorkosMembershipID: conv.PtrToPGText(conv.PtrEmpty(workosMembershipID)),
 	})
 	require.NoError(t, err)
 }

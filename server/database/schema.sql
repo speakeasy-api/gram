@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO. Will be replaced by workos_org_id.
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
 
+  whitelisted boolean NOT NULL DEFAULT TRUE,
+  free_trial_started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  free_trial_ends_at timestamptz NOT NULL DEFAULT clock_timestamp() + INTERVAL '14 days',
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   disabled_at timestamptz,
@@ -1445,33 +1449,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
 ON user_oauth_tokens (user_id, organization_id, toolset_id)
 WHERE deleted IS FALSE;
 
--- Team invites for organization member management
-CREATE TABLE IF NOT EXISTS team_invites (
-  expires_at timestamptz NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  organization_id TEXT NOT NULL,
-  email TEXT NOT NULL CHECK (email <> '' AND CHAR_LENGTH(email) <= 255),
-  invited_by_user_id TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')),
-  token TEXT NOT NULL CHECK (token <> ''),
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT team_invites_pkey PRIMARY KEY (id),
-  CONSTRAINT team_invites_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT team_invites_invited_by_user_id_fkey FOREIGN KEY (invited_by_user_id) REFERENCES users (id) ON DELETE SET NULL
-);
-
--- Unique constraint on organization + email for non-deleted pending invites
-CREATE UNIQUE INDEX IF NOT EXISTS team_invites_organization_id_email_pending_key
-ON team_invites (organization_id, email)
-WHERE deleted IS FALSE AND status = 'pending';
-
--- Index for looking up invites by token (unconditional to prevent token reuse)
-CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
-ON team_invites (token);
 
 -- Server display name overrides for hooks dashboard
 CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (

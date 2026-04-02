@@ -188,6 +188,30 @@ var _ = Service("projects", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteById")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteProject"}`)
 	})
+
+	Method("setOrganizationWhitelist", func() {
+		Description("Set organization whitelist status (admin only - requires speakeasy-team API key)")
+
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+
+		Payload(func() {
+			Required("organization_id", "whitelisted")
+			Attribute("organization_id", String, "The ID of the organization to update")
+			Attribute("whitelisted", Boolean, "Whether the organization should be whitelisted")
+			security.ByKeyPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/projects.setOrganizationWhitelist")
+			security.ByKeyHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setOrganizationWhitelist")
+		Meta("openapi:extension:x-speakeasy-name-override", "setOrganizationWhitelist")
+	})
 })
 
 var GetProjectForm = Type("GetProjectForm", func() {

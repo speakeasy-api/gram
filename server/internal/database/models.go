@@ -586,15 +586,18 @@ type OrganizationFeature struct {
 }
 
 type OrganizationMetadatum struct {
-	ID              string
-	Name            string
-	Slug            string
-	GramAccountType string
-	SsoConnectionID pgtype.Text
-	WorkosID        pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DisabledAt      pgtype.Timestamptz
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	SsoConnectionID    pgtype.Text
+	WorkosID           pgtype.Text
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
@@ -754,20 +757,6 @@ type SourceEnvironment struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
-}
-
-type TeamInvite struct {
-	ExpiresAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	OrganizationID  string
-	Email           string
-	InvitedByUserID pgtype.Text
-	Status          string
-	Token           string
-	ID              uuid.UUID
-	Deleted         bool
 }
 
 type ToolVariation struct {

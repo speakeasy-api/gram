@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -41,6 +42,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, db *pgxpool.Pool, redisCl
 
 	return sessions.NewManager(
 		logger,
+		NewTracerProvider(t),
 		db,
 		redisClient,
 		suffix,
@@ -78,6 +80,7 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 		Name:            activeOrg.Name,
 		Slug:            activeOrg.Slug,
 		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
+		Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
 	})
 	require.NoError(t, err)
 

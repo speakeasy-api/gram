@@ -102,7 +102,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey stri
 	return &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
-		logger:          logger,
+		logger:          logger.With(attr.SlogComponent("openrouter")),
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
 		orClient:        retryablehttp.NewClient().StandardClient(),

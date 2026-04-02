@@ -38,7 +38,7 @@ type LoadAgentTools struct {
 
 func NewLoadAgentTools(logger *slog.Logger, agentsService *agents.Service) *LoadAgentTools {
 	return &LoadAgentTools{
-		logger:        logger.With(attr.SlogComponent("load-agent-tools-activity")),
+		logger:        logger.With(attr.SlogComponent("load_agent_tools")),
 		agentsService: agentsService,
 	}
 }

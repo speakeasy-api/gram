@@ -13,8 +13,8 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -65,6 +65,7 @@ var _ gen.Service = (*Service)(nil)
 
 func NewService(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	cfg AuthConfigurations,
@@ -72,7 +73,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
-		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
 		logger:       logger,
 		db:           db,
 		sessions:     sessions,
@@ -175,6 +176,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		Name:            activeOrg.Name,
 		Slug:            activeOrg.Slug,
 		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
+		Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
 	})
 	if err != nil {
 		return redirectWithError(authErrInit, err)
@@ -248,6 +250,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 				Name:            org.Name,
 				Slug:            org.Slug,
 				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
+				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 			}
@@ -356,6 +359,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 				Name:            org.Name,
 				Slug:            org.Slug,
 				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
+				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 			}
@@ -372,17 +376,19 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}
 
 	return &gen.InfoResult{
-		SessionToken:         *authCtx.SessionID,
-		SessionCookie:        *authCtx.SessionID,
-		ActiveOrganizationID: authCtx.ActiveOrganizationID,
-		GramAccountType:      authCtx.AccountType,
-		UserID:               userInfo.UserID,
-		UserEmail:            userInfo.Email,
-		UserSignature:        userInfo.UserPylonSignature,
-		UserDisplayName:      userInfo.DisplayName,
-		UserPhotoURL:         userInfo.PhotoURL,
-		IsAdmin:              userInfo.Admin,
-		Organizations:        organizations,
+		SessionToken:          *authCtx.SessionID,
+		SessionCookie:         *authCtx.SessionID,
+		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
+		GramAccountType:       authCtx.AccountType,
+		HasActiveSubscription: authCtx.HasActiveSubscription,
+		Whitelisted:           authCtx.Whitelisted,
+		UserID:                userInfo.UserID,
+		UserEmail:             userInfo.Email,
+		UserSignature:         userInfo.UserPylonSignature,
+		UserDisplayName:       userInfo.DisplayName,
+		UserPhotoURL:          userInfo.PhotoURL,
+		IsAdmin:               userInfo.Admin,
+		Organizations:         organizations,
 	}, nil
 }
 
@@ -430,11 +436,13 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error storing session").Log(ctx, s.logger)
 	}
 
+	whitelisted := false
 	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:              info.Organizations[0].ID,
 		Name:            info.Organizations[0].Name,
 		Slug:            info.Organizations[0].Slug,
 		SsoConnectionID: conv.PtrToPGText(nil),
+		Whitelisted:     conv.PtrToPGBool(&whitelisted),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}
