@@ -21,6 +21,7 @@ import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
+import { Organizations } from "./organizations.js";
 import { Packages } from "./packages.js";
 import { Projects } from "./projects.js";
 import { Resources } from "./resources.js";
@@ -111,6 +112,11 @@ export class Gram extends ClientSDK {
   private _mcpRegistries?: McpRegistries;
   get mcpRegistries(): McpRegistries {
     return (this._mcpRegistries ??= new McpRegistries(this._options));
+  }
+
+  private _organizations?: Organizations;
+  get organizations(): Organizations {
+    return (this._organizations ??= new Organizations(this._options));
   }
 
   private _packages?: Packages;

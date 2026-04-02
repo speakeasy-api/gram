@@ -108,8 +108,23 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	return out, nil
 }
 
-func (s *Service) RevokeInvite(context.Context, *gen.RevokeInvitePayload) error {
-	return errNotImplemented
+func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePayload) error {
+	ac, _, err := s.orgContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	_, err = s.orgs.RevokeInvitation(ctx, payload.InvitationID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) ListInvites(context.Context, *gen.ListInvitesPayload) (*gen.ListInvitesResult, error) {

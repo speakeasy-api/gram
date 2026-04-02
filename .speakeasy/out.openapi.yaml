@@ -7792,6 +7792,624 @@ paths:
       x-speakeasy-name-override: listRegistries
       x-speakeasy-react-hook:
         name: ListMCPRegistries
+  /rpc/organizations.getInviteByID:
+    get:
+      description: Get a WorkOS invitation by ID.
+      operationId: getInviteByID
+      parameters:
+        - allowEmptyValue: true
+          description: WorkOS invitation ID.
+          in: query
+          name: invitation_id
+          required: true
+          schema:
+            description: WorkOS invitation ID.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInvitation'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getInviteByID organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: getInviteByID
+      x-speakeasy-react-hook:
+        name: GetInviteByID
+  /rpc/organizations.getInviteByToken:
+    get:
+      description: Resolve a WorkOS invitation from its token (e.g. accept-flow).
+      operationId: getInviteByToken
+      parameters:
+        - allowEmptyValue: true
+          description: Invitation token from the invite link.
+          in: query
+          name: token
+          required: true
+          schema:
+            description: Invitation token from the invite link.
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInvitationAccept'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getInviteByToken organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: getInviteByToken
+      x-speakeasy-react-hook:
+        name: GetInviteByToken
+  /rpc/organizations.listInvites:
+    get:
+      description: List WorkOS invitations for an organization.
+      operationId: listInvites
+      parameters:
+        - allowEmptyValue: true
+          description: Gram organization ID.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Gram organization ID.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInvitesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listInvites organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: listInvites
+      x-speakeasy-react-hook:
+        name: ListInvites
+  /rpc/organizations.listUsers:
+    get:
+      description: List users in an organization from Gram organization_user_relationships.
+      operationId: listOrganizationUsers
+      parameters:
+        - allowEmptyValue: true
+          description: Gram organization ID.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Gram organization ID.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListUsersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listUsers organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: listUsers
+      x-speakeasy-react-hook:
+        name: ListOrganizationUsers
+  /rpc/organizations.removeUser:
+    delete:
+      description: Remove a user from an organization in Gram and delete their WorkOS organization membership.
+      operationId: removeOrganizationUser
+      parameters:
+        - allowEmptyValue: true
+          description: Gram organization ID.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Gram organization ID.
+            type: string
+        - allowEmptyValue: true
+          description: Gram user ID to remove.
+          in: query
+          name: user_id
+          required: true
+          schema:
+            description: Gram user ID to remove.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: removeUser organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: removeUser
+      x-speakeasy-react-hook:
+        name: RemoveOrganizationUser
+  /rpc/organizations.revokeInvite:
+    delete:
+      description: Revoke a pending WorkOS invitation.
+      operationId: revokeInvite
+      parameters:
+        - allowEmptyValue: true
+          description: WorkOS invitation ID.
+          in: query
+          name: invitation_id
+          required: true
+          schema:
+            description: WorkOS invitation ID.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: revokeInvite organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: revokeInvite
+      x-speakeasy-react-hook:
+        name: RevokeInvite
+  /rpc/organizations.sendInvite:
+    post:
+      description: Send a WorkOS invitation to join an organization.
+      operationId: sendInvite
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendInviteRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInvitation'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: sendInvite organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: sendInvite
+      x-speakeasy-react-hook:
+        name: SendInvite
   /rpc/packages.create:
     post:
       description: Create a new package for a project.
@@ -17581,6 +18199,16 @@ components:
           items:
             $ref: '#/components/schemas/IntegrationEntry'
           description: List of available third-party integrations
+    ListInvitesResult:
+      type: object
+      properties:
+        invitations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationInvitation'
+          description: Pending and historical invitations for the organization.
+      required:
+        - invitations
     ListKeysResult:
       type: object
       properties:
@@ -17718,6 +18346,16 @@ components:
           description: The list of toolsets
       required:
         - toolsets
+    ListUsersResult:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationUser'
+          description: Users linked to the organization in Gram.
+      required:
+        - users
     ListVariationsResult:
       type: object
       properties:
@@ -18359,6 +18997,125 @@ components:
         - name
         - slug
         - projects
+    OrganizationInvitation:
+      type: object
+      properties:
+        accepted_at:
+          type: string
+          description: When the invitation was accepted.
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        email:
+          type: string
+          description: Invitee email address.
+        expires_at:
+          type: string
+          description: When the invitation expires.
+          format: date-time
+        id:
+          type: string
+          description: WorkOS invitation ID.
+        inviter_user_id:
+          type: string
+          description: WorkOS user ID of the inviter.
+        organization_id:
+          type: string
+          description: WorkOS organization ID.
+        revoked_at:
+          type: string
+          description: When the invitation was revoked.
+          format: date-time
+        role_slug:
+          type: string
+          description: WorkOS role slug for the invitee.
+        state:
+          type: string
+          description: Invitation lifecycle state.
+          enum:
+            - pending
+            - accepted
+            - expired
+            - revoked
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - state
+        - organization_id
+        - created_at
+        - updated_at
+    OrganizationInvitationAccept:
+      type: object
+      properties:
+        accept_invitation_url:
+          type: string
+          description: URL to complete acceptance in WorkOS.
+        created_at:
+          type: string
+          format: date-time
+        email:
+          type: string
+          description: Invitee email address.
+        expires_at:
+          type: string
+          description: When the invitation expires.
+          format: date-time
+        id:
+          type: string
+          description: WorkOS invitation ID.
+        organization_id:
+          type: string
+          description: WorkOS organization ID.
+        state:
+          type: string
+          description: Invitation lifecycle state.
+          enum:
+            - pending
+            - accepted
+            - expired
+            - revoked
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - state
+        - organization_id
+        - accept_invitation_url
+        - created_at
+        - updated_at
+    OrganizationUser:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: Gram relationship row ID.
+        organization_id:
+          type: string
+          description: Gram organization ID.
+        updated_at:
+          type: string
+          format: date-time
+        user_id:
+          type: string
+          description: Gram user ID.
+        workos_membership_id:
+          type: string
+          description: WorkOS organization membership ID when known.
+      required:
+        - id
+        - organization_id
+        - user_id
+        - created_at
+        - updated_at
     Package:
       type: object
       properties:
@@ -19389,6 +20146,21 @@ components:
         - in_placement
         - scheme
         - env_variables
+    SendInviteRequestBody:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Email address to invite.
+        organization_id:
+          type: string
+          description: Gram organization ID to invite into.
+        role_slug:
+          type: string
+          description: Optional WorkOS role slug for the invitee.
+      required:
+        - organization_id
+        - email
     ServeChatAttachmentForm:
       type: object
       properties:
@@ -21289,6 +22061,8 @@ tags:
     description: Managing system api keys.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
+  - name: organizations
+    description: Organization membership, invitations, and directory.
   - name: packages
     description: Manages packages in Gram.
   - name: features
