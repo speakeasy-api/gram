@@ -88,6 +88,12 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
+func enterpriseCtx(ctx context.Context) context.Context {
+	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		AccountType: "enterprise",
+	})
+}
+
 func newTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 

@@ -775,12 +775,30 @@ func (s *Service) connectedMembers(ctx context.Context, organizationID string) (
 	if err != nil {
 		return nil, fmt.Errorf("list organization users: %w", err)
 	}
+	if len(relationships) == 0 {
+		return nil, nil
+	}
+
+	userIDs := make([]string, 0, len(relationships))
+	for _, relationship := range relationships {
+		userIDs = append(userIDs, relationship.UserID)
+	}
+
+	users, err := usersrepo.New(s.db).GetUsersByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get users by ids: %w", err)
+	}
+
+	usersByID := make(map[string]usersrepo.User, len(users))
+	for _, user := range users {
+		usersByID[user.ID] = user
+	}
 
 	connectedMembers := make([]connectedMember, 0, len(relationships))
 	for _, relationship := range relationships {
-		user, err := usersrepo.New(s.db).GetUser(ctx, relationship.UserID)
-		if err != nil {
-			return nil, fmt.Errorf("get user %q: %w", relationship.UserID, err)
+		user, ok := usersByID[relationship.UserID]
+		if !ok {
+			continue
 		}
 
 		connectedMembers = append(connectedMembers, connectedMember{

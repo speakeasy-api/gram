@@ -16,13 +16,15 @@ import (
 // Client is the "hooks" service client.
 type Client struct {
 	ClaudeEndpoint goa.Endpoint
+	CursorEndpoint goa.Endpoint
 	LogsEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "hooks" service client given the endpoints.
-func NewClient(claude, logs goa.Endpoint) *Client {
+func NewClient(claude, cursor, logs goa.Endpoint) *Client {
 	return &Client{
 		ClaudeEndpoint: claude,
+		CursorEndpoint: cursor,
 		LogsEndpoint:   logs,
 	}
 }
@@ -47,6 +49,28 @@ func (c *Client) Claude(ctx context.Context, p *ClaudeHookPayload) (res *ClaudeH
 		return
 	}
 	return ires.(*ClaudeHookResult), nil
+}
+
+// Cursor calls the "cursor" endpoint of the "hooks" service.
+// Cursor may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Cursor(ctx context.Context, p *CursorPayload) (res *CursorHookResult, err error) {
+	var ires any
+	ires, err = c.CursorEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CursorHookResult), nil
 }
 
 // Logs calls the "logs" endpoint of the "hooks" service.

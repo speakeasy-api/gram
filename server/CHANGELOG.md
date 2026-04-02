@@ -1,5 +1,13 @@
 # server
 
+## 0.34.2
+
+### Patch Changes
+
+- bfae9f2: Adds role based access control enforcement to projects (behind feature flag)
+- f2ec00c: Fixes issue with Oauth validation checks.
+- c0d3215: Fix custom domain verification to fail fast on transient database errors instead of incorrectly creating a new domain record
+
 ## 0.34.1
 
 ### Patch Changes

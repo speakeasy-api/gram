@@ -14,11 +14,14 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Receives Claude Code hook events for tool usage observability.
+// Receives hook events from coding assistants for tool usage observability.
 type Service interface {
 	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
 	Claude(context.Context, *ClaudeHookPayload) (res *ClaudeHookResult, err error)
+	// Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and
+	// postToolUseFailure.
+	Cursor(context.Context, *CursorPayload) (res *CursorHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -44,7 +47,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"claude", "logs"}
+var MethodNames = [3]string{"claude", "cursor", "logs"}
 
 // ClaudeHookPayload is the payload type of the hooks service claude method.
 type ClaudeHookPayload struct {
@@ -76,6 +79,50 @@ type ClaudeHookResult struct {
 	StopReason *string
 	// Hook-specific output as JSON object
 	HookSpecificOutput any
+}
+
+// CursorHookResult is the result type of the hooks service cursor method.
+type CursorHookResult struct {
+	// Permission decision for preToolUse: allow or deny
+	Permission *string
+	// Message to display to the user
+	UserMessage *string
+	// Additional context to inject into the conversation
+	AdditionalContext *string
+}
+
+// CursorPayload is the payload type of the hooks service cursor method.
+type CursorPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+	HookEventName string
+	// The Cursor conversation ID
+	ConversationID *string
+	// The Cursor generation ID
+	GenerationID *string
+	// The model being used
+	Model *string
+	// The Cursor IDE version
+	CursorVersion *string
+	// Email of the authenticated Cursor user, if available
+	UserEmail *string
+	// The session ID from Cursor
+	SessionID *string
+	// The name of the tool
+	ToolName *string
+	// The unique ID for this tool use
+	ToolUseID *string
+	// The input to the tool
+	ToolInput any
+	// The response from the tool (postToolUse only)
+	ToolResponse any
+	// The error from the tool (postToolUseFailure only)
+	Error any
+	// Whether the failure was caused by user interruption
+	IsInterrupt *bool
+	// Additional hook-specific data
+	AdditionalData map[string]any
 }
 
 // LogsPayload is the payload type of the hooks service logs method.

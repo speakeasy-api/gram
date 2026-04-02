@@ -704,7 +704,7 @@ func newStartCommand() *cli.Command {
 					Environment:            c.String("environment"),
 				},
 			))
-			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager))
+			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, productFeatures))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient))
 			toolsets.Attach(mux, toolsetsSvc)
