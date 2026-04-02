@@ -2,10 +2,11 @@ import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { Badge } from "@speakeasy-api/moonshine";
-import { Network, ScrollText } from "lucide-react";
+import { LibraryIcon, Network, ScrollText } from "lucide-react";
 
 const BUILT_IN_ICONS: Record<string, React.ReactNode> = {
   logs: <ScrollText className="w-8 h-8 text-muted-foreground" />,
+  "docs-mcp": <LibraryIcon className="w-8 h-8 text-muted-foreground" />,
 };
 
 interface BuiltInMCPCardProps {
