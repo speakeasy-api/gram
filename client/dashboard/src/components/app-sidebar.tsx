@@ -25,7 +25,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { orgSlug } = useSlugs();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const settingsItems = [routes.settings, routes.billing] as AppRoute[];
+  const settingsItems = [routes.settings] as AppRoute[];
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
