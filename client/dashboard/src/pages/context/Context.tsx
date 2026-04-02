@@ -1893,50 +1893,289 @@ function ConfigDetail({ config }: { config: DocsMcpConfig }) {
       )}
 
       {config.accessControl && config.accessControl.length > 0 && (
-        <ConfigSection title="Access Control">
-          {config.accessControl.map((rule) => (
-            <div
-              key={rule.role}
-              className="text-xs bg-muted/30 rounded-md p-2.5 mb-1.5 last:mb-0"
-            >
-              <Type small className="font-bold block mb-1.5">
-                {rule.role}
-              </Type>
-              {rule.allowedTaxonomy &&
-                Object.keys(rule.allowedTaxonomy).length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-1.5">
-                    {Object.entries(rule.allowedTaxonomy).flatMap(
-                      ([field, values]) =>
-                        values.map((value) => (
-                          <Badge
-                            key={`${field}-${value}`}
-                            variant="secondary"
-                            className="border-emerald-500/50 text-emerald-600 bg-emerald-500/10"
-                          >
-                            {field}: {value}
-                          </Badge>
-                        )),
-                    )}
-                  </div>
-                )}
-              {rule.deniedPaths && rule.deniedPaths.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {rule.deniedPaths.map((deniedPath) => (
-                    <Badge
-                      key={deniedPath}
-                      variant="secondary"
-                      className="border-destructive/50 text-destructive bg-destructive/10"
-                    >
-                      denied: {deniedPath}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </ConfigSection>
+        <AccessControlSection
+          initialRules={config.accessControl}
+          taxonomy={config.taxonomy}
+        />
       )}
     </div>
+  );
+}
+
+// All known taxonomy values and folder paths for the dropdown options.
+const ALL_TAXONOMY_VALUES: Record<string, string[]> = {
+  language: ["typescript", "python", "go", "java", "rust"],
+};
+const ALL_FOLDER_PATHS = [
+  "getting-started/*",
+  "guides/*",
+  "guides/advanced/*",
+  "api-reference/*",
+  "sdk/*",
+  "sdk/typescript/*",
+  "sdk/python/*",
+];
+
+type AccessRule = NonNullable<DocsMcpConfig["accessControl"]>[number];
+
+function AccessControlSection({
+  initialRules,
+  taxonomy,
+}: {
+  initialRules: AccessRule[];
+  taxonomy?: DocsMcpConfig["taxonomy"];
+}) {
+  const [rules, setRules] = useState<AccessRule[]>(initialRules);
+  const [editingRole, setEditingRole] = useState<string | null>(null);
+  const [addingRole, setAddingRole] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+
+  // Derive available taxonomy fields from the config or fallback
+  const taxonomyFields = taxonomy
+    ? Object.keys(taxonomy)
+    : Object.keys(ALL_TAXONOMY_VALUES);
+
+  const getTaxonomyValues = (field: string) =>
+    taxonomy?.[field]?.properties
+      ? Object.keys(taxonomy[field].properties!)
+      : (ALL_TAXONOMY_VALUES[field] ?? []);
+
+  const updateRule = (role: string, updated: Partial<AccessRule>) => {
+    setRules((prev) =>
+      prev.map((r) => (r.role === role ? { ...r, ...updated } : r)),
+    );
+  };
+
+  const removeRule = (role: string) => {
+    setRules((prev) => prev.filter((r) => r.role !== role));
+    if (editingRole === role) setEditingRole(null);
+  };
+
+  const addRole = () => {
+    if (!newRoleName.trim()) return;
+    setRules((prev) => [
+      ...prev,
+      { role: newRoleName.trim(), allowedTaxonomy: {}, deniedPaths: [] },
+    ]);
+    setEditingRole(newRoleName.trim());
+    setNewRoleName("");
+    setAddingRole(false);
+  };
+
+  const toggleTaxonomyValue = (role: string, field: string, value: string) => {
+    setRules((prev) =>
+      prev.map((r) => {
+        if (r.role !== role) return r;
+        const current = r.allowedTaxonomy?.[field] ?? [];
+        const next = current.includes(value)
+          ? current.filter((v) => v !== value)
+          : [...current, value];
+        return {
+          ...r,
+          allowedTaxonomy: { ...r.allowedTaxonomy, [field]: next },
+        };
+      }),
+    );
+  };
+
+  const toggleDeniedPath = (role: string, path: string) => {
+    setRules((prev) =>
+      prev.map((r) => {
+        if (r.role !== role) return r;
+        const current = r.deniedPaths ?? [];
+        const next = current.includes(path)
+          ? current.filter((p) => p !== path)
+          : [...current, path];
+        return { ...r, deniedPaths: next };
+      }),
+    );
+  };
+
+  return (
+    <ConfigSection title="Access Control">
+      {rules.map((rule) => {
+        const isEditing = editingRole === rule.role;
+        return (
+          <div
+            key={rule.role}
+            className="text-xs bg-muted/30 rounded-md p-2.5 mb-2 last:mb-0"
+          >
+            {/* Role header */}
+            <div className="flex items-center justify-between mb-1.5">
+              <Type small className="font-bold">
+                {rule.role}
+              </Type>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setEditingRole(isEditing ? null : rule.role)}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] transition-colors",
+                    isEditing
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  )}
+                >
+                  {isEditing ? "Done" : "Edit"}
+                </button>
+                <button
+                  onClick={() => removeRule(rule.role)}
+                  className="px-1.5 py-0.5 rounded text-[10px] text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+
+            {/* Allowed taxonomy */}
+            {isEditing ? (
+              <div className="space-y-2 mb-2">
+                {taxonomyFields.map((field) => {
+                  const allValues = getTaxonomyValues(field);
+                  const selected = rule.allowedTaxonomy?.[field] ?? [];
+                  return (
+                    <div key={field}>
+                      <Type
+                        small
+                        muted
+                        className="text-[10px] font-medium mb-1 block"
+                      >
+                        {field}
+                      </Type>
+                      <div className="flex flex-wrap gap-1">
+                        {allValues.map((value) => {
+                          const isActive = selected.includes(value);
+                          return (
+                            <button
+                              key={value}
+                              onClick={() =>
+                                toggleTaxonomyValue(rule.role, field, value)
+                              }
+                              className={cn(
+                                "px-1.5 py-0.5 rounded-md text-[10px] border transition-colors",
+                                isActive
+                                  ? "border-emerald-500/50 text-emerald-600 bg-emerald-500/10"
+                                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                              )}
+                            >
+                              {value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Denied paths */}
+                <div>
+                  <Type
+                    small
+                    muted
+                    className="text-[10px] font-medium mb-1 block"
+                  >
+                    Denied paths
+                  </Type>
+                  <div className="flex flex-wrap gap-1">
+                    {ALL_FOLDER_PATHS.map((path) => {
+                      const isDenied = (rule.deniedPaths ?? []).includes(path);
+                      return (
+                        <button
+                          key={path}
+                          onClick={() => toggleDeniedPath(rule.role, path)}
+                          className={cn(
+                            "px-1.5 py-0.5 rounded-md text-[10px] border transition-colors font-mono",
+                            isDenied
+                              ? "border-destructive/50 text-destructive bg-destructive/10"
+                              : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                          )}
+                        >
+                          {path}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {rule.allowedTaxonomy &&
+                  Object.keys(rule.allowedTaxonomy).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {Object.entries(rule.allowedTaxonomy).flatMap(
+                        ([field, values]) =>
+                          values.map((value) => (
+                            <Badge
+                              key={`${field}-${value}`}
+                              variant="secondary"
+                              className="border-emerald-500/50 text-emerald-600 bg-emerald-500/10"
+                            >
+                              {field}: {value}
+                            </Badge>
+                          )),
+                      )}
+                    </div>
+                  )}
+                {rule.deniedPaths && rule.deniedPaths.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {rule.deniedPaths.map((deniedPath) => (
+                      <Badge
+                        key={deniedPath}
+                        variant="secondary"
+                        className="border-destructive/50 text-destructive bg-destructive/10"
+                      >
+                        denied: {deniedPath}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Add role */}
+      {addingRole ? (
+        <div className="flex items-center gap-2 mt-2">
+          <input
+            type="text"
+            value={newRoleName}
+            onChange={(e) => setNewRoleName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addRole()}
+            placeholder="Role name..."
+            className="flex-1 h-7 px-2 text-xs rounded-md border border-border bg-transparent focus:outline-none focus:border-ring"
+            autoFocus
+          />
+          <Button
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={addRole}
+            disabled={!newRoleName.trim()}
+          >
+            Add
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              setAddingRole(false);
+              setNewRoleName("");
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAddingRole(true)}
+          className="flex items-center gap-1 mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Icon name="plus" className="h-3 w-3" />
+          Add role
+        </button>
+      )}
+    </ConfigSection>
   );
 }
 
