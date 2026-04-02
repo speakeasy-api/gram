@@ -198,9 +198,12 @@ func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteBy
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "find invitation by token").Log(ctx, s.logger)
 	}
+	if invite == nil {
+		return nil, oops.C(oops.CodeNotFound)
+	}
 
 	orgName := ""
-	if invite != nil && invite.OrganizationID != "" {
+	if invite.OrganizationID != "" {
 		name, qerr := orgrepo.New(s.db).GetOrganizationNameByWorkosID(ctx, conv.ToPGText(invite.OrganizationID))
 		switch {
 		case qerr == nil:

@@ -7,6 +7,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -57,4 +58,25 @@ func TestService_GetInviteByToken_NotFound(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, notFound)
 	require.Nil(t, res)
+}
+
+func TestService_GetInviteByToken_NilInvitation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	_, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	ti.orgs.On("FindInvitationByToken", mock.Anything, "test-token").Return(nil, nil)
+
+	res, err := ti.service.GetInviteByToken(ctx, &gen.GetInviteByTokenPayload{
+		Token: "test-token",
+	})
+	require.Error(t, err)
+	require.Nil(t, res)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+
+	ti.orgs.AssertExpectations(t)
 }
