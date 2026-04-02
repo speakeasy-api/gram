@@ -79,24 +79,6 @@ func (s *Service) handleNotification(ctx context.Context, payload *gen.ClaudeHoo
 	}, nil
 }
 
-// recordConversationEvent buffers or directly writes a conversation event (user prompt or assistant response).
-func (s *Service) recordConversationEvent(ctx context.Context, payload *gen.ClaudeHookPayload) {
-	if payload.SessionID == nil || *payload.SessionID == "" {
-		return
-	}
-
-	sessionID := *payload.SessionID
-	metadata, err := s.getSessionMetadata(ctx, sessionID)
-	if err == nil {
-		s.persistConversationEvent(ctx, payload, &metadata)
-	} else {
-		// Session not validated yet — buffer alongside tool calls
-		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
-			s.logger.ErrorContext(ctx, "buffer conversation event", attr.SlogError(err))
-		}
-	}
-}
-
 // persistConversationEvent writes a conversation event (user prompt or assistant response) to PostgreSQL.
 func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
 	if s.productFeatures == nil {
