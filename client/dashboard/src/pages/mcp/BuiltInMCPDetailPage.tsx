@@ -429,6 +429,67 @@ function DocsMCPOverviewTab({
       </PageSection>
 
       <PageSection
+        heading="Knowledge Base"
+        description="A hosted, searchable knowledge base powered by your documentation corpus. Share this URL with your team or embed it in your product."
+      >
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+          <CodeBlock
+            className="flex-grow overflow-hidden"
+            innerClassName="!p-2 !pr-10 !bg-white dark:!bg-zinc-950"
+            preClassName="whitespace-nowrap overflow-auto"
+            copyable={true}
+          >
+            {`${mcpUrl}/kb`}
+          </CodeBlock>
+          <Link external to={`${mcpUrl}/kb`} noIcon>
+            <Button variant="primary" className="px-4">
+              <Button.LeftIcon>
+                <Icon name="external-link" className="w-4 h-4" />
+              </Button.LeftIcon>
+              <Button.Text>View</Button.Text>
+            </Button>
+          </Link>
+        </div>
+        <div className="mt-3 rounded-lg border p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              <Type small className="font-medium">
+                Published
+              </Type>
+            </div>
+            <Type small muted>
+              Last updated{" "}
+              {new Date().toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </Type>
+          </div>
+          <Type small muted>
+            Your knowledge base is publicly accessible. It includes full-text
+            search, skill browsing, and respects your access control rules —
+            external visitors only see content allowed for their role.
+          </Type>
+          <div className="flex gap-2">
+            <div className="rounded-md border px-3 py-1.5 text-xs">
+              <span className="text-muted-foreground">Documents:</span>{" "}
+              <span className="font-medium text-foreground">18</span>
+            </div>
+            <div className="rounded-md border px-3 py-1.5 text-xs">
+              <span className="text-muted-foreground">Skills:</span>{" "}
+              <span className="font-medium text-foreground">6</span>
+            </div>
+            <div className="rounded-md border px-3 py-1.5 text-xs">
+              <span className="text-muted-foreground">Sections:</span>{" "}
+              <span className="font-medium text-foreground">142</span>
+            </div>
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
         heading="Status"
         description="Current status of your Docs MCP server."
       >
