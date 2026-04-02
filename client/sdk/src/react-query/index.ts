@@ -63,6 +63,7 @@ export * from "./getUsageTiers.js";
 export * from "./getUserMetricsSummary.js";
 export * from "./globalVariations.js";
 export * from "./hooksHooksNumberClaude.js";
+export * from "./hooksHooksNumberCursor.js";
 export * from "./hooksHooksNumberLogs.js";
 export * from "./hooksServerNamesDeleteServerNameOverride.js";
 export * from "./hooksServerNamesListServerNameOverrides.js";
