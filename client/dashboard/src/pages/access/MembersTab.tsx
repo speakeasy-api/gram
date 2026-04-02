@@ -117,10 +117,10 @@ export function MembersTab() {
       )}
       <div className="flex justify-center border border-t-0 border-border rounded-b-lg py-3">
         <Button variant="tertiary" size="sm">
-          <Button.LeftIcon>
-            <Icon name="plus" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Invite Team Members</Button.Text>
+          <Button.Text>Manage Team</Button.Text>
+          <Button.RightIcon>
+            <Icon name="arrow-right" className="h-4 w-4" />
+          </Button.RightIcon>
         </Button>
       </div>
 
