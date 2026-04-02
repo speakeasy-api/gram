@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.36.4
+
+### Patch Changes
+
+- 5d68b58: Replace browser confirm() with Dialog component for MCP server deletion
+- bcc775c: adds feature flagged dashboard for assigning roles
+
 ## 0.36.3
 
 ### Patch Changes
