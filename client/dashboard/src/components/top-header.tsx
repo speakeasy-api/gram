@@ -191,8 +191,36 @@ export function TopHeader() {
           )}
         </div>
 
-        {/* Right side - Theme toggle & User menu */}
+        {/* Right side - Nav links, Theme toggle & User menu */}
         <div className="ml-auto flex items-center gap-4">
+          <nav className="hidden lg:flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              className="text-sm"
+              onClick={togglePylon}
+            >
+              {pylonOpen ? "Close Support" : "Get Support"}
+            </Button>
+            <Button variant="outline" size="sm" className="text-sm" asChild>
+              <a
+                href="https://www.speakeasy.com/docs/mcp"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Docs
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" className="text-sm" asChild>
+              <a
+                href="https://www.speakeasy.com/changelog?product=mcp-platform"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Changelog
+              </a>
+            </Button>
+          </nav>
           <ThemeSwitcher />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
