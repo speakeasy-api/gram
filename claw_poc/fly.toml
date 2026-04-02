@@ -1,0 +1,15 @@
+app = "defenseclaw-gram-poc"
+primary_region = "ord"
+
+[build]
+
+[http_service]
+  internal_port = 18789
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = 1024
