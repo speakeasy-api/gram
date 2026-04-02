@@ -61,7 +61,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 		require.NotNil(t, result.Project)
 	})
 
-	t.Run("it rejects when build read access is missing", func(t *testing.T) {
+	t.Run("it returns not found when build read access is missing", func(t *testing.T) {
 		t.Parallel()
 
 		ctx, ti := newTestProjectsService(t, true)
@@ -80,7 +80,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
-		assert.Equal(t, oops.CodeForbidden, oopsErr.Code)
+		assert.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	})
 
 	t.Run("it rejects without auth context", func(t *testing.T) {

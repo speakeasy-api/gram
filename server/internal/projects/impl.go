@@ -113,6 +113,10 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 	}
 
 	if err := s.requireAccess(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: proj.ID.String()}); err != nil {
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden {
+			return nil, oops.C(oops.CodeNotFound)
+		}
 		return nil, err
 	}
 
