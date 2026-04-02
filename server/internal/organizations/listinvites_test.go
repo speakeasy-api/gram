@@ -6,7 +6,9 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -24,13 +26,19 @@ func TestService_ListInvites(t *testing.T) {
 	createdAt := now.Format(time.RFC3339)
 	updatedAt := now.Format(time.RFC3339)
 
+	const workosInviterUserID = "user_01WORKOS_INVITER"
+	require.NoError(t, userrepo.New(ti.conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
+		ID:       authCtx.UserID,
+		WorkosID: conv.ToPGText(workosInviterUserID),
+	}))
+
 	ti.orgs.On("ListInvitations", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Invitation{
 		{
 			ID:             "test-invitation-id",
 			Email:          "test@example.com",
 			State:          thirdpartyworkos.InvitationStatePending,
-			OrganizationID: authCtx.ActiveOrganizationID,
-			InviterUserID:  authCtx.UserID,
+			OrganizationID: "org_workos_test",
+			InviterUserID:  workosInviterUserID,
 			ExpiresAt:      expiresAt,
 			CreatedAt:      createdAt,
 			UpdatedAt:      updatedAt,
@@ -39,8 +47,8 @@ func TestService_ListInvites(t *testing.T) {
 			ID:             "test-invitation-id-2",
 			Email:          "test2@example.com",
 			State:          thirdpartyworkos.InvitationStateAccepted,
-			OrganizationID: authCtx.ActiveOrganizationID,
-			InviterUserID:  authCtx.UserID,
+			OrganizationID: "org_workos_test",
+			InviterUserID:  workosInviterUserID,
 			ExpiresAt:      expiresAt,
 			CreatedAt:      createdAt,
 			UpdatedAt:      updatedAt,

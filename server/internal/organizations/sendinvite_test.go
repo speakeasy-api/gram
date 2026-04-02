@@ -9,8 +9,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
+
+const testInviterWorkosUserID = "user_01WORKOS_INVITER"
 
 func TestService_SendInvite(t *testing.T) {
 	t.Parallel()
@@ -24,17 +27,22 @@ func TestService_SendInvite(t *testing.T) {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	updatedAt := time.Now().UTC().Format(time.RFC3339)
 
+	ti.orgs.On("GetUserByEmail", mock.Anything, mockidp.MockUserEmail).Return(&thirdpartyworkos.User{
+		ID:    testInviterWorkosUserID,
+		Email: mockidp.MockUserEmail,
+	}, nil).Once()
+
 	ti.orgs.On("SendInvitation", mock.Anything, thirdpartyworkos.SendInvitationOpts{
 		Email:          "test@example.com",
 		OrganizationID: "org_workos_test",
-		InviterUserID:  authCtx.UserID,
+		InviterUserID:  testInviterWorkosUserID,
 		ExpiresInDays:  7,
 	}).Return(&thirdpartyworkos.Invitation{
 		ID:             "test-invitation-id",
 		Email:          "test@example.com",
 		State:          thirdpartyworkos.InvitationStatePending,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		InviterUserID:  authCtx.UserID,
+		OrganizationID: "org_01WORKOS",
+		InviterUserID:  "user_01WORKOS",
 		ExpiresAt:      expiresAt,
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
@@ -72,18 +80,23 @@ func TestService_SendInvite_WithRoleSlug(t *testing.T) {
 
 	roleSlug := "test-role"
 
+	ti.orgs.On("GetUserByEmail", mock.Anything, mockidp.MockUserEmail).Return(&thirdpartyworkos.User{
+		ID:    testInviterWorkosUserID,
+		Email: mockidp.MockUserEmail,
+	}, nil).Once()
+
 	ti.orgs.On("SendInvitation", mock.Anything, thirdpartyworkos.SendInvitationOpts{
 		Email:          "test@example.com",
 		OrganizationID: "org_workos_test",
-		InviterUserID:  authCtx.UserID,
+		InviterUserID:  testInviterWorkosUserID,
 		RoleSlug:       roleSlug,
 		ExpiresInDays:  7,
 	}).Return(&thirdpartyworkos.Invitation{
 		ID:             "test-invitation-id",
 		Email:          "test@example.com",
 		State:          thirdpartyworkos.InvitationStatePending,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		InviterUserID:  authCtx.UserID,
+		OrganizationID: "org_01WORKOS",
+		InviterUserID:  "user_01WORKOS",
 		ExpiresAt:      expiresAt,
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,

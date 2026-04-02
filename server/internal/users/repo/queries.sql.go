@@ -55,6 +55,19 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
+const getUserIDByWorkosID = `-- name: GetUserIDByWorkosID :one
+SELECT id FROM users
+WHERE workos_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetUserIDByWorkosID(ctx context.Context, workosID pgtype.Text) (string, error) {
+	row := q.db.QueryRow(ctx, getUserIDByWorkosID, workosID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const setUserWorkosID = `-- name: SetUserWorkosID :exec
 UPDATE users 
 SET workos_id = $1, 

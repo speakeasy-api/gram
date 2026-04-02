@@ -20,8 +20,8 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("role_slug", String, "WorkOS role slug for the invitee.")
-	Attribute("organization_id", String, "WorkOS organization ID.")
-	Attribute("inviter_user_id", String, "WorkOS user ID of the inviter.")
+	Attribute("organization_id", String, "Gram organization ID.")
+	Attribute("inviter_user_id", String, "Gram user ID of the inviter, when known.")
 	Attribute("expires_at", String, "When the invitation expires.", func() {
 		Format(FormatDateTime)
 	})
@@ -36,14 +36,15 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 })
 
 // OrganizationInvitationAccept is the public accept-flow view: enough to render copy and redirect,
-// without WorkOS invitation IDs, org IDs, or audit timestamps.
+// without WorkOS invitation IDs or audit timestamps.
 var OrganizationInvitationAccept = Type("OrganizationInvitationAccept", func() {
 	Attribute("email", String, "Invitee email address.")
 	Attribute("state", String, "Invitation lifecycle state.", func() {
 		Enum("pending", "accepted", "expired", "revoked")
 	})
+	Attribute("organization_name", String, "Gram organization display name when the org is linked in Gram; empty if unknown.")
 	Attribute("accept_invitation_url", String, "URL to complete acceptance in WorkOS (may be empty when not actionable).")
-	Required("email", "state", "accept_invitation_url")
+	Required("email", "state", "organization_name", "accept_invitation_url")
 })
 
 // OrganizationUser is a row from organization_user_relationships (active members).

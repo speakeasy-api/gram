@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -24,9 +25,9 @@ func TestService_GetInviteByToken(t *testing.T) {
 		ID:                  "test-invitation-id",
 		Email:               "test@example.com",
 		State:               thirdpartyworkos.InvitationStatePending,
-		OrganizationID:      authCtx.ActiveOrganizationID,
+		OrganizationID:      "org_workos_test",
 		InviterUserID:       authCtx.UserID,
-		AcceptInvitationURL: "https://auth.workos.com/invite/accept",
+		AcceptInvitationURL: "https://auth.workos.com/invite/accept?token=test-token",
 	}, nil).Once()
 
 	res, err := ti.service.GetInviteByToken(ctx, &gen.GetInviteByTokenPayload{
@@ -36,7 +37,8 @@ func TestService_GetInviteByToken(t *testing.T) {
 	require.NotNil(t, res)
 	require.Equal(t, "test@example.com", res.Email)
 	require.Equal(t, "pending", res.State)
-	require.Equal(t, "https://auth.workos.com/invite/accept", res.AcceptInvitationURL)
+	require.Equal(t, mockidp.MockOrgName, res.OrganizationName)
+	require.Equal(t, "https://auth.workos.com/invite/accept?token=test-token", res.AcceptInvitationURL)
 }
 
 func TestService_GetInviteByToken_NotFound(t *testing.T) {

@@ -36,9 +36,9 @@ type SendInviteResponseBody struct {
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 	// WorkOS role slug for the invitee.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
-	// WorkOS organization ID.
+	// Gram organization ID.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// WorkOS user ID of the inviter.
+	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// When the invitation expires.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
@@ -60,6 +60,9 @@ type GetInviteByTokenResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Invitation lifecycle state.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// Gram organization display name when the org is linked in Gram; empty if
+	// unknown.
+	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
 	// URL to complete acceptance in WorkOS (may be empty when not actionable).
 	AcceptInvitationURL *string `form:"accept_invitation_url,omitempty" json:"accept_invitation_url,omitempty" xml:"accept_invitation_url,omitempty"`
 }
@@ -1196,9 +1199,9 @@ type OrganizationInvitationResponseBody struct {
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 	// WorkOS role slug for the invitee.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
-	// WorkOS organization ID.
+	// Gram organization ID.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// WorkOS user ID of the inviter.
+	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// When the invitation expires.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
@@ -1722,6 +1725,7 @@ func NewGetInviteByTokenOrganizationInvitationAcceptOK(body *GetInviteByTokenRes
 	v := &organizations.OrganizationInvitationAccept{
 		Email:               *body.Email,
 		State:               *body.State,
+		OrganizationName:    *body.OrganizationName,
 		AcceptInvitationURL: *body.AcceptInvitationURL,
 	}
 
@@ -2262,6 +2266,9 @@ func ValidateGetInviteByTokenResponseBody(body *GetInviteByTokenResponseBody) (e
 	}
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.OrganizationName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_name", "body"))
 	}
 	if body.AcceptInvitationURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("accept_invitation_url", "body"))

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/organizations/server"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
@@ -14,10 +16,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/trace"
 
 	goahttp "goa.design/goa/v3/http"
@@ -28,14 +34,20 @@ const (
 	defaultInviteExpiryDays = 7
 )
 
+// OrganizationProvider is the WorkOS surface the organizations service uses.
+// *workos.Client implements it.
 type OrganizationProvider interface {
-	ListUsers(ctx context.Context, orgID string) ([]workos.User, error)
-	RemoveUser(ctx context.Context, orgID, userID string) error
+	// DeleteOrganizationMembership removes a user from the org in WorkOS using the
+	// organization membership ID (not Gram user_id or WorkOS user id).
+	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
+	GetUserByEmail(ctx context.Context, email string) (*workos.User, error)
 	SendInvitation(ctx context.Context, opts workos.SendInvitationOpts) (*workos.Invitation, error)
 	ListInvitations(ctx context.Context, orgID string) ([]workos.Invitation, error)
 	RevokeInvitation(ctx context.Context, invitationID string) (*workos.Invitation, error)
 	FindInvitationByToken(ctx context.Context, token string) (*workos.Invitation, error)
 }
+
+var _ OrganizationProvider = (*workos.Client)(nil)
 
 type Service struct {
 	logger *slog.Logger
@@ -91,10 +103,15 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		attr.UserID(ac.UserID),
 	)
 
+	inviterWorkosUserID, err := s.workosInviterUserID(ctx, ac.UserID, logger)
+	if err != nil {
+		return nil, err
+	}
+
 	opts := workos.SendInvitationOpts{
 		Email:          payload.Email,
 		OrganizationID: workosOrgID,
-		InviterUserID:  ac.UserID,
+		InviterUserID:  inviterWorkosUserID,
 		ExpiresInDays:  defaultInviteExpiryDays,
 	}
 	if payload.RoleSlug != nil && *payload.RoleSlug != "" {
@@ -106,7 +123,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "send invitation").Log(ctx, logger)
 	}
 
-	out := invitationToGen(invite)
+	out := invitationToGen(invite, ac.ActiveOrganizationID, &ac.UserID)
 	if payload.RoleSlug != nil && *payload.RoleSlug != "" {
 		rs := *payload.RoleSlug
 		out.RoleSlug = &rs
@@ -161,37 +178,40 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 	}
 
 	out := make([]*gen.OrganizationInvitation, 0, len(invites))
-	for _, invite := range invites {
+	for i := range invites {
+		invite := &invites[i]
 		if invite.State != workos.InvitationStatePending {
 			continue
 		}
-		out = append(out, invitationToGen(&invite))
+		var inviterGram *string
+		if invite.InviterUserID != "" {
+			inviterGram = s.gramUserIDForWorkosID(ctx, invite.InviterUserID)
+		}
+		out = append(out, invitationToGen(invite, ac.ActiveOrganizationID, inviterGram))
 	}
 	return &gen.ListInvitesResult{Invitations: out}, nil
 }
 
 func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteByTokenPayload) (*gen.OrganizationInvitationAccept, error) {
-	ac, _, err := s.orgContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-	)
-
-	trace.SpanFromContext(ctx).SetAttributes(
-		attr.OrganizationID(ac.ActiveOrganizationID),
-		attr.UserID(ac.UserID),
-	)
-
 	invite, err := s.orgs.FindInvitationByToken(ctx, payload.Token)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "find invitation by token").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "find invitation by token").Log(ctx, s.logger)
 	}
 
-	return invitationToGenAccept(invite), nil
+	orgName := ""
+	if invite != nil && invite.OrganizationID != "" {
+		name, qerr := orgrepo.New(s.db).GetOrganizationNameByWorkosID(ctx, conv.ToPGText(invite.OrganizationID))
+		switch {
+		case qerr == nil:
+			orgName = name
+		case errors.Is(qerr, pgx.ErrNoRows):
+			// Gram has no row for this WorkOS org yet.
+		default:
+			return nil, oops.E(oops.CodeUnexpected, qerr, "get organization name").Log(ctx, s.logger)
+		}
+	}
+
+	return invitationToGenAccept(invite, orgName), nil
 }
 
 // ListUsers returns Gram organization members from organization_user_relationships.
@@ -253,15 +273,15 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 
 	qtx := orgrepo.New(tx)
 
-	member, err := qtx.HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
+	rel, err := qtx.GetOrganizationUserRelationship(ctx, orgrepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		UserID:         payload.UserID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check organization membership").Log(ctx, logger)
-	}
-	if !member {
-		return oops.E(oops.CodeNotFound, nil, "user is not a member of this organization").Log(ctx, logger)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, nil, "user is not a member of this organization").Log(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get organization user relationship").Log(ctx, logger)
 	}
 
 	if err := qtx.DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
@@ -271,8 +291,16 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		return oops.E(oops.CodeUnexpected, err, "delete organization user relationship").Log(ctx, logger)
 	}
 
-	if err := s.orgs.RemoveUser(ctx, workosOrgID, payload.UserID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove user").Log(ctx, logger)
+	if rel.WorkosMembershipID.Valid && rel.WorkosMembershipID.String != "" {
+		if err := s.orgs.DeleteOrganizationMembership(ctx, rel.WorkosMembershipID.String); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "remove user").Log(ctx, logger)
+		}
+	} else {
+		s.logger.DebugContext(ctx, "skipping WorkOS membership delete: no workos_membership_id on relationship",
+			attr.SlogOrganizationID(ac.ActiveOrganizationID),
+			attr.SlogUserID(payload.UserID),
+			slog.String("workos.organization_id", workosOrgID),
+		)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -323,9 +351,15 @@ func optionalTimeString(s string) *string {
 	return &s
 }
 
-func invitationToGen(inv *workos.Invitation) *gen.OrganizationInvitation {
+// invitationToGen maps a WorkOS invitation into the public API shape. gramOrganizationID
+// and inviterGramUserID are Gram identifiers; WorkOS IDs are not exposed for those fields.
+func invitationToGen(inv *workos.Invitation, gramOrganizationID string, inviterGramUserID *string) *gen.OrganizationInvitation {
 	if inv == nil {
 		return nil
+	}
+	var inviter *string
+	if inviterGramUserID != nil && *inviterGramUserID != "" {
+		inviter = inviterGramUserID
 	}
 	return &gen.OrganizationInvitation{
 		ID:             inv.ID,
@@ -334,21 +368,73 @@ func invitationToGen(inv *workos.Invitation) *gen.OrganizationInvitation {
 		AcceptedAt:     optionalTimeString(inv.AcceptedAt),
 		RevokedAt:      optionalTimeString(inv.RevokedAt),
 		RoleSlug:       nil,
-		OrganizationID: inv.OrganizationID,
-		InviterUserID:  optionalTimeString(inv.InviterUserID),
+		OrganizationID: gramOrganizationID,
+		InviterUserID:  inviter,
 		ExpiresAt:      optionalTimeString(inv.ExpiresAt),
 		CreatedAt:      inv.CreatedAt,
 		UpdatedAt:      inv.UpdatedAt,
 	}
 }
 
-func invitationToGenAccept(inv *workos.Invitation) *gen.OrganizationInvitationAccept {
+// workosInviterUserID returns the WorkOS user id for the Gram user sending an invitation.
+func (s *Service) workosInviterUserID(ctx context.Context, gramUserID string, logger *slog.Logger) (string, error) {
+	u, err := userrepo.New(s.db).GetUser(ctx, gramUserID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", oops.E(oops.CodeNotFound, nil, "inviting user not found").Log(ctx, logger)
+		}
+		return "", oops.E(oops.CodeUnexpected, err, "get inviting user").Log(ctx, logger)
+	}
+	if u.WorkosID.Valid && strings.TrimSpace(u.WorkosID.String) != "" {
+		return strings.TrimSpace(u.WorkosID.String), nil
+	}
+
+	wu, err := s.orgs.GetUserByEmail(ctx, u.Email)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "lookup WorkOS user by email").Log(ctx, logger)
+	}
+	if wu == nil {
+		return "", oops.E(oops.CodeBadRequest, nil, "inviter has no WorkOS user id; sign in via WorkOS first or link your account").Log(ctx, logger)
+	}
+
+	if err := userrepo.New(s.db).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(wu.ID),
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to persist WorkOS user id for inviter", attr.SlogError(err))
+	}
+	return wu.ID, nil
+}
+
+func (s *Service) gramUserIDForWorkosID(ctx context.Context, workosUserID string) *string {
+	if workosUserID == "" {
+		return nil
+	}
+	gramID, err := userrepo.New(s.db).GetUserIDByWorkosID(ctx, pgtype.Text{String: workosUserID, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		s.logger.WarnContext(ctx, "lookup gram user by workos user id",
+			attr.SlogError(err),
+			slog.String("workos.user_id", workosUserID),
+		)
+		return nil
+	}
+	if gramID == "" {
+		return nil
+	}
+	return &gramID
+}
+
+func invitationToGenAccept(inv *workos.Invitation, organizationName string) *gen.OrganizationInvitationAccept {
 	if inv == nil {
 		return nil
 	}
 	return &gen.OrganizationInvitationAccept{
 		Email:               inv.Email,
 		State:               string(inv.State),
+		OrganizationName:    organizationName,
 		AcceptInvitationURL: inv.AcceptInvitationURL,
 	}
 }

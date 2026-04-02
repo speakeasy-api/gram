@@ -18745,10 +18745,10 @@ components:
                     description: WorkOS invitation ID.
                 inviter_user_id:
                     type: string
-                    description: WorkOS user ID of the inviter.
+                    description: Gram user ID of the inviter, when known.
                 organization_id:
                     type: string
-                    description: WorkOS organization ID.
+                    description: Gram organization ID.
                 revoked_at:
                     type: string
                     description: When the invitation was revoked.
@@ -18783,6 +18783,9 @@ components:
                 email:
                     type: string
                     description: Invitee email address.
+                organization_name:
+                    type: string
+                    description: Gram organization display name when the org is linked in Gram; empty if unknown.
                 state:
                     type: string
                     description: Invitation lifecycle state.
@@ -18794,6 +18797,7 @@ components:
             required:
                 - email
                 - state
+                - organization_name
                 - accept_invitation_url
         OrganizationUser:
             type: object

@@ -102,9 +102,9 @@ type OrganizationInvitation struct {
 	RevokedAt *string
 	// WorkOS role slug for the invitee.
 	RoleSlug *string
-	// WorkOS organization ID.
+	// Gram organization ID.
 	OrganizationID string
-	// WorkOS user ID of the inviter.
+	// Gram user ID of the inviter, when known.
 	InviterUserID *string
 	// When the invitation expires.
 	ExpiresAt *string
@@ -119,6 +119,9 @@ type OrganizationInvitationAccept struct {
 	Email string
 	// Invitation lifecycle state.
 	State string
+	// Gram organization display name when the org is linked in Gram; empty if
+	// unknown.
+	OrganizationName string
 	// URL to complete acceptance in WorkOS (may be empty when not actionable).
 	AcceptInvitationURL string
 }

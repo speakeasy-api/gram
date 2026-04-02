@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -12,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Matches SetOrgWorkosID in setup_test.go.
-const testWorkosOrgID = "org_workos_test"
+// WorkOS organization membership id stored on organization_user_relationships (not Gram user_id).
+const testWorkosMembershipID = "org_membership_test_1"
 
 func TestService_RemoveUser(t *testing.T) {
 	t.Parallel()
@@ -28,8 +29,14 @@ func TestService_RemoveUser(t *testing.T) {
 		UserID:         authCtx.UserID,
 	})
 	require.NoError(t, err)
+	err = orgrepo.New(ti.conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		UserID:             authCtx.UserID,
+		WorkosMembershipID: pgtype.Text{String: testWorkosMembershipID, Valid: true},
+	})
+	require.NoError(t, err)
 
-	ti.orgs.On("RemoveUser", mock.Anything, testWorkosOrgID, authCtx.UserID).Return(nil).Once()
+	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, testWorkosMembershipID).Return(nil).Once()
 
 	err = ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
 		UserID: authCtx.UserID,
@@ -61,9 +68,15 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 		UserID:         authCtx.UserID,
 	})
 	require.NoError(t, err)
+	err = orgrepo.New(ti.conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		UserID:             authCtx.UserID,
+		WorkosMembershipID: pgtype.Text{String: testWorkosMembershipID, Valid: true},
+	})
+	require.NoError(t, err)
 
 	workosErr := errors.New("workos error")
-	ti.orgs.On("RemoveUser", mock.Anything, testWorkosOrgID, authCtx.UserID).Return(workosErr).Once()
+	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, testWorkosMembershipID).Return(workosErr).Once()
 
 	err = ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
 		UserID: authCtx.UserID,

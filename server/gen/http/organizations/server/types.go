@@ -36,9 +36,9 @@ type SendInviteResponseBody struct {
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 	// WorkOS role slug for the invitee.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
-	// WorkOS organization ID.
+	// Gram organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// WorkOS user ID of the inviter.
+	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// When the invitation expires.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
@@ -60,6 +60,9 @@ type GetInviteByTokenResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Invitation lifecycle state.
 	State string `form:"state" json:"state" xml:"state"`
+	// Gram organization display name when the org is linked in Gram; empty if
+	// unknown.
+	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
 	// URL to complete acceptance in WorkOS (may be empty when not actionable).
 	AcceptInvitationURL string `form:"accept_invitation_url" json:"accept_invitation_url" xml:"accept_invitation_url"`
 }
@@ -1196,9 +1199,9 @@ type OrganizationInvitationResponseBody struct {
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 	// WorkOS role slug for the invitee.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
-	// WorkOS organization ID.
+	// Gram organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// WorkOS user ID of the inviter.
+	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// When the invitation expires.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
@@ -1264,6 +1267,7 @@ func NewGetInviteByTokenResponseBody(res *organizations.OrganizationInvitationAc
 	body := &GetInviteByTokenResponseBody{
 		Email:               res.Email,
 		State:               res.State,
+		OrganizationName:    res.OrganizationName,
 		AcceptInvitationURL: res.AcceptInvitationURL,
 	}
 	return body

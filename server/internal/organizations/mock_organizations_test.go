@@ -77,27 +77,24 @@ func (m *MockOrganizationProvider) FindInvitationByToken(ctx context.Context, to
 	return nil, nil
 }
 
-func (m *MockOrganizationProvider) ListUsers(ctx context.Context, orgID string) ([]thirdpartyworkos.User, error) {
-	args := m.Called(ctx, orgID)
-	if err := args.Error(1); err != nil {
-		var users []thirdpartyworkos.User
-		if v, ok := args.Get(0).([]thirdpartyworkos.User); ok {
-			users = v
-		}
-		return users, mockErr(args, 1)
-	}
-	if users, ok := args.Get(0).([]thirdpartyworkos.User); ok {
-		return users, nil
-	}
-	return nil, nil
-}
-
-func (m *MockOrganizationProvider) RemoveUser(ctx context.Context, orgID, userID string) error {
-	args := m.Called(ctx, orgID, userID)
+func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error {
+	args := m.Called(ctx, workosMembershipID)
 	if err := args.Error(0); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (m *MockOrganizationProvider) GetUserByEmail(ctx context.Context, email string) (*thirdpartyworkos.User, error) {
+	args := m.Called(ctx, email)
+	if err := args.Error(1); err != nil {
+		u, _ := args.Get(0).(*thirdpartyworkos.User)
+		return u, mockErr(args, 1)
+	}
+	if u, ok := args.Get(0).(*thirdpartyworkos.User); ok {
+		return u, nil
+	}
+	return nil, nil
 }
 
 func mockErr(args mock.Arguments, index int) error {
