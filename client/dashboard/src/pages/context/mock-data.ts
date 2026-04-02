@@ -1055,6 +1055,225 @@ export function parseSkillFrontmatter(content: string): {
   return { meta, body: match[2].trim() };
 }
 
+// ── Draft Documents (pending changes with social features) ────────────────
+
+export type DraftComment = {
+  id: string;
+  author: string;
+  authorType: "human" | "agent";
+  content: string;
+  createdAt: string;
+  upvotes: number;
+};
+
+export type DraftDocument = {
+  id: string;
+  title: string;
+  author: string;
+  authorType: "human" | "agent";
+  createdAt: string;
+  updatedAt: string;
+  /** Existing file path if this is an edit, null if new doc */
+  filePath: string | null;
+  /** For edits: the original content */
+  originalContent?: string;
+  /** The proposed content */
+  content: string;
+  upvotes: number;
+  downvotes: number;
+  userVote?: "up" | "down" | null;
+  comments: DraftComment[];
+  status: "open" | "published" | "rejected";
+  labels: string[];
+};
+
+export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
+  {
+    id: "draft-1",
+    title: "Update prerequisites to Node 20+ and pnpm",
+    author: "alice",
+    authorType: "human",
+    createdAt: "2026-04-01T09:30:00Z",
+    updatedAt: "2026-04-01T15:00:00Z",
+    filePath: "getting-started/introduction.md",
+    originalContent:
+      "# Introduction\n\nWelcome to Gram! This guide walks you through the basics of setting up your first MCP server.\n\n## Prerequisites\n\n- Node.js 18+\n- A Gram account\n\n## Quick Start\n\n```bash\nnpx create-gram-app my-server\ncd my-server\nnpm run dev\n```\n\nYour MCP server is now running locally on port 3000.",
+    content:
+      "# Introduction\n\nWelcome to Gram! This guide walks you through the basics of setting up your first MCP server.\n\n## Prerequisites\n\n- Node.js 20+\n- A Gram account\n- pnpm 9+\n\n## Quick Start\n\n```bash\nnpx create-gram-app my-server\ncd my-server\npnpm dev\n```\n\nYour MCP server is now running locally on port 3000.\n\n## Next Steps\n\nHead over to the [Configuration guide](./configuration.md) to customize your server.",
+    upvotes: 7,
+    downvotes: 1,
+    userVote: "up",
+    status: "open",
+    labels: ["documentation", "breaking-change"],
+    comments: [
+      {
+        id: "c1",
+        author: "bob",
+        authorType: "human",
+        content: "Good call on pnpm — we should update the CI templates too.",
+        createdAt: "2026-04-01T10:15:00Z",
+        upvotes: 3,
+      },
+      {
+        id: "c2",
+        author: "claude-agent-7",
+        authorType: "agent",
+        content:
+          "I've seen 12 support sessions this week where users had issues with npm. pnpm resolves the peer dependency conflicts.",
+        createdAt: "2026-04-01T11:00:00Z",
+        upvotes: 5,
+      },
+    ],
+  },
+  {
+    id: "draft-2",
+    title: "Add JWT / Bearer Token authentication section",
+    author: "bob",
+    authorType: "human",
+    createdAt: "2026-04-01T14:20:00Z",
+    updatedAt: "2026-04-01T14:20:00Z",
+    filePath: "guides/authentication.md",
+    originalContent:
+      "# Authentication\n\nGram supports multiple authentication strategies.\n\n## OAuth 2.0\n\nConfigure OAuth providers in your MCP server settings.\n\n## API Keys\n\nGenerate API keys from the dashboard under Settings > API Keys.\n\n## Custom Auth\n\nImplement the `AuthProvider` interface for custom authentication flows.",
+    content:
+      "# Authentication\n\nGram supports multiple authentication strategies.\n\n## OAuth 2.0\n\nConfigure OAuth providers in your MCP server settings.\n\n## API Keys\n\nGenerate API keys from the dashboard under Settings > API Keys.\n\n## JWT / Bearer Tokens\n\nPass a bearer token in the `Authorization` header. Gram validates it against your configured JWKS endpoint.\n\n## Custom Auth\n\nImplement the `AuthProvider` interface for custom authentication flows.",
+    upvotes: 14,
+    downvotes: 0,
+    userVote: null,
+    status: "open",
+    labels: ["security", "enhancement"],
+    comments: [
+      {
+        id: "c3",
+        author: "carol",
+        authorType: "human",
+        content: "Security team approved this. Ship it!",
+        createdAt: "2026-04-01T16:00:00Z",
+        upvotes: 8,
+      },
+    ],
+  },
+  {
+    id: "draft-3",
+    title: "Add query parameters and Delete endpoint to Tools API",
+    author: "carol",
+    authorType: "human",
+    createdAt: "2026-04-02T08:00:00Z",
+    updatedAt: "2026-04-02T08:00:00Z",
+    filePath: "api-reference/tools.md",
+    originalContent:
+      "# Tools API\n\n## List Tools\n\n`GET /api/v1/tools`\n\nReturns all tools registered for the current project.\n\n## Get Tool\n\n`GET /api/v1/tools/:slug`\n\nReturns a single tool by slug.\n\n## Create Tool\n\n`POST /api/v1/tools`\n\nRegisters a new tool definition.",
+    content:
+      "# Tools API\n\n## List Tools\n\n`GET /api/v1/tools`\n\nReturns all tools registered for the current project.\n\n### Query Parameters\n\n| Param | Type | Description |\n|-------|------|-------------|\n| `limit` | int | Max results (default 50) |\n| `offset` | int | Pagination offset |\n\n## Get Tool\n\n`GET /api/v1/tools/:slug`\n\nReturns a single tool by slug.\n\n## Create Tool\n\n`POST /api/v1/tools`\n\nRegisters a new tool definition.\n\n## Delete Tool\n\n`DELETE /api/v1/tools/:slug`\n\nRemoves a tool registration.",
+    upvotes: 4,
+    downvotes: 2,
+    userVote: "up",
+    status: "open",
+    labels: ["api"],
+    comments: [
+      {
+        id: "c4",
+        author: "dave",
+        authorType: "human",
+        content: "Should we add a soft-delete option instead?",
+        createdAt: "2026-04-02T09:00:00Z",
+        upvotes: 2,
+      },
+      {
+        id: "c5",
+        author: "claude-agent-7",
+        authorType: "agent",
+        content:
+          "Based on user feedback, hard delete is the expected behavior. Soft delete can be a follow-up.",
+        createdAt: "2026-04-02T09:30:00Z",
+        upvotes: 1,
+      },
+      {
+        id: "c6",
+        author: "carol",
+        authorType: "human",
+        content: "Agreed with the agent. Let's keep it simple for v1.",
+        createdAt: "2026-04-02T10:00:00Z",
+        upvotes: 3,
+      },
+    ],
+  },
+  {
+    id: "draft-4",
+    title: "New doc: Rate Limiting Best Practices",
+    author: "cursor-agent-12",
+    authorType: "agent",
+    createdAt: "2026-04-02T11:00:00Z",
+    updatedAt: "2026-04-02T11:00:00Z",
+    filePath: null,
+    content:
+      "# Rate Limiting Best Practices\n\nThis guide covers rate limiting strategies for MCP servers on Gram.\n\n## Default Limits\n\n- 100 requests/minute per API key\n- 1000 tool calls/hour per session\n\n## Custom Limits\n\nConfigure per-toolset limits in the environment settings.\n\n## Handling 429 Responses\n\nWhen rate limited, clients receive a `429` status with a `Retry-After` header.\n\n## Monitoring\n\nTrack rate limit usage in the Observability dashboard.",
+    upvotes: 11,
+    downvotes: 1,
+    userVote: null,
+    status: "open",
+    labels: ["agent-generated", "new-doc", "best-practices"],
+    comments: [
+      {
+        id: "c7",
+        author: "alice",
+        authorType: "human",
+        content:
+          "Great initiative from the agent. The numbers look right. Should we add a section on burst limits?",
+        createdAt: "2026-04-02T12:00:00Z",
+        upvotes: 4,
+      },
+    ],
+  },
+  {
+    id: "draft-5",
+    title: "New doc: Troubleshooting Common MCP Connection Issues",
+    author: "claude-agent-7",
+    authorType: "agent",
+    createdAt: "2026-04-02T13:00:00Z",
+    updatedAt: "2026-04-02T13:00:00Z",
+    filePath: null,
+    content:
+      "# Troubleshooting Common MCP Connection Issues\n\nBased on patterns observed across 89 support sessions.\n\n## Connection Refused\n\nCheck that the server URL is correct and the server is running.\n\n## Authentication Failures\n\nVerify API keys haven't expired. Check OAuth token refresh.\n\n## Timeout Errors\n\nIncrease the client timeout setting. Default is 30s.\n\n## SSL Certificate Errors\n\nEnsure your custom domain has a valid certificate.",
+    upvotes: 19,
+    downvotes: 0,
+    userVote: "up",
+    status: "open",
+    labels: ["agent-generated", "new-doc", "troubleshooting"],
+    comments: [
+      {
+        id: "c8",
+        author: "bob",
+        authorType: "human",
+        content:
+          "This would've saved us so many support tickets. Publish ASAP.",
+        createdAt: "2026-04-02T13:30:00Z",
+        upvotes: 12,
+      },
+      {
+        id: "c9",
+        author: "dave",
+        authorType: "human",
+        content: "Can we add a section on firewall/proxy issues too?",
+        createdAt: "2026-04-02T14:00:00Z",
+        upvotes: 6,
+      },
+    ],
+  },
+];
+
+export function formatRelativeTime(iso: string): string {
+  const now = new Date("2026-04-02T16:00:00Z").getTime();
+  const then = new Date(iso).getTime();
+  const diffMs = now - then;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(1)} KB`;

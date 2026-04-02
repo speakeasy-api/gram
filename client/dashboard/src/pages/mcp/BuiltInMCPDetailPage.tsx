@@ -147,6 +147,37 @@ const DOCS_MCP_TOOLS: DocsMcpTool[] = [
     ],
   },
   {
+    name: "write_doc",
+    description:
+      "Create or update a document in the corpus. Submits as a draft that appears in the Draft Documents review queue. Authors and reviewers can comment, upvote/downvote, and publish or reject.",
+    configurable: true,
+    defaultEnabled: true,
+    parameters: [
+      {
+        name: "title",
+        type: "string",
+        description: "A short title describing the change (like a PR title)",
+      },
+      {
+        name: "file_path",
+        type: "string | null",
+        description:
+          "Path to an existing file to update, or null to create a new document",
+      },
+      {
+        name: "content",
+        type: "string",
+        description: "The full markdown content for the document",
+      },
+      {
+        name: "labels",
+        type: "string[]",
+        description:
+          "Labels to categorize the draft (e.g. 'new-doc', 'bug-fix', 'enhancement')",
+      },
+    ],
+  },
+  {
     name: "feedback",
     description:
       "Submit feedback on a document: upvote, downvote, or label. Feedback is aggregated and visible to doc authors in the Gram UI.",
