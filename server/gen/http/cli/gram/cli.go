@@ -33,6 +33,7 @@ import (
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
+	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
@@ -71,6 +72,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
+		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-id|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -580,6 +582,36 @@ func ParseEndpoint(
 		mcpMetadataExportMcpMetadataSessionTokenFlag     = mcpMetadataExportMcpMetadataFlags.String("session-token", "", "")
 		mcpMetadataExportMcpMetadataProjectSlugInputFlag = mcpMetadataExportMcpMetadataFlags.String("project-slug-input", "", "")
 
+		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
+
+		organizationsSendInviteFlags            = flag.NewFlagSet("send-invite", flag.ExitOnError)
+		organizationsSendInviteBodyFlag         = organizationsSendInviteFlags.String("body", "REQUIRED", "")
+		organizationsSendInviteSessionTokenFlag = organizationsSendInviteFlags.String("session-token", "", "")
+
+		organizationsRevokeInviteFlags            = flag.NewFlagSet("revoke-invite", flag.ExitOnError)
+		organizationsRevokeInviteInvitationIDFlag = organizationsRevokeInviteFlags.String("invitation-id", "REQUIRED", "")
+		organizationsRevokeInviteSessionTokenFlag = organizationsRevokeInviteFlags.String("session-token", "", "")
+
+		organizationsListInvitesFlags              = flag.NewFlagSet("list-invites", flag.ExitOnError)
+		organizationsListInvitesOrganizationIDFlag = organizationsListInvitesFlags.String("organization-id", "REQUIRED", "")
+		organizationsListInvitesSessionTokenFlag   = organizationsListInvitesFlags.String("session-token", "", "")
+
+		organizationsGetInviteByIDFlags            = flag.NewFlagSet("get-invite-by-id", flag.ExitOnError)
+		organizationsGetInviteByIDInvitationIDFlag = organizationsGetInviteByIDFlags.String("invitation-id", "REQUIRED", "")
+		organizationsGetInviteByIDSessionTokenFlag = organizationsGetInviteByIDFlags.String("session-token", "", "")
+
+		organizationsGetInviteByTokenFlags     = flag.NewFlagSet("get-invite-by-token", flag.ExitOnError)
+		organizationsGetInviteByTokenTokenFlag = organizationsGetInviteByTokenFlags.String("token", "REQUIRED", "")
+
+		organizationsListUsersFlags              = flag.NewFlagSet("list-users", flag.ExitOnError)
+		organizationsListUsersOrganizationIDFlag = organizationsListUsersFlags.String("organization-id", "REQUIRED", "")
+		organizationsListUsersSessionTokenFlag   = organizationsListUsersFlags.String("session-token", "", "")
+
+		organizationsRemoveUserFlags              = flag.NewFlagSet("remove-user", flag.ExitOnError)
+		organizationsRemoveUserOrganizationIDFlag = organizationsRemoveUserFlags.String("organization-id", "REQUIRED", "")
+		organizationsRemoveUserUserIDFlag         = organizationsRemoveUserFlags.String("user-id", "REQUIRED", "")
+		organizationsRemoveUserSessionTokenFlag   = organizationsRemoveUserFlags.String("session-token", "", "")
+
 		packagesFlags = flag.NewFlagSet("packages", flag.ContinueOnError)
 
 		packagesCreatePackageFlags                = flag.NewFlagSet("create-package", flag.ExitOnError)
@@ -1050,6 +1082,15 @@ func ParseEndpoint(
 	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
 	mcpMetadataExportMcpMetadataFlags.Usage = mcpMetadataExportMcpMetadataUsage
 
+	organizationsFlags.Usage = organizationsUsage
+	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
+	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
+	organizationsListInvitesFlags.Usage = organizationsListInvitesUsage
+	organizationsGetInviteByIDFlags.Usage = organizationsGetInviteByIDUsage
+	organizationsGetInviteByTokenFlags.Usage = organizationsGetInviteByTokenUsage
+	organizationsListUsersFlags.Usage = organizationsListUsersUsage
+	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
+
 	packagesFlags.Usage = packagesUsage
 	packagesCreatePackageFlags.Usage = packagesCreatePackageUsage
 	packagesUpdatePackageFlags.Usage = packagesUpdatePackageUsage
@@ -1184,6 +1225,8 @@ func ParseEndpoint(
 			svcf = keysFlags
 		case "mcp-metadata":
 			svcf = mcpMetadataFlags
+		case "organizations":
+			svcf = organizationsFlags
 		case "packages":
 			svcf = packagesFlags
 		case "features":
@@ -1540,6 +1583,31 @@ func ParseEndpoint(
 
 			case "export-mcp-metadata":
 				epf = mcpMetadataExportMcpMetadataFlags
+
+			}
+
+		case "organizations":
+			switch epn {
+			case "send-invite":
+				epf = organizationsSendInviteFlags
+
+			case "revoke-invite":
+				epf = organizationsRevokeInviteFlags
+
+			case "list-invites":
+				epf = organizationsListInvitesFlags
+
+			case "get-invite-by-id":
+				epf = organizationsGetInviteByIDFlags
+
+			case "get-invite-by-token":
+				epf = organizationsGetInviteByTokenFlags
+
+			case "list-users":
+				epf = organizationsListUsersFlags
+
+			case "remove-user":
+				epf = organizationsRemoveUserFlags
 
 			}
 
@@ -2116,6 +2184,31 @@ func ParseEndpoint(
 			case "export-mcp-metadata":
 				endpoint = c.ExportMcpMetadata()
 				data, err = mcpmetadatac.BuildExportMcpMetadataPayload(*mcpMetadataExportMcpMetadataBodyFlag, *mcpMetadataExportMcpMetadataApikeyTokenFlag, *mcpMetadataExportMcpMetadataSessionTokenFlag, *mcpMetadataExportMcpMetadataProjectSlugInputFlag)
+			}
+		case "organizations":
+			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "send-invite":
+				endpoint = c.SendInvite()
+				data, err = organizationsc.BuildSendInvitePayload(*organizationsSendInviteBodyFlag, *organizationsSendInviteSessionTokenFlag)
+			case "revoke-invite":
+				endpoint = c.RevokeInvite()
+				data, err = organizationsc.BuildRevokeInvitePayload(*organizationsRevokeInviteInvitationIDFlag, *organizationsRevokeInviteSessionTokenFlag)
+			case "list-invites":
+				endpoint = c.ListInvites()
+				data, err = organizationsc.BuildListInvitesPayload(*organizationsListInvitesOrganizationIDFlag, *organizationsListInvitesSessionTokenFlag)
+			case "get-invite-by-id":
+				endpoint = c.GetInviteByID()
+				data, err = organizationsc.BuildGetInviteByIDPayload(*organizationsGetInviteByIDInvitationIDFlag, *organizationsGetInviteByIDSessionTokenFlag)
+			case "get-invite-by-token":
+				endpoint = c.GetInviteByToken()
+				data, err = organizationsc.BuildGetInviteByTokenPayload(*organizationsGetInviteByTokenTokenFlag)
+			case "list-users":
+				endpoint = c.ListUsers()
+				data, err = organizationsc.BuildListUsersPayload(*organizationsListUsersOrganizationIDFlag, *organizationsListUsersSessionTokenFlag)
+			case "remove-user":
+				endpoint = c.RemoveUser()
+				data, err = organizationsc.BuildRemoveUserPayload(*organizationsRemoveUserOrganizationIDFlag, *organizationsRemoveUserUserIDFlag, *organizationsRemoveUserSessionTokenFlag)
 			}
 		case "packages":
 			c := packagesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4466,6 +4559,163 @@ func mcpMetadataExportMcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// organizationsUsage displays the usage of the organizations command and its
+// subcommands.
+func organizationsUsage() {
+	fmt.Fprintln(os.Stderr, `Organization membership, invitations, and directory.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organizations COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation to join an organization.`)
+	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
+	fmt.Fprintln(os.Stderr, `    list-invites: List WorkOS invitations for an organization.`)
+	fmt.Fprintln(os.Stderr, `    get-invite-by-id: Get a WorkOS invitation by ID.`)
+	fmt.Fprintln(os.Stderr, `    get-invite-by-token: Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
+	fmt.Fprintln(os.Stderr, `    list-users: List users in an organization from Gram organization_user_relationships.`)
+	fmt.Fprintln(os.Stderr, `    remove-user: Remove a user from an organization in Gram and delete their WorkOS organization membership.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s organizations COMMAND --help\n", os.Args[0])
+}
+func organizationsSendInviteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations send-invite", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Send a WorkOS invitation to join an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations send-invite --body '{\n      \"email\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"role_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func organizationsRevokeInviteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations revoke-invite", os.Args[0])
+	fmt.Fprint(os.Stderr, " -invitation-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a pending WorkOS invitation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -invitation-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations revoke-invite --invitation-id \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsListInvitesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations list-invites", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List WorkOS invitations for an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-invites --organization-id \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsGetInviteByIDUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations get-invite-by-id", os.Args[0])
+	fmt.Fprint(os.Stderr, " -invitation-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a WorkOS invitation by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -invitation-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-invite-by-id --invitation-id \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsGetInviteByTokenUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations get-invite-by-token", os.Args[0])
+	fmt.Fprint(os.Stderr, " -token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-invite-by-token --token \"abc123\"")
+}
+
+func organizationsListUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations list-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List users in an organization from Gram organization_user_relationships.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-users --organization-id \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsRemoveUserUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations remove-user", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a user from an organization in Gram and delete their WorkOS organization membership.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations remove-user --organization-id \"abc123\" --user-id \"abc123\" --session-token \"abc123\"")
 }
 
 // packagesUsage displays the usage of the packages command and its subcommands.
