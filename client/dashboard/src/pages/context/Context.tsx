@@ -422,9 +422,36 @@ function DraftDocumentCard({
 }) {
   const score = draft.upvotes - draft.downvotes;
   const isEdit = draft.filePath !== null;
+  const [iterateState, setIterateState] = useState<IterateState>("idle");
+  const [iteratePrompt, setIteratePrompt] = useState("");
+  const [showPrompt, setShowPrompt] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(0 as never);
+
+  const handleIterate = useCallback(() => {
+    if (iterateState === "processing") return;
+    setIterateState("processing");
+    setShowPrompt(false);
+    timerRef.current = setTimeout(() => setIterateState("done"), 3000);
+  }, [iterateState]);
+
+  const handleUndo = useCallback(() => {
+    clearTimeout(timerRef.current);
+    setIterateState("idle");
+    setIteratePrompt("");
+  }, []);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const isProcessing = iterateState === "processing";
+  const isDone = iterateState === "done";
 
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
+    <div
+      className={cn(
+        "rounded-lg border border-border bg-card overflow-hidden transition-all duration-500",
+        isProcessing && "opacity-40 grayscale",
+      )}
+    >
       <div className="flex">
         {/* Vote column */}
         <div className="flex flex-col items-center gap-0.5 px-3 py-3 bg-muted/20 border-r border-border">
@@ -567,20 +594,79 @@ function DraftDocumentCard({
             )}
           </div>
 
-          {/* Comments */}
-          <div className="p-4 space-y-3">
-            {draft.comments.map((comment) => (
-              <DraftCommentItem key={comment.id} comment={comment} />
-            ))}
-            <div className="flex gap-2 pt-2">
-              <div className="flex-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                Add a comment...
+          {/* Done banner */}
+          {isDone && (
+            <div className="flex items-center justify-between px-5 py-3 bg-emerald-500/10 border-b border-emerald-500/30">
+              <div className="flex items-center gap-2 text-sm text-emerald-600">
+                <SparklesIcon className="h-4 w-4" />
+                <span className="font-medium">
+                  Agent incorporated {draft.comments.length} comment
+                  {draft.comments.length !== 1 && "s"} into a new draft
+                </span>
               </div>
-              <Button size="sm" variant="outline" disabled>
-                Comment
-              </Button>
+              <button
+                onClick={handleUndo}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Undo2Icon className="h-3.5 w-3.5" />
+                Undo
+              </button>
             </div>
-          </div>
+          )}
+
+          {/* Comments */}
+          {!isDone && (
+            <div className="p-5 space-y-4">
+              {draft.comments.map((comment) => (
+                <DraftCommentItem key={comment.id} comment={comment} />
+              ))}
+
+              {/* Iterate action */}
+              {draft.comments.length > 0 && (
+                <div className="pt-2 border-t border-border">
+                  {showPrompt ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={iteratePrompt}
+                        onChange={(e) => setIteratePrompt(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleIterate()}
+                        placeholder="Incorporate all comments into the doc..."
+                        className="flex-1 h-8 px-3 text-sm rounded-md border border-border bg-transparent focus:outline-none focus:border-ring"
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 px-4 text-xs gap-1.5"
+                        onClick={handleIterate}
+                      >
+                        <SparklesIcon className="h-3.5 w-3.5" />
+                        Iterate
+                      </Button>
+                      <button
+                        onClick={() => {
+                          setShowPrompt(false);
+                          setIteratePrompt("");
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowPrompt(true)}
+                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <SparklesIcon className="h-4 w-4" />
+                      Iterate on {draft.comments.length} comment
+                      {draft.comments.length !== 1 && "s"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
