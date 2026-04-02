@@ -61,11 +61,22 @@ export type Annotation = {
   createdAt: string;
 };
 
+export type FeedbackComment = {
+  id: string;
+  author: string;
+  authorType: "human" | "agent";
+  content: string;
+  createdAt: string;
+  upvotes: number;
+  downvotes: number;
+};
+
 export type DocFeedback = {
   upvotes: number;
   downvotes: number;
   labels: string[];
   userVote?: "up" | "down" | null;
+  comments: FeedbackComment[];
 };
 
 export type ContextFile = {
@@ -276,6 +287,58 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
             downvotes: 1,
             labels: ["beginner-friendly", "needs-update"],
             userVote: "up",
+            comments: [
+              {
+                id: "fc1",
+                author: "bob",
+                authorType: "human",
+                content:
+                  "This page got me started in under 5 minutes. Great intro.",
+                createdAt: "2026-03-22T10:00:00Z",
+                upvotes: 8,
+                downvotes: 0,
+              },
+              {
+                id: "fc2",
+                author: "cursor-agent-12",
+                authorType: "agent",
+                content:
+                  "Users frequently reference this page when asking about first-time setup. Consider adding a video walkthrough link.",
+                createdAt: "2026-03-25T14:00:00Z",
+                upvotes: 5,
+                downvotes: 1,
+              },
+              {
+                id: "fc3",
+                author: "carol",
+                authorType: "human",
+                content:
+                  "The prerequisites section is outdated — we require Node 20 now.",
+                createdAt: "2026-03-28T09:00:00Z",
+                upvotes: 11,
+                downvotes: 0,
+              },
+              {
+                id: "fc4",
+                author: "dave",
+                authorType: "human",
+                content:
+                  "Would be nice to mention Docker as an alternative setup method.",
+                createdAt: "2026-03-30T16:00:00Z",
+                upvotes: 3,
+                downvotes: 0,
+              },
+              {
+                id: "fc5",
+                author: "claude-agent-7",
+                authorType: "agent",
+                content:
+                  "Based on 34 support sessions this week, the Quick Start command works reliably. The main confusion is around environment variables — consider linking to the config page.",
+                createdAt: "2026-04-01T08:00:00Z",
+                upvotes: 7,
+                downvotes: 0,
+              },
+            ],
           },
           annotations: [
             {
@@ -303,6 +366,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
             downvotes: 0,
             labels: ["reference"],
             userVote: null,
+            comments: [],
           },
         },
         {
@@ -320,6 +384,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
             downvotes: 2,
             labels: ["onboarding"],
             userVote: "up",
+            comments: [],
           },
         },
       ],
@@ -350,6 +415,37 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
             downvotes: 3,
             labels: ["security", "reference"],
             userVote: null,
+            comments: [
+              {
+                id: "fc6",
+                author: "alice",
+                authorType: "human",
+                content:
+                  "The OAuth section needs more detail on refresh token flows.",
+                createdAt: "2026-03-27T11:00:00Z",
+                upvotes: 9,
+                downvotes: 0,
+              },
+              {
+                id: "fc7",
+                author: "claude-agent-7",
+                authorType: "agent",
+                content:
+                  "This is the most-referenced doc in auth-related sessions. 67% of auth questions are answered by this page.",
+                createdAt: "2026-03-29T15:00:00Z",
+                upvotes: 14,
+                downvotes: 1,
+              },
+              {
+                id: "fc8",
+                author: "dave",
+                authorType: "human",
+                content: "JWT section is critical — glad it's being added.",
+                createdAt: "2026-04-01T16:00:00Z",
+                upvotes: 6,
+                downvotes: 0,
+              },
+            ],
           },
           annotations: [
             {
@@ -384,6 +480,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
             downvotes: 0,
             labels: ["devops"],
             userVote: null,
+            comments: [],
           },
         },
         {
@@ -420,6 +517,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 downvotes: 1,
                 labels: ["tools"],
                 userVote: "up",
+                comments: [],
               },
             },
             {
@@ -448,6 +546,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 downvotes: 0,
                 labels: ["advanced"],
                 userVote: null,
+                comments: [],
               },
             },
           ],
@@ -480,6 +579,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
             downvotes: 2,
             labels: ["api", "reference"],
             userVote: "up",
+            comments: [],
           },
         },
         {
@@ -519,6 +619,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
             downvotes: 0,
             labels: ["agent-generated"],
             userVote: null,
+            comments: [],
           },
           annotations: [
             {
@@ -580,6 +681,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 downvotes: 0,
                 labels: ["typescript", "quickstart"],
                 userVote: "up",
+                comments: [],
               },
             },
             {
