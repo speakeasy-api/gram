@@ -36,6 +36,7 @@ import {
   type DiffLine,
   type DocFeedback,
   type DocsMcpConfig,
+  type DraftDocument,
   type RegistrySkill,
   collectDrafts,
   collectSkills,
@@ -45,10 +46,12 @@ import {
   findFile,
   formatDate,
   formatFileSize,
+  formatRelativeTime,
   formatTime,
   getEffectiveConfig,
   MOCK_CAPTURE_SETTINGS,
   MOCK_CONTEXT_TREE,
+  MOCK_DRAFT_DOCUMENTS,
   MOCK_REGISTRY_SKILLS,
   MOCK_SEARCH_LOGS,
   MOCK_SKILL_INVOCATIONS,
@@ -65,7 +68,9 @@ const RESIZABLE_PANEL_CLASS =
   "[&>[role='separator']]:w-px [&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:border-0 [&>[role='separator']]:hover:bg-primary [&>[role='separator']]:relative [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:cursor-col-resize";
 
 export default function ContextPage() {
-  const totalDrafts = useMemo(() => countDrafts(MOCK_CONTEXT_TREE), []);
+  const totalDrafts = MOCK_DRAFT_DOCUMENTS.filter(
+    (d) => d.status === "open",
+  ).length;
 
   return (
     <Page>
@@ -313,13 +318,37 @@ function TreeNode({
   );
 }
 
-// ── Pending Changes Tab ───────────────────────────────────────────────────
+// ── Draft Documents Tab (Reddit-style) ────────────────────────────────────
 
 function PendingChangesTab() {
-  const drafts = useMemo(() => collectDrafts(MOCK_CONTEXT_TREE), []);
-  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const drafts = MOCK_DRAFT_DOCUMENTS;
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("hot");
 
-  if (drafts.length === 0) {
+  const sorted = useMemo(() => {
+    const open = drafts.filter((d) => d.status === "open");
+    switch (sortBy) {
+      case "new":
+        return [...open].sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+      case "top":
+        return [...open].sort(
+          (a, b) => b.upvotes - b.downvotes - (a.upvotes - a.downvotes),
+        );
+      default:
+        return [...open].sort(
+          (a, b) =>
+            b.upvotes -
+            b.downvotes +
+            b.comments.length * 2 -
+            (a.upvotes - a.downvotes + a.comments.length * 2),
+        );
+    }
+  }, [drafts, sortBy]);
+
+  if (sorted.length === 0) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-border bg-card h-[300px]">
         <div className="text-center space-y-2">
@@ -328,10 +357,10 @@ function PendingChangesTab() {
             className="h-10 w-10 text-muted-foreground/50 mx-auto"
           />
           <Type variant="subheading" className="text-muted-foreground">
-            No pending changes
+            No draft documents
           </Type>
           <Type small muted>
-            All content is up to date.
+            All content is published and up to date.
           </Type>
         </div>
       </div>
@@ -339,76 +368,248 @@ function PendingChangesTab() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Type small muted>
-          {drafts.length} file{drafts.length !== 1 && "s"} with unpublished
-          drafts
-        </Type>
-        <Button size="sm">Publish All</Button>
-      </div>
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        {drafts.map(({ file, path }) => {
-          const fullPath = [...path, file.name].join("/");
-          const isExpanded = expandedFile === fullPath;
-          return (
-            <div
-              key={fullPath}
-              className="border-b border-border last:border-b-0"
-            >
-              <button
-                onClick={() => setExpandedFile(isExpanded ? null : fullPath)}
-                className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-muted/50 transition-colors"
-              >
-                <Icon
-                  name={isExpanded ? "chevron-down" : "chevron-right"}
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                />
-                <Icon
-                  name={getFileIcon(file)}
-                  className="h-4 w-4 text-muted-foreground"
-                />
-                <span className="flex-1 text-left font-medium truncate">
-                  <span className="text-muted-foreground">
-                    {path.length > 0 ? path.join("/") + "/" : ""}
-                  </span>
-                  {file.name}
-                </span>
-                <DraftBadge />
-                <span className="text-xs text-muted-foreground">
-                  {file.draft?.author} &middot;{" "}
-                  {formatDate(file.draft!.updatedAt)}
-                </span>
-                <div className="flex gap-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 px-2 text-xs"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Publish
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-xs text-destructive"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Discard
-                  </Button>
-                </div>
-              </button>
-              {isExpanded && file.content && file.draft?.content && (
-                <div className="px-4 pb-3">
-                  <DiffView
-                    oldText={file.content}
-                    newText={file.draft.content}
-                  />
-                </div>
+    <div className="max-w-4xl space-y-3">
+      {/* Sort bar */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-1">
+          {(["hot", "new", "top"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSortBy(s)}
+              className={cn(
+                "px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize",
+                sortBy === s
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <Type small muted>
+          {sorted.length} open draft{sorted.length !== 1 && "s"}
+        </Type>
+      </div>
+
+      {/* Draft list */}
+      <div className="space-y-2">
+        {sorted.map((draft) => (
+          <DraftDocumentCard
+            key={draft.id}
+            draft={draft}
+            expanded={expandedId === draft.id}
+            onToggle={() =>
+              setExpandedId(expandedId === draft.id ? null : draft.id)
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DraftDocumentCard({
+  draft,
+  expanded,
+  onToggle,
+}: {
+  draft: DraftDocument;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const score = draft.upvotes - draft.downvotes;
+  const isEdit = draft.filePath !== null;
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <div className="flex">
+        {/* Vote column */}
+        <div className="flex flex-col items-center gap-0.5 px-3 py-3 bg-muted/20 border-r border-border">
+          <button
+            className={cn(
+              "p-0.5 rounded transition-colors",
+              draft.userVote === "up"
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <ThumbsUpIcon className="h-4 w-4" />
+          </button>
+          <span
+            className={cn(
+              "text-sm font-bold tabular-nums",
+              score > 0
+                ? "text-primary"
+                : score < 0
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+            )}
+          >
+            {score}
+          </span>
+          <button
+            className={cn(
+              "p-0.5 rounded transition-colors",
+              draft.userVote === "down"
+                ? "text-destructive"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <ThumbsDownIcon className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0 p-3">
+          {/* Header */}
+          <div className="flex items-start gap-2 mb-1">
+            <button onClick={onToggle} className="flex-1 text-left min-w-0">
+              <Type
+                variant="subheading"
+                className="hover:text-primary transition-colors"
+              >
+                {draft.title}
+              </Type>
+            </button>
+            <div className="flex gap-1 shrink-0">
+              <Button size="sm" variant="outline" className="h-6 px-2 text-xs">
+                Publish
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs text-destructive"
+              >
+                Reject
+              </Button>
             </div>
-          );
-        })}
+          </div>
+
+          {/* Meta line */}
+          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mb-2">
+            <span>
+              submitted {formatRelativeTime(draft.createdAt)} by{" "}
+              <span className="font-medium text-foreground">
+                {draft.author}
+              </span>
+            </span>
+            {draft.authorType === "agent" && (
+              <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                Agent
+              </Badge>
+            )}
+            {isEdit ? (
+              <span className="font-mono text-xs">{draft.filePath}</span>
+            ) : (
+              <Badge
+                variant="outline"
+                className="border-emerald-500/50 text-emerald-600 bg-emerald-500/10 text-[10px] px-1.5 py-0"
+              >
+                New Doc
+              </Badge>
+            )}
+          </div>
+
+          {/* Labels */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-2">
+            {draft.labels.map((label) => (
+              <Badge key={label} variant="secondary" className="text-[10px]">
+                {label}
+              </Badge>
+            ))}
+          </div>
+
+          {/* Action bar */}
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <button
+              onClick={onToggle}
+              className="flex items-center gap-1 hover:text-foreground transition-colors"
+            >
+              <MessageSquareIcon className="h-3.5 w-3.5" />
+              {draft.comments.length} comment
+              {draft.comments.length !== 1 && "s"}
+            </button>
+            <button
+              onClick={onToggle}
+              className="flex items-center gap-1 hover:text-foreground transition-colors"
+            >
+              <Icon name="git-compare" className="h-3.5 w-3.5" />
+              {isEdit ? "View diff" : "Preview"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded: diff + comments */}
+      {expanded && (
+        <div className="border-t border-border">
+          {/* Diff / preview */}
+          <div className="p-4 border-b border-border">
+            {isEdit && draft.originalContent ? (
+              <DiffView
+                oldText={draft.originalContent}
+                newText={draft.content}
+              />
+            ) : (
+              <pre className="text-xs font-mono whitespace-pre-wrap text-foreground bg-muted/30 rounded-md p-3 max-h-[400px] overflow-auto">
+                {draft.content}
+              </pre>
+            )}
+          </div>
+
+          {/* Comments */}
+          <div className="p-4 space-y-3">
+            {draft.comments.map((comment) => (
+              <DraftCommentItem key={comment.id} comment={comment} />
+            ))}
+            <div className="flex gap-2 pt-2">
+              <div className="flex-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                Add a comment...
+              </div>
+              <Button size="sm" variant="outline" disabled>
+                Comment
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DraftCommentItem({
+  comment,
+}: {
+  comment: DraftDocument["comments"][number];
+}) {
+  return (
+    <div className="flex gap-3">
+      {/* Vote */}
+      <div className="flex flex-col items-center gap-0.5 pt-1">
+        <button className="text-muted-foreground hover:text-foreground transition-colors">
+          <ThumbsUpIcon className="h-3 w-3" />
+        </button>
+        <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+          {comment.upvotes}
+        </span>
+      </div>
+      {/* Body */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 text-xs mb-0.5">
+          <span className="font-medium text-foreground">{comment.author}</span>
+          {comment.authorType === "agent" && (
+            <Badge variant="default" className="text-[10px] px-1 py-0">
+              Agent
+            </Badge>
+          )}
+          <span className="text-muted-foreground">
+            {formatRelativeTime(comment.createdAt)}
+          </span>
+        </div>
+        <Type small className="text-foreground">
+          {comment.content}
+        </Type>
       </div>
     </div>
   );
