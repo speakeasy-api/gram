@@ -88,8 +88,8 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func enterpriseCtx() context.Context {
-	return contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
+func enterpriseCtx(ctx context.Context) context.Context {
+	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		AccountType: "enterprise",
 	})
 }

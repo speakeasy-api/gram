@@ -1,7 +1,6 @@
 package access_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +12,7 @@ import (
 func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	t.Parallel()
 
-	ctx := enterpriseCtx()
+	ctx := enterpriseCtx(t.Context())
 	conn := newTestDB(t)
 	organizationID := "org_load_grants"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
@@ -34,10 +33,9 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	conn := newTestDB(t)
 
-	grants, err := access.LoadGrants(ctx, conn, "", []urn.Principal{
+	grants, err := access.LoadGrants(t.Context(), conn, "", []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "user_123"),
 	})
 	require.Error(t, err)
@@ -47,7 +45,8 @@ func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
 func TestLoadGrants_rejectsMissingPrincipals(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
+
 	conn := newTestDB(t)
 	organizationID := "org_missing_principals"
 
@@ -61,7 +60,7 @@ func TestLoadGrants_rejectsMissingPrincipals(t *testing.T) {
 func TestLoadGrants_rejectsInvalidPrincipal(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	conn := newTestDB(t)
 	organizationID := "org_invalid_principal"
 
@@ -75,7 +74,7 @@ func TestLoadGrants_rejectsInvalidPrincipal(t *testing.T) {
 func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	t.Parallel()
 
-	ctx := enterpriseCtx()
+	ctx := enterpriseCtx(t.Context())
 	conn := newTestDB(t)
 	organizationID := "org_empty_grants"
 
