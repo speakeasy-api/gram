@@ -60,7 +60,6 @@ import {
   MOCK_SKILL_INVOCATIONS,
   parseSkillFrontmatter,
   resolvePath,
-  sourceLabel,
 } from "./mock-data";
 
 export function ContextRoot() {
@@ -1477,7 +1476,6 @@ function FileDetail({ file }: { file: ContextFile }) {
           <Type variant="subheading" className="truncate">
             {file.name}
           </Type>
-          {file.source && <SourceBadge source={file.source} />}
           {file.draft && <DraftBadge />}
         </div>
         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
@@ -1490,6 +1488,12 @@ function FileDetail({ file }: { file: ContextFile }) {
             <Icon name="history" className="h-3 w-3" />
             {file.versions.length} version{file.versions.length !== 1 && "s"}
           </button>
+          {file.source === "github" && (
+            <button className="flex items-center gap-1 hover:text-foreground transition-colors ml-auto">
+              <Icon name="github" className="h-3 w-3" />
+              Open in GitHub
+            </button>
+          )}
         </div>
         {file.draft && (
           <div className="flex items-center gap-1 mt-2">
@@ -1589,25 +1593,6 @@ function FileDetail({ file }: { file: ContextFile }) {
 }
 
 // ── Source Badge ───────────────────────────────────────────────────────────
-
-const SOURCE_BADGE_CLASSES: Record<string, string> = {
-  github: "border-purple-500/50 text-purple-600 bg-purple-500/10",
-  cli: "border-blue-500/50 text-blue-600 bg-blue-500/10",
-  agent: "border-emerald-500/50 text-emerald-600 bg-emerald-500/10",
-  manual: "border-muted-foreground/50 text-muted-foreground bg-muted/50",
-};
-
-function SourceBadge({
-  source,
-}: {
-  source: NonNullable<ContextFile["source"]>;
-}) {
-  return (
-    <Badge variant="outline" className={SOURCE_BADGE_CLASSES[source] ?? ""}>
-      {sourceLabel(source)}
-    </Badge>
-  );
-}
 
 // ── Feedback Section ──────────────────────────────────────────────────────
 
