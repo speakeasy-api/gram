@@ -47,7 +47,6 @@ import {
   formatFileSize,
   formatTime,
   getEffectiveConfig,
-  hasDraft,
   MOCK_CAPTURE_SETTINGS,
   MOCK_CONTEXT_TREE,
   MOCK_REGISTRY_SKILLS,
@@ -117,42 +116,152 @@ export default function ContextPage() {
 // ── Content Tab ────────────────────────────────────────────────────────────
 
 function ContentTab() {
-  const [path, setPath] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<ContextFile | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string[]>([]);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
+  const [layout, setLayout] = useState<"horizontal" | "vertical">("horizontal");
 
-  const currentFolder = resolvePath(MOCK_CONTEXT_TREE, path);
-  const effectiveConfig = getEffectiveConfig(MOCK_CONTEXT_TREE, path);
+  const effectiveConfig = getEffectiveConfig(MOCK_CONTEXT_TREE, selectedPath);
+  const selectedFolder = resolvePath(MOCK_CONTEXT_TREE, selectedPath);
 
-  if (!currentFolder) {
-    setPath([]);
-    return null;
+  const handleFileSelect = (file: ContextFile, path: string[]) => {
+    setSelectedFile(file);
+    setSelectedPath(path);
+  };
+
+  const handleFolderSelect = (path: string[]) => {
+    setSelectedFile(null);
+    setSelectedPath(path);
+  };
+
+  const isHorizontal = layout === "horizontal";
+
+  return (
+    <>
+      <div
+        className={cn(
+          "flex",
+          isHorizontal ? "flex-row gap-0" : "flex-col gap-4",
+        )}
+      >
+        {/* Left: tree explorer */}
+        <div
+          className={cn(
+            "shrink-0 border-border",
+            isHorizontal
+              ? "w-[280px] border-r pr-0 overflow-y-auto max-h-[calc(100vh-220px)]"
+              : "w-full border-b pb-4",
+          )}
+        >
+          <div className="flex items-center justify-between px-2 pb-2">
+            <Type
+              small
+              muted
+              className="font-medium uppercase tracking-wider text-xs"
+            >
+              Files
+            </Type>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() =>
+                  setLayout(isHorizontal ? "vertical" : "horizontal")
+                }
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                title={isHorizontal ? "Stack vertically" : "Split horizontally"}
+              >
+                <Icon
+                  name={isHorizontal ? "rows-3" : "columns-2"}
+                  className="h-3.5 w-3.5"
+                />
+              </button>
+              <button
+                onClick={() => setAddRepoOpen(true)}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                title="Add content"
+              >
+                <Icon name="plus" className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+          <TreeNode
+            node={MOCK_CONTEXT_TREE}
+            depth={0}
+            selectedFile={selectedFile}
+            onFileSelect={handleFileSelect}
+            onFolderSelect={handleFolderSelect}
+            parentPath={[]}
+          />
+        </div>
+
+        {/* Right: detail view */}
+        <div className={cn("flex-1 min-w-0", isHorizontal && "pl-4")}>
+          {selectedFile ? (
+            <FileDetail file={selectedFile} />
+          ) : selectedFolder ? (
+            <FolderDetail
+              folder={selectedFolder}
+              path={selectedPath}
+              config={effectiveConfig}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      <AddRepoDialog
+        open={addRepoOpen}
+        onOpenChange={setAddRepoOpen}
+        onComplete={() => {}}
+      />
+    </>
+  );
+}
+
+// ── Tree View ─────────────────────────────────────────────────────────────
+
+function TreeNode({
+  node,
+  depth,
+  selectedFile,
+  onFileSelect,
+  onFolderSelect,
+  parentPath,
+}: {
+  node: ContextNode;
+  depth: number;
+  selectedFile: ContextFile | null;
+  onFileSelect: (file: ContextFile, path: string[]) => void;
+  onFolderSelect: (path: string[]) => void;
+  parentPath: string[];
+}) {
+  const [expanded, setExpanded] = useState(depth < 1);
+
+  if (node.type === "file") {
+    const isSelected = selectedFile?.name === node.name;
+    return (
+      <button
+        onClick={() => onFileSelect(node, parentPath)}
+        className={cn(
+          "flex items-center gap-1.5 w-full py-1 pr-2 text-xs transition-colors rounded-sm",
+          isSelected
+            ? "bg-primary/10 text-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+        )}
+        style={{ paddingLeft: depth * 12 + 8 }}
+      >
+        <Icon name={getFileIcon(node)} className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{node.name}</span>
+        {node.draft && (
+          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+        )}
+      </button>
+    );
   }
 
-  const navigateToFolder = (name: string) => {
-    setSelectedFile(null);
-    setPath((prev) => [...prev, name]);
-  };
+  // Folder
+  const folderPath = depth === 0 ? [] : [...parentPath, node.name];
+  const draftCount = countDrafts(node);
 
-  const navigateUp = () => {
-    setSelectedFile(null);
-    setPath((prev) => prev.slice(0, -1));
-  };
-
-  const navigateToBreadcrumb = (index: number) => {
-    setSelectedFile(null);
-    setPath((prev) => prev.slice(0, index));
-  };
-
-  const handleNodeClick = (node: ContextNode) => {
-    if (node.type === "folder") {
-      navigateToFolder(node.name);
-    } else {
-      setSelectedFile(node);
-    }
-  };
-
-  const sorted = [...currentFolder.children].sort((a, b) => {
+  const sortedChildren = [...node.children].sort((a, b) => {
     if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
     if (a.type === "file" && b.type === "file") {
       if (a.kind === "mcp-docs-config") return -1;
@@ -162,68 +271,46 @@ function ContentTab() {
   });
 
   return (
-    <>
-      <div className="flex gap-6">
-        {/* Left panel: file browser */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-3">
-            <Breadcrumbs path={path} onNavigate={navigateToBreadcrumb} />
-            <Button size="sm" onClick={() => setAddRepoOpen(true)}>
-              <Icon name="plus" className="h-3.5 w-3.5 mr-1.5" />
-              Add
-            </Button>
-          </div>
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
-            {path.length > 0 && (
-              <button
-                onClick={navigateUp}
-                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors border-b border-border"
-              >
-                <Icon name="arrow-left" className="h-4 w-4" />
-                ..
-              </button>
-            )}
-            {sorted.map((node) => (
-              <NodeRow
-                key={node.name}
-                node={node}
-                isSelected={
-                  selectedFile?.type === "file" &&
-                  selectedFile.name === node.name
-                }
-                onClick={() => handleNodeClick(node)}
-              />
-            ))}
-            {sorted.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                This folder is empty.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right panel: detail view */}
-        <div className="w-[420px] shrink-0">
-          {selectedFile ? (
-            <FileDetail file={selectedFile} />
-          ) : (
-            <FolderDetail
-              folder={currentFolder}
-              path={path}
-              config={effectiveConfig}
-            />
-          )}
-        </div>
-      </div>
-
-      <AddRepoDialog
-        open={addRepoOpen}
-        onOpenChange={setAddRepoOpen}
-        onComplete={() => {
-          // Mock: in real implementation this would trigger a refetch
+    <div>
+      <button
+        onClick={() => {
+          setExpanded((v) => !v);
+          onFolderSelect(folderPath);
         }}
-      />
-    </>
+        className={cn(
+          "flex items-center gap-1.5 w-full py-1 pr-2 text-xs transition-colors rounded-sm",
+          "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+        )}
+        style={{ paddingLeft: depth * 12 + 8 }}
+      >
+        <Icon
+          name={expanded ? "chevron-down" : "chevron-right"}
+          className="h-3 w-3 shrink-0"
+        />
+        <Icon name="folder" className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate font-medium">
+          {depth === 0 ? "docs" : node.name}
+        </span>
+        {draftCount > 0 && (
+          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+        )}
+      </button>
+      {expanded && (
+        <div>
+          {sortedChildren.map((child) => (
+            <TreeNode
+              key={child.name}
+              node={child}
+              depth={depth + 1}
+              selectedFile={selectedFile}
+              onFileSelect={onFileSelect}
+              onFolderSelect={onFolderSelect}
+              parentPath={folderPath}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1136,92 +1223,6 @@ function SkillPreview({
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function Breadcrumbs({
-  path,
-  onNavigate,
-}: {
-  path: string[];
-  onNavigate: (index: number) => void;
-}) {
-  return (
-    <nav className="flex items-center gap-1 text-sm text-muted-foreground">
-      <button
-        onClick={() => onNavigate(0)}
-        className="hover:text-foreground transition-colors font-medium"
-      >
-        docs
-      </button>
-      {path.map((segment, i) => (
-        <span key={i} className="flex items-center gap-1">
-          <span>/</span>
-          <button
-            onClick={() => onNavigate(i + 1)}
-            className="hover:text-foreground transition-colors font-medium"
-          >
-            {segment}
-          </button>
-        </span>
-      ))}
-    </nav>
-  );
-}
-
-function NodeRow({
-  node,
-  isSelected,
-  onClick,
-}: {
-  node: ContextNode;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const iconName = getNodeIcon(node);
-  const counts = node.type === "folder" ? countItems(node) : null;
-  const nodeHasDraft = hasDraft(node);
-  const draftCount = node.type === "folder" ? countDrafts(node) : 0;
-
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors border-b border-border last:border-b-0 ${
-        isSelected
-          ? "bg-primary/5 text-foreground"
-          : "hover:bg-muted/50 text-foreground"
-      }`}
-    >
-      <Icon
-        name={iconName}
-        className="h-4 w-4 shrink-0 text-muted-foreground"
-      />
-      <span className="flex-1 text-left truncate font-medium">{node.name}</span>
-      {node.type === "file" && <FileKindBadge kind={node.kind} />}
-      {node.type === "file" && nodeHasDraft && <DraftBadge />}
-      {node.type === "folder" && draftCount > 0 && (
-        <Badge
-          variant="outline"
-          className="border-amber-500/50 text-amber-600 bg-amber-500/10"
-        >
-          {draftCount} draft{draftCount !== 1 && "s"}
-        </Badge>
-      )}
-      {counts && (
-        <span className="text-xs text-muted-foreground">
-          {counts.folders + counts.files} items
-        </span>
-      )}
-      <span className="text-xs text-muted-foreground shrink-0">
-        {formatDate(node.updatedAt)}
-      </span>
-      {node.type === "folder" && (
-        <Icon
-          name="chevron-right"
-          className="h-3.5 w-3.5 text-muted-foreground"
-        />
-      )}
-    </button>
-  );
-}
-
 function DraftBadge() {
   return (
     <Badge
@@ -1858,11 +1859,6 @@ function FolderDetail({
 }
 
 // ── Icon helpers ───────────────────────────────────────────────────────────
-
-function getNodeIcon(node: ContextNode): string {
-  if (node.type === "folder") return "folder";
-  return getFileIcon(node);
-}
 
 function getFileIcon(file: ContextFile): string {
   switch (file.kind) {
