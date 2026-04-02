@@ -322,10 +322,13 @@ function TreeNode({
 
 // ── Draft Documents Tab (Reddit-style) ────────────────────────────────────
 
+type YoloSchedule = "off" | "24h" | "weekly";
+
 function PendingChangesTab() {
   const drafts = MOCK_DRAFT_DOCUMENTS;
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("hot");
+  const [yoloSchedule, setYoloSchedule] = useState<YoloSchedule>("off");
 
   const sorted = useMemo(() => {
     const open = drafts.filter((d) => d.status === "open");
@@ -371,7 +374,7 @@ function PendingChangesTab() {
 
   return (
     <div className="max-w-4xl space-y-3">
-      {/* Sort bar */}
+      {/* Sort bar + yolo mode */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-1">
           {(["hot", "new", "top"] as const).map((s) => (
@@ -392,7 +395,33 @@ function PendingChangesTab() {
         <Type small muted>
           {sorted.length} open draft{sorted.length !== 1 && "s"}
         </Type>
+        <div className="ml-auto">
+          <YoloModeToggle schedule={yoloSchedule} onChange={setYoloSchedule} />
+        </div>
       </div>
+
+      {/* Yolo mode banner */}
+      {yoloSchedule !== "off" && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+          <SparklesIcon className="h-4 w-4 text-amber-500 shrink-0" />
+          <div className="flex-1">
+            <Type small className="font-medium text-foreground">
+              Auto-iterate is active
+            </Type>
+            <Type small muted>
+              Every {yoloSchedule === "24h" ? "24 hours" : "week"}, an agent
+              will incorporate comments and publish approved drafts
+              automatically.
+            </Type>
+          </div>
+          <button
+            onClick={() => setYoloSchedule("off")}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          >
+            Disable
+          </button>
+        </div>
+      )}
 
       {/* Draft list */}
       <div className="space-y-2">
@@ -407,6 +436,77 @@ function PendingChangesTab() {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function YoloModeToggle({
+  schedule,
+  onChange,
+}: {
+  schedule: YoloSchedule;
+  onChange: (s: YoloSchedule) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (schedule !== "off") {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+          <SparklesIcon className="h-3 w-3" />
+          YOLO: {schedule === "24h" ? "Daily" : "Weekly"}
+        </span>
+        <button
+          onClick={() => onChange("off")}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Off
+        </button>
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <SparklesIcon className="h-3.5 w-3.5" />
+        YOLO Mode
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-1">
+      <Type small muted className="px-2 text-xs">
+        Auto-iterate & publish:
+      </Type>
+      <button
+        onClick={() => {
+          onChange("24h");
+          setOpen(false);
+        }}
+        className="px-2.5 py-1 text-xs rounded-md hover:bg-muted/50 text-foreground transition-colors"
+      >
+        Every 24h
+      </button>
+      <button
+        onClick={() => {
+          onChange("weekly");
+          setOpen(false);
+        }}
+        className="px-2.5 py-1 text-xs rounded-md hover:bg-muted/50 text-foreground transition-colors"
+      >
+        Weekly
+      </button>
+      <button
+        onClick={() => setOpen(false)}
+        className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Cancel
+      </button>
     </div>
   );
 }
