@@ -449,7 +449,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
 			}
-			if oauthToken != nil {
+			// Collect upstream secrets so checkToolsetSecurity knows the user
+			// authenticated. We skip this when the Gram access token itself has
+			// expired (ErrExpiredAccessToken) — an expired token must not grant
+			// access. We still collect when only the upstream credentials expired
+			// (ErrExpiredExternalSecrets) because the user's Gram session is
+			// valid; the upstream refresh is best-effort.
+			if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
 				for _, externalSecret := range oauthToken.ExternalSecrets {
 					tokenInputs = append(tokenInputs, oauthTokenInputs{
 						securityKeys: externalSecret.SecurityKeys,
