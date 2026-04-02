@@ -3,8 +3,8 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
-import { useListMembers } from "@gram/client/react-query/listMembers.js";
-import { useListRoles } from "@gram/client/react-query/listRoles.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useState } from "react";
@@ -23,8 +23,8 @@ export function MembersTab() {
   const [changingMember, setChangingMember] = useState<AccessMember | null>(
     null,
   );
-  const { data: membersData, isLoading: membersLoading } = useListMembers();
-  const { data: rolesData } = useListRoles();
+  const { data: membersData, isLoading: membersLoading } = useMembers();
+  const { data: rolesData } = useRoles();
   const members = membersData?.members ?? [];
   const roles = rolesData?.roles ?? [];
 

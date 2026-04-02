@@ -3,10 +3,10 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
-  invalidateAllListRoles,
-  useListRoles,
-} from "@gram/client/react-query/listRoles.js";
-import { invalidateAllListMembers } from "@gram/client/react-query/listMembers.js";
+  invalidateAllRoles,
+  useRoles,
+} from "@gram/client/react-query/roles.js";
+import { invalidateAllMembers } from "@gram/client/react-query/members.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
@@ -27,14 +27,14 @@ export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const queryClient = useQueryClient();
-  const { data: rolesData, isLoading } = useListRoles();
+  const { data: rolesData, isLoading } = useRoles();
   const roles = rolesData?.roles ?? [];
 
   const deleteRole = useDeleteRoleMutation({
     onSuccess: async () => {
       await Promise.all([
-        invalidateAllListRoles(queryClient),
-        invalidateAllListMembers(queryClient),
+        invalidateAllRoles(queryClient),
+        invalidateAllMembers(queryClient),
       ]);
     },
   });

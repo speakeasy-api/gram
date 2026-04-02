@@ -7,8 +7,8 @@ import {
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useListMembers } from "@gram/client/react-query/listMembers.js";
-import { useListRoles } from "@gram/client/react-query/listRoles.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
@@ -34,10 +34,10 @@ export default function Access() {
   const currentTab = tabFromPath[lastSegment] || "roles";
   const shouldRedirect = lastSegment === "access";
 
-  const { data: rolesData } = useListRoles(undefined, undefined, {
+  const { data: rolesData } = useRoles(undefined, undefined, {
     enabled: isRbacEnabled,
   });
-  const { data: membersData } = useListMembers(undefined, undefined, {
+  const { data: membersData } = useMembers(undefined, undefined, {
     enabled: isRbacEnabled,
   });
   const roleCount = rolesData?.roles?.length;

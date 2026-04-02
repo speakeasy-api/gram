@@ -10,11 +10,11 @@ import {
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
-import { invalidateAllListMembers } from "@gram/client/react-query/listMembers.js";
+import { invalidateAllMembers } from "@gram/client/react-query/members.js";
 import {
-  invalidateAllListRoles,
-  useListRoles,
-} from "@gram/client/react-query/listRoles.js";
+  invalidateAllRoles,
+  useRoles,
+} from "@gram/client/react-query/roles.js";
 import { useUpdateMemberRoleMutation } from "@gram/client/react-query/updateMemberRole.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,14 +34,14 @@ export function ChangeRoleDialog({
     undefined,
   );
   const queryClient = useQueryClient();
-  const { data: rolesData } = useListRoles();
+  const { data: rolesData } = useRoles();
   const roles = rolesData?.roles ?? [];
 
   const updateMemberRole = useUpdateMemberRoleMutation({
     onSuccess: async () => {
       await Promise.all([
-        invalidateAllListMembers(queryClient),
-        invalidateAllListRoles(queryClient),
+        invalidateAllMembers(queryClient),
+        invalidateAllRoles(queryClient),
       ]);
       onOpenChange(false);
     },

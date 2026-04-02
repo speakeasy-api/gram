@@ -15,13 +15,13 @@ import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
-  invalidateAllListMembers,
-  useListMembers,
-} from "@gram/client/react-query/listMembers.js";
+  invalidateAllMembers,
+  useMembers,
+} from "@gram/client/react-query/members.js";
 import {
-  invalidateAllListRoles,
-  useListRoles,
-} from "@gram/client/react-query/listRoles.js";
+  invalidateAllRoles,
+  useRoles,
+} from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Button } from "@speakeasy-api/moonshine";
@@ -65,9 +65,9 @@ export function CreateRoleDialog({
   const [initialized, setInitialized] = useState(false);
 
   const queryClient = useQueryClient();
-  const { data: membersData } = useListMembers();
+  const { data: membersData } = useMembers();
   const members = membersData?.members ?? [];
-  const { data: rolesData } = useListRoles();
+  const { data: rolesData } = useRoles();
   const roleNameById = new Map(
     (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
   );
@@ -104,8 +104,8 @@ export function CreateRoleDialog({
   const createRole = useCreateRoleMutation({
     onSuccess: async () => {
       await Promise.all([
-        invalidateAllListRoles(queryClient),
-        invalidateAllListMembers(queryClient),
+        invalidateAllRoles(queryClient),
+        invalidateAllMembers(queryClient),
       ]);
       handleClose();
     },
@@ -114,8 +114,8 @@ export function CreateRoleDialog({
   const updateRole = useUpdateRoleMutation({
     onSuccess: async () => {
       await Promise.all([
-        invalidateAllListRoles(queryClient),
-        invalidateAllListMembers(queryClient),
+        invalidateAllRoles(queryClient),
+        invalidateAllMembers(queryClient),
       ]);
       handleClose();
     },

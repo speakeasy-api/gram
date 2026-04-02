@@ -43,11 +43,6 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
-import OrgApiKeys from "./pages/org/OrgApiKeys";
-import OrgDomains from "./pages/org/OrgDomains";
-import OrgLogs from "./pages/org/OrgLogs";
-import OrgHome from "./pages/org/OrgHome";
-import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
@@ -565,6 +560,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
+  },
+  auditLogs: {
+    title: "Audit Logs",
+    url: "audit-logs",
+    icon: "history",
+    component: OrgAuditLogs,
   },
   access: {
     title: "Roles & Permissions",
