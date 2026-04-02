@@ -125,10 +125,10 @@ export function MCPOverview() {
     </Page.Section>
   );
 
-  if (!toolsets.isLoading && toolsets.length === 0) {
+  if (!isLoading && toolsets.length === 0) {
     return (
       <>
-        {isProjectEmpty && !isProjectLoading ? (
+        {isProjectEmpty ? (
           <InitialChoiceStep
             routes={routes}
             isFunctionsEnabled={isFunctionsEnabled}
