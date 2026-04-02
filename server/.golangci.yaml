@@ -57,9 +57,12 @@ linters:
       - path: internal/billing/stub\.go
         linters:
           - musttag
-      - path: _test\.go|internal/testenv/|cmd/
+      - path: _test\.go|internal/testenv/|cmd/|internal/dns/
         linters:
           - forbidigo
+      - path: internal/dns/net_resolver\.go
+        linters:
+          - wrapcheck
       - path: _test\.go|internal/oauthtest
         linters:
           - exhaustruct
@@ -86,6 +89,9 @@ linters:
         - pattern: ^otel\.Tracer$
           pkg: ^go\.opentelemetry\.io/otel$
           msg: "GG003: pass a trace.TracerProvider to functions instead of using otel.Tracer directly."
+        - pattern: ^net\.Lookup(Addr|CNAME|Host|IP|MX|NS|Port|SRV|TXT)$
+          pkg: ^net$
+          msg: "Use dns.NewNetResolver() instead of net.Lookup* for testability."
     sloglint:
       no-mixed-args: true
       attr-only: true
