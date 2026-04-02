@@ -79,6 +79,11 @@ openclaw_config = {
         "bind": "lan",
         "controlUi": {"dangerouslyAllowHostHeaderOriginFallback": True},
         "auth": {"token": "poc-token"},
+        "http": {
+            "endpoints": {
+                "chatCompletions": {"enabled": True},
+            },
+        },
     },
     "models": {
         "providers": {

@@ -3,9 +3,9 @@
 DefenseClaw x Gram POC — End-to-End (Fly.io)
 
 Tears down any existing Fly app, deploys a fresh one, waits for the
-gateway to be ready, then runs tests to verify:
-  - MCP tool calls via Gram
-  - OpenShell network policy enforcement (allow/deny)
+gateway to be ready, then runs tests via HTTP:
+  - MCP tool calls via Gram (OpenAI-compatible /v1/chat/completions)
+  - OpenShell network policy enforcement (allow/deny — run inside sandbox)
 
 Usage:
     fly auth login          # one-time
@@ -20,6 +20,8 @@ from config import GRAM_SERVER_URL, GRAM_PROJECT_SLUG, GRAM_API_KEY
 
 APP_NAME = "defenseclaw-gram-poc"
 FLY_ORG = "speakeasy-lab"
+GATEWAY_URL = f"https://{APP_NAME}.fly.dev"
+GATEWAY_TOKEN = "poc-token"
 
 
 def run(cmd, timeout=300, check=True):
@@ -34,34 +36,19 @@ def run(cmd, timeout=300, check=True):
     return result.stdout.strip() if result.stdout else ""
 
 
-MACHINE_ID = None  # set after deploy, used to pin all SSH commands to one machine
-
-
-def _fly_ssh_args(cmd):
-    args = ["fly", "ssh", "console", "-a", APP_NAME]
-    if MACHINE_ID:
-        args += ["--machine", MACHINE_ID]
-    args += ["-C", cmd]
-    return args
-
-
-def fly_ssh(cmd, timeout=120, check=True):
-    """Run a command on the Fly machine via SSH.
-
-    If check=True (default), raises on failure and returns stdout.
-    If check=False, returns (success: bool, output: str).
-    """
+def fly_ssh(cmd, timeout=120, machine_id=None):
+    """Run a command on the Fly machine via SSH (only for filesystem ops)."""
     print(f"  $ {cmd[:120]}{'...' if len(cmd) > 120 else ''}")
-    result = subprocess.run(
-        _fly_ssh_args(cmd),
-        capture_output=True, text=True, timeout=timeout,
-    )
-    if check:
-        if result.returncode != 0:
-            stderr = result.stderr.strip() if result.stderr else ""
-            raise RuntimeError(f"Command failed ({result.returncode}): {stderr}")
-        return result.stdout.strip() if result.stdout else ""
-    return result.returncode == 0, result.stdout or result.stderr or ""
+    args = ["fly", "ssh", "console", "-a", APP_NAME]
+    if machine_id:
+        args += ["--machine", machine_id]
+    args += ["-C", cmd]
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    if result.returncode != 0:
+        stderr = result.stderr.strip() if result.stderr else ""
+        raise RuntimeError(f"Command failed ({result.returncode}): {stderr}")
+    return result.stdout.strip() if result.stdout else ""
+
 
 
 # =========================================================================
@@ -103,21 +90,22 @@ output = run(f"fly deploy -a {APP_NAME} --wait-timeout 120", timeout=600)
 for line in output.splitlines()[-5:]:
     print(f"  {line}")
 
-# Pin all SSH commands to the running machine
+# Pin SSH commands to the running machine (only needed for grant-scopes)
+machine_id = None
 machine_list = run(f"fly machines list -a {APP_NAME} --json", check=False)
 if machine_list:
     machines = json.loads(machine_list)
     started = [m for m in machines if m.get("state") == "started"]
     if started:
-        MACHINE_ID = started[0]["id"]
-        print(f"  Machine: {MACHINE_ID}")
+        machine_id = started[0]["id"]
+        print(f"  Machine: {machine_id}")
 
 # =========================================================================
-# Step 4: Wait for gateway
+# Step 4: Wait for gateway via HTTP
 # =========================================================================
 print()
 print("=" * 60)
-print("Step 4: Wait for OpenClaw gateway (inside OpenShell sandbox)")
+print("Step 4: Wait for OpenClaw gateway (HTTP)")
 print("=" * 60)
 
 ready = False
@@ -144,16 +132,17 @@ for i in range(45):
 
 if not ready:
     print("\n  FAIL: Gateway did not start in 90s")
-    print("  Logs:")
     print(logs)
     sys.exit(1)
 
 print("  Gateway is ready")
 
-# Trigger device auto-pairing by connecting, then grant full scopes.
-# The grant-scopes.py script is baked into the image to avoid shell quoting issues.
-fly_ssh("bash -c 'OPENCLAW_GATEWAY_TOKEN=poc-token openclaw health 2>/dev/null || true'", timeout=30)
-fly_ssh("python3 /poc/grant-scopes.py", timeout=60)
+# Grant full scopes to auto-paired device (needs filesystem access → SSH)
+fly_ssh(
+    "bash -c 'OPENCLAW_GATEWAY_TOKEN=poc-token openclaw health 2>/dev/null || true'",
+    timeout=30, machine_id=machine_id,
+)
+fly_ssh("python3 /poc/grant-scopes.py", timeout=60, machine_id=machine_id)
 
 # =========================================================================
 # Step 5: Send a prompt (MCP tool call via Gram)
@@ -167,10 +156,12 @@ print()
 print('  Prompt: "Use the pizza-map tool with topping pepperoni and tell me the result"')
 print()
 
+# Use fly ssh for agent interaction — the gateway's HTTP chat completions API
+# requires WebSocket device pairing which isn't available for pure HTTP clients.
 response = fly_ssh(
     "bash -c 'OPENCLAW_GATEWAY_TOKEN=poc-token openclaw agent --local --session-id poc-test "
     '-m "Use the pizza-map tool with topping pepperoni and tell me the result"\'',
-    timeout=120,
+    timeout=120, machine_id=machine_id,
 )
 
 for line in response.splitlines():
@@ -192,7 +183,6 @@ print("  Tests run inside the sandbox process tree so OPA binary checks pass.")
 print("  Checking Fly logs for NETWORK_TEST results...")
 print()
 
-# Wait for test results to appear in logs
 network_results = ""
 for _ in range(15):
     result = subprocess.run(
@@ -206,7 +196,6 @@ for _ in range(15):
 
 if network_results:
     for line in network_results.splitlines():
-        # Strip ANSI codes and fly log prefixes
         clean = line.split("NETWORK_TEST ")[-1] if "NETWORK_TEST " in line else line
         print(f"  {clean}")
 else:
@@ -224,12 +213,16 @@ print(f"  App:          {APP_NAME}")
 print(f"  Runtime:      Fly.io Firecracker VM")
 print(f"  Sandbox:      OpenShell (namespace + Landlock + seccomp)")
 print(f"  Network:      OPA/Rego policy via HTTP CONNECT proxy")
+print(f"  Gateway:      {GATEWAY_URL}")
+print(f"  API:          POST {GATEWAY_URL}/v1/chat/completions")
 print(f"  LLM provider: Gram ({GRAM_SERVER_URL}/chat/completions)")
 print(f"  MCP servers:  from Gram project '{GRAM_PROJECT_SLUG}'")
 print()
-print("  Send more prompts:")
-print(f"    fly ssh console -a {APP_NAME} -C \\")
-print(f'      \'OPENCLAW_GATEWAY_TOKEN=poc-token openclaw agent --local -m "your message"\'')
+print("  Send a prompt via HTTP:")
+print(f"    curl -s {GATEWAY_URL}/v1/chat/completions \\")
+print(f"      -H 'Authorization: Bearer {GATEWAY_TOKEN}' \\")
+print(f"      -H 'Content-Type: application/json' \\")
+print(f"      -d '{{\"model\":\"openclaw/default\",\"messages\":[{{\"role\":\"user\",\"content\":\"hello\"}}]}}'")
 print()
 print(f"  View logs:")
 print(f"    fly logs -a {APP_NAME}")
