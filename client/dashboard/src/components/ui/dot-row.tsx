@@ -38,7 +38,7 @@ export function DotRow({ children, icon, className, onClick }: DotRowProps) {
           />
           {icon && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="bg-background/90 backdrop-blur-sm rounded-md p-1.5 shadow-sm">
+              <div className="bg-background/90 backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none rounded-md p-1.5 shadow-sm">
                 {icon}
               </div>
             </div>
