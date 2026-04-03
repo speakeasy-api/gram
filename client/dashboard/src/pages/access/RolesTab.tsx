@@ -22,10 +22,12 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
+import { DeleteRoleDialog } from "./DeleteRoleDialog";
 
 export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [deletingRole, setDeletingRole] = useState<Role | null>(null);
   const queryClient = useQueryClient();
   const { data: rolesData, isLoading } = useRoles();
   const roles = rolesData?.roles ?? [];
@@ -104,7 +106,7 @@ export function RolesTab() {
             {!role.isSystem && (
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => deleteRole.mutate({ request: { id: role.id } })}
+                onSelect={() => setTimeout(() => setDeletingRole(role), 0)}
               >
                 Delete
               </DropdownMenuItem>
@@ -186,6 +188,21 @@ export function RolesTab() {
           }
         }}
         editingRole={editingRole}
+      />
+
+      <DeleteRoleDialog
+        isOpen={!!deletingRole}
+        onOpenChange={(open) => {
+          if (!open) setDeletingRole(null);
+        }}
+        handleDeleteRole={() => {
+          if (deletingRole) {
+            deleteRole.mutateAsync({ request: { id: deletingRole.id } });
+            setDeletingRole(null);
+          }
+        }}
+        handleCancel={() => setDeletingRole(null)}
+        role={deletingRole}
       />
     </div>
   );
