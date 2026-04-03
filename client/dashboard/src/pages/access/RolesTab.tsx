@@ -199,9 +199,9 @@ export function RolesTab() {
         onOpenChange={(open) => {
           if (!open) setDeletingRole(null);
         }}
-        handleDeleteRole={() => {
+        handleDeleteRole={async () => {
           if (deletingRole) {
-            deleteRole.mutateAsync({ request: { id: deletingRole.id } });
+            await deleteRole.mutateAsync({ request: { id: deletingRole.id } });
             setDeletingRole(null);
           }
         }}
