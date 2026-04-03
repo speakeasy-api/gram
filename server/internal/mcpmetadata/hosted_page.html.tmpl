@@ -1556,12 +1556,11 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
             class="tools-search"
             type="text"
             placeholder="Search tools..."
-            oninput="filterTools(this.value)"
           />
           {{- end }}
           <div class="tools-table{{ if gt (len .Tools) 20 }} scrollable{{ end }}">
             {{- range $i, $tool := .Tools }}
-            <div class="tool-row" onclick="toggleToolDetail(this)" data-tool-name="{{ $tool.Name }}">
+            <div class="tool-row" data-tool-name="{{ $tool.Name }}">
               <span class="tool-name">{{ $tool.Name }}</span>
               <span class="tool-desc">{{ $tool.Description }}</span>
               <span class="tool-chevron">&#9662;</span>
@@ -1746,41 +1745,6 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
         </symbol>
       </defs>
     </svg>
-    <script>
-      function toggleToolDetail(row) {
-        var detail = row.nextElementSibling;
-        if (detail && detail.classList.contains("tool-detail")) {
-          row.classList.toggle("expanded");
-          detail.classList.toggle("visible");
-        }
-      }
-
-      function filterTools(query) {
-        var table = document.querySelector(".tools-table");
-        if (!table) return;
-        var rows = table.querySelectorAll(".tool-row");
-        var q = query.toLowerCase();
-        var visibleCount = 0;
-        for (var i = 0; i < rows.length; i++) {
-          var name = rows[i].getAttribute("data-tool-name") || "";
-          var desc = rows[i].querySelector(".tool-desc");
-          var descText = desc ? desc.textContent : "";
-          var match = name.toLowerCase().indexOf(q) !== -1 || descText.toLowerCase().indexOf(q) !== -1;
-          rows[i].classList.toggle("filtered-out", !match);
-          var detail = rows[i].nextElementSibling;
-          if (detail && detail.classList.contains("tool-detail")) {
-            detail.classList.toggle("filtered-out", !match);
-            if (!match) {
-              rows[i].classList.remove("expanded");
-              detail.classList.remove("visible");
-            }
-          }
-          if (match) visibleCount++;
-        }
-        var noResults = table.querySelector(".tools-no-results");
-        if (noResults) noResults.style.display = visibleCount === 0 ? "block" : "none";
-      }
-    </script>
     <script
       type="module"
       src="{{ .ScriptURL }}"
