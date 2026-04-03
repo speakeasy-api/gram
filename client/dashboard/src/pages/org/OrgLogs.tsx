@@ -183,7 +183,7 @@ export default function OrgLogs() {
                   className="text-muted-foreground text-sm ml-6"
                 >
                   Capture user prompts and assistant responses from Claude Code
-                  sessions. Sessions appear in the Chat Sessions tab.
+                  sessions. Sessions appear in the Agent Sessions tab.
                 </Type>
               </Stack>
               {!featuresLoading && (
