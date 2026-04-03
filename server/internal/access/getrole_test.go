@@ -3,6 +3,7 @@ package access
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -46,8 +47,8 @@ func TestService_GetRole(t *testing.T) {
 	require.Equal(t, "Can build selected resources", role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 2, role.MemberCount)
-	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), role.CreatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
 	grantsByScope := make(map[string]*gen.RoleGrant, len(role.Grants))

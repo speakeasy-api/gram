@@ -474,8 +474,8 @@ func TestRoleClient_ListRoles(t *testing.T) {
 	t.Parallel()
 	fake := newFakeWorkOS()
 	fake.roles["org_1"] = []roles.Role{
-		{ID: "role_a", Name: "Admin", Slug: "admin", Type: "EnvironmentRole"},
-		{ID: "role_b", Name: "Editor", Slug: "org-editor", Type: "OrganizationRole"},
+		{ID: "role_a", Name: "Admin", Slug: "admin", Type: "EnvironmentRole", CreatedAt: "2026-04-04T12:30:00Z", UpdatedAt: "2026-04-05T10:43:00Z"},
+		{ID: "role_b", Name: "Editor", Slug: "org-editor", Type: "OrganizationRole", CreatedAt: "2026-04-04T12:30:00Z", UpdatedAt: "2026-04-05T10:43:00Z"},
 	}
 	client, _ := newTestClient(t, fake)
 
@@ -519,7 +519,7 @@ func TestRoleClient_UpdateRole(t *testing.T) {
 	t.Parallel()
 	fake := newFakeWorkOS()
 	fake.roles["org_1"] = []roles.Role{
-		{ID: "role_1", Name: "Old Name", Slug: "org-old", Type: "OrganizationRole"},
+		{ID: "role_1", Name: "Old Name", Slug: "org-old", Type: "OrganizationRole", CreatedAt: "2026-04-04T12:30:00Z", UpdatedAt: "2026-04-05T10:43:00Z"},
 	}
 	client, _ := newTestClient(t, fake)
 

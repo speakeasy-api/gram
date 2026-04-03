@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
+type HTTPError = workos_errors.HTTPError
+
 const workosBaseURL = "https://api.workos.com"
 
 // APIError is returned by do when the WorkOS API responds with a 4xx or 5xx status.

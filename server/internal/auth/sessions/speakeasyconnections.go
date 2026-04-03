@@ -401,11 +401,6 @@ func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 }
 
 func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow, validateResp validateTokenResponse) {
-	// skip if workos client is not configured
-	if s.workos == nil {
-		return
-	}
-
 	var workosUserID string
 
 	if user.WorkosID.Valid && user.WorkosID.String != "" {

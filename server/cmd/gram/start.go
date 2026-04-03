@@ -25,6 +25,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 
@@ -362,6 +363,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"WORKOS_API_KEY"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "workos-webhook-secret",
+			Usage:    "WorkOS webhook secret for verifying incoming webhooks",
+			EnvVars:  []string{"WORKOS_WEBHOOK_SECRET"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, clickHouseFlags...)
@@ -462,6 +469,16 @@ func newStartCommand() *cli.Command {
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
+			}
+
+			workosEventsClient, err := newWorkOSEventsClient(c, guardianPolicy)
+			if err != nil {
+				return fmt.Errorf("failed to create WorkOS events client: %w", err)
+			}
+
+			workosWebhooksClient, err := newWorkOSWebhooksClient(c)
+			if err != nil {
+				return fmt.Errorf("failed to create WorkOS webhooks client: %w", err)
 			}
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
@@ -762,6 +779,7 @@ func newStartCommand() *cli.Command {
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter, accessManager))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
+			external.Attach(mux, external.NewService(logger, tracerProvider, db, workosWebhooksClient, temporalEnv))
 
 			slack.Attach(mux, slack.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
 				GramServerURL:     c.String("server-url"),
@@ -811,6 +829,8 @@ func newStartCommand() *cli.Command {
 						MCPRegistryClient:   mcpRegistryClient,
 						TelemetryLogger:     telemLogger,
 						TriggersApp:         triggerApp,
+						WorkOSClient:        workosClient,
+						WorkOSEventsClient:  workosEventsClient,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {

@@ -3,6 +3,7 @@ package access
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -49,14 +50,14 @@ func TestService_UpdateRole(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: "org_workos_test",
 		RoleSlug:       "custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: "org_workos_test",
 		RoleSlug:       "custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
 		mockMember("org_workos_test", "membership_1", "user_1", "custom-builder"),
@@ -86,8 +87,8 @@ func TestService_UpdateRole(t *testing.T) {
 	require.Equal(t, description, role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 3, role.MemberCount)
-	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), role.CreatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))

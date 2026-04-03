@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -224,4 +225,38 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const upsertRole = `-- name: UpsertRole :exec
+INSERT INTO organization_roles (organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (organization_id, workos_slug)
+DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_created_at = EXCLUDED.workos_created_at,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  updated_at = clock_timestamp()
+  WHERE organization_roles.workos_updated_at < EXCLUDED.workos_updated_at
+`
+
+type UpsertRoleParams struct {
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertRole(ctx context.Context, arg UpsertRoleParams) error {
+	_, err := q.db.Exec(ctx, upsertRole,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+	)
+	return err
 }

@@ -120,6 +120,13 @@ OIDC_EXTERNAL_URL = "http://{{env.MOCK_IDP_HOST}}:{{env.MOCK_IDP_PORT}}"
 GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/local.pem"
 GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 
+############
+## WorkOS ##
+############
+WORKOS_API_KEY = ""
+## The webhook secret below is found on the WorkOS dashboard for production.
+WORKOS_WEBHOOK_SECRET = ""
+
 ##########################
 ## Observability config ##
 ##########################

@@ -6,7 +6,11 @@ import (
 	"maps"
 	"sync"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/must"
 )
+
+var stubRoleTimestamp = must.Value(time.Parse(time.RFC3339, "2024-12-28T07:55:09Z"))
 
 type StubClient struct {
 	mut   sync.Mutex
@@ -55,7 +59,7 @@ func (s *StubClient) CreateRole(_ context.Context, orgID string, opts CreateRole
 		return nil, &APIError{Method: "POST", Path: "/stub/roles", StatusCode: 409, Body: "role already exists"}
 	}
 
-	now := s.nowFn().UTC().Format(time.RFC3339)
+	now := s.nowFn().UTC()
 	role := Role{ID: s.nextRoleID(), Name: opts.Name, Slug: opts.Slug, Description: opts.Description, CreatedAt: now, UpdatedAt: now}
 	state.roles[role.Slug] = role
 	state.roleOrder = append(state.roleOrder, role.Slug)
@@ -78,7 +82,7 @@ func (s *StubClient) UpdateRole(_ context.Context, orgID string, roleSlug string
 	if opts.Description != nil {
 		role.Description = *opts.Description
 	}
-	role.UpdatedAt = s.nowFn().UTC().Format(time.RFC3339)
+	role.UpdatedAt = s.nowFn().UTC()
 	state.roles[roleSlug] = role
 
 	return &role, nil
@@ -354,5 +358,3 @@ func (s *StubClient) nextInviteID() string {
 	s.next++
 	return id
 }
-
-const stubRoleTimestamp = "2024-12-28T07:55:09Z"
