@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils";
 import { Slot } from "@radix-ui/react-slot";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { VariantProps, cva } from "class-variance-authority";
-import { ChevronDown } from "lucide-react";
 import * as React from "react";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
@@ -370,52 +369,16 @@ function SidebarSeparator({
 }
 
 function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [canScrollDown, setCanScrollDown] = React.useState(false);
-
-  React.useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const check = () => {
-      setCanScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
-    };
-
-    check();
-    el.addEventListener("scroll", check, { passive: true });
-    const observer = new ResizeObserver(check);
-    observer.observe(el);
-
-    return () => {
-      el.removeEventListener("scroll", check);
-      observer.disconnect();
-    };
-  }, []);
-
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <div
-        ref={scrollRef}
-        data-slot="sidebar-content"
-        data-sidebar="content"
-        className={cn(
-          "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
-          className,
-        )}
-        {...props}
-      />
-      {canScrollDown && (
-        <button
-          type="button"
-          onClick={() =>
-            scrollRef.current?.scrollBy({ top: 100, behavior: "smooth" })
-          }
-          className="absolute bottom-0 left-0 right-0 flex justify-center py-1 bg-gradient-to-t from-sidebar to-transparent pointer-events-auto cursor-pointer"
-        >
-          <ChevronDown className="h-4 w-4 text-muted-foreground animate-bounce" />
-        </button>
+    <div
+      data-slot="sidebar-content"
+      data-sidebar="content"
+      className={cn(
+        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        className,
       )}
-    </div>
+      {...props}
+    />
   );
 }
 
@@ -424,10 +387,7 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sidebar-group"
       data-sidebar="group"
-      className={cn(
-        "relative flex w-full min-w-0 flex-col px-2 py-1",
-        className,
-      )}
+      className={cn("relative flex w-full min-w-0 flex-col p-2", className)}
       {...props}
     />
   );
@@ -496,7 +456,7 @@ function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
     <ul
       data-slot="sidebar-menu"
       data-sidebar="menu"
-      className={cn("flex w-full min-w-0 flex-col gap-1", className)}
+      className={cn("flex w-full min-w-0 flex-col gap-2", className)}
       {...props}
     />
   );

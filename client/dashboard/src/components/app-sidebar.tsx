@@ -1,4 +1,4 @@
-import { NavButton, NavMenu } from "@/components/nav-menu";
+import { NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -6,22 +6,13 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import {
-  BookOpen,
-  ExternalLink,
-  MessageCircle,
-  MinusIcon,
-  Newspaper,
-  TestTube2Icon,
-  Undo2,
-} from "lucide-react";
+import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -65,49 +56,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-        <SidebarGroup>
-          <SidebarGroupLabel>get help</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <NavMenu items={[]}>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Get Support"
-                  Icon={(props) => <MessageCircle {...props} />}
-                  onClick={() => window.Pylon?.("show")}
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Docs"
-                  titleNode={
-                    <span className="flex items-center gap-1.5">
-                      Docs
-                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                    </span>
-                  }
-                  href="https://www.speakeasy.com/docs/mcp"
-                  target="_blank"
-                  Icon={(props) => <BookOpen {...props} />}
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Changelog"
-                  titleNode={
-                    <span className="flex items-center gap-1.5">
-                      Changelog
-                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                    </span>
-                  }
-                  href="https://www.speakeasy.com/changelog?product=mcp-platform"
-                  target="_blank"
-                  Icon={(props) => <Newspaper {...props} />}
-                />
-              </SidebarMenuItem>
-            </NavMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <div className="px-2 py-3">
+        <div className="mt-auto px-2 py-3">
           <Link
             to={`/${orgSlug}`}
             className="flex items-center gap-1.5 px-2 py-1 text-sm text-muted-foreground hover:text-foreground transition-colors hover:no-underline"
