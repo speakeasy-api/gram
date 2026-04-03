@@ -50,20 +50,20 @@ function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8 rounded-xl border border-dashed bg-muted/20">
       <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-        <Icon name="slack" className="w-6 h-6 text-muted-foreground" />
+        <Icon name="bot" className="w-6 h-6 text-muted-foreground" />
       </div>
       <Type variant="subheading" className="mb-1">
-        No Slack apps yet
+        No assistants yet
       </Type>
       <Type small muted className="text-center mb-4 max-w-md">
-        Create a Slack app to let your team interact with Gram toolsets directly
-        from Slack.
+        Create an assistant to let your team interact with Gram toolsets
+        directly from Slack.
       </Type>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
           <Icon name="plus" className="w-4 h-4" />
         </Button.LeftIcon>
-        <Button.Text>Create new Slack App</Button.Text>
+        <Button.Text>Create new Assistant</Button.Text>
       </Button>
     </div>
   );
@@ -164,9 +164,9 @@ function CreateSlackAppDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content className="sm:max-w-xl">
         <Dialog.Header>
-          <Dialog.Title>Create Slack App</Dialog.Title>
+          <Dialog.Title>Create Assistant</Dialog.Title>
           <Dialog.Description>
-            Name your app and choose which MCP toolsets it can access.
+            Name your assistant and choose which MCP toolsets it can access.
           </Dialog.Description>
         </Dialog.Header>
 
@@ -289,13 +289,13 @@ export default function SlackAppsIndex() {
       </Page.Header>
       <Page.Body>
         <EnterpriseGate
-          icon="slack"
-          description="Slack apps are available on the Enterprise plan. Book a time to get started."
+          icon="bot"
+          description="Assistants are available on the Enterprise plan. Book a time to get started."
         >
           <Page.Section>
-            <Page.Section.Title>Slack Apps</Page.Section.Title>
+            <Page.Section.Title>Assistants</Page.Section.Title>
             <Page.Section.Description>
-              Create and manage Slack apps that connect your team to Gram
+              Create and manage assistants that connect your team to Gram
               toolsets.
             </Page.Section.Description>
             <Page.Section.CTA>
@@ -304,7 +304,7 @@ export default function SlackAppsIndex() {
                   <Button.LeftIcon>
                     <Icon name="plus" className="w-4 h-4" />
                   </Button.LeftIcon>
-                  <Button.Text>Create new Slack App</Button.Text>
+                  <Button.Text>Create new Assistant</Button.Text>
                 </Button>
               )}
             </Page.Section.CTA>

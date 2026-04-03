@@ -240,21 +240,21 @@ const ROUTE_STRUCTURE = {
     },
   },
   slackApps: {
-    title: "Slack",
+    title: "Assistants",
     url: "slack",
-    icon: "slack",
+    icon: "bot",
     component: SlackAppsRoot,
     indexComponent: SlackAppsIndex,
     subPages: {
       detail: {
-        title: "Slack App",
+        title: "Assistant",
         url: ":slackAppId",
         component: SlackAppDetailPage,
       },
     },
   },
   clis: {
-    title: "CLIs",
+    title: "Skills",
     url: "clis",
     icon: "terminal",
     component: CLIs,
@@ -293,7 +293,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   chatSessions: {
-    title: "Chat Sessions",
+    title: "Agent Sessions",
     url: "chat-sessions",
     icon: "messages-square",
     component: ChatSessions,

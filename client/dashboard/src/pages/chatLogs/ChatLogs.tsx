@@ -305,7 +305,7 @@ export default function ChatLogs() {
     <InsightsSidebar
       mcpConfig={mcpConfig}
       title="How can I help you debug?"
-      subtitle="Search chat sessions, analyze failures, or explore logs"
+      subtitle="Search agent sessions, analyze failures, or explore logs"
       contextInfo={dateRangeContext}
       hideTrigger={isLogsDisabled}
       suggestions={[
@@ -423,9 +423,9 @@ function ChatLogsContent({
           </Page.Header>
           <Page.Body fullWidth className="space-y-6">
             <div className="flex flex-col gap-1 min-w-0">
-              <h1 className="text-xl font-semibold">Chat Sessions</h1>
+              <h1 className="text-xl font-semibold">Agent Sessions</h1>
               <p className="text-sm text-muted-foreground">
-                View and debug individual chat conversations
+                View and debug individual agent conversations
               </p>
             </div>
             <div className="flex-1 relative">
@@ -455,9 +455,9 @@ function ChatLogsContent({
               {/* Header section */}
               <div className="px-8 py-4 shrink-0 space-y-4">
                 <div className="flex flex-col gap-1 min-w-0">
-                  <h1 className="text-xl font-semibold">Chat Sessions</h1>
+                  <h1 className="text-xl font-semibold">Agent Sessions</h1>
                   <p className="text-sm text-muted-foreground">
-                    View and debug individual chat conversations
+                    View and debug individual agent conversations
                   </p>
                 </div>
                 {/* Filter row - all controls on one line */}
