@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type stubFeatureChecker struct {
@@ -28,19 +27,19 @@ func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ prod
 	return s.enabled, nil
 }
 
-func TestManagerPrepareContext_requiresAuthContext(t *testing.T) {
+func TestManagerRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), stubFeatureChecker{enabled: true})
 
-	_, err := manager.PrepareContext(t.Context())
+	err := manager.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
 func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
+	manager := NewManager(testLogger(t), stubFeatureChecker{enabled: false})
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
@@ -49,61 +48,27 @@ func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), stubFeatureChecker{enabled: true})
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: nil})
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestManagerMapError_mapsMissingGrantsToUnexpected(t *testing.T) {
+func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
-	ctx := t.Context()
+	manager := NewManager(testLogger(t), stubFeatureChecker{enabled: true})
 
-	err := manager.mapError(ctx, ErrMissingGrants)
+	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 	require.ErrorIs(t, err, ErrMissingGrants)
-}
-
-func TestManagerRequire_loadsGrantsIntoContext(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newInternalTestService(t)
-	organizationID := "org_manager_loads"
-	userID := "user_manager_loads"
-	sessionID := "session_manager_loads"
-
-	seedInternalOrganization(t, ctx, conn, organizationID)
-	seedInternalGrant(t, ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, userID), string(ScopeBuildRead), "proj_123")
-
-	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID:  organizationID,
-		UserID:                userID,
-		ExternalUserID:        "",
-		APIKeyID:              "",
-		SessionID:             &sessionID,
-		ProjectID:             nil,
-		OrganizationSlug:      "",
-		Email:                 nil,
-		AccountType:           "enterprise",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-	})
-
-	manager := NewManager(svc.logger, conn, stubFeatureChecker{enabled: true})
-
-	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
 }
 
 func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")})
+	manager := NewManager(testLogger(t), stubFeatureChecker{err: errors.New("boom")})
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)

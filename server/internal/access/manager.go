@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -18,33 +17,35 @@ type FeatureChecker interface {
 
 type Manager struct {
 	logger   *slog.Logger
-	db       accessrepo.DBTX
 	features FeatureChecker
 }
 
-func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker) *Manager {
+func NewManager(logger *slog.Logger, features FeatureChecker) *Manager {
 	return &Manager{
 		logger:   logger.With(attr.SlogComponent("access")),
-		db:       db,
 		features: features,
 	}
 }
 
-func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
-	ctx, _, err := m.prepareForEvaluation(ctx)
-	if err != nil {
-		return ctx, err
-	}
-
-	return ctx, nil
-}
-
 func (m *Manager) Require(ctx context.Context, checks ...Check) error {
-	ctx, enforce, err := m.prepareForEvaluation(ctx)
-	if err != nil {
-		return err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
 	}
-	if !enforce {
+
+	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" || authCtx.SessionID == nil {
+		return nil
+	}
+
+	if m.features == nil {
+		return oops.E(oops.CodeUnexpected, nil, "access feature checker is not configured").Log(ctx, m.logger)
+	}
+
+	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, m.logger)
+	}
+	if !enabled {
 		return nil
 	}
 
@@ -56,11 +57,24 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 }
 
 func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
-	ctx, enforce, err := m.prepareForEvaluation(ctx)
-	if err != nil {
-		return err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
 	}
-	if !enforce {
+
+	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" || authCtx.SessionID == nil {
+		return nil
+	}
+
+	if m.features == nil {
+		return oops.E(oops.CodeUnexpected, nil, "access feature checker is not configured").Log(ctx, m.logger)
+	}
+
+	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, m.logger)
+	}
+	if !enabled {
 		return nil
 	}
 
@@ -72,11 +86,24 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 }
 
 func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
-	ctx, enforce, err := m.prepareForEvaluation(ctx)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if !enforce {
+
+	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" || authCtx.SessionID == nil {
+		return resourceIDs, nil
+	}
+
+	if m.features == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "access feature checker is not configured").Log(ctx, m.logger)
+	}
+
+	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, m.logger)
+	}
+	if !enabled {
 		return resourceIDs, nil
 	}
 
@@ -86,40 +113,6 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 	}
 
 	return resourceIDs, nil
-}
-
-func (m *Manager) prepareForEvaluation(ctx context.Context) (context.Context, bool, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return ctx, false, oops.C(oops.CodeUnauthorized)
-	}
-
-	if !requiresGrantEvaluation(authCtx) {
-		return ctx, false, nil
-	}
-
-	if m.features == nil {
-		return ctx, false, oops.E(oops.CodeUnexpected, nil, "access feature checker is not configured").Log(ctx, m.logger)
-	}
-
-	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
-	if err != nil {
-		return ctx, false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, m.logger)
-	}
-	if !enabled {
-		return ctx, false, nil
-	}
-
-	if grants, ok := GrantsFromContext(ctx); ok && grants != nil {
-		return ctx, true, nil
-	}
-
-	ctx, err = LoadIntoContext(ctx, m.logger, m.db)
-	if err != nil {
-		return ctx, false, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, m.logger)
-	}
-
-	return ctx, true, nil
 }
 
 func (m *Manager) mapError(ctx context.Context, err error) error {
@@ -133,12 +126,4 @@ func (m *Manager) mapError(ctx context.Context, err error) error {
 	default:
 		return oops.E(oops.CodeUnexpected, err, "check access").Log(ctx, m.logger)
 	}
-}
-
-func requiresGrantEvaluation(authCtx *contextvalues.AuthContext) bool {
-	if authCtx == nil {
-		return false
-	}
-
-	return authCtx.AccountType == "enterprise" && authCtx.APIKeyID == "" && authCtx.ActiveOrganizationID != "" && authCtx.UserID != "" && authCtx.SessionID != nil
 }
