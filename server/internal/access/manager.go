@@ -33,12 +33,8 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" || authCtx.SessionID == nil {
+	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.SessionID == nil {
 		return nil
-	}
-
-	if m.features == nil {
-		return oops.E(oops.CodeUnexpected, nil, "access feature checker is not configured").Log(ctx, m.logger)
 	}
 
 	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
@@ -62,12 +58,8 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" || authCtx.SessionID == nil {
+	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.SessionID == nil {
 		return nil
-	}
-
-	if m.features == nil {
-		return oops.E(oops.CodeUnexpected, nil, "access feature checker is not configured").Log(ctx, m.logger)
 	}
 
 	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
@@ -91,12 +83,8 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" || authCtx.SessionID == nil {
+	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.SessionID == nil {
 		return resourceIDs, nil
-	}
-
-	if m.features == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "access feature checker is not configured").Log(ctx, m.logger)
 	}
 
 	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
