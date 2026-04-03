@@ -1,5 +1,20 @@
 # dashboard
 
+## 0.37.0
+
+### Minor Changes
+
+- c28788e: Add MCP App support across the playground, local functions runner, and the functions SDK.
+
+  Improve local runner lifecycle handling for proxied tool and resource responses, and only seed MCP App function assets when the functions backend is local.
+
+### Patch Changes
+
+- 0a3af53: Adds support for full session capture from Claude. Complete transcripts of prompts, responses, and tool calls
+- ba10ce4: Add Cursor hooks support with authenticated endpoint, plugin, and setup
+- Updated dependencies [0a3af53]
+  - @gram/client@0.32.20
+
 ## 0.36.4
 
 ### Patch Changes
