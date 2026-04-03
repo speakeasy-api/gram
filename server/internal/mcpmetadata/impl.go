@@ -827,8 +827,13 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		// Handle proxy tools (external MCP) separately
 		if conv.IsProxyTool(toolDesc) {
 			info := toolInfo{
-				Name:        toolDesc.ExternalMcpToolDefinition.Name,
-				Description: toolDesc.ExternalMcpToolDefinition.Description,
+				Name:            toolDesc.ExternalMcpToolDefinition.Name,
+				Description:     toolDesc.ExternalMcpToolDefinition.Description,
+				Title:           "",
+				ReadOnlyHint:    false,
+				DestructiveHint: false,
+				IdempotentHint:  false,
+				OpenWorldHint:   false,
 			}
 			applyAnnotations(&info, toolDesc.ExternalMcpToolDefinition.Annotations)
 			tools = append(tools, info)
@@ -841,8 +846,13 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			continue
 		}
 		info := toolInfo{
-			Name:        baseTool.Name,
-			Description: baseTool.Description,
+			Name:            baseTool.Name,
+			Description:     baseTool.Description,
+			Title:           "",
+			ReadOnlyHint:    false,
+			DestructiveHint: false,
+			IdempotentHint:  false,
+			OpenWorldHint:   false,
 		}
 		applyAnnotations(&info, baseTool.Annotations)
 		tools = append(tools, info)
