@@ -45,7 +45,8 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 orgRoutes.apiKeys,
                 orgRoutes.domains,
                 orgRoutes.logs,
-                ...(isRbacEnabled ? [orgRoutes.access] : [orgRoutes.auditLogs]),
+                orgRoutes.auditLogs,
+                ...(isRbacEnabled ? [orgRoutes.access] : []),
                 ...(isAdmin ? [orgRoutes.adminSettings] : []),
               ]}
             >
