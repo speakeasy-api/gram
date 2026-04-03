@@ -23,6 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
+import { Ellipsis } from "lucide-react";
 
 export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -93,7 +94,10 @@ export function RolesTab() {
               size="sm"
               className="opacity-50 hover:opacity-100"
             >
-              <Icon name="ellipsis" className="h-4 w-4" />
+              <Button.LeftIcon>
+                <Ellipsis className="h-4 w-4" />
+              </Button.LeftIcon>
+              <span className="hidden">Actions</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
