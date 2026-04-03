@@ -96,6 +96,27 @@ type toolInfo struct {
 	OpenWorldHint   bool
 }
 
+func applyAnnotations(info *toolInfo, a *types.ToolAnnotations) {
+	if a == nil {
+		return
+	}
+	if a.Title != nil {
+		info.Title = *a.Title
+	}
+	if a.ReadOnlyHint != nil {
+		info.ReadOnlyHint = *a.ReadOnlyHint
+	}
+	if a.DestructiveHint != nil {
+		info.DestructiveHint = *a.DestructiveHint
+	}
+	if a.IdempotentHint != nil {
+		info.IdempotentHint = *a.IdempotentHint
+	}
+	if a.OpenWorldHint != nil {
+		info.OpenWorldHint = *a.OpenWorldHint
+	}
+}
+
 type jsonSnippetData struct {
 	MCPName        string
 	MCPSlug        string
@@ -809,23 +830,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 				Name:        toolDesc.ExternalMcpToolDefinition.Name,
 				Description: toolDesc.ExternalMcpToolDefinition.Description,
 			}
-			if a := toolDesc.ExternalMcpToolDefinition.Annotations; a != nil {
-				if a.Title != nil {
-					info.Title = *a.Title
-				}
-				if a.ReadOnlyHint != nil {
-					info.ReadOnlyHint = *a.ReadOnlyHint
-				}
-				if a.DestructiveHint != nil {
-					info.DestructiveHint = *a.DestructiveHint
-				}
-				if a.IdempotentHint != nil {
-					info.IdempotentHint = *a.IdempotentHint
-				}
-				if a.OpenWorldHint != nil {
-					info.OpenWorldHint = *a.OpenWorldHint
-				}
-			}
+			applyAnnotations(&info, toolDesc.ExternalMcpToolDefinition.Annotations)
 			tools = append(tools, info)
 			continue
 		}
@@ -839,23 +844,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			Name:        baseTool.Name,
 			Description: baseTool.Description,
 		}
-		if a := baseTool.Annotations; a != nil {
-			if a.Title != nil {
-				info.Title = *a.Title
-			}
-			if a.ReadOnlyHint != nil {
-				info.ReadOnlyHint = *a.ReadOnlyHint
-			}
-			if a.DestructiveHint != nil {
-				info.DestructiveHint = *a.DestructiveHint
-			}
-			if a.IdempotentHint != nil {
-				info.IdempotentHint = *a.IdempotentHint
-			}
-			if a.OpenWorldHint != nil {
-				info.OpenWorldHint = *a.OpenWorldHint
-			}
-		}
+		applyAnnotations(&info, baseTool.Annotations)
 		tools = append(tools, info)
 	}
 
