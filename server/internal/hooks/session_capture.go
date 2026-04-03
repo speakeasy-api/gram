@@ -93,25 +93,23 @@ func (s *Service) handleNotification(ctx context.Context, payload *gen.ClaudeHoo
 }
 
 // persistConversationEvent writes a conversation event (user prompt or assistant response) to PostgreSQL.
-func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
 	if s.productFeatures == nil {
-		return
+		return nil
 	}
 
 	// Check if session capture is enabled for this org
 	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
 	if err != nil {
-		s.logger.WarnContext(ctx, "check session_capture feature flag", attr.SlogError(err))
-		return
+		return fmt.Errorf("check session_capture feature flag: %w", err)
 	}
 	if !enabled {
-		return
+		return nil
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "invalid project ID in session metadata", attr.SlogError(err))
-		return
+		return fmt.Errorf("invalid project ID in session metadata: %w", err)
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
@@ -130,11 +128,11 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		content = conv.PtrValOr(payload.LastAssistantMessage, "")
 		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
 	default:
-		return
+		return nil
 	}
 
 	if content == "" {
-		return
+		return nil
 	}
 
 	insertMessage := func() error {
@@ -178,18 +176,15 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 				Title:          conv.ToPGText("Claude Code Session"),
 			})
 			if upsertErr != nil {
-				s.logger.ErrorContext(ctx, "upsert claude code session after FK violation", attr.SlogError(upsertErr))
-				return
+				return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
 			}
 
 			// Retry message creation
 			if err := insertMessage(); err != nil {
-				s.logger.ErrorContext(ctx, "insert claude code message after creating chat", attr.SlogError(err))
-				return
+				return fmt.Errorf("insert claude code message after creating chat: %w", err)
 			}
 		} else {
-			s.logger.ErrorContext(ctx, "insert claude code message", attr.SlogError(err))
-			return
+			return fmt.Errorf("insert claude code message: %w", err)
 		}
 	}
 
@@ -204,6 +199,8 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
 		}
 	}
+
+	return nil
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.
