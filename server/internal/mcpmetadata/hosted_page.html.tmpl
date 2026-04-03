@@ -352,11 +352,43 @@
         color: var(--text-default);
       }
 
+      .tools-search {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        font-family: var(--font-diatype);
+        font-size: 0.8125rem;
+        font-weight: 300;
+        color: var(--text-default);
+        background: var(--bg-surface-primary-default);
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem 0.5rem 0 0;
+        border-bottom: none;
+        outline: none;
+        box-sizing: border-box;
+      }
+
+      .tools-search:focus {
+        border-color: var(--fill-neutral-default);
+      }
+
+      .tools-search::placeholder {
+        color: var(--border-neutral-softest);
+      }
+
+      .tools-search + .tools-table {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
+
       .tools-table {
         border: solid 1px var(--border-neutral-softest);
         border-radius: 0.5rem;
-        overflow: hidden;
+        overflow-y: auto;
         background: var(--bg-surface-primary-default);
+      }
+
+      .tools-table.scrollable {
+        max-height: 32rem;
       }
 
       .tool-row {
@@ -478,25 +510,16 @@
         border: solid 1px hsl(268, 25%, 80%);
       }
 
-      .hidden-tool {
+      .filtered-out {
         display: none;
       }
 
-      .show-more-tools {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.625rem 1rem;
-        cursor: pointer;
+      .tools-no-results {
+        display: none;
+        padding: 1.5rem 1rem;
+        text-align: center;
         font-size: 0.8125rem;
         color: var(--text-default);
-        font-weight: 400;
-        transition: background-color 200ms var(--ease-in-out-quad);
-        border-top: solid 1px var(--border-neutral-softest);
-      }
-
-      .show-more-tools:hover {
-        background: var(--bg-surface-secondary-default);
       }
 
       /******************
@@ -1528,14 +1551,22 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
           <header class="section-title">
             Available Tools <span class="tool-count">({{ len .Tools }})</span>
           </header>
-          <div class="tools-table">
+          {{- if gt (len .Tools) 10 }}
+          <input
+            class="tools-search"
+            type="text"
+            placeholder="Search tools..."
+            oninput="filterTools(this.value)"
+          />
+          {{- end }}
+          <div class="tools-table{{ if gt (len .Tools) 20 }} scrollable{{ end }}">
             {{- range $i, $tool := .Tools }}
-            <div class="tool-row{{ if ge $i 10 }} hidden-tool{{ end }}" onclick="toggleToolDetail(this)">
+            <div class="tool-row" onclick="toggleToolDetail(this)" data-tool-name="{{ $tool.Name }}">
               <span class="tool-name">{{ $tool.Name }}</span>
               <span class="tool-desc">{{ $tool.Description }}</span>
               <span class="tool-chevron">&#9662;</span>
             </div>
-            <div class="tool-detail{{ if ge $i 10 }} hidden-tool{{ end }}">
+            <div class="tool-detail">
               <div class="tool-detail-inner">
                 {{- if $tool.Title }}
                 <div class="tool-detail-title">{{ $tool.Title }}</div>
@@ -1560,11 +1591,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
               </div>
             </div>
             {{- end }}
-            {{- if gt (len .Tools) 10 }}
-            <div class="show-more-tools" onclick="showAllTools(this)">
-              Show {{ diff (len .Tools) 10 }} more tools
-            </div>
-            {{- end }}
+            <div class="tools-no-results">No tools match your search.</div>
           </div>
         </section>
         {{- end }}
@@ -1728,12 +1755,27 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
         }
       }
 
-      function showAllTools(btn) {
-        var hidden = btn.parentElement.querySelectorAll(".hidden-tool");
-        for (var i = 0; i < hidden.length; i++) {
-          hidden[i].classList.remove("hidden-tool");
+      function filterTools(query) {
+        var table = document.querySelector(".tools-table");
+        if (!table) return;
+        var rows = table.querySelectorAll(".tool-row");
+        var q = query.toLowerCase();
+        var visibleCount = 0;
+        for (var i = 0; i < rows.length; i++) {
+          var name = rows[i].getAttribute("data-tool-name") || "";
+          var desc = rows[i].querySelector(".tool-desc");
+          var descText = desc ? desc.textContent : "";
+          var match = name.toLowerCase().indexOf(q) !== -1 || descText.toLowerCase().indexOf(q) !== -1;
+          rows[i].classList.toggle("filtered-out", !match);
+          var detail = rows[i].nextElementSibling;
+          if (detail && detail.classList.contains("tool-detail")) {
+            detail.classList.toggle("filtered-out", !match);
+            if (!match) detail.classList.remove("visible");
+          }
+          if (match) visibleCount++;
         }
-        btn.style.display = "none";
+        var noResults = table.querySelector(".tools-no-results");
+        if (noResults) noResults.style.display = visibleCount === 0 ? "block" : "none";
       }
     </script>
     <script
