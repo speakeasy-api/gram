@@ -86,13 +86,23 @@ type IDEInstallLinkConfig struct {
 	Type *string `json:"type,omitempty"`
 }
 
+type toolInfo struct {
+	Name            string
+	Description     string
+	Title           string
+	ReadOnlyHint    bool
+	DestructiveHint bool
+	IdempotentHint  bool
+	OpenWorldHint   bool
+}
+
 type jsonSnippetData struct {
 	MCPName        string
 	MCPSlug        string
 	MCPDescription string
 	SecurityInputs []securityInput
 	MCPURL         string
-	ToolNames      []string
+	Tools          []toolInfo
 }
 
 type hostedPageData struct {
@@ -790,12 +800,33 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	securityMode := s.resolveSecurityMode(toolset)
 	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, variableProvidedBy)
 
-	toolNames := []string{}
+	tools := []toolInfo{}
 
 	for _, toolDesc := range toolsetDetails.Tools {
-		// Handle proxy tools (external MCP) separately - they show as a single proxy entry
+		// Handle proxy tools (external MCP) separately
 		if conv.IsProxyTool(toolDesc) {
-			toolNames = append(toolNames, toolDesc.ExternalMcpToolDefinition.Name)
+			info := toolInfo{
+				Name:        toolDesc.ExternalMcpToolDefinition.Name,
+				Description: toolDesc.ExternalMcpToolDefinition.Description,
+			}
+			if a := toolDesc.ExternalMcpToolDefinition.Annotations; a != nil {
+				if a.Title != nil {
+					info.Title = *a.Title
+				}
+				if a.ReadOnlyHint != nil {
+					info.ReadOnlyHint = *a.ReadOnlyHint
+				}
+				if a.DestructiveHint != nil {
+					info.DestructiveHint = *a.DestructiveHint
+				}
+				if a.IdempotentHint != nil {
+					info.IdempotentHint = *a.IdempotentHint
+				}
+				if a.OpenWorldHint != nil {
+					info.OpenWorldHint = *a.OpenWorldHint
+				}
+			}
+			tools = append(tools, info)
 			continue
 		}
 
@@ -804,7 +835,28 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			s.logger.WarnContext(ctx, "failed to convert tool to base tool", attr.SlogError(err))
 			continue
 		}
-		toolNames = append(toolNames, baseTool.Name)
+		info := toolInfo{
+			Name:        baseTool.Name,
+			Description: baseTool.Description,
+		}
+		if a := baseTool.Annotations; a != nil {
+			if a.Title != nil {
+				info.Title = *a.Title
+			}
+			if a.ReadOnlyHint != nil {
+				info.ReadOnlyHint = *a.ReadOnlyHint
+			}
+			if a.DestructiveHint != nil {
+				info.DestructiveHint = *a.DestructiveHint
+			}
+			if a.IdempotentHint != nil {
+				info.IdempotentHint = *a.IdempotentHint
+			}
+			if a.OpenWorldHint != nil {
+				info.OpenWorldHint = *a.OpenWorldHint
+			}
+		}
+		tools = append(tools, info)
 	}
 
 	MCPURL, err := s.resolveMCPURLFromContext(ctx, *toolset, s.serverURL.String())
@@ -818,7 +870,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		MCPDescription: toolset.Description.String,
 		MCPURL:         MCPURL,
 		SecurityInputs: securityInputs,
-		ToolNames:      toolNames,
+		Tools:          tools,
 	}
 
 	configSnippetTmpl, err := template.New("config_snippet").Funcs(templatefuncs.FuncMap()).Parse(configSnippetTmplData)
