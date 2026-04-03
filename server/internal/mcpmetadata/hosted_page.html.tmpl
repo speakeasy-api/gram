@@ -373,7 +373,7 @@
         background: var(--bg-surface-secondary-default);
       }
 
-      .tools-table > .tool-row:last-of-type {
+      .tools-table > *:last-child {
         border-bottom: none;
       }
 
@@ -396,7 +396,7 @@
       }
 
       .tool-chevron {
-        color: var(--border-neutral-softest);
+        color: var(--text-default);
         font-size: 0.75rem;
         flex-shrink: 0;
         transition: transform 200ms var(--ease-in-out-quad);
@@ -418,6 +418,9 @@
       }
 
       .tool-detail-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
         padding: 0.75rem 1rem;
         border-radius: 0.375rem;
         background: var(--bg-surface-secondary-default);
@@ -427,14 +430,12 @@
         font-size: 0.8125rem;
         font-weight: 500;
         color: var(--fill-neutral-default);
-        margin-bottom: 0.375rem;
       }
 
       .tool-detail-description {
         font-size: 0.8125rem;
         color: var(--text-default);
         line-height: 1.6;
-        margin-bottom: 0.625rem;
       }
 
       .annotation-badges {
@@ -454,9 +455,9 @@
       }
 
       .annotation-badge.read-only {
-        background: hsl(102, 35%, 93%);
-        color: hsl(105, 24%, 27%);
-        border: solid 1px hsl(99, 30%, 73%);
+        background: var(--color-feedback-green-100);
+        color: var(--color-feedback-green-700);
+        border: solid 1px var(--color-feedback-green-300);
       }
 
       .annotation-badge.destructive {
@@ -1540,6 +1541,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 <div class="tool-detail-title">{{ $tool.Title }}</div>
                 {{- end }}
                 <div class="tool-detail-description">{{ $tool.Description }}</div>
+                {{- if or $tool.ReadOnlyHint $tool.DestructiveHint $tool.IdempotentHint $tool.OpenWorldHint }}
                 <div class="annotation-badges">
                   {{- if $tool.ReadOnlyHint }}
                   <span class="annotation-badge read-only">Read-only</span>
@@ -1554,6 +1556,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                   <span class="annotation-badge open-world">Open-world</span>
                   {{- end }}
                 </div>
+                {{- end }}
               </div>
             </div>
             {{- end }}
