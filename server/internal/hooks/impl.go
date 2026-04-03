@@ -332,7 +332,9 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudeHookPayloa
 			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
 		}
 	} else {
-		s.persistToolCallEvent(ctx, payload, metadata)
+		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
+		}
 	}
 }
 

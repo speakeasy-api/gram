@@ -159,7 +159,10 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 			UserAgent:        conv.ToPGTextEmpty(""),
 			IpAddress:        conv.ToPGTextEmpty(""),
 		}})
-		return err
+		if err != nil {
+			return fmt.Errorf("create chat message: %w", err)
+		}
+		return nil
 	}
 
 	// Only the first message needs to create a chat record, so we save database writes by only
@@ -204,15 +207,14 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.
-func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
 	if s.productFeatures == nil {
-		return
+		return nil
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "invalid project ID", attr.SlogError(err))
-		return
+		return fmt.Errorf("invalid project ID: %w", err)
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
@@ -230,8 +232,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 
 	toolCallsJSON, err := json.Marshal(toolCalls)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "marshal tool_calls", attr.SlogError(err))
-		return
+		return fmt.Errorf("marshal tool_calls: %w", err)
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
@@ -272,31 +273,31 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 				Title:          conv.ToPGText(activities.DefaultClaudeChatTitle),
 			})
 			if upsertErr != nil {
-				s.logger.ErrorContext(ctx, "upsert claude code session after FK violation", attr.SlogError(upsertErr))
-				return
+				return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
 			}
 
 			// Retry message creation
 			_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
 			if err != nil {
-				s.logger.ErrorContext(ctx, "insert tool call request message after creating chat", attr.SlogError(err))
+				return fmt.Errorf("insert tool call request message after creating chat: %w", err)
 			}
 		} else {
-			s.logger.ErrorContext(ctx, "insert tool call request message", attr.SlogError(err))
+			return fmt.Errorf("insert tool call request message: %w", err)
 		}
 	}
+
+	return nil
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
-func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
 	if s.productFeatures == nil {
-		return
+		return nil
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "invalid project ID", attr.SlogError(err))
-		return
+		return fmt.Errorf("invalid project ID: %w", err)
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
@@ -312,7 +313,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		content = marshalToJSON(payload.Error)
 		isError = true
 	} else {
-		return // No content to store
+		return nil // No content to store
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
@@ -353,22 +354,23 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 				Title:          conv.ToPGText(activities.DefaultClaudeChatTitle),
 			})
 			if upsertErr != nil {
-				s.logger.ErrorContext(ctx, "upsert claude code session after FK violation", attr.SlogError(upsertErr))
-				return
+				return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
 			}
 
 			// Retry message creation
 			_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
 			if err != nil {
-				s.logger.ErrorContext(ctx, "insert tool result message after creating chat", attr.SlogError(err))
+				return fmt.Errorf("insert tool result message after creating chat: %w", err)
 			}
 		} else {
-			s.logger.ErrorContext(ctx, "insert tool result message", attr.SlogError(err))
+			return fmt.Errorf("insert tool result message: %w", err)
 		}
 	}
 
 	// If this was an error, we could optionally set tool_outcome based on isError
 	_ = isError
+
+	return nil
 }
 
 // marshalToJSON converts any value to a JSON string.

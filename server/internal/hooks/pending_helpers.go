@@ -31,18 +31,16 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 }
 
 // persistToolCallEvent writes a hook event to ClickHouse with full session context
-func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
 	toolName, ok := attrs[attr.ToolNameKey].(string) //  Make sure this comes from here so that we get the parsed tool name
 	if !ok {
-		s.logger.ErrorContext(ctx, "Tool name not found in attributes")
-		return
+		return fmt.Errorf("tool name not found in attributes")
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Invalid project ID in session metadata", attr.SlogError(err))
-		return
+		return fmt.Errorf("invalid project ID in session metadata: %w", err)
 	}
 
 	// Build ToolInfo
@@ -69,11 +67,17 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeH
 	}
 
 	if payload.HookEventName == "PreToolUse" {
-		s.writeToolCallRequestToPG(ctx, payload, metadata)
+		if err := s.writeToolCallRequestToPG(ctx, payload, metadata); err != nil {
+			return fmt.Errorf("write tool call request to PG: %w", err)
+		}
 	}
 	if payload.HookEventName == "PostToolUse" || payload.HookEventName == "PostToolUseFailure" {
-		s.writeToolCallResultToPG(ctx, payload, metadata)
+		if err := s.writeToolCallResultToPG(ctx, payload, metadata); err != nil {
+			return fmt.Errorf("write tool call result to PG: %w", err)
+		}
 	}
+
+	return nil
 }
 
 // buildTelemetryAttributesWithMetadata creates attributes for a hook event with session metadata
@@ -150,8 +154,6 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	return attrs
 }
 
-// flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
-// Conversation events (UserPromptSubmit, Stop, SessionStart) are also written to PostgreSQL.
 // writeCursorHookToClickHouse writes a Cursor hook event directly to ClickHouse
 // Unlike Claude hooks, Cursor payloads are already authenticated and include user_email,
 // so no Redis buffering is needed.
@@ -274,7 +276,8 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	return attrs
 }
 
-// flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse
+// flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
+// Conversation events (UserPromptSubmit, Stop) are written to PostgreSQL.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
 	// Use LRANGE to get all payloads from the list atomically
 	var payloads []gen.ClaudeHookPayload
