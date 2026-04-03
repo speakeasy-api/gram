@@ -30,19 +30,17 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 	return nil
 }
 
-// writeHookToClickHouseWithMetadata writes a hook event to ClickHouse with full session context
-func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+// persistToolCallEvent writes a hook event to ClickHouse with full session context
+func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
 	toolName, ok := attrs[attr.ToolNameKey].(string) //  Make sure this comes from here so that we get the parsed tool name
 	if !ok {
-		s.logger.ErrorContext(ctx, "Tool name not found in attributes")
-		return
+		return fmt.Errorf("tool name not found in attributes")
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Invalid project ID in session metadata", attr.SlogError(err))
-		return
+		return fmt.Errorf("invalid project ID in session metadata: %w", err)
 	}
 
 	// Build ToolInfo
@@ -67,6 +65,19 @@ func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload
 			attr.SlogEvent("hook_written"),
 		)
 	}
+
+	if payload.HookEventName == "PreToolUse" {
+		if err := s.writeToolCallRequestToPG(ctx, payload, metadata); err != nil {
+			return fmt.Errorf("write tool call request to PG: %w", err)
+		}
+	}
+	if payload.HookEventName == "PostToolUse" || payload.HookEventName == "PostToolUseFailure" {
+		if err := s.writeToolCallResultToPG(ctx, payload, metadata); err != nil {
+			return fmt.Errorf("write tool call result to PG: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // buildTelemetryAttributesWithMetadata creates attributes for a hook event with session metadata
@@ -121,6 +132,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	if payload.ToolUseID != nil {
 		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
 	}
+
 	// Stringify ToolInput and ToolResponse to prevent JSON path explosion in ClickHouse
 	// When these are stored as nested objects, ClickHouse auto-unflattens dotted keys
 	// which creates an explosion of attribute keys in the attributes JSON column
@@ -264,7 +276,8 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	return attrs
 }
 
-// flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse
+// flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
+// Conversation events (UserPromptSubmit, Stop) are written to PostgreSQL.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
 	// Use LRANGE to get all payloads from the list atomically
 	var payloads []gen.ClaudeHookPayload
@@ -279,12 +292,11 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 		return
 	}
 
-	// Write all payloads to ClickHouse
 	for i := range payloads {
-		s.writeHookToClickHouseWithMetadata(ctx, &payloads[i], metadata)
+		s.persistHook(ctx, &payloads[i], metadata)
 	}
 
-	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks to ClickHouse", len(payloads)))
+	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks", len(payloads)))
 
 	// Delete the list after successful processing
 	if err := s.cache.Delete(ctx, key); err != nil {

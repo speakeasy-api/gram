@@ -87,6 +87,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = @project_id
 ORDER BY c.updated_at DESC;
@@ -106,6 +107,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = @project_id AND c.external_user_id = @external_user_id
 ORDER BY c.updated_at DESC;
@@ -126,6 +128,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = @project_id AND c.user_id = @user_id
 ORDER BY c.updated_at DESC;
@@ -237,6 +240,7 @@ WITH limited_chats AS (
     c.created_at,
     c.updated_at,
     (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source,
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
@@ -282,6 +286,7 @@ SELECT
     lc.title,
     lc.user_id,
     lc.external_user_id,
+    lc.source,
     lc.created_at,
     lc.updated_at,
     lc.num_messages,

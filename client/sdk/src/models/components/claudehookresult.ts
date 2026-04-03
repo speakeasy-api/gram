@@ -23,6 +23,10 @@ export type ClaudeHookResult = {
    * Reason if blocked (SessionStart only)
    */
   stopReason?: string | undefined;
+  /**
+   * Whether to suppress the hook's output
+   */
+  suppressOutput?: boolean | undefined;
 };
 
 /** @internal */
@@ -33,6 +37,7 @@ export const ClaudeHookResult$inboundSchema: z.ZodMiniType<
   continue: z.optional(z.boolean()),
   hookSpecificOutput: z.optional(z.any()),
   stopReason: z.optional(z.string()),
+  suppressOutput: z.optional(z.boolean()),
 });
 
 export function claudeHookResultFromJSON(

@@ -68,6 +68,64 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 	return items, nil
 }
 
+const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
+UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
+`
+
+type UpdateClaudeCodeSessionTimestampParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) UpdateClaudeCodeSessionTimestamp(ctx context.Context, arg UpdateClaudeCodeSessionTimestampParams) error {
+	_, err := q.db.Exec(ctx, updateClaudeCodeSessionTimestamp, arg.ID, arg.ProjectID)
+	return err
+}
+
+const upsertClaudeCodeSession = `-- name: UpsertClaudeCodeSession :one
+INSERT INTO chats (
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , title
+  , created_at
+  , updated_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    NOW(),
+    NOW()
+)
+ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+RETURNING id
+`
+
+type UpsertClaudeCodeSessionParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	Title          pgtype.Text
+}
+
+func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeCodeSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertClaudeCodeSession,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Title,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const upsertHooksServerNameOverride = `-- name: UpsertHooksServerNameOverride :one
 INSERT INTO hooks_server_name_overrides (project_id, raw_server_name, display_name)
 VALUES ($1, $2, $3)

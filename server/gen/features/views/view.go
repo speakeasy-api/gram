@@ -26,6 +26,8 @@ type GramProductFeaturesView struct {
 	LogsEnabled *bool
 	// Whether tool I/O logging is enabled
 	ToolIoLogsEnabled *bool
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled *bool
 }
 
 var (
@@ -35,6 +37,7 @@ var (
 		"default": {
 			"logs_enabled",
 			"tool_io_logs_enabled",
+			"session_capture_enabled",
 		},
 	}
 )
@@ -59,6 +62,9 @@ func ValidateGramProductFeaturesView(result *GramProductFeaturesView) (err error
 	}
 	if result.ToolIoLogsEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_io_logs_enabled", "result"))
+	}
+	if result.SessionCaptureEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_capture_enabled", "result"))
 	}
 	return
 }

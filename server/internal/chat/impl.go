@@ -204,6 +204,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				ID:             chat.ID.String(),
 				UserID:         nil,
 				ExternalUserID: &chat.ExternalUserID.String,
+				Source:         conv.FromPGText[string](chat.Source),
 				Title:          chat.Title.String,
 				NumMessages:    int(chat.NumMessages),
 				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -226,6 +227,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				ID:             chat.ID.String(),
 				UserID:         &chat.UserID.String,
 				ExternalUserID: nil,
+				Source:         conv.FromPGText[string](chat.Source),
 				Title:          chat.Title.String,
 				NumMessages:    int(chat.NumMessages),
 				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -254,6 +256,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			ID:             chat.ID.String(),
 			UserID:         &chat.UserID.String,
 			ExternalUserID: nil,
+			Source:         conv.FromPGText[string](chat.Source),
 			Title:          chat.Title.String,
 			NumMessages:    int(chat.NumMessages),
 			CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -358,6 +361,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 				Title:          row.Title.String,
 				UserID:         conv.FromPGText[string](row.UserID),
 				ExternalUserID: conv.FromPGText[string](row.ExternalUserID),
+				Source:         conv.FromPGText[string](row.Source),
 				NumMessages:    int(row.NumMessages),
 				CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
@@ -464,11 +468,22 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
+	// Infer source from the most recent message with a source
+	var source *string
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Source.Valid && messages[i].Source.String != "" {
+			s := messages[i].Source.String
+			source = &s
+			break
+		}
+	}
+
 	return &gen.Chat{
 		ID:             chat.ID.String(),
 		Title:          chat.Title.String,
 		UserID:         &chat.UserID.String,
 		ExternalUserID: &chat.ExternalUserID.String,
+		Source:         source,
 		NumMessages:    len(messages),
 		CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),

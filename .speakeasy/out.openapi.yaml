@@ -14598,6 +14598,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        source:
+          type: string
+          description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
         title:
           type: string
           description: The title of the chat
@@ -14671,6 +14674,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        source:
+          type: string
+          description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
         title:
           type: string
           description: The title of the chat
@@ -14709,6 +14715,9 @@ components:
           items:
             $ref: '#/components/schemas/ChatResolution'
           description: List of resolutions for this chat
+        source:
+          type: string
+          description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
         title:
           type: string
           description: The title of the chat
@@ -14840,6 +14849,9 @@ components:
           type: object
           description: Additional hook-specific data
           additionalProperties: true
+        cwd:
+          type: string
+          description: The working directory when the event fired
         error:
           description: The error from the tool (PostToolUseFailure only)
         hook_event_name:
@@ -14850,12 +14862,43 @@ components:
             - PreToolUse
             - PostToolUse
             - PostToolUseFailure
+            - UserPromptSubmit
+            - Stop
+            - SessionEnd
+            - Notification
         is_interrupt:
           type: boolean
           description: Whether the failure was caused by user interruption (PostToolUseFailure only)
+        last_assistant_message:
+          type: string
+          description: Claude's final response text (Stop only)
+        message:
+          type: string
+          description: Notification message text (Notification only)
+        model:
+          type: string
+          description: The model identifier (SessionStart, Stop)
+        notification_type:
+          type: string
+          description: 'Type of notification: permission_prompt, idle_prompt, auth_success, elicitation_dialog (Notification only)'
+        prompt:
+          type: string
+          description: The user's prompt text (UserPromptSubmit only)
+        reason:
+          type: string
+          description: Why the session ended (SessionEnd only)
         session_id:
           type: string
           description: The Claude Code session ID
+        source:
+          type: string
+          description: 'How the session started: startup, resume, clear, compact (SessionStart only)'
+        stop_hook_active:
+          type: boolean
+          description: Whether a stop hook continuation is active (Stop only)
+        title:
+          type: string
+          description: Notification title (Notification only)
         tool_input:
           description: The input to the tool
         tool_name:
@@ -14866,6 +14909,9 @@ components:
         tool_use_id:
           type: string
           description: The unique ID for this tool use
+        transcript_path:
+          type: string
+          description: Path to the conversation transcript file
       description: Unified payload for all Claude Code hook events
       required:
         - hook_event_name
@@ -14880,6 +14926,9 @@ components:
         stopReason:
           type: string
           description: Reason if blocked (SessionStart only)
+        suppressOutput:
+          type: boolean
+          description: Whether to suppress the hook's output
       description: Unified result for all Claude Code hook events with proper response structure
     ConfigureSlackAppRequestBody:
       type: object
@@ -16846,6 +16895,9 @@ components:
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
+        session_capture_enabled:
+          type: boolean
+          description: Whether Claude Code session capture is enabled
         tool_io_logs_enabled:
           type: boolean
           description: Whether tool I/O logging is enabled
@@ -16853,6 +16905,7 @@ components:
       required:
         - logs_enabled
         - tool_io_logs_enabled
+        - session_capture_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -19578,6 +19631,7 @@ components:
           enum:
             - logs
             - tool_io_logs
+            - session_capture
           maxLength: 60
       required:
         - feature_name

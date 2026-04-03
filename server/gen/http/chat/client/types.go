@@ -52,6 +52,9 @@ type LoadChatResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
@@ -1197,6 +1200,9 @@ type ChatOverviewResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
@@ -1242,6 +1248,9 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
@@ -1458,6 +1467,7 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		UserID:         body.UserID,
 		ExternalUserID: body.ExternalUserID,
 		NumMessages:    *body.NumMessages,
+		Source:         body.Source,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}

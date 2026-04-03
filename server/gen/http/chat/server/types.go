@@ -52,6 +52,9 @@ type LoadChatResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
@@ -1197,6 +1200,9 @@ type ChatOverviewResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
@@ -1242,6 +1248,9 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
+	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
+	// messages)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
@@ -1294,6 +1303,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		UserID:         res.UserID,
 		ExternalUserID: res.ExternalUserID,
 		NumMessages:    res.NumMessages,
+		Source:         res.Source,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}

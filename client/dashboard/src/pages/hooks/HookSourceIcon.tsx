@@ -1,3 +1,5 @@
+import { GlobeIcon } from "lucide-react";
+
 // Claude Code logo - official Anthropic Claude icon
 function ClaudeCodeIcon({ className }: { className?: string }) {
   return (
@@ -43,13 +45,15 @@ interface HookSourceIconProps {
 export function HookSourceIcon({ source, className }: HookSourceIconProps) {
   const normalizedSource = source?.toLowerCase();
 
-  switch (normalizedSource) {
-    case "claude-code":
-    case "cowork":
-      return <ClaudeCodeIcon className={className} />;
-    case "cursor":
-      return <CursorIcon className={className} />;
-    default:
-      return null;
+  if (
+    normalizedSource?.includes("claude") ||
+    normalizedSource?.includes("cowork")
+  ) {
+    return <ClaudeCodeIcon className={className} />;
   }
+  if (normalizedSource?.includes("cursor")) {
+    return <CursorIcon className={className} />;
+  }
+
+  return <GlobeIcon className={className} />;
 }

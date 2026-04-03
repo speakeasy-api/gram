@@ -14,3 +14,28 @@ RETURNING *;
 -- name: DeleteHooksServerNameOverride :exec
 DELETE FROM hooks_server_name_overrides
 WHERE id = $1 AND project_id = $2;
+
+-- name: UpsertClaudeCodeSession :one
+INSERT INTO chats (
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , title
+  , created_at
+  , updated_at
+)
+VALUES (
+    @id,
+    @project_id,
+    @organization_id,
+    @user_id,
+    @title,
+    NOW(),
+    NOW()
+)
+ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+RETURNING id;
+
+-- name: UpdateClaudeCodeSessionTimestamp :exec
+UPDATE chats SET updated_at = NOW() WHERE id = @id AND project_id = @project_id;

@@ -67,8 +67,31 @@ type ClaudeHookPayload struct {
 	IsInterrupt *bool
 	// The Claude Code session ID
 	SessionID *string
+	// The working directory when the event fired
+	Cwd *string
+	// Path to the conversation transcript file
+	TranscriptPath *string
 	// Additional hook-specific data
 	AdditionalData map[string]any
+	// How the session started: startup, resume, clear, compact (SessionStart only)
+	Source *string
+	// The model identifier (SessionStart, Stop)
+	Model *string
+	// The user's prompt text (UserPromptSubmit only)
+	Prompt *string
+	// Claude's final response text (Stop only)
+	LastAssistantMessage *string
+	// Whether a stop hook continuation is active (Stop only)
+	StopHookActive *bool
+	// Why the session ended (SessionEnd only)
+	Reason *string
+	// Type of notification: permission_prompt, idle_prompt, auth_success,
+	// elicitation_dialog (Notification only)
+	NotificationType *string
+	// Notification message text (Notification only)
+	Message *string
+	// Notification title (Notification only)
+	Title *string
 }
 
 // ClaudeHookResult is the result type of the hooks service claude method.
@@ -77,6 +100,8 @@ type ClaudeHookResult struct {
 	Continue *bool
 	// Reason if blocked (SessionStart only)
 	StopReason *string
+	// Whether to suppress the hook's output
+	SuppressOutput *bool
 	// Hook-specific output as JSON object
 	HookSpecificOutput any
 }
