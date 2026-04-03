@@ -32,10 +32,8 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	srv "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
-	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 type Service struct {
@@ -48,7 +46,6 @@ type Service struct {
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
-	environment        string
 	chatTitleGenerator ChatTitleGenerator
 }
 
@@ -93,7 +90,6 @@ func NewService(
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	pfClient ProductFeaturesClient,
-	environment string,
 	chatTitleGenerator ChatTitleGenerator,
 ) *Service {
 	return &Service{
@@ -106,7 +102,6 @@ func NewService(
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
-		environment:        environment,
 		chatTitleGenerator: chatTitleGenerator,
 	}
 }
@@ -301,23 +296,16 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 		return s.handleNotification(ctx, payload)
 	default:
 		s.logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
-		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-				HookEventName: &payload.HookEventName,
-			},
-		}, nil
+		return makeHookResult(payload.HookEventName), nil
 	}
 }
 
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	// Always allow sessions to start
 	continueVal := true
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		Continue: &continueVal,
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	result := makeHookResult(payload.HookEventName)
+	result.Continue = &continueVal
+	return result, nil
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudeHookPayload) {
@@ -347,26 +335,6 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudeHookPayloa
 }
 
 func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (SessionMetadata, error) {
-	// For local development, use hardcoded test values
-	// Avoids needing to set up OTEL export for local development
-	if s.environment == "local" {
-		config := mockidp.DefaultConfig()
-		projectsRepo := projectsRepo.New(s.db)
-		projects, err := projectsRepo.ListProjectsByOrganization(ctx, config.Organization.ID)
-		if err != nil || len(projects) == 0 {
-			return SessionMetadata{}, fmt.Errorf("get project: %w", err)
-		}
-		projectID := projects[0].ID.String()
-		return SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "claude-code",
-			UserEmail:   config.User.Email,
-			ClaudeOrgID: config.Organization.ID,
-			GramOrgID:   config.Organization.ID,
-			ProjectID:   projectID,
-		}, nil
-	}
-
 	var metadata SessionMetadata
 	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
 	if err != nil {
@@ -378,28 +346,19 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow tools
 	allow := "allow"
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName:      &payload.HookEventName,
-			PermissionDecision: &allow,
-		},
-	}, nil
+	result := makeHookResult(payload.HookEventName)
+	if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
+		output.PermissionDecision = &allow
+	}
+	return result, nil
 }
 
 func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	return makeHookResult(payload.HookEventName), nil
 }
 
 func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	return makeHookResult(payload.HookEventName), nil
 }
 
 // Cursor is the endpoint for Cursor hook events

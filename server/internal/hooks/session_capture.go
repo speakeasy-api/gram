@@ -2,11 +2,12 @@ package hooks
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -18,6 +19,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
+var (
+	// claudeSessionNamespace is the UUIDv5 namespace for Claude Code session IDs.
+	// This ensures deterministic UUID generation from session ID strings.
+	claudeSessionNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+	// ErrChatNotFound indicates the chat (conversation) does not exist.
+	ErrChatNotFound = errors.New("chat not found")
+)
+
+// isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
+// This indicates that the referenced chat does not exist.
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		// 23503 is PostgreSQL's foreign_key_violation error code
+		return pgErr.Code == "23503"
+	}
+	return false
+}
+
 // isConversationEvent returns true if the event is a conversation capture event (not a tool call).
 func isConversationEvent(eventName string) bool {
 	switch eventName {
@@ -28,55 +49,47 @@ func isConversationEvent(eventName string) bool {
 	}
 }
 
-// sessionIDToUUID converts a Claude Code session_id string to a deterministic UUID.
-// Uses UUIDv5 with a fixed namespace so the same session_id always maps to the same UUID.
+// sessionIDToUUID converts a Claude Code session_id string to a deterministic UUIDv5.
+// Uses RFC 4122 compliant UUIDv5 generation so the same session_id always maps to the same UUID.
 func sessionIDToUUID(sessionID string) uuid.UUID {
-	// Use SHA256 of session ID to create a deterministic UUID
-	hash := sha256.Sum256([]byte(sessionID))
-	// Use the first 16 bytes as a UUIDv5-like deterministic ID
-	id, _ := uuid.FromBytes(hash[:16])
-	// Set version 5 and variant bits
-	id[6] = (id[6] & 0x0f) | 0x50
-	id[8] = (id[8] & 0x3f) | 0x80
-	return id
+	return uuid.NewSHA1(claudeSessionNamespace, []byte(sessionID))
+}
+
+// makeHookResult creates a ClaudeHookResult with the HookSpecificOutput populated.
+func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
+	return &gen.ClaudeHookResult{
+		HookSpecificOutput: &HookSpecificOutput{
+			HookEventName:            &hookEventName,
+			AdditionalContext:        nil,
+			PermissionDecision:       nil,
+			PermissionDecisionReason: nil,
+		},
+		Continue:       nil,
+		StopReason:     nil,
+		SuppressOutput: nil,
+	}
 }
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleStop captures the assistant's final response text.
 // Note: If the Stop event includes tool calls, those are handled separately by PreToolUse events,
 // so we skip creating duplicate messages here.
 func (s *Service) handleStop(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleSessionEnd finalizes the session by updating the timestamp.
 func (s *Service) handleSessionEnd(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleNotification handles notification events (permission_prompt, idle_prompt, etc.)
 func (s *Service) handleNotification(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	return makeHookResult(payload.HookEventName), nil
 }
 
 // persistConversationEvent writes a conversation event (user prompt or assistant response) to PostgreSQL.
@@ -104,19 +117,6 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	chatID := sessionIDToUUID(*payload.SessionID)
 	chatRepoQueries := chatRepo.New(s.db)
 
-	// Ensure the session (chat) exists
-	_, err = s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserEmail),
-		Title:          conv.ToPGText("Claude Code Session"),
-	})
-	if err != nil {
-		s.logger.ErrorContext(ctx, "upsert claude code session", attr.SlogError(err))
-		return
-	}
-
 	// Determine role and content based on event type
 	var role, content string
 	var model pgtype.Text
@@ -137,32 +137,60 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		return
 	}
 
-	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{{
-		ChatID:           chatID,
-		ProjectID:        projectID,
-		Role:             role,
-		Content:          content,
-		Model:            model,
-		UserID:           conv.ToPGTextEmpty(metadata.UserEmail),
-		Source:           conv.ToPGText("ClaudeCode"),
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		ContentRaw:       nil,
-		ContentAssetUrl:  conv.ToPGTextEmpty(""),
-		StorageError:     conv.ToPGTextEmpty(""),
-		MessageID:        conv.ToPGTextEmpty(""),
-		ToolCallID:       conv.ToPGTextEmpty(""),
-		ExternalUserID:   conv.ToPGTextEmpty(""),
-		FinishReason:     conv.ToPGTextEmpty(""),
-		ToolCalls:        nil,
-		Origin:           conv.ToPGTextEmpty(""),
-		UserAgent:        conv.ToPGTextEmpty(""),
-		IpAddress:        conv.ToPGTextEmpty(""),
-	}})
-	if err != nil {
-		s.logger.ErrorContext(ctx, "insert claude code message", attr.SlogError(err))
-		return
+	insertMessage := func() error {
+		_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{{
+			ChatID:           chatID,
+			ProjectID:        projectID,
+			Role:             role,
+			Content:          content,
+			Model:            model,
+			UserID:           conv.ToPGTextEmpty(metadata.UserEmail),
+			Source:           conv.ToPGText(metadata.ServiceName),
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+			ContentRaw:       nil,
+			ContentAssetUrl:  conv.ToPGTextEmpty(""),
+			StorageError:     conv.ToPGTextEmpty(""),
+			MessageID:        conv.ToPGTextEmpty(""),
+			ToolCallID:       conv.ToPGTextEmpty(""),
+			ExternalUserID:   conv.ToPGTextEmpty(""),
+			FinishReason:     conv.ToPGTextEmpty(""),
+			ToolCalls:        nil,
+			Origin:           conv.ToPGTextEmpty(""),
+			UserAgent:        conv.ToPGTextEmpty(""),
+			IpAddress:        conv.ToPGTextEmpty(""),
+		}})
+		return err
+	}
+
+	// Only the first message needs to create a chat record, so we save database writes by only
+	// upserting the chat record if inserting the message fails.
+	if err := insertMessage(); err != nil {
+		// Check if this is a foreign key violation (chat doesn't exist)
+		if isForeignKeyViolation(err) {
+			// Create the chat and retry
+			_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+				ID:             chatID,
+				ProjectID:      projectID,
+				OrganizationID: metadata.GramOrgID,
+				UserID:         conv.ToPGTextEmpty(metadata.UserEmail),
+				Title:          conv.ToPGText("Claude Code Session"),
+			})
+			if upsertErr != nil {
+				s.logger.ErrorContext(ctx, "upsert claude code session after FK violation", attr.SlogError(upsertErr))
+				return
+			}
+
+			// Retry message creation
+			if err := insertMessage(); err != nil {
+				s.logger.ErrorContext(ctx, "insert claude code message after creating chat", attr.SlogError(err))
+				return
+			}
+		} else {
+			s.logger.ErrorContext(ctx, "insert claude code message", attr.SlogError(err))
+			return
+		}
 	}
 
 	// Schedule chat title generation for assistant messages
@@ -193,19 +221,6 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 	chatID := sessionIDToUUID(*payload.SessionID)
 	chatRepoQueries := chatRepo.New(s.db)
 
-	// Ensure the session exists
-	_, err = s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserEmail),
-		Title:          conv.ToPGText(activities.DefaultClaudeChatTitle),
-	})
-	if err != nil {
-		s.logger.ErrorContext(ctx, "upsert claude code session", attr.SlogError(err))
-		return
-	}
-
 	// Build tool_calls JSONB array from the PreToolUse payload
 	toolCalls := []map[string]any{{
 		"id":   conv.PtrValOr(payload.ToolUseID, ""),
@@ -222,8 +237,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		return
 	}
 
-	// Insert assistant message with tool_calls
-	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{{
+	msgParams := chatRepo.CreateChatMessageParams{
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -245,9 +259,34 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
-	}})
+	}
+
+	// Try to insert the message
+	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "insert tool call request message", attr.SlogError(err))
+		// Check if this is a foreign key violation (chat doesn't exist)
+		if isForeignKeyViolation(err) {
+			// Create the chat and retry
+			_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+				ID:             chatID,
+				ProjectID:      projectID,
+				OrganizationID: metadata.GramOrgID,
+				UserID:         conv.ToPGTextEmpty(metadata.UserEmail),
+				Title:          conv.ToPGText(activities.DefaultClaudeChatTitle),
+			})
+			if upsertErr != nil {
+				s.logger.ErrorContext(ctx, "upsert claude code session after FK violation", attr.SlogError(upsertErr))
+				return
+			}
+
+			// Retry message creation
+			_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
+			if err != nil {
+				s.logger.ErrorContext(ctx, "insert tool call request message after creating chat", attr.SlogError(err))
+			}
+		} else {
+			s.logger.ErrorContext(ctx, "insert tool call request message", attr.SlogError(err))
+		}
 	}
 }
 
@@ -279,8 +318,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		return // No content to store
 	}
 
-	// Insert tool result message
-	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{{
+	msgParams := chatRepo.CreateChatMessageParams{
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -302,9 +340,34 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
-	}})
+	}
+
+	// Try to insert the message
+	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "insert tool result message", attr.SlogError(err))
+		// Check if this is a foreign key violation (chat doesn't exist)
+		if isForeignKeyViolation(err) {
+			// Create the chat and retry
+			_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+				ID:             chatID,
+				ProjectID:      projectID,
+				OrganizationID: metadata.GramOrgID,
+				UserID:         conv.ToPGTextEmpty(metadata.UserEmail),
+				Title:          conv.ToPGText(activities.DefaultClaudeChatTitle),
+			})
+			if upsertErr != nil {
+				s.logger.ErrorContext(ctx, "upsert claude code session after FK violation", attr.SlogError(upsertErr))
+				return
+			}
+
+			// Retry message creation
+			_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
+			if err != nil {
+				s.logger.ErrorContext(ctx, "insert tool result message after creating chat", attr.SlogError(err))
+			}
+		} else {
+			s.logger.ErrorContext(ctx, "insert tool result message", attr.SlogError(err))
+		}
 	}
 
 	// If this was an error, we could optionally set tool_outcome based on isError
