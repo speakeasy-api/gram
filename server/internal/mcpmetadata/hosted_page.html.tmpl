@@ -405,7 +405,7 @@
         background: var(--bg-surface-secondary-default);
       }
 
-      .tools-table > *:last-child {
+      .tools-table > .tool-detail:last-of-type {
         border-bottom: none;
       }
 
@@ -1770,7 +1770,10 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
           var detail = rows[i].nextElementSibling;
           if (detail && detail.classList.contains("tool-detail")) {
             detail.classList.toggle("filtered-out", !match);
-            if (!match) detail.classList.remove("visible");
+            if (!match) {
+              rows[i].classList.remove("expanded");
+              detail.classList.remove("visible");
+            }
           }
           if (match) visibleCount++;
         }
