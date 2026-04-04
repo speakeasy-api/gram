@@ -472,6 +472,10 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err != nil {
+		// Suggest clients back off before retrying to mitigate retry storms.
+		// 300 seconds (5 minutes) gives time to investigate without overwhelming
+		// the service with repeated failed attempts.
+		w.Header().Set("Retry-After", "300")
 		return oops.E(oops.CodeBadRequest, err, "token exchange failed").Log(ctx, s.logger)
 	}
 

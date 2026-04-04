@@ -85,7 +85,14 @@ func (t Token) TTL() time.Duration {
 	// Add grace period so refresh token cache entry outlives the access token.
 	// Without this, the cache evicts the entry at the same time the access token
 	// expires, making the refresh token unusable.
-	return time.Until(t.ExpiresAt) + 24*time.Hour
+	ttl := time.Until(t.ExpiresAt) + 24*time.Hour
+	// Ensure minimum TTL to prevent immediate eviction when ExpiresAt is in the
+	// past (e.g., due to clock skew or stale data). A 1-minute floor gives
+	// clients a window to attempt refresh before the key disappears.
+	if ttl < time.Minute {
+		return time.Minute
+	}
+	return ttl
 }
 
 var _ cache.CacheableObject[OauthProxyClientInfo] = (*OauthProxyClientInfo)(nil)
