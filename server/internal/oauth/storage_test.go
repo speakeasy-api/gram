@@ -83,3 +83,22 @@ func TestGrantTTLFloorWhenExpired(t *testing.T) {
 	ttl := grant.TTL()
 	require.GreaterOrEqual(t, ttl, time.Minute, "TTL should be at least 1 minute even when ExpiresAt is in the past")
 }
+
+func TestExternalOAuthStateTTLFloorWhenExpired(t *testing.T) {
+	t.Parallel()
+	state := oauth.ExternalOAuthState{
+		ToolsetID:         uuid.New(),
+		RedirectURI:       "https://example.com/callback",
+		CodeVerifier:      "test",
+		StateID:           "test-state-id",
+		ExternalMCPSlug:   "",
+		OAuthServerIssuer: "https://oauth.example.com",
+		TokenEndpoint:     "https://oauth.example.com/token",
+		ProviderName:      "test",
+		Scope:             "",
+		CreatedAt:         time.Now().Add(-1 * time.Hour),
+		ExpiresAt:         time.Now().Add(-1 * time.Hour),
+	}
+	ttl := state.TTL()
+	require.GreaterOrEqual(t, ttl, time.Minute, "TTL should be at least 1 minute even when ExpiresAt is in the past")
+}
