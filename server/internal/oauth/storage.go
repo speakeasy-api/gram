@@ -45,7 +45,11 @@ func (g Grant) AdditionalCacheKeys() []string {
 }
 
 func (g Grant) TTL() time.Duration {
-	return time.Until(g.ExpiresAt)
+	ttl := time.Until(g.ExpiresAt)
+	if ttl < time.Minute {
+		return time.Minute
+	}
+	return ttl
 }
 
 var _ cache.CacheableObject[Token] = (*Token)(nil)

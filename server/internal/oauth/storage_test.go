@@ -63,3 +63,23 @@ func TestOauthProxyClientInfoTTLFloorWhenExpired(t *testing.T) {
 	ttl := info.TTL()
 	require.GreaterOrEqual(t, ttl, time.Minute, "TTL should be at least 1 minute even when ClientSecretExpiresAt is in the past")
 }
+
+func TestGrantTTLFloorWhenExpired(t *testing.T) {
+	t.Parallel()
+	grant := oauth.Grant{
+		ToolsetID:           uuid.New(),
+		Code:                "test",
+		ClientID:            "test",
+		RedirectURI:         "https://example.com/callback",
+		Scope:               "",
+		State:               "",
+		CodeChallenge:       "",
+		CodeChallengeMethod: "",
+		Props:               nil,
+		CreatedAt:           time.Now().Add(-1 * time.Hour),
+		ExpiresAt:           time.Now().Add(-1 * time.Hour),
+		ExternalSecrets:     nil,
+	}
+	ttl := grant.TTL()
+	require.GreaterOrEqual(t, ttl, time.Minute, "TTL should be at least 1 minute even when ExpiresAt is in the past")
+}
