@@ -127,7 +127,11 @@ func (o OauthProxyClientInfo) AdditionalCacheKeys() []string {
 
 func (o OauthProxyClientInfo) TTL() time.Duration {
 	// we double the client expiration time we send to MCP clients for safety
-	return time.Until(o.ClientSecretExpiresAt) * 2
+	ttl := time.Until(o.ClientSecretExpiresAt) * 2
+	if ttl < time.Minute {
+		return time.Minute
+	}
+	return ttl
 }
 
 var _ cache.CacheableObject[UpstreamPKCEVerifier] = (*UpstreamPKCEVerifier)(nil)
