@@ -2,7 +2,6 @@ package workos
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -43,10 +42,6 @@ type SendInvitationOpts struct {
 
 // SendInvitation creates an invitation for a user to join an organization.
 func (wc *Client) SendInvitation(ctx context.Context, opts SendInvitationOpts) (*Invitation, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	inv, err := wc.um.SendInvitation(ctx, usermanagement.SendInvitationOpts{
 		Email:          opts.Email,
 		OrganizationID: opts.OrganizationID,
@@ -64,10 +59,6 @@ func (wc *Client) SendInvitation(ctx context.Context, opts SendInvitationOpts) (
 
 // ListInvitations returns all invitations for an organization.
 func (wc *Client) ListInvitations(ctx context.Context, orgID string) ([]Invitation, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	var all []Invitation
 	after := ""
 
@@ -99,10 +90,6 @@ func (wc *Client) ListInvitations(ctx context.Context, orgID string) ([]Invitati
 
 // RevokeInvitation revokes an invitation by ID.
 func (wc *Client) RevokeInvitation(ctx context.Context, invitationID string) (*Invitation, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	inv, err := wc.um.RevokeInvitation(ctx, usermanagement.RevokeInvitationOpts{Invitation: invitationID})
 	if err != nil {
 		return nil, fmt.Errorf("revoke invitation: %w", err)
@@ -114,10 +101,6 @@ func (wc *Client) RevokeInvitation(ctx context.Context, invitationID string) (*I
 
 // ResendInvitation resends an invitation by ID.
 func (wc *Client) ResendInvitation(ctx context.Context, invitationID string) (*Invitation, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	inv, err := wc.um.ResendInvitation(ctx, usermanagement.ResendInvitationOpts{Invitation: invitationID})
 	if err != nil {
 		return nil, fmt.Errorf("resend invitation: %w", err)
@@ -129,10 +112,6 @@ func (wc *Client) ResendInvitation(ctx context.Context, invitationID string) (*I
 
 // FindInvitationByToken resolves an invitation from its token.
 func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Invitation, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	inv, err := wc.um.FindInvitationByToken(ctx, usermanagement.FindInvitationByTokenOpts{InvitationToken: token})
 	if err != nil {
 		return nil, fmt.Errorf("find invitation by token: %w", err)
@@ -144,10 +123,6 @@ func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Inv
 
 // GetInvitation returns an invitation by ID.
 func (wc *Client) GetInvitation(ctx context.Context, invitationID string) (*Invitation, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	inv, err := wc.um.GetInvitation(ctx, usermanagement.GetInvitationOpts{Invitation: invitationID})
 	if err != nil {
 		return nil, fmt.Errorf("get invitation: %w", err)

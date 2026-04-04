@@ -2,7 +2,6 @@ package workos
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -31,10 +30,6 @@ type User struct {
 
 // ListMembers lists all active organization memberships for the given org.
 func (wc *Client) ListMembers(ctx context.Context, orgID string) ([]Member, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	var all []Member
 	after := ""
 
@@ -67,10 +62,6 @@ func (wc *Client) ListMembers(ctx context.Context, orgID string) ([]Member, erro
 
 // ListUsersInOrg returns all users in the given organization.
 func (wc *Client) ListUsersInOrg(ctx context.Context, orgID string) ([]User, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	var all []User
 	after := ""
 
@@ -102,10 +93,6 @@ func (wc *Client) ListUsersInOrg(ctx context.Context, orgID string) ([]User, err
 
 // GetUserByEmail returns the first WorkOS user for the given email.
 func (wc *Client) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	resp, err := wc.um.ListUsers(ctx, usermanagement.ListUsersOpts{
 		Email:          email,
 		OrganizationID: "",
@@ -128,10 +115,6 @@ func (wc *Client) GetUserByEmail(ctx context.Context, email string) (*User, erro
 
 // GetUser returns a WorkOS user by ID.
 func (wc *Client) GetUser(ctx context.Context, userID string) (*User, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	u, err := wc.um.GetUser(ctx, usermanagement.GetUserOpts{User: userID})
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
@@ -143,10 +126,6 @@ func (wc *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 
 // GetOrgMembership returns the first membership matching a user and organization.
 func (wc *Client) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*Member, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	resp, err := wc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
 		OrganizationID: workOSOrgID,
 		UserID:         workOSUserID,
@@ -170,10 +149,6 @@ func (wc *Client) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgI
 
 // ListOrgUsers returns all users in the given organization as a map of userID → User.
 func (wc *Client) ListOrgUsers(ctx context.Context, orgID string) (map[string]User, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	users := make(map[string]User)
 	after := ""
 
@@ -205,10 +180,6 @@ func (wc *Client) ListOrgUsers(ctx context.Context, orgID string) (map[string]Us
 
 // UpdateMemberRole changes a member's role within an organization membership.
 func (wc *Client) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*Member, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	m, err := wc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
 		RoleSlug:  roleSlug,
 		RoleSlugs: nil,
@@ -223,10 +194,6 @@ func (wc *Client) UpdateMemberRole(ctx context.Context, membershipID string, rol
 
 // DeleteOrganizationMembership deletes an organization membership by ID.
 func (wc *Client) DeleteOrganizationMembership(ctx context.Context, membershipID string) error {
-	if wc == nil {
-		return errors.New("workos client is not initialized")
-	}
-
 	err := wc.um.DeleteOrganizationMembership(ctx, usermanagement.DeleteOrganizationMembershipOpts{
 		OrganizationMembership: membershipID,
 	})
@@ -239,10 +206,6 @@ func (wc *Client) DeleteOrganizationMembership(ctx context.Context, membershipID
 
 // ListOrgMemberships returns all organization memberships for an org.
 func (wc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Member, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	var all []Member
 	after := ""
 

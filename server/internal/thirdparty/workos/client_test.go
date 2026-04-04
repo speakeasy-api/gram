@@ -455,11 +455,10 @@ func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.Client, *fakeWorkOS)
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 
-	client, err := workos.NewClient("test-api-key", workos.ClientOpts{
+	client := workos.NewClient("test-api-key", workos.ClientOpts{
 		Endpoint:   srv.URL,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	})
-	require.NoError(t, err)
 	return client, fake
 }
 
@@ -831,13 +830,4 @@ func TestRoleClient_ListOrgUsers(t *testing.T) {
 	require.Equal(t, "Alice", users["user_1"].FirstName)
 	require.Equal(t, "Bob", users["user_2"].FirstName)
 	require.NotContains(t, users, "user_3")
-}
-
-func TestRoleClient_NilClient(t *testing.T) {
-	t.Parallel()
-
-	var rc *workos.Client
-	_, err := rc.ListRoles(context.Background(), "org_1")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not initialized")
 }

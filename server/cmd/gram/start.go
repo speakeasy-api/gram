@@ -73,7 +73,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -453,12 +452,9 @@ func newStartCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			var workosClient *workos.Client
-			if workosAPIKey := c.String("workos-api-key"); workosAPIKey != "" && workosAPIKey != "unset" {
-				workosClient, err = workos.NewClient(workosAPIKey)
-				if err != nil {
-					return fmt.Errorf("failed to create WorkOS client: %w", err)
-				}
+			workosClient, workosAvailable, err := newWorkOSClient(c)
+			if err != nil {
+				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
@@ -477,7 +473,7 @@ func newStartCommand() *cli.Command {
 				pylonClient,
 				posthogClient,
 				billingRepo,
-				workosClient,
+				conv.Ternary(workosAvailable, workosClient, nil),
 			)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))

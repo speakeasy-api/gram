@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -52,11 +51,7 @@ type ClientOpts struct {
 	HTTPClient *http.Client
 }
 
-func NewClient(apiKey string, opts ...ClientOpts) (*Client, error) {
-	if apiKey == "" || apiKey == "unset" {
-		return nil, errors.New("no API key provided to initialize WorkOS client")
-	}
-
+func NewClient(apiKey string, opts ...ClientOpts) *Client {
 	var opt ClientOpts
 	if len(opts) > 0 {
 		opt = opts[0]
@@ -86,7 +81,7 @@ func NewClient(apiKey string, opts ...ClientOpts) (*Client, error) {
 		httpClient: httpClient,
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:         um,
-	}, nil
+	}
 }
 
 // do performs a raw HTTP request against the WorkOS REST API.
