@@ -15,6 +15,7 @@ import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { toast } from "sonner";
 import {
   environmentHasValue,
@@ -365,10 +366,10 @@ export function PlaygroundAuth({
   // Load environment variables using the same hook as MCPAuthenticationTab
   const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);
 
-  // Track user-provided header values
-  const [userProvidedValues, setUserProvidedValues] = useState<
+  // Track user-provided header values (persisted in localStorage per toolset)
+  const [userProvidedValues, setUserProvidedValues] = useLocalStorageState<
     Record<string, string>
-  >({});
+  >(`playground-auth-${toolset.slug}`, {});
 
   // Calculate missing required variables using the same hook as MCPAuthenticationTab
   const missingRequiredCount = useMissingRequiredEnvVars(
