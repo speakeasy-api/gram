@@ -1,6 +1,5 @@
 import { useQueryState } from "nuqs";
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -9,14 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
@@ -28,15 +19,14 @@ import {
   useAuditLogFacets,
 } from "@gram/client/react-query";
 import { Icon } from "@speakeasy-api/moonshine";
-import React, { Suspense, useMemo, useState, type ReactNode } from "react";
+import React, { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { HighlightProvider } from "@/components/diffs/provider";
-
-const StaticDiff = React.lazy(() =>
-  import("@/components/auditlogs/diff").then((mod) => ({
-    default: mod.StaticDiff,
-  })),
-);
+import {
+  getActionCategory,
+  getActionColorConfig,
+} from "@/lib/audit-log-colors";
+import { StructuredDiff } from "@/components/auditlogs/structured-diff";
+import { cn } from "@/lib/utils";
 
 type FacetOption = {
   count?: number;
@@ -44,32 +34,36 @@ type FacetOption = {
   value: string;
 };
 
-function getTimestampFormatter(mode: "utc" | "local") {
+function formatTimeOnly(date: Date, mode: "utc" | "local") {
+  return new Intl.DateTimeFormat(undefined, {
+    ...(mode === "utc" ? { timeZone: "UTC" } : {}),
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+function formatDateHeader(date: Date, mode: "utc" | "local") {
   return new Intl.DateTimeFormat(undefined, {
     ...(mode === "utc" ? { timeZone: "UTC" } : {}),
     year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    timeZoneName: "short",
-    hour12: false,
-  });
+    month: "long",
+    day: "numeric",
+  }).format(date);
+}
+
+function getDateKey(date: Date, mode: "utc" | "local") {
+  if (mode === "utc") {
+    return date.toISOString().slice(0, 10);
+  }
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function StrongName({ children }: { children: ReactNode }) {
   return <strong className="font-semibold text-foreground">{children}</strong>;
-}
-
-function formatTimestamp(date: Date, mode: "utc" | "local") {
-  const formatter = getTimestampFormatter(mode);
-  const parts = formatter.formatToParts(date);
-  const values = Object.fromEntries(
-    parts.map((part) => [part.type, part.value]),
-  );
-
-  return `${values.day}/${values.month}/${values.year} ${values.hour}:${values.minute}:${values.second} ${values.timeZoneName}`;
 }
 
 function getActorLabel(log: AuditLog) {
@@ -84,68 +78,7 @@ function truncateMiddle(value: string, start = 18, end = 16) {
   if (value.length <= start + end + 1) {
     return value;
   }
-
   return `${value.slice(0, start)}...${value.slice(-end)}`;
-}
-
-function renderSubject(log: AuditLog, orgSlug: string) {
-  if (log.subjectType === "deployment" && log.projectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/deployments/${log.subjectId}`}
-        className="text-primary hover:underline"
-      >
-        <StrongName>{log.subjectId}</StrongName>
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "toolset" && log.projectSlug && log.subjectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/mcp/${log.subjectSlug}`}
-        className="text-primary hover:underline"
-      >
-        <StrongName>{log.subjectSlug}</StrongName>
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "project" && log.subjectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.subjectSlug}`}
-        className="text-primary hover:underline"
-      >
-        <StrongName>{log.subjectSlug}</StrongName>
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "api_key") {
-    return (
-      <Link
-        to={`/${orgSlug}/api-keys`}
-        className="text-primary hover:underline"
-      >
-        <StrongName>{getSubjectLabel(log)}</StrongName>
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "asset") {
-    const subjectLabel = getSubjectLabel(log);
-
-    return (
-      <SimpleTooltip tooltip={subjectLabel}>
-        <span className="inline-block max-w-[34ch] align-bottom">
-          <StrongName>{truncateMiddle(subjectLabel)}</StrongName>
-        </span>
-      </SimpleTooltip>
-    );
-  }
-
-  return <StrongName>{getSubjectLabel(log)}</StrongName>;
 }
 
 function getResourceLabel(resource: string) {
@@ -177,14 +110,284 @@ function getResourceLabel(resource: string) {
 
 function formatAuditAction(action: string) {
   const [resource, verb] = action.split(":");
-
   if (!resource || !verb) {
     return action;
   }
-
   const resourceLabel = resource === "toolset" ? "mcp" : resource;
-
   return `${resourceLabel}:${verb}`;
+}
+
+function renderSubject(log: AuditLog, orgSlug: string) {
+  const monoClass = "font-mono text-xs text-muted-foreground";
+
+  if (log.subjectType === "deployment" && log.projectSlug) {
+    return (
+      <Link
+        to={`/${orgSlug}/projects/${log.projectSlug}/deployments/${log.subjectId}`}
+        className={cn(monoClass, "hover:underline")}
+      >
+        {log.subjectId}
+      </Link>
+    );
+  }
+
+  if (log.subjectType === "toolset" && log.projectSlug && log.subjectSlug) {
+    return (
+      <Link
+        to={`/${orgSlug}/projects/${log.projectSlug}/mcp/${log.subjectSlug}`}
+        className={cn(monoClass, "hover:underline")}
+      >
+        {log.subjectSlug}
+      </Link>
+    );
+  }
+
+  if (log.subjectType === "project" && log.subjectSlug) {
+    return (
+      <Link
+        to={`/${orgSlug}/projects/${log.subjectSlug}`}
+        className={cn(monoClass, "hover:underline")}
+      >
+        {log.subjectSlug}
+      </Link>
+    );
+  }
+
+  if (log.subjectType === "api_key") {
+    return (
+      <Link
+        to={`/${orgSlug}/api-keys`}
+        className={cn(monoClass, "hover:underline")}
+      >
+        {getSubjectLabel(log)}
+      </Link>
+    );
+  }
+
+  if (log.subjectType === "asset") {
+    const subjectLabel = getSubjectLabel(log);
+    return (
+      <SimpleTooltip tooltip={subjectLabel}>
+        <span
+          className={cn(monoClass, "inline-block max-w-[34ch] align-bottom")}
+        >
+          {truncateMiddle(subjectLabel)}
+        </span>
+      </SimpleTooltip>
+    );
+  }
+
+  return <span className={monoClass}>{getSubjectLabel(log)}</span>;
+}
+
+function renderVerb(log: AuditLog): string {
+  switch (log.action) {
+    case "project:create":
+      return "created project";
+    case "project:update":
+      return "updated project";
+    case "project:delete":
+      return "deleted project";
+    case "environment:create":
+      return "created environment";
+    case "environment:update":
+      return "updated environment";
+    case "environment:delete":
+      return "deleted environment";
+    case "template:create":
+      return "created template";
+    case "template:update":
+      return "updated template";
+    case "template:delete":
+      return "deleted template";
+    case "toolset:create":
+      return "created MCP server";
+    case "toolset:update":
+      return "updated MCP server";
+    case "toolset:delete":
+      return "deleted MCP server";
+    case "toolset:attach_external_oauth":
+      return "attached an external OAuth server to MCP server";
+    case "toolset:detach_external_oauth":
+      return "detached an external OAuth server from MCP server";
+    case "toolset:attach_oauth_proxy":
+      return "attached an OAuth proxy to MCP server";
+    case "toolset:detach_oauth_proxy":
+      return "detached an OAuth proxy from MCP server";
+    case "api_key:create":
+      return "created API key";
+    case "api_key:revoke":
+      return "revoked API key";
+    case "variation:update_global":
+      return "updated a global variation for";
+    case "variation:delete_global":
+      return "deleted a global variation for";
+    case "deployments:create":
+      return "created deployment";
+    case "deployments:evolve":
+      return "created deployment";
+    case "deployments:redeploy":
+      return "redeployed deployment";
+    case "custom_domains:create":
+      return "added custom domain";
+    case "custom_domains:delete":
+      return "deleted custom domain";
+    case "mcp_metadata:update":
+      return "updated MCP metadata for";
+    case "asset:create":
+      return "uploaded asset";
+    default: {
+      const [resource = "activity", verb = "updated"] = log.action.split(":");
+      return `${verb.replace(/_/g, " ")} ${getResourceLabel(resource)}`;
+    }
+  }
+}
+
+function hasDiff(log: AuditLog): boolean {
+  if (log.action.startsWith("deployments:")) {
+    return false;
+  }
+  return log.beforeSnapshot != null || log.afterSnapshot != null;
+}
+
+function ActionBadge({ action }: { action: string }) {
+  const category = getActionCategory(action);
+  const colors = getActionColorConfig(category);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-medium",
+        colors.bg,
+        colors.text,
+      )}
+    >
+      {formatAuditAction(action)}
+    </span>
+  );
+}
+
+function ActionDot({ action }: { action: string }) {
+  const category = getActionCategory(action);
+  const colors = getActionColorConfig(category);
+  return (
+    <span
+      className={cn(
+        "mt-[3px] inline-block size-2 shrink-0 rounded-full",
+        colors.dot,
+      )}
+    />
+  );
+}
+
+function AuditLogRow({
+  log,
+  orgSlug,
+  timestampMode,
+  isOdd,
+}: {
+  log: AuditLog;
+  orgSlug: string;
+  timestampMode: "utc" | "local";
+  isOdd: boolean;
+}) {
+  const [diffExpanded, setDiffExpanded] = useState(false);
+  const showDiff = hasDiff(log);
+
+  const rowContent = (
+    <div className="flex items-start gap-3.5 px-4 py-2.5">
+      <ActionDot action={log.action} />
+      <ActionBadge action={log.action} />
+      <div className="min-w-0 flex-1 text-sm leading-5">
+        <span>
+          <StrongName>{getActorLabel(log)}</StrongName>
+          <span className="mx-1.5 text-muted-foreground">
+            {renderVerb(log)}
+          </span>
+          {renderSubject(log, orgSlug)}
+        </span>
+        {showDiff && (
+          <button
+            type="button"
+            onClick={() => setDiffExpanded((v) => !v)}
+            className="ml-2 text-xs text-blue-500 hover:underline"
+          >
+            {diffExpanded ? "Hide diff" : "Show diff"}
+          </button>
+        )}
+      </div>
+      <span className="shrink-0 font-mono text-xs text-muted-foreground">
+        {formatTimeOnly(log.createdAt, timestampMode)}
+      </span>
+    </div>
+  );
+
+  if (showDiff && diffExpanded) {
+    return (
+      <div key={log.id}>
+        <div
+          className={cn(
+            "rounded-t-lg border border-b-0",
+            isOdd ? "bg-muted/30" : "bg-background",
+          )}
+        >
+          {rowContent}
+        </div>
+        <div className="rounded-b-lg border border-t-0 bg-background px-4 pb-3 pt-2">
+          <StructuredDiff log={log} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      key={log.id}
+      className={cn("rounded-none", isOdd ? "bg-muted/30" : "bg-background")}
+    >
+      {rowContent}
+    </div>
+  );
+}
+
+function DateGroupHeader({
+  date,
+  mode,
+}: {
+  date: Date;
+  mode: "utc" | "local";
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2">
+      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {formatDateHeader(date, mode)}
+      </span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+type DateGroup = {
+  key: string;
+  date: Date;
+  logs: AuditLog[];
+};
+
+function groupLogsByDate(logs: AuditLog[], mode: "utc" | "local"): DateGroup[] {
+  const groups: DateGroup[] = [];
+  const keyMap = new Map<string, DateGroup>();
+
+  for (const log of logs) {
+    const key = getDateKey(log.createdAt, mode);
+    let group = keyMap.get(key);
+    if (!group) {
+      group = { key, date: log.createdAt, logs: [] };
+      groups.push(group);
+      keyMap.set(key, group);
+    }
+    group.logs.push(log);
+  }
+
+  return groups;
 }
 
 function FacetSelect({
@@ -236,186 +439,6 @@ function FacetSelect({
   );
 }
 
-function renderAuditMessage(log: AuditLog, orgSlug: string) {
-  const actor = <StrongName>{getActorLabel(log)}</StrongName>;
-  const subject = renderSubject(log, orgSlug);
-
-  switch (log.action) {
-    case "project:create":
-      return (
-        <>
-          {actor} created project {subject}
-        </>
-      );
-    case "project:update":
-      return (
-        <>
-          {actor} updated project {subject}
-        </>
-      );
-    case "project:delete":
-      return (
-        <>
-          {actor} deleted project {subject}
-        </>
-      );
-    case "environment:create":
-      return (
-        <>
-          {actor} created environment {subject}
-        </>
-      );
-    case "environment:update":
-      return (
-        <>
-          {actor} updated environment {subject}
-        </>
-      );
-    case "environment:delete":
-      return (
-        <>
-          {actor} deleted environment {subject}
-        </>
-      );
-    case "template:create":
-      return (
-        <>
-          {actor} created template {subject}
-        </>
-      );
-    case "template:update":
-      return (
-        <>
-          {actor} updated template {subject}
-        </>
-      );
-    case "template:delete":
-      return (
-        <>
-          {actor} deleted template {subject}
-        </>
-      );
-    case "toolset:create":
-      return (
-        <>
-          {actor} created MCP server {subject}
-        </>
-      );
-    case "toolset:update":
-      return (
-        <>
-          {actor} updated MCP server {subject}
-        </>
-      );
-    case "toolset:delete":
-      return (
-        <>
-          {actor} deleted MCP server {subject}
-        </>
-      );
-    case "toolset:attach_external_oauth":
-      return (
-        <>
-          {actor} attached an external OAuth server to MCP server {subject}
-        </>
-      );
-    case "toolset:detach_external_oauth":
-      return (
-        <>
-          {actor} detached an external OAuth server from MCP server {subject}
-        </>
-      );
-    case "toolset:attach_oauth_proxy":
-      return (
-        <>
-          {actor} attached an OAuth proxy to MCP server {subject}
-        </>
-      );
-    case "toolset:detach_oauth_proxy":
-      return (
-        <>
-          {actor} detached an OAuth proxy from MCP server {subject}
-        </>
-      );
-    case "api_key:create":
-      return (
-        <>
-          {actor} created API key {subject}
-        </>
-      );
-    case "api_key:revoke":
-      return (
-        <>
-          {actor} revoked API key {subject}
-        </>
-      );
-    case "variation:update_global":
-      return (
-        <>
-          {actor} updated a global variation for {subject}
-        </>
-      );
-    case "variation:delete_global":
-      return (
-        <>
-          {actor} deleted a global variation for {subject}
-        </>
-      );
-    case "deployments:create":
-      return (
-        <>
-          {actor} created deployment {subject}
-        </>
-      );
-    case "deployments:evolve":
-      return (
-        <>
-          {actor} created deployment {subject}
-        </>
-      );
-    case "deployments:redeploy":
-      return (
-        <>
-          {actor} redeployed deployment {subject}
-        </>
-      );
-    case "custom_domains:create":
-      return (
-        <>
-          {actor} added custom domain {subject}
-        </>
-      );
-    case "custom_domains:delete":
-      return (
-        <>
-          {actor} deleted custom domain {subject}
-        </>
-      );
-    case "mcp_metadata:update":
-      return (
-        <>
-          {actor} updated MCP metadata for {subject}
-        </>
-      );
-    case "asset:create":
-      return (
-        <>
-          {actor} uploaded asset {subject}
-        </>
-      );
-    default: {
-      const [resource = "activity", verb = "updated"] = log.action.split(":");
-
-      return (
-        <>
-          {actor} {verb.replace(/_/g, " ")} {getResourceLabel(resource)}{" "}
-          {subject}
-        </>
-      );
-    }
-  }
-}
-
 export default function OrgAuditLogs() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
@@ -432,6 +455,10 @@ export default function OrgAuditLogs() {
   const [timestampMode, setTimestampMode] = useQueryState("time", {
     defaultValue: "utc",
   });
+
+  const tsMode = (timestampMode === "local" ? "local" : "utc") as
+    | "utc"
+    | "local";
 
   const projects = useMemo(
     () =>
@@ -473,6 +500,11 @@ export default function OrgAuditLogs() {
   const logs = useMemo(
     () => data?.pages.flatMap((page) => page.result.logs) ?? [],
     [data],
+  );
+
+  const dateGroups = useMemo(
+    () => groupLogsByDate(logs, tsMode),
+    [logs, tsMode],
   );
 
   const hasActiveFilters =
@@ -550,7 +582,7 @@ export default function OrgAuditLogs() {
                 <Type
                   small
                   className={
-                    timestampMode === "utc"
+                    tsMode === "utc"
                       ? "text-foreground"
                       : "text-muted-foreground"
                   }
@@ -558,7 +590,7 @@ export default function OrgAuditLogs() {
                   UTC
                 </Type>
                 <Switch
-                  checked={timestampMode === "local"}
+                  checked={tsMode === "local"}
                   onCheckedChange={(checked) => {
                     void setTimestampMode(checked ? "local" : "utc");
                   }}
@@ -567,7 +599,7 @@ export default function OrgAuditLogs() {
                 <Type
                   small
                   className={
-                    timestampMode === "local"
+                    tsMode === "local"
                       ? "text-foreground"
                       : "text-muted-foreground"
                   }
@@ -579,103 +611,54 @@ export default function OrgAuditLogs() {
           </div>
 
           <div className="overflow-hidden rounded-lg border bg-background">
-            <HighlightProvider>
-              <Table>
-                <TableHeader className="bg-muted/30">
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="h-11 w-[240px] text-xs uppercase tracking-wide text-muted-foreground">
-                      Timestamp
-                    </TableHead>
-                    <TableHead className="h-11 w-[180px] text-xs uppercase tracking-wide text-muted-foreground">
-                      Project
-                    </TableHead>
-                    <TableHead className="h-11 text-xs uppercase tracking-wide text-muted-foreground">
-                      Event
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={3} className="py-12">
-                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                          <Icon
-                            name="loader-circle"
-                            className="size-4 animate-spin"
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                <Icon name="loader-circle" className="size-4 animate-spin" />
+                <span>Loading audit logs...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center gap-2 py-12 text-center">
+                <Type className="font-medium">Error loading audit logs</Type>
+                <Type muted small>
+                  {error.message}
+                </Type>
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-12 text-center">
+                <Type className="font-medium">No audit logs found</Type>
+                <Type muted small>
+                  {selectedProjectSlug === "all" &&
+                  selectedAction === "all" &&
+                  selectedActor === "all"
+                    ? "Activity will appear here as changes are made across your organization."
+                    : "No audit logs match the selected filters."}
+                </Type>
+              </div>
+            ) : (
+              <div>
+                {dateGroups.map((group) => {
+                  let rowIndex = 0;
+                  return (
+                    <React.Fragment key={group.key}>
+                      <DateGroupHeader date={group.date} mode={tsMode} />
+                      {group.logs.map((log) => {
+                        const isOdd = rowIndex % 2 === 1;
+                        rowIndex++;
+                        return (
+                          <AuditLogRow
+                            key={log.id}
+                            log={log}
+                            orgSlug={orgSlug}
+                            timestampMode={tsMode}
+                            isOdd={isOdd}
                           />
-                          <span>Loading audit logs...</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : error ? (
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={3} className="py-12">
-                        <div className="flex flex-col items-center gap-2 text-center">
-                          <Type className="font-medium">
-                            Error loading audit logs
-                          </Type>
-                          <Type muted small>
-                            {error.message}
-                          </Type>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : logs.length === 0 ? (
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={3} className="py-12">
-                        <div className="flex flex-col items-center gap-2 text-center">
-                          <Type className="font-medium">
-                            No audit logs found
-                          </Type>
-                          <Type muted small>
-                            {selectedProjectSlug === "all" &&
-                            selectedAction === "all" &&
-                            selectedActor === "all"
-                              ? "Activity will appear here as changes are made across your organization."
-                              : "No audit logs match the selected filters."}
-                          </Type>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    logs.map((log) => {
-                      return (
-                        <TableRow key={log.id}>
-                          <TableCell className="font-mono text-xs text-muted-foreground">
-                            {formatTimestamp(
-                              log.createdAt,
-                              timestampMode === "local" ? "local" : "utc",
-                            )}
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {log.projectSlug ? (
-                              <Link
-                                to={`/${orgSlug}/projects/${log.projectSlug}`}
-                                className="text-primary hover:underline"
-                              >
-                                {log.projectSlug}
-                              </Link>
-                            ) : null}
-                          </TableCell>
-                          <TableCell className="whitespace-normal text-sm leading-6">
-                            <div className="flex flex-nowrap items-baseline gap-2">
-                              <Badge
-                                variant="outline"
-                                className="font-mono text-[11px]"
-                              >
-                                {formatAuditAction(log.action)}
-                              </Badge>
-                              <span>{renderAuditMessage(log, orgSlug)}</span>
-                            </div>
-                            {renderDiff(log)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </HighlightProvider>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            )}
 
             {(logs.length > 0 || isFetchingNextPage) && (
               <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-3">
@@ -714,51 +697,5 @@ export default function OrgAuditLogs() {
         </div>
       </Page.Body>
     </Page>
-  );
-}
-
-function renderDiff(log: AuditLog) {
-  if (log.action.startsWith("deployments:")) {
-    return null;
-  }
-
-  if (log.beforeSnapshot == null && log.afterSnapshot == null) {
-    return null;
-  }
-
-  return <AuditLogDiff log={log} />;
-}
-
-function AuditLogDiff({ log }: { log: AuditLog }) {
-  const [isVisible, setIsVisible] = useState(false);
-
-  return (
-    <div className="mt-2">
-      <Button
-        className="font-bold"
-        type="button"
-        variant="link"
-        size="sm"
-        onClick={() => setIsVisible((visible) => !visible)}
-        aria-expanded={isVisible}
-      >
-        {isVisible ? "Hide diff" : "Show diff"}
-      </Button>
-
-      {isVisible ? (
-        <div className="mt-2">
-          <Suspense
-            fallback={
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Icon name="loader-circle" className="size-4 animate-spin" />
-                <span>Loading diff...</span>
-              </div>
-            }
-          >
-            <StaticDiff log={log} />
-          </Suspense>
-        </div>
-      ) : null}
-    </div>
   );
 }
