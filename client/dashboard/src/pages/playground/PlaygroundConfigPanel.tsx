@@ -1,23 +1,23 @@
-import { AnnotationBadges } from '@/components/tool-list/AnnotationBadges';
-import { MethodBadge } from '@/components/tool-list/MethodBadge';
-import { Button } from '@/components/ui/button';
+import { AnnotationBadges } from "@/components/tool-list/AnnotationBadges";
+import { MethodBadge } from "@/components/tool-list/MethodBadge";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/collapsible";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
-import { SimpleTooltip } from '@/components/ui/tooltip';
-import { Type } from '@/components/ui/type';
-import { Tool } from '@/lib/toolTypes';
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Type } from "@/components/ui/type";
+import { Tool } from "@/lib/toolTypes";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -26,8 +26,8 @@ import {
   PencilRuler,
   PlusIcon,
   SquareFunction,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
+} from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface ToolsetInfo {
   name: string;
@@ -38,7 +38,7 @@ interface ToolsetInfo {
 }
 
 interface ToolGroup {
-  type: 'package' | 'function' | 'custom' | 'higher_order';
+  type: "package" | "function" | "custom" | "higher_order";
   icon:
     | typeof FileCode
     | typeof SquareFunction
@@ -71,16 +71,16 @@ interface ToolsetSectionProps {
 }
 
 // Sort HTTP tools by method in round-robin fashion for visual variety
-const HTTP_METHOD_ORDER = ['GET', 'POST', 'PUT', 'DELETE'];
+const HTTP_METHOD_ORDER = ["GET", "POST", "PUT", "DELETE"];
 
 function sortToolsByMethod(tools: Tool[]): Tool[] {
-  const httpTools = tools.filter((t) => t.type === 'http');
-  const nonHttpTools = tools.filter((t) => t.type !== 'http');
+  const httpTools = tools.filter((t) => t.type === "http");
+  const nonHttpTools = tools.filter((t) => t.type !== "http");
 
   const toolsByMethod = new Map<string, typeof httpTools>();
   httpTools.forEach((tool) => {
-    if (tool.type === 'http') {
-      const method = tool.httpMethod?.toUpperCase() || 'UNKNOWN';
+    if (tool.type === "http") {
+      const method = tool.httpMethod?.toUpperCase() || "UNKNOWN";
       if (!toolsByMethod.has(method)) {
         toolsByMethod.set(method, []);
       }
@@ -97,10 +97,10 @@ function sortToolsByMethod(tools: Tool[]): Tool[] {
 
       // If PUT is empty but PATCH exists, use PATCH instead (both are orange)
       if (
-        method === 'PUT' &&
+        method === "PUT" &&
         (!toolsForMethod || toolsForMethod.length === 0)
       ) {
-        toolsForMethod = toolsByMethod.get('PATCH');
+        toolsForMethod = toolsByMethod.get("PATCH");
       }
 
       if (toolsForMethod && toolsForMethod.length > 0) {
@@ -112,7 +112,7 @@ function sortToolsByMethod(tools: Tool[]): Tool[] {
     toolsByMethod.forEach((tools, method) => {
       if (
         !HTTP_METHOD_ORDER.includes(method) &&
-        method !== 'PATCH' &&
+        method !== "PATCH" &&
         tools.length > 0
       ) {
         sortedTools.push(tools.shift()!);
@@ -136,7 +136,7 @@ function groupTools(
   const higherOrderTools: Tool[] = [];
 
   tools.forEach((tool) => {
-    if (tool.type === 'http') {
+    if (tool.type === "http") {
       let groupKey: string | undefined;
 
       if (tool.packageName) {
@@ -154,7 +154,7 @@ function groupTools(
         // HTTP tools without any identifier go to custom
         customTools.push(tool);
       }
-    } else if (tool.type === 'function') {
+    } else if (tool.type === "function") {
       let groupKey: string | undefined;
 
       if (tool.functionId && functionIdToName) {
@@ -177,7 +177,7 @@ function groupTools(
   // Add package groups with sorted tools
   packageMap.forEach((tools, packageName) => {
     groups.push({
-      type: 'package',
+      type: "package",
       icon: FileCode,
       title: packageName,
       tools: sortToolsByMethod(tools),
@@ -188,7 +188,7 @@ function groupTools(
   // Add function groups
   functionMap.forEach((tools, functionName) => {
     groups.push({
-      type: 'function',
+      type: "function",
       icon: SquareFunction,
       title: functionName,
       tools,
@@ -199,9 +199,9 @@ function groupTools(
   // Add function tools group
   if (functionTools.length > 0) {
     groups.push({
-      type: 'function',
+      type: "function",
       icon: SquareFunction,
-      title: 'Functions',
+      title: "Functions",
       tools: functionTools,
     });
   }
@@ -209,9 +209,9 @@ function groupTools(
   // Add custom tools group with sorted tools
   if (customTools.length > 0) {
     groups.push({
-      type: 'custom',
+      type: "custom",
       icon: PencilRuler,
-      title: 'Custom',
+      title: "Custom",
       tools: sortToolsByMethod(customTools),
     });
   }
@@ -219,9 +219,9 @@ function groupTools(
   // Add higher order tools group
   if (higherOrderTools.length > 0) {
     groups.push({
-      type: 'higher_order',
+      type: "higher_order",
       icon: Layers,
-      title: 'Higher Order Tools',
+      title: "Higher Order Tools",
       tools: higherOrderTools,
     });
   }
@@ -279,10 +279,10 @@ export function PlaygroundConfigPanel({
   };
 
   return (
-    <div className='h-full flex flex-col border-r overflow-y-auto'>
+    <div className="h-full flex flex-col border-r overflow-y-auto">
       {/* Toolset Selector - Always at top */}
-      <div className='px-4 py-3 border-b'>
-        <Label className='text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block'>
+      <div className="px-4 py-3 border-b">
+        <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
           MCP Server
         </Label>
         {toolsetSelector}
@@ -290,21 +290,21 @@ export function PlaygroundConfigPanel({
 
       {/* Auth Settings Section */}
       {authSettings && (
-        <div className='border-b'>
+        <div className="border-b">
           <Collapsible open={authOpen} onOpenChange={setAuthOpen}>
-            <CollapsibleTrigger className='flex w-full items-center px-4 py-2.5 hover:bg-muted/30 transition-colors group'>
-              <div className='flex items-center gap-1.5'>
-                <span className='text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'>
+            <CollapsibleTrigger className="flex w-full items-center px-4 py-2.5 hover:bg-muted/30 transition-colors group">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Authentication
                 </span>
                 {authOpen ? (
-                  <ChevronDownIcon className='h-3.5 w-3.5 text-muted-foreground' />
+                  <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : (
-                  <ChevronRightIcon className='h-3.5 w-3.5 text-muted-foreground' />
+                  <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground" />
                 )}
               </div>
             </CollapsibleTrigger>
-            <CollapsibleContent className='px-4 pb-3 pt-2'>
+            <CollapsibleContent className="px-4 pb-3 pt-2">
               {authSettings}
             </CollapsibleContent>
           </Collapsible>
@@ -312,33 +312,33 @@ export function PlaygroundConfigPanel({
       )}
 
       {/* Tools Section */}
-      <div className='border-b'>
+      <div className="border-b">
         <Collapsible open={toolsOpen} onOpenChange={setToolsOpen}>
-          <CollapsibleTrigger className='flex w-full items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors group'>
-            <div className='flex items-center gap-1.5'>
-              <span className='text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'>
+          <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors group">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Tools
               </span>
               {toolsOpen ? (
-                <ChevronDownIcon className='h-3.5 w-3.5 text-muted-foreground' />
+                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
               ) : (
-                <ChevronRightIcon className='h-3.5 w-3.5 text-muted-foreground' />
+                <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground" />
               )}
             </div>
 
             <Button
-              size='sm'
-              variant='ghost'
-              className='h-6 px-2'
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2"
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
                 onOpenToolsModal?.();
               }}
             >
-              <PlusIcon className='size-3.5' />
+              <PlusIcon className="size-3.5" />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className='py-1'>
+          <CollapsibleContent className="py-1">
             {toolGroups.length > 0 ? (
               <div>
                 {toolGroups.map((group) => {
@@ -348,19 +348,19 @@ export function PlaygroundConfigPanel({
                       {/* Group Header */}
                       <button
                         onClick={() => toggleGroup(group.title)}
-                        className='w-full px-3 py-2 flex items-center gap-2 bg-surface-secondary-default hover:bg-active transition-colors text-left group/item'
+                        className="w-full px-3 py-2 flex items-center gap-2 bg-surface-secondary-default hover:bg-active transition-colors text-left group/item"
                       >
-                        <group.icon className='size-3.5 shrink-0 text-muted-foreground' />
-                        <div className='min-w-0 truncate text-xs'>
+                        <group.icon className="size-3.5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 truncate text-xs">
                           {group.title}
                         </div>
                         {isExpanded ? (
-                          <ChevronDownIcon className='size-3.5 shrink-0 text-muted-foreground' />
+                          <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
                         ) : (
-                          <ChevronRightIcon className='size-3.5 shrink-0 text-muted-foreground' />
+                          <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
                         )}
-                        <div className='flex-1' />
-                        <div className='text-[11px] text-muted-foreground tabular-nums'>
+                        <div className="flex-1" />
+                        <div className="text-[11px] text-muted-foreground tabular-nums">
                           {group.tools.length}
                         </div>
                       </button>
@@ -372,26 +372,26 @@ export function PlaygroundConfigPanel({
                             return (
                               <div
                                 key={tool.toolUrn}
-                                className='group w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/30 transition-colors'
+                                className="group w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/30 transition-colors"
                               >
                                 <button
                                   onClick={() => tool && onToolClick?.(tool)}
-                                  className='flex-1 flex items-center justify-between text-left min-w-0'
+                                  className="flex-1 flex items-center justify-between text-left min-w-0"
                                 >
-                                  <p className='text-xs leading-5 text-foreground truncate'>
+                                  <p className="text-xs leading-5 text-foreground truncate">
                                     {tool.name}
                                   </p>
-                                  <div className='flex items-center gap-2 shrink-0 ml-2'>
+                                  <div className="flex items-center gap-2 shrink-0 ml-2">
                                     <AnnotationBadges tool={tool} />
-                                    {tool.type === 'http' &&
+                                    {tool.type === "http" &&
                                       tool.httpMethod && (
                                         <MethodBadge method={tool.httpMethod} />
                                       )}
-                                    {tool.type === 'function' && (
-                                      <SquareFunction className='size-3.5 text-muted-foreground' />
+                                    {tool.type === "function" && (
+                                      <SquareFunction className="size-3.5 text-muted-foreground" />
                                     )}
-                                    {tool.type === 'prompt' && (
-                                      <PencilRuler className='size-3.5 text-muted-foreground' />
+                                    {tool.type === "prompt" && (
+                                      <PencilRuler className="size-3.5 text-muted-foreground" />
                                     )}
                                   </div>
                                 </button>
@@ -405,8 +405,8 @@ export function PlaygroundConfigPanel({
                 })}
               </div>
             ) : (
-              <div className='px-4 py-6 text-center'>
-                <Type variant='small' className='text-muted-foreground'>
+              <div className="px-4 py-6 text-center">
+                <Type variant="small" className="text-muted-foreground">
                   No tools added
                 </Type>
               </div>
@@ -416,97 +416,97 @@ export function PlaygroundConfigPanel({
       </div>
 
       {/* Configuration Section */}
-      <div className='border-b'>
+      <div className="border-b">
         <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
-          <CollapsibleTrigger className='flex w-full items-center px-4 py-2.5 hover:bg-muted/30 transition-colors group'>
-            <div className='flex items-center gap-1.5'>
-              <span className='text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'>
+          <CollapsibleTrigger className="flex w-full items-center px-4 py-2.5 hover:bg-muted/30 transition-colors group">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Model Settings
               </span>
               {configOpen ? (
-                <ChevronDownIcon className='h-3.5 w-3.5 text-muted-foreground' />
+                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
               ) : (
-                <ChevronRightIcon className='h-3.5 w-3.5 text-muted-foreground' />
+                <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground" />
               )}
             </div>
           </CollapsibleTrigger>
-          <CollapsibleContent className='px-4 pb-3 pt-2 space-y-4'>
+          <CollapsibleContent className="px-4 pb-3 pt-2 space-y-4">
             {/* Model */}
             {model !== undefined && onModelChange && (
-              <div className='space-y-2'>
-                <Label htmlFor='model' className='text-xs font-medium'>
+              <div className="space-y-2">
+                <Label htmlFor="model" className="text-xs font-medium">
                   Model
                 </Label>
                 <Select value={model} onValueChange={onModelChange}>
-                  <SelectTrigger size='sm' className='w-full'>
+                  <SelectTrigger size="sm" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='anthropic/claude-opus-4.6'>
+                    <SelectItem value="anthropic/claude-opus-4.6">
                       Claude Opus 4.6 (Expensive)
                     </SelectItem>
-                    <SelectItem value='anthropic/claude-sonnet-4.6'>
+                    <SelectItem value="anthropic/claude-sonnet-4.6">
                       Claude Sonnet 4.6
                     </SelectItem>
-                    <SelectItem value='anthropic/claude-sonnet-4.5'>
+                    <SelectItem value="anthropic/claude-sonnet-4.5">
                       Claude Sonnet 4.5
                     </SelectItem>
-                    <SelectItem value='anthropic/claude-opus-4.5'>
+                    <SelectItem value="anthropic/claude-opus-4.5">
                       Claude Opus 4.5 (Expensive)
                     </SelectItem>
-                    <SelectItem value='anthropic/claude-haiku-4.5'>
+                    <SelectItem value="anthropic/claude-haiku-4.5">
                       Claude Haiku 4.5
                     </SelectItem>
-                    <SelectItem value='anthropic/claude-opus-4.1'>
+                    <SelectItem value="anthropic/claude-opus-4.1">
                       Claude Opus 4.1 (Expensive)
                     </SelectItem>
-                    <SelectItem value='anthropic/claude-sonnet-4'>
+                    <SelectItem value="anthropic/claude-sonnet-4">
                       Claude Sonnet 4
                     </SelectItem>
-                    <SelectItem value='openai/gpt-5.4'>GPT-5.4</SelectItem>
-                    <SelectItem value='openai/gpt-5.4-mini'>
+                    <SelectItem value="openai/gpt-5.4">GPT-5.4</SelectItem>
+                    <SelectItem value="openai/gpt-5.4-mini">
                       GPT-5.4 Mini
                     </SelectItem>
-                    <SelectItem value='openai/gpt-5.1'>GPT-5.1</SelectItem>
-                    <SelectItem value='openai/gpt-5.1-codex'>
+                    <SelectItem value="openai/gpt-5.1">GPT-5.1</SelectItem>
+                    <SelectItem value="openai/gpt-5.1-codex">
                       GPT-5.1 Codex
                     </SelectItem>
-                    <SelectItem value='openai/gpt-5'>GPT-5</SelectItem>
-                    <SelectItem value='openai/gpt-4.1'>GPT-4.1</SelectItem>
-                    <SelectItem value='openai/o4-mini'>o4-mini</SelectItem>
-                    <SelectItem value='openai/o3'>o3</SelectItem>
-                    <SelectItem value='google/gemini-3.1-pro-preview'>
+                    <SelectItem value="openai/gpt-5">GPT-5</SelectItem>
+                    <SelectItem value="openai/gpt-4.1">GPT-4.1</SelectItem>
+                    <SelectItem value="openai/o4-mini">o4-mini</SelectItem>
+                    <SelectItem value="openai/o3">o3</SelectItem>
+                    <SelectItem value="google/gemini-3.1-pro-preview">
                       Gemini 3.1 Pro Preview
                     </SelectItem>
-                    <SelectItem value='google/gemini-2.5-pro'>
+                    <SelectItem value="google/gemini-2.5-pro">
                       Gemini 2.5 Pro
                     </SelectItem>
-                    <SelectItem value='google/gemini-2.5-flash'>
+                    <SelectItem value="google/gemini-2.5-flash">
                       Gemini 2.5 Flash
                     </SelectItem>
-                    <SelectItem value='deepseek/deepseek-r1'>
+                    <SelectItem value="deepseek/deepseek-r1">
                       DeepSeek R1
                     </SelectItem>
-                    <SelectItem value='deepseek/deepseek-v3.2'>
+                    <SelectItem value="deepseek/deepseek-v3.2">
                       DeepSeek V3.2
                     </SelectItem>
-                    <SelectItem value='meta-llama/llama-4-maverick'>
+                    <SelectItem value="meta-llama/llama-4-maverick">
                       Llama 4 Maverick
                     </SelectItem>
-                    <SelectItem value='x-ai/grok-4'>Grok 4</SelectItem>
-                    <SelectItem value='qwen/qwen3-coder'>
+                    <SelectItem value="x-ai/grok-4">Grok 4</SelectItem>
+                    <SelectItem value="qwen/qwen3-coder">
                       Qwen3 Coder
                     </SelectItem>
-                    <SelectItem value='moonshotai/kimi-k2.5'>
+                    <SelectItem value="moonshotai/kimi-k2.5">
                       Kimi K2.5
                     </SelectItem>
-                    <SelectItem value='mistralai/mistral-medium-3.1'>
+                    <SelectItem value="mistralai/mistral-medium-3.1">
                       Mistral Medium 3.1
                     </SelectItem>
-                    <SelectItem value='mistralai/codestral-2508'>
+                    <SelectItem value="mistralai/codestral-2508">
                       Codestral 2508
                     </SelectItem>
-                    <SelectItem value='mistralai/devstral-small'>
+                    <SelectItem value="mistralai/devstral-small">
                       Devstral Small
                     </SelectItem>
                   </SelectContent>
@@ -516,50 +516,50 @@ export function PlaygroundConfigPanel({
 
             {/* Temperature */}
             {temperature !== undefined && onTemperatureChange && (
-              <div className='space-y-2'>
-                <div className='flex items-center justify-between'>
-                  <Label htmlFor='temperature' className='text-xs font-medium'>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="temperature" className="text-xs font-medium">
                     Temperature
                   </Label>
-                  <SimpleTooltip tooltip='Controls randomness in responses. Lower values (0.0-0.3) make outputs more focused and deterministic. Higher values (0.7-1.0) increase creativity and variety.'>
-                    <span className='text-xs text-muted-foreground cursor-help font-mono'>
+                  <SimpleTooltip tooltip="Controls randomness in responses. Lower values (0.0-0.3) make outputs more focused and deterministic. Higher values (0.7-1.0) increase creativity and variety.">
+                    <span className="text-xs text-muted-foreground cursor-help font-mono">
                       {temperature.toFixed(1)}
                     </span>
                   </SimpleTooltip>
                 </div>
                 <Slider
-                  id='temperature'
+                  id="temperature"
                   value={temperature}
                   onChange={onTemperatureChange}
                   min={0}
                   max={1}
                   step={0.1}
-                  className='w-full'
+                  className="w-full"
                 />
               </div>
             )}
 
             {/* Max Tokens */}
             {maxTokens !== undefined && onMaxTokensChange && (
-              <div className='space-y-2'>
-                <div className='flex items-center justify-between'>
-                  <Label htmlFor='maxTokens' className='text-xs font-medium'>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="maxTokens" className="text-xs font-medium">
                     Max Tokens
                   </Label>
-                  <SimpleTooltip tooltip='Maximum number of tokens in the response. Higher values allow longer responses but may increase cost.'>
-                    <span className='text-xs text-muted-foreground cursor-help font-mono'>
+                  <SimpleTooltip tooltip="Maximum number of tokens in the response. Higher values allow longer responses but may increase cost.">
+                    <span className="text-xs text-muted-foreground cursor-help font-mono">
                       {maxTokens}
                     </span>
                   </SimpleTooltip>
                 </div>
                 <Slider
-                  id='maxTokens'
+                  id="maxTokens"
                   value={maxTokens}
                   onChange={onMaxTokensChange}
                   min={256}
                   max={8192}
                   step={256}
-                  className='w-full'
+                  className="w-full"
                 />
               </div>
             )}
