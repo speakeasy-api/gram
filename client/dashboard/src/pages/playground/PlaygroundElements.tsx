@@ -223,7 +223,13 @@ export function PlaygroundElements({
           title: "Test Your MCP Server",
           subtitle:
             "This chat has access to the selected MCP server. Use it to test your tools.",
-          suggestions: [],
+          suggestions: [
+            {
+              title: "Explore tools",
+              label: "See what's available",
+              prompt: "What tools does this server have?",
+            },
+          ],
         },
         composer: {
           placeholder: "Send a message...",
