@@ -848,6 +848,53 @@ export default function OrgAuditLogs() {
             {/* Search toolbar */}
             {!isLoading && !error && logs.length > 0 && (
               <div className="flex items-center gap-2 border-b bg-surface/50 p-2">
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  {searchQuery ? (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                          N
+                        </kbd>
+                        <span>/</span>
+                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                          ⇧N
+                        </kbd>
+                        <span className="ml-0.5">results</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                          ESC
+                        </kbd>
+                        <span>clear</span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                          J
+                        </kbd>
+                        <span>/</span>
+                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                          K
+                        </kbd>
+                        <span className="ml-0.5">navigate</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                          G
+                        </kbd>
+                        <span>first</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                          ⇧G
+                        </kbd>
+                        <span>last</span>
+                      </span>
+                    </>
+                  )}
+                </div>
                 <div className="ml-auto relative">
                   <Icon
                     name="search"
@@ -901,7 +948,7 @@ export default function OrgAuditLogs() {
                     )
                   ) : (
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                      <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                      <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm font-mono">
                         /
                       </span>
                     </div>
@@ -1011,49 +1058,6 @@ export default function OrgAuditLogs() {
               </div>
             )}
           </div>
-
-          {/* Footer shortcuts bar */}
-          {logs.length > 0 && (
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <div className="flex items-center gap-4">
-                {searchQuery ? (
-                  <>
-                    <div className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">N</kbd>
-                      <span>/</span>
-                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">
-                        {"\u21E7"}N
-                      </kbd>
-                      <span className="ml-1">navigate results</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">
-                        ESC
-                      </kbd>
-                      <span>clear search</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">
-                        {"\u2318"}F
-                      </kbd>
-                      <span>or</span>
-                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">/</kbd>
-                      <span>to search</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">J</kbd>
-                      <span>/</span>
-                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">K</kbd>
-                      <span className="ml-1">navigate logs</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </Page.Body>
     </Page>
