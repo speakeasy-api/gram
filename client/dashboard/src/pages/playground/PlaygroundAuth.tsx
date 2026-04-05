@@ -416,7 +416,7 @@ export function PlaygroundAuth({
           <Type variant="small" className="text-muted-foreground">
             Environment:
           </Type>
-          <Badge variant="secondary">{defaultEnvironmentName}</Badge>
+          <Badge variant="neutral">{defaultEnvironmentName}</Badge>
         </div>
       )}
 
