@@ -311,7 +311,7 @@ function AuditLogRow({
             onClick={() => setDiffExpanded((v) => !v)}
             className="ml-2 text-xs text-blue-500 hover:underline"
           >
-            {diffExpanded ? "Hide diff" : "Show diff"}
+            {diffExpanded ? "Hide diff ▴" : "Show diff ▾"}
           </button>
         )}
       </div>
