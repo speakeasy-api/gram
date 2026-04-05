@@ -18,8 +18,15 @@ import {
   useAuditLogsInfinite,
   useAuditLogFacets,
 } from "@gram/client/react-query";
-import { Icon } from "@speakeasy-api/moonshine";
-import React, { useMemo, useState, type ReactNode } from "react";
+import { Icon, Input } from "@speakeasy-api/moonshine";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router";
 import {
   getActionCategory,
@@ -284,14 +291,23 @@ function AuditLogRow({
   orgSlug,
   timestampMode,
   isOdd,
+  isHighlighted,
+  rowRef,
+  highlightMatch,
 }: {
   log: AuditLog;
   orgSlug: string;
   timestampMode: "utc" | "local";
   isOdd: boolean;
+  isHighlighted?: boolean;
+  rowRef?: (el: HTMLDivElement | null) => void;
+  highlightMatch?: (text: string) => React.ReactNode;
 }) {
   const [diffExpanded, setDiffExpanded] = useState(false);
   const showDiff = hasDiff(log);
+
+  const actorLabel = getActorLabel(log);
+  const verbText = renderVerb(log);
 
   const rowContent = (
     <div className="flex items-start gap-3.5 px-4 py-2.5">
@@ -299,9 +315,11 @@ function AuditLogRow({
       <ActionBadge action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
         <span>
-          <StrongName>{getActorLabel(log)}</StrongName>
+          <StrongName>
+            {highlightMatch ? highlightMatch(actorLabel) : actorLabel}
+          </StrongName>
           <span className="mx-1.5 text-muted-foreground">
-            {renderVerb(log)}
+            {highlightMatch ? highlightMatch(verbText) : verbText}
           </span>
           {renderSubject(log, orgSlug)}
         </span>
@@ -323,7 +341,10 @@ function AuditLogRow({
 
   if (showDiff && diffExpanded) {
     return (
-      <div>
+      <div
+        ref={rowRef}
+        className={cn(isHighlighted && "border-l-4 border-l-foreground")}
+      >
         <div
           className={cn(
             "rounded-t-lg border border-b-0",
@@ -341,7 +362,12 @@ function AuditLogRow({
 
   return (
     <div
-      className={cn("rounded-none", isOdd ? "bg-muted/30" : "bg-background")}
+      ref={rowRef}
+      className={cn(
+        "rounded-none transition-colors",
+        isOdd ? "bg-muted/30" : "bg-background",
+        isHighlighted && "border-l-4 border-l-foreground",
+      )}
     >
       {rowContent}
     </div>
@@ -511,6 +537,215 @@ export default function OrgAuditLogs() {
     selectedAction !== "all" ||
     selectedActor !== "all";
 
+  // --- Search & keyboard navigation state ---
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentLogIndex, setCurrentLogIndex] = useState<number | null>(null);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [searchInputFocused, setSearchInputFocused] = useState(false);
+
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  const getSearchableText = useCallback((log: AuditLog): string => {
+    const actor = getActorLabel(log);
+    const action = formatAuditAction(log.action);
+    const verb = renderVerb(log);
+    const subject = getSubjectLabel(log);
+    return `${actor} ${action} ${verb} ${subject}`;
+  }, []);
+
+  const searchMatchIndices = useMemo(() => {
+    if (!searchQuery) return [];
+    const query = searchQuery.toLowerCase();
+    const indices: number[] = [];
+    logs.forEach((log, index) => {
+      if (getSearchableText(log).toLowerCase().includes(query)) {
+        indices.push(index);
+      }
+    });
+    return indices;
+  }, [searchQuery, logs, getSearchableText]);
+
+  const scrollToLog = useCallback((index: number) => {
+    const element = logRefs.current.get(index);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setCurrentLogIndex(index);
+  }, []);
+
+  const navigateToResult = useCallback(
+    (direction: "next" | "prev") => {
+      if (searchMatchIndices.length === 0) return;
+
+      let newIndex: number;
+      if (direction === "next") {
+        newIndex = (currentSearchIndex + 1) % searchMatchIndices.length;
+      } else {
+        newIndex =
+          currentSearchIndex === 0
+            ? searchMatchIndices.length - 1
+            : currentSearchIndex - 1;
+      }
+
+      setCurrentSearchIndex(newIndex);
+      const targetIndex = searchMatchIndices[newIndex];
+      if (targetIndex !== undefined) {
+        scrollToLog(targetIndex);
+      }
+    },
+    [currentSearchIndex, searchMatchIndices, scrollToLog],
+  );
+
+  const handleSearchChange = useCallback(
+    (query: string) => {
+      setSearchQuery(query);
+      setCurrentSearchIndex(0);
+
+      if (query) {
+        const q = query.toLowerCase();
+        const firstMatch = logs.findIndex((log) =>
+          getSearchableText(log).toLowerCase().includes(q),
+        );
+        if (firstMatch !== -1) {
+          scrollToLog(firstMatch);
+        }
+      } else {
+        setCurrentLogIndex(null);
+      }
+    },
+    [logs, getSearchableText, scrollToLog],
+  );
+
+  const highlightMatch = useCallback(
+    (text: string): React.ReactNode => {
+      if (!searchQuery) return text;
+
+      const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+      return (
+        <>
+          {parts.map((part, i) =>
+            part.toLowerCase() === searchQuery.toLowerCase() ? (
+              <mark
+                key={i}
+                className="bg-yellow-200 dark:bg-yellow-800 text-inherit"
+              >
+                {part}
+              </mark>
+            ) : (
+              part
+            ),
+          )}
+        </>
+      );
+    },
+    [searchQuery],
+  );
+
+  // Keyboard handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const logsContainer = logsContainerRef.current;
+      const activeElement = document.activeElement;
+      const isWithinLogsSection = logsContainer?.contains(
+        activeElement as Node,
+      );
+      const isSearchInputFocusedNow = activeElement?.hasAttribute(
+        "data-audit-search-input",
+      );
+
+      if (e.key === "Escape") {
+        if (isWithinLogsSection || isSearchInputFocusedNow) {
+          e.preventDefault();
+          setSearchQuery("");
+          setCurrentLogIndex(null);
+          setCurrentSearchIndex(0);
+          const el = document.activeElement as HTMLElement;
+          if (el && el.tagName === "INPUT") {
+            el.blur();
+          }
+        }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        if (isWithinLogsSection || isSearchInputFocusedNow) {
+          e.preventDefault();
+          const searchInput = document.querySelector<HTMLInputElement>(
+            "[data-audit-search-input]",
+          );
+          searchInput?.focus();
+        }
+        return;
+      }
+
+      const isInInput =
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.tagName === "SELECT";
+      if (!isInInput) {
+        switch (e.key) {
+          case "/": {
+            e.preventDefault();
+            const searchInput = document.querySelector<HTMLInputElement>(
+              "[data-audit-search-input]",
+            );
+            searchInput?.focus();
+            break;
+          }
+          case "n":
+            if (searchMatchIndices.length > 0) {
+              e.preventDefault();
+              navigateToResult("next");
+            }
+            break;
+          case "N":
+            if (e.shiftKey && searchMatchIndices.length > 0) {
+              e.preventDefault();
+              navigateToResult("prev");
+            }
+            break;
+          case "j":
+            e.preventDefault();
+            if (currentLogIndex !== null && currentLogIndex < logs.length - 1) {
+              scrollToLog(currentLogIndex + 1);
+            } else if (currentLogIndex === null && logs.length > 0) {
+              scrollToLog(0);
+            }
+            break;
+          case "k":
+            e.preventDefault();
+            if (currentLogIndex !== null && currentLogIndex > 0) {
+              scrollToLog(currentLogIndex - 1);
+            }
+            break;
+          case "g":
+            if (!e.shiftKey && !e.ctrlKey && logs.length > 0) {
+              e.preventDefault();
+              scrollToLog(0);
+            }
+            break;
+          case "G":
+            if (e.shiftKey && logs.length > 0) {
+              e.preventDefault();
+              scrollToLog(logs.length - 1);
+            }
+            break;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    currentLogIndex,
+    logs.length,
+    navigateToResult,
+    scrollToLog,
+    searchMatchIndices.length,
+  ]);
+
   return (
     <Page>
       <Page.Header>
@@ -610,54 +845,137 @@ export default function OrgAuditLogs() {
           </div>
 
           <div className="overflow-hidden rounded-lg border bg-background">
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                <Icon name="loader-circle" className="size-4 animate-spin" />
-                <span>Loading audit logs...</span>
-              </div>
-            ) : error ? (
-              <div className="flex flex-col items-center gap-2 py-12 text-center">
-                <Type className="font-medium">Error loading audit logs</Type>
-                <Type muted small>
-                  {error.message}
-                </Type>
-              </div>
-            ) : logs.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-12 text-center">
-                <Type className="font-medium">No audit logs found</Type>
-                <Type muted small>
-                  {selectedProjectSlug === "all" &&
-                  selectedAction === "all" &&
-                  selectedActor === "all"
-                    ? "Activity will appear here as changes are made across your organization."
-                    : "No audit logs match the selected filters."}
-                </Type>
-              </div>
-            ) : (
-              <div>
-                {dateGroups.map((group) => {
-                  let rowIndex = 0;
-                  return (
-                    <React.Fragment key={group.key}>
-                      <DateGroupHeader date={group.date} mode={tsMode} />
-                      {group.logs.map((log) => {
-                        const isOdd = rowIndex % 2 === 1;
-                        rowIndex++;
-                        return (
-                          <AuditLogRow
-                            key={log.id}
-                            log={log}
-                            orgSlug={orgSlug}
-                            timestampMode={tsMode}
-                            isOdd={isOdd}
-                          />
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })}
+            {/* Search toolbar */}
+            {!isLoading && !error && logs.length > 0 && (
+              <div className="flex items-center gap-2 border-b bg-surface/50 p-2">
+                <div className="ml-auto relative">
+                  <Icon
+                    name="search"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none"
+                  />
+                  <Input
+                    data-audit-search-input
+                    type="text"
+                    placeholder="Search audit logs"
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => setSearchInputFocused(true)}
+                    onBlur={() => setSearchInputFocused(false)}
+                    className="pl-7 pr-16 w-56 text-xs py-1 rounded-sm"
+                  />
+                  {searchQuery || searchInputFocused ? (
+                    searchMatchIndices.length > 0 ? (
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                          ESC
+                        </span>
+                        <span className="text-[10px] text-muted-foreground mx-0.5">
+                          {currentSearchIndex + 1}/{searchMatchIndices.length}
+                        </span>
+                        <div className="flex items-center">
+                          <button
+                            onClick={() => navigateToResult("prev")}
+                            className="p-0.5 hover:bg-muted rounded-sm opacity-60 hover:opacity-100 transition-opacity"
+                            title="Previous (Shift+N)"
+                          >
+                            <Icon name="chevron-up" className="size-2.5" />
+                          </button>
+                          <button
+                            onClick={() => navigateToResult("next")}
+                            className="p-0.5 hover:bg-muted rounded-sm opacity-60 hover:opacity-100 transition-opacity"
+                            title="Next (N)"
+                          >
+                            <Icon name="chevron-down" className="size-2.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                          ESC
+                        </span>
+                        <span className="text-[10px] text-muted-foreground ml-0.5">
+                          0/0
+                        </span>
+                      </div>
+                    )
+                  ) : (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+                      <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                        /
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+
+            <div
+              ref={logsContainerRef}
+              tabIndex={0}
+              className="focus:outline-none"
+            >
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                  <Icon name="loader-circle" className="size-4 animate-spin" />
+                  <span>Loading audit logs...</span>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center gap-2 py-12 text-center">
+                  <Type className="font-medium">Error loading audit logs</Type>
+                  <Type muted small>
+                    {error.message}
+                  </Type>
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-12 text-center">
+                  <Type className="font-medium">No audit logs found</Type>
+                  <Type muted small>
+                    {selectedProjectSlug === "all" &&
+                    selectedAction === "all" &&
+                    selectedActor === "all"
+                      ? "Activity will appear here as changes are made across your organization."
+                      : "No audit logs match the selected filters."}
+                  </Type>
+                </div>
+              ) : (
+                <div>
+                  {(() => {
+                    let flatIndex = 0;
+                    return dateGroups.map((group) => {
+                      let rowIndex = 0;
+                      return (
+                        <React.Fragment key={group.key}>
+                          <DateGroupHeader date={group.date} mode={tsMode} />
+                          {group.logs.map((log) => {
+                            const isOdd = rowIndex % 2 === 1;
+                            rowIndex++;
+                            const idx = flatIndex++;
+                            return (
+                              <AuditLogRow
+                                key={log.id}
+                                log={log}
+                                orgSlug={orgSlug}
+                                timestampMode={tsMode}
+                                isOdd={isOdd}
+                                isHighlighted={idx === currentLogIndex}
+                                rowRef={(el) => {
+                                  if (el) logRefs.current.set(idx, el);
+                                  else logRefs.current.delete(idx);
+                                }}
+                                highlightMatch={
+                                  searchQuery ? highlightMatch : undefined
+                                }
+                              />
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+            </div>
 
             {(logs.length > 0 || isFetchingNextPage) && (
               <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-3">
@@ -693,6 +1011,49 @@ export default function OrgAuditLogs() {
               </div>
             )}
           </div>
+
+          {/* Footer shortcuts bar */}
+          {logs.length > 0 && (
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div className="flex items-center gap-4">
+                {searchQuery ? (
+                  <>
+                    <div className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">N</kbd>
+                      <span>/</span>
+                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">
+                        {"\u21E7"}N
+                      </kbd>
+                      <span className="ml-1">navigate results</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">
+                        ESC
+                      </kbd>
+                      <span>clear search</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">
+                        {"\u2318"}F
+                      </kbd>
+                      <span>or</span>
+                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">/</kbd>
+                      <span>to search</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">J</kbd>
+                      <span>/</span>
+                      <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">K</kbd>
+                      <span className="ml-1">navigate logs</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </Page.Body>
     </Page>
