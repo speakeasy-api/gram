@@ -359,9 +359,11 @@ export function PlaygroundAuth({
     },
   );
   const mcpMetadata = mcpMetadataData?.metadata;
-  const defaultEnvironmentSlug =
-    environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)
-      ?.slug ?? "default";
+  const defaultEnvironment = environments.find(
+    (env) => env.id === mcpMetadata?.defaultEnvironmentId,
+  );
+  const defaultEnvironmentSlug = defaultEnvironment?.slug ?? "default";
+  const defaultEnvironmentName = defaultEnvironment?.name;
 
   // Load environment variables using the same hook as MCPAuthenticationTab
   const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);
@@ -408,6 +410,16 @@ export function PlaygroundAuth({
 
   return (
     <div className="space-y-3">
+      {/* Environment indicator */}
+      {defaultEnvironmentName && (
+        <div className="flex items-center gap-1.5">
+          <Type variant="small" className="text-muted-foreground">
+            Environment:
+          </Type>
+          <Badge variant="secondary">{defaultEnvironmentName}</Badge>
+        </div>
+      )}
+
       {/* Toolset-level OAuth Connection UI */}
       {hasOAuth &&
         (oauthMode === "custom-proxy" || oauthMode === "external") && (
