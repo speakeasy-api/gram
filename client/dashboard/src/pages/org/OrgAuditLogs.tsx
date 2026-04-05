@@ -323,7 +323,7 @@ function AuditLogRow({
 
   if (showDiff && diffExpanded) {
     return (
-      <div key={log.id}>
+      <div>
         <div
           className={cn(
             "rounded-t-lg border border-b-0",
@@ -341,7 +341,6 @@ function AuditLogRow({
 
   return (
     <div
-      key={log.id}
       className={cn("rounded-none", isOdd ? "bg-muted/30" : "bg-background")}
     >
       {rowContent}
