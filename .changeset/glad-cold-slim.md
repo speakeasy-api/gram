@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Fix tool request/result JSON clipping in playground by adding overflow-hidden to the details container
+Fix tool request/result JSON clipping in playground by adding `overflow-auto` to the details container
