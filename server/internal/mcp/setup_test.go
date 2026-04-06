@@ -230,3 +230,66 @@ func (ti *testInstance) addToolWithSecurity(ctx context.Context, t *testing.T, t
 
 	return envVarName
 }
+
+// addToolWithDualSecurity creates a deployment with an HTTP tool that accepts
+// EITHER an apiKey OR an oauth2 access token. This exercises the
+// anySchemeSatisfied logic where multiple alternative schemes exist.
+// Returns the deployment ID so callers can reference it.
+func (ti *testInstance) addToolWithDualSecurity(ctx context.Context, t *testing.T, toolsetID uuid.UUID, projectID uuid.UUID, orgID string) uuid.UUID {
+	t.Helper()
+
+	var deploymentID uuid.UUID
+	err := ti.conn.QueryRow(ctx, `
+		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, projectID, orgID, "test-user", uuid.New().String()).Scan(&deploymentID)
+	require.NoError(t, err)
+
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO deployment_statuses (deployment_id, status)
+		VALUES ($1, 'completed')
+	`, deploymentID)
+	require.NoError(t, err)
+
+	// Tool security: either "test_api_key" OR "test_oauth" can satisfy.
+	toolURN := "tools:http:dual-sec:" + uuid.New().String()[:8]
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_tool_definitions (
+			project_id, deployment_id, tool_urn, name, untruncated_name,
+			summary, description, tags, http_method, path,
+			schema_version, schema, server_env_var, security,
+			header_settings, query_settings, path_settings
+		) VALUES (
+			$1, $2, $3, 'dual_sec_tool', '', 'Dual security tool', 'A tool with apiKey and oauth2 security',
+			'{}', 'GET', '/dual', '3.0.0', '{}', 'TEST_SERVER_URL',
+			$4, '{}', '{}', '{}'
+		)
+	`, projectID, deploymentID, toolURN, `[{"test_api_key": []}, {"test_oauth": []}]`)
+	require.NoError(t, err)
+
+	// apiKey scheme
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_security (
+			key, deployment_id, project_id, type, name, in_placement, env_variables
+		) VALUES ($1, $2, $3, 'apiKey', 'X-Api-Key', 'header', $4)
+	`, "test_api_key", deploymentID, projectID, []string{"TEST_API_KEY"})
+	require.NoError(t, err)
+
+	// oauth2 scheme — name and in_placement are nullable for oauth2 types
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_security (
+			key, deployment_id, project_id, type, name, in_placement, env_variables
+		) VALUES ($1, $2, $3, 'oauth2', NULL, NULL, $4)
+	`, "test_oauth", deploymentID, projectID, []string{"TEST_OAUTH_ACCESS_TOKEN"})
+	require.NoError(t, err)
+
+	// Link tool to toolset
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
+		VALUES ($1, 1, $2, '{}')
+	`, toolsetID, []string{toolURN})
+	require.NoError(t, err)
+
+	return deploymentID
+}
