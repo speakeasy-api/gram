@@ -425,7 +425,7 @@ function ChatLogsContent({
             <div className="flex flex-col gap-1 min-w-0">
               <h1 className="text-xl font-semibold">Agent Sessions</h1>
               <p className="text-sm text-muted-foreground">
-                View and debug individual chat conversations
+                View and debug individual agent sessions
               </p>
             </div>
             <div className="flex-1 relative">
@@ -457,7 +457,7 @@ function ChatLogsContent({
                 <div className="flex flex-col gap-1 min-w-0">
                   <h1 className="text-xl font-semibold">Agent Sessions</h1>
                   <p className="text-sm text-muted-foreground">
-                    View and debug individual chat conversations
+                    View and debug individual agent sessions
                   </p>
                 </div>
                 {/* Filter row - all controls on one line */}

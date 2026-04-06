@@ -242,7 +242,7 @@ const ROUTE_STRUCTURE = {
   slackApps: {
     title: "Assistants",
     url: "slack",
-    icon: "slack",
+    icon: "bot",
     component: SlackAppsRoot,
     indexComponent: SlackAppsIndex,
     subPages: {

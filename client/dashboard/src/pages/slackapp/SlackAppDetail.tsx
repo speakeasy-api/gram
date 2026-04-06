@@ -123,7 +123,7 @@ export default function SlackAppDetailPage() {
                 onClick={handleDelete}
                 disabled={deleteMutation.isPending}
               >
-                {deleteMutation.isPending ? "Deleting..." : "Delete App"}
+                {deleteMutation.isPending ? "Deleting..." : "Delete Assistant"}
               </Button>
             </Dialog.Footer>
           </Dialog.Content>

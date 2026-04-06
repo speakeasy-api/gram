@@ -62,9 +62,9 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
             />
             <p className="text-xs text-muted-foreground">
               When enabled, Gram will collect tool call payloads, response data,
-              and chat conversation logs for analysis. This data is stored
-              securely and used to generate the metrics and insights. You can
-              disable logging at any time from the Logs page.
+              and agent session logs for analysis. This data is stored securely
+              and used to generate the metrics and insights. You can disable
+              logging at any time from the Logs page.
             </p>
           </div>
         </div>

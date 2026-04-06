@@ -17,8 +17,8 @@ export default function CLIs() {
             Skills
           </Type>
           <Type small muted className="text-center mb-4 max-w-md">
-            Build and distribute skills with your team. Track usage, enable discovery and improve performance.
-            and track usage alongside your MCP insights and logs.
+            Build and distribute skills with your team. Track usage, enable
+            discovery and improve performance.
           </Type>
           <Type small muted>
             Coming soon

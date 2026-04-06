@@ -265,7 +265,7 @@ function CreateSlackAppDialog({
             onClick={handleCreate}
             disabled={!isValid || createMutation.isPending}
           >
-            {createMutation.isPending ? "Creating..." : "Create App"}
+            {createMutation.isPending ? "Creating..." : "Create Assistant"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
