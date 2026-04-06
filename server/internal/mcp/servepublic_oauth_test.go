@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -65,29 +64,7 @@ func TestServePublicOAuth_ExternalNoSecurityDefs_NoToken_Returns401(t *testing.T
 func TestServePublicOAuth_ProxyNoSecurityDefs_ValidToken_Succeeds(t *testing.T) {
 	t.Parallel()
 
-	mockOAuth := &mockOAuthService{
-		validateFunc: func(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error) {
-			expiresAt := time.Now().Add(24 * time.Hour)
-			return &oauth.Token{
-				ToolsetID:   toolsetId,
-				AccessToken: accessToken,
-				ExternalSecrets: []oauth.ExternalSecret{{
-					SecurityKeys: []string{},
-					Token:        "upstream-token",
-					RefreshToken: "",
-					ExpiresAt:    &expiresAt,
-				}},
-				RefreshToken: "",
-				TokenType:    "",
-				Scope:        "",
-				CreatedAt:    time.Time{},
-				ExpiresAt:    time.Time{},
-			}, nil
-		},
-		refreshFunc: nil,
-	}
-
-	ctx, ti := newTestMCPServiceWithOAuth(t, mockOAuth)
+	ctx, ti := newTestMCPService(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -99,8 +76,13 @@ func TestServePublicOAuth_ProxyNoSecurityDefs_ValidToken_Succeeds(t *testing.T) 
 		ProviderType: "custom",
 	})
 
+	// Issue a real Gram token backed by an upstream credential.
+	upstreamExpiry := time.Now().Add(24 * time.Hour)
+	issuer := oauthtest.NewTokenIssuer(t, ti.cacheAdapter, ti.enc)
+	issued := issuer.IssueToken(t, ctx, result.Toolset.ID, "upstream-token", "", &upstreamExpiry, []string{})
+
 	mcpSlug := result.Toolset.McpSlug.String
-	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "valid-oauth-token", nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), issued.AccessToken, nil)
 	// The request may fail later (e.g. no active deployment), but it must NOT
 	// fail with "unauthorized" — the security check should pass.
 	if err != nil {
@@ -126,8 +108,8 @@ func TestServePublicOAuth_ExternalNoSecurityDefs_ValidToken_Succeeds(t *testing.
 	})
 
 	mcpSlug := result.Toolset.McpSlug.String
-	// External OAuth flow passes the bearer token through without validation
-	// via mockOAuthService — it's collected as-is in tokenInputs.
+	// External OAuth flow passes the bearer token through without Gram-level
+	// validation — it's collected as-is in tokenInputs.
 	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "some-external-token", nil)
 	require.NoError(t, err)
 	require.Empty(t, w.Header().Get("WWW-Authenticate"), "should not send WWW-Authenticate when token provided")

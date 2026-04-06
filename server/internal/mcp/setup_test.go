@@ -2,7 +2,6 @@ package mcp_test
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"log/slog"
 	"net/url"
@@ -25,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -32,10 +32,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
-	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var (
@@ -71,6 +69,7 @@ type testInstance struct {
 	logger         *slog.Logger
 	tracerProvider trace.TracerProvider
 	cacheAdapter   cache.Cache
+	enc            *encryption.Client
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
@@ -146,102 +145,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		logger:         logger,
 		tracerProvider: tracerProvider,
 		cacheAdapter:   cacheAdapter,
-	}
-}
-
-// mockOAuthService allows controlling OAuth validation behavior in tests
-type mockOAuthService struct {
-	validateFunc func(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error)
-	refreshFunc  func(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error)
-}
-
-func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error) {
-	if m.validateFunc != nil {
-		return m.validateFunc(ctx, toolsetId, accessToken)
-	}
-	return nil, oauth.ErrInvalidAccessToken
-}
-
-func (m *mockOAuthService) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error) {
-	if m.refreshFunc != nil {
-		return m.refreshFunc(ctx, toolsetID, token, proxyProvider, toolset)
-	}
-	return nil, fmt.Errorf("not implemented")
-}
-
-// newTestMCPServiceWithOAuth creates a test MCP service with a custom OAuth service
-func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (context.Context, *testInstance) {
-	t.Helper()
-
-	ctx := t.Context()
-
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	meterProvider := noop.NewMeterProvider()
-
-	conn, err := infra.CloneTestDatabase(t, "mcptest")
-	require.NoError(t, err)
-
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-
-	billingClient := billing.NewStubClient(logger, tracerProvider)
-
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
-
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	serverURL, err := url.Parse("http://0.0.0.0")
-	require.NoError(t, err)
-
-	siteURL, err := url.Parse("http://0.0.0.0")
-	require.NoError(t, err)
-
-	enc := testenv.NewEncryptionClient(t)
-	mcpMetadataRepo := mcpmetadata_repo.New(conn)
-	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
-	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
-	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	guardianPolicy := guardian.NewDefaultPolicy()
-	billingStub := billing.NewStubClient(logger, tracerProvider)
-	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, devProvisioner, nil, nil, nil, nil, nil)
-	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
-	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	temporalEnv, _ := infra.NewTemporalEnv(t)
-
-	redisClient, err2 := infra.NewRedisClient(t, 0)
-	require.NoError(t, err2)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
-
-	telemService := telemetry.NewService(
-		logger,
-		tracerProvider,
-		conn,
-		chConn,
-		sessionManager,
-		chatSessionsManager,
-		logsEnabled,
-		toolIOLogsEnabled,
-		posthog,
-	)
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv)
-
-	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		serverURL:      serverURL,
-		siteURL:        siteURL,
-		logger:         logger,
-		tracerProvider: tracerProvider,
-		cacheAdapter:   cacheAdapter,
+		enc:            enc,
 	}
 }
 
