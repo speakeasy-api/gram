@@ -21,6 +21,7 @@ INSERT INTO chats (
   , project_id
   , organization_id
   , user_id
+  , external_user_id
   , title
   , created_at
   , updated_at
@@ -30,6 +31,7 @@ VALUES (
     @project_id,
     @organization_id,
     @user_id,
+    @external_user_id,
     @title,
     NOW(),
     NOW()
