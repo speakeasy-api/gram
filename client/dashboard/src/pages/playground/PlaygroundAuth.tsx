@@ -14,8 +14,8 @@ import {
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
-import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import { toast } from "sonner";
 import {
   environmentHasValue,
@@ -33,7 +33,7 @@ export { getToolsetOAuthMode, type OAuthMode } from "./playgroundOAuthMode";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
-  onUserProvidedHeadersChange?: (headers: Record<string, string>) => void;
+  onPlaygroundEnvironmentSlug?: (slug: string | undefined) => void;
 }
 
 const PASSWORD_MASK = "••••••••";
@@ -334,7 +334,7 @@ function ExternalMcpOAuthConnection({
 
 export function PlaygroundAuth({
   toolset,
-  onUserProvidedHeadersChange,
+  onPlaygroundEnvironmentSlug,
 }: PlaygroundAuthProps) {
   const routes = useRoutes();
 
@@ -368,10 +368,12 @@ export function PlaygroundAuth({
   // Load environment variables using the same hook as MCPAuthenticationTab
   const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);
 
-  // Track user-provided header values (persisted in localStorage per toolset)
-  const [userProvidedValues, setUserProvidedValues] = useLocalStorageState<
+  // Track user-provided header values
+  const [userProvidedValues, setUserProvidedValues] = useState<
     Record<string, string>
-  >(`playground-auth-${toolset.slug}`, {});
+  >({});
+  const [editedKeys, setEditedKeys] = useState<Set<string>>(new Set());
+  const playgroundEnv = usePlaygroundEnvironment(toolset);
 
   // Calculate missing required variables using the same hook as MCPAuthenticationTab
   const missingRequiredCount = useMissingRequiredEnvVars(
@@ -381,21 +383,25 @@ export function PlaygroundAuth({
     mcpMetadata,
   );
 
-  // Notify parent component when user-provided values change
+  // Notify parent component of the playground environment slug
   useEffect(() => {
-    if (onUserProvidedHeadersChange) {
-      // Build headers object with MCP- prefix and proper header names
-      const headers: Record<string, string> = {};
-      Object.entries(userProvidedValues).forEach(([varKey, value]) => {
-        if (value.trim()) {
-          // Use MCP- prefix with the header name
-          const headerKey = `MCP-${varKey.replace(/\s+/g, "-").replace(/_/g, "-")}`;
-          headers[headerKey] = value;
-        }
-      });
-      onUserProvidedHeadersChange(headers);
+    onPlaygroundEnvironmentSlug?.(
+      playgroundEnv.exists ? playgroundEnv.slug : undefined,
+    );
+  }, [playgroundEnv.exists, playgroundEnv.slug, onPlaygroundEnvironmentSlug]);
+
+  const handleSave = () => {
+    const entriesToUpdate = Object.entries(userProvidedValues)
+      .filter(([key, value]) => value.trim() && editedKeys.has(key))
+      .map(([name, value]) => ({ name, value }));
+    const entriesToRemove = Array.from(editedKeys).filter(
+      (key) => !userProvidedValues[key]?.trim(),
+    );
+    if (entriesToUpdate.length > 0 || entriesToRemove.length > 0) {
+      playgroundEnv.save(entriesToUpdate, entriesToRemove);
+      setEditedKeys(new Set());
     }
-  }, [userProvidedValues, onUserProvidedHeadersChange, mcpMetadata]);
+  };
 
   // Show "no auth required" only if there are no env vars AND no OAuth
   if (envVars.length === 0 && !hasOAuth) {
@@ -448,7 +454,17 @@ export function PlaygroundAuth({
         let isEditable = false;
 
         if (envVar.state === "user-provided") {
-          displayValue = userProvidedValues[envVar.key] || "";
+          const storedEntry = playgroundEnv.storedEntries.find(
+            (e) => e.name === envVar.key,
+          );
+          const isEdited = editedKeys.has(envVar.key);
+          if (isEdited) {
+            displayValue = userProvidedValues[envVar.key] || "";
+          } else if (storedEntry?.hasStoredValue) {
+            displayValue = PASSWORD_MASK;
+          } else {
+            displayValue = "";
+          }
           placeholder = "Enter value here";
           isEditable = true;
         } else if (envVar.state === "omitted") {
@@ -474,6 +490,7 @@ export function PlaygroundAuth({
               value={displayValue}
               onChange={(newValue) => {
                 if (isEditable) {
+                  setEditedKeys((prev) => new Set(prev).add(envVar.key));
                   setUserProvidedValues((prev) => ({
                     ...prev,
                     [envVar.key]: newValue,
@@ -488,6 +505,20 @@ export function PlaygroundAuth({
           </div>
         );
       })}
+      {envVars.some((v) => v.state === "user-provided") && (
+        <Button
+          size="sm"
+          variant="default"
+          className="w-full"
+          onClick={handleSave}
+          disabled={editedKeys.size === 0 || playgroundEnv.isSaving}
+        >
+          {playgroundEnv.isSaving ? (
+            <Loader2 className="size-3 mr-2 animate-spin" />
+          ) : null}
+          Save
+        </Button>
+      )}
       {missingRequiredCount > 0 && (
         <Type variant="small" className="text-warning pt-2">
           {missingRequiredCount} required variable
