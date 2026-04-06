@@ -403,13 +403,13 @@ const LOADING_NAV = {
   build: [
     { label: "Chat Elements", icon: "message-circle" as const },
     { label: "MCP", icon: "network" as const },
-    { label: "Slack", icon: "slack" as const },
-    { label: "CLIs", icon: "terminal" as const },
+    { label: "Assistants", icon: "slack" as const },
+    { label: "Skills", icon: "terminal" as const },
   ],
   observe: [
     { label: "Insights", icon: "layout-dashboard" as const },
     { label: "MCP Logs", icon: "file-text" as const },
-    { label: "Chat Sessions", icon: "messages-square" as const },
+    { label: "Agent Sessions", icon: "messages-square" as const },
     { label: "Hooks", icon: "webhook" as const },
   ],
   settings: [{ label: "Settings", icon: "settings" as const }],

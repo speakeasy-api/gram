@@ -305,7 +305,7 @@ export default function ChatLogs() {
     <InsightsSidebar
       mcpConfig={mcpConfig}
       title="How can I help you debug?"
-      subtitle="Search chat sessions, analyze failures, or explore logs"
+      subtitle="Search agent sessions, analyze failures, or explore logs"
       contextInfo={dateRangeContext}
       hideTrigger={isLogsDisabled}
       suggestions={[
@@ -313,7 +313,7 @@ export default function ChatLogs() {
           title: "Failed Chats",
           label: "Analyze failed chats",
           prompt:
-            "Show me recent chat sessions that failed. What patterns do you see in the failures?",
+            "Show me recent agent sessions that failed. What patterns do you see in the failures?",
         },
         {
           title: "Search Logs",
@@ -325,7 +325,7 @@ export default function ChatLogs() {
           title: "Debug Session",
           label: "Debug a specific chat",
           prompt:
-            "Help me debug a chat session. Search both the chat data and raw logs to understand what happened.",
+            "Help me debug an agent session. Search both the chat data and raw logs to understand what happened.",
         },
       ]}
     >
@@ -423,7 +423,7 @@ function ChatLogsContent({
           </Page.Header>
           <Page.Body fullWidth className="space-y-6">
             <div className="flex flex-col gap-1 min-w-0">
-              <h1 className="text-xl font-semibold">Chat Sessions</h1>
+              <h1 className="text-xl font-semibold">Agent Sessions</h1>
               <p className="text-sm text-muted-foreground">
                 View and debug individual chat conversations
               </p>
@@ -455,7 +455,7 @@ function ChatLogsContent({
               {/* Header section */}
               <div className="px-8 py-4 shrink-0 space-y-4">
                 <div className="flex flex-col gap-1 min-w-0">
-                  <h1 className="text-xl font-semibold">Chat Sessions</h1>
+                  <h1 className="text-xl font-semibold">Agent Sessions</h1>
                   <p className="text-sm text-muted-foreground">
                     View and debug individual chat conversations
                   </p>

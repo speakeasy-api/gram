@@ -105,7 +105,7 @@ export default function SlackAppDetailPage() {
         <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
           <Dialog.Content className="sm:max-w-md">
             <Dialog.Header>
-              <Dialog.Title>Delete Slack App</Dialog.Title>
+              <Dialog.Title>Delete Assistant</Dialog.Title>
               <Dialog.Description>
                 Are you sure you want to delete <strong>{app.name}</strong>?
                 This action cannot be undone.

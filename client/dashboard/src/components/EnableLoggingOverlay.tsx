@@ -50,7 +50,7 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
           <h3 className="text-lg font-semibold mb-1">Enable Logging</h3>
           <p className="text-sm text-muted-foreground">
             Turn on logging to start collecting telemetry data for your
-            organization. This will record tool call traces, chat sessions, and
+            organization. This will record tool call traces, agent sessions, and
             system metrics to power the observability dashboard.
           </p>
         </div>

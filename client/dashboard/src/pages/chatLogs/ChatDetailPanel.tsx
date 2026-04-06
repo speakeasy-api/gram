@@ -108,7 +108,7 @@ function TelemetryLogsTab({
   if (logs.length === 0) {
     return (
       <div className="p-6 text-center text-muted-foreground">
-        No telemetry logs found for this chat session.
+        No telemetry logs found for this agent session.
       </div>
     );
   }
@@ -201,7 +201,7 @@ function ToolCallsTab({
   if (toolLogs.length === 0) {
     return (
       <div className="p-6 text-center text-muted-foreground">
-        No tool call logs found for this chat session.
+        No tool call logs found for this agent session.
       </div>
     );
   }

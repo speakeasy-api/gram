@@ -14,11 +14,11 @@ export default function CLIs() {
             <Icon name="terminal" className="w-6 h-6 text-muted-foreground" />
           </div>
           <Type variant="subheading" className="mb-1">
-            CLIs
+            Skills
           </Type>
           <Type small muted className="text-center mb-4 max-w-md">
-            Build and distribute CLI tools for your API sources. Secure with
-            OAuth and track usage alongside your MCP insights and logs.
+            Build and distribute skills for your API sources. Secure with OAuth
+            and track usage alongside your MCP insights and logs.
           </Type>
           <Type small muted>
             Coming soon
