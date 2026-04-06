@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Shared skeleton component used across all observability pages
- * (Insights, Chat Sessions, Logs) when logs are disabled.
+ * (Insights, Agent Sessions, Logs) when logs are disabled.
  */
 export function ObservabilitySkeleton() {
   return (

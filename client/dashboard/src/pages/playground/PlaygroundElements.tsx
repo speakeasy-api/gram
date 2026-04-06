@@ -127,7 +127,7 @@ export function PlaygroundElements({
       });
       return result.clientToken;
     } catch (error) {
-      toast.error("Failed to create chat session. Please try again.");
+      toast.error("Failed to create session. Please try again.");
       throw error;
     }
   }, [

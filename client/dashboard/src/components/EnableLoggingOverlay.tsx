@@ -50,7 +50,7 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
           <h3 className="text-lg font-semibold mb-1">Enable Logging</h3>
           <p className="text-sm text-muted-foreground">
             Turn on logging to start collecting telemetry data for your
-            organization. This will record tool call traces, chat sessions, and
+            organization. This will record tool call traces, agent sessions, and
             system metrics to power the observability dashboard.
           </p>
         </div>
@@ -62,9 +62,9 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
             />
             <p className="text-xs text-muted-foreground">
               When enabled, Gram will collect tool call payloads, response data,
-              and chat conversation logs for analysis. This data is stored
-              securely and used to generate the metrics and insights. You can
-              disable logging at any time from the Logs page.
+              and agent session logs for analysis. This data is stored securely
+              and used to generate the metrics and insights. You can disable
+              logging at any time from the Logs page.
             </p>
           </div>
         </div>
