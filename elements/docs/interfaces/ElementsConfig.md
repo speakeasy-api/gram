@@ -162,7 +162,7 @@ LLM model configuration.
 ```ts
 const config: ElementsConfig = {
   model: {
-    defaultModel: 'openai/gpt-4o',
+    defaultModel: 'openai/gpt-5.4',
     showModelPicker: true,
   },
 }
