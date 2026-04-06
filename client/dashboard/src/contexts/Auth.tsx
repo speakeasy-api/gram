@@ -403,7 +403,7 @@ const LOADING_NAV = {
   build: [
     { label: "Chat Elements", icon: "message-circle" as const },
     { label: "MCP", icon: "network" as const },
-    { label: "Assistants", icon: "slack" as const },
+    { label: "Assistants", icon: "bot" as const },
     { label: "Skills", icon: "terminal" as const },
   ],
   observe: [
