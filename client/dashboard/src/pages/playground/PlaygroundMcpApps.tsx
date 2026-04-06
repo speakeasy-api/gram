@@ -179,7 +179,7 @@ export const PlaygroundMcpToolFallback: ToolCallMessagePartComponent = ({
           </span>
         </div>
 
-        <details className="mt-3 rounded-xl border border-border bg-background">
+        <details className="mt-3 overflow-auto rounded-xl border border-border bg-background">
           <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
             Request / Result
           </summary>
