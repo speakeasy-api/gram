@@ -151,6 +151,8 @@ export function PlaygroundElements({
     staleTime: 1000 * 60 * 30,
   });
 
+  const effectiveEnvironmentSlug = playgroundEnvironmentSlug ?? environmentSlug;
+
   const mcpAppHeaders = useMemo(() => {
     if (!mcpAppSessionQuery.data) {
       return null;
@@ -159,9 +161,11 @@ export function PlaygroundElements({
     return {
       "Gram-Chat-Session": mcpAppSessionQuery.data,
       "Gram-Project": project.slug,
-      ...(environmentSlug ? { "Gram-Environment": environmentSlug } : {}),
+      ...(effectiveEnvironmentSlug
+        ? { "Gram-Environment": effectiveEnvironmentSlug }
+        : {}),
     };
-  }, [environmentSlug, mcpAppSessionQuery.data, project.slug]);
+  }, [effectiveEnvironmentSlug, mcpAppSessionQuery.data, project.slug]);
 
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {

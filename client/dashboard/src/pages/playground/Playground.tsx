@@ -180,7 +180,7 @@ export function ToolsetPanel({
   setModel,
   maxTokens,
   setMaxTokens,
-  onUserProvidedHeadersChange,
+  onPlaygroundEnvironmentSlug,
 }: {
   configRef: ChatConfig;
   setSelectedToolset: (toolset: string) => void;

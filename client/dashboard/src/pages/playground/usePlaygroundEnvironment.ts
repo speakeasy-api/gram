@@ -7,7 +7,8 @@ import {
   useUpdateEnvironmentMutation,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
 
 export interface UsePlaygroundEnvironmentReturn {
   slug: string;
@@ -27,6 +28,8 @@ export function usePlaygroundEnvironment(
   const organization = useOrganization();
   const queryClient = useQueryClient();
 
+  // The slug doubles as the environment name so that the server's
+  // conv.ToSlug(name) produces exactly this slug on creation.
   const slug = `playground-${user.id}-${toolset.slug}`;
 
   const { data: environmentsData } = useListEnvironments();
@@ -37,8 +40,6 @@ export function usePlaygroundEnvironment(
     [environments, slug],
   );
 
-  const exists = !!existingEnvironment;
-
   const storedEntries = useMemo(
     () =>
       (existingEnvironment?.entries ?? []).map((entry) => ({
@@ -48,23 +49,38 @@ export function usePlaygroundEnvironment(
     [existingEnvironment],
   );
 
-  const createEnvironmentMutation = useCreateEnvironmentMutation({
-    onSuccess: () => {
-      invalidateAllListEnvironments(queryClient);
-    },
-  });
+  const createMutation = useCreateEnvironmentMutation();
+  const updateMutation = useUpdateEnvironmentMutation();
 
-  const updateEnvironmentMutation = useUpdateEnvironmentMutation({
-    onSuccess: () => {
-      invalidateAllListEnvironments(queryClient);
-    },
-  });
+  // Use refs to avoid stale closures in the debounced callback
+  const existingEnvironmentRef = useRef(existingEnvironment);
+  existingEnvironmentRef.current = existingEnvironment;
 
-  const isSaving =
-    createEnvironmentMutation.isPending || updateEnvironmentMutation.isPending;
+  const slugRef = useRef(slug);
+  slugRef.current = slug;
 
-  // Use a ref to hold the debounce timer
+  const orgIdRef = useRef(organization.id);
+  orgIdRef.current = organization.id;
+
+  const createMutationRef = useRef(createMutation);
+  createMutationRef.current = createMutation;
+
+  const updateMutationRef = useRef(updateMutation);
+  updateMutationRef.current = updateMutation;
+
+  const queryClientRef = useRef(queryClient);
+  queryClientRef.current = queryClient;
+
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const save = useCallback(
     (
@@ -76,48 +92,50 @@ export function usePlaygroundEnvironment(
       }
 
       debounceTimerRef.current = setTimeout(() => {
-        if (!existingEnvironment) {
-          // Create new environment with initial entries
-          const displayName = user.displayName || user.email;
-          createEnvironmentMutation.mutate({
-            request: {
-              createEnvironmentForm: {
-                name: `Playground - ${displayName}`,
-                organizationId: organization.id,
-                entries: entriesToUpdate,
+        const onSuccess = () => {
+          invalidateAllListEnvironments(queryClientRef.current);
+        };
+        const onError = () => {
+          toast.error("Failed to save credentials");
+        };
+
+        if (!existingEnvironmentRef.current) {
+          createMutationRef.current.mutate(
+            {
+              request: {
+                createEnvironmentForm: {
+                  name: slugRef.current,
+                  organizationId: orgIdRef.current,
+                  entries: entriesToUpdate,
+                },
               },
             },
-          });
+            { onSuccess, onError },
+          );
         } else {
-          // Update existing environment
-          updateEnvironmentMutation.mutate({
-            request: {
-              slug,
-              updateEnvironmentRequestBody: {
-                entriesToUpdate,
-                entriesToRemove,
+          updateMutationRef.current.mutate(
+            {
+              request: {
+                slug: slugRef.current,
+                updateEnvironmentRequestBody: {
+                  entriesToUpdate,
+                  entriesToRemove,
+                },
               },
             },
-          });
+            { onSuccess, onError },
+          );
         }
       }, 1000);
     },
-    [
-      existingEnvironment,
-      slug,
-      user.displayName,
-      user.email,
-      organization.id,
-      createEnvironmentMutation,
-      updateEnvironmentMutation,
-    ],
+    [],
   );
 
   return {
     slug,
-    exists,
+    exists: !!existingEnvironment,
     storedEntries,
     save,
-    isSaving,
+    isSaving: createMutation.isPending || updateMutation.isPending,
   };
 }
