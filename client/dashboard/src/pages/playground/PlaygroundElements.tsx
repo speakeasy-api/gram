@@ -45,8 +45,8 @@ interface PlaygroundElementsProps {
   model: string;
   /** Additional action buttons to render alongside the share button */
   additionalActions?: React.ReactNode;
-  /** User-provided auth headers for user-provided variables */
-  userProvidedHeaders?: Record<string, string>;
+  /** Slug of the playground environment for user-provided variables */
+  playgroundEnvironmentSlug?: string;
 }
 
 export function PlaygroundElements({
@@ -54,7 +54,7 @@ export function PlaygroundElements({
   environmentSlug,
   model,
   additionalActions,
-  userProvidedHeaders = {},
+  playgroundEnvironmentSlug,
 }: PlaygroundElementsProps) {
   const session = useSession();
   const project = useProject();
@@ -160,14 +160,8 @@ export function PlaygroundElements({
       "Gram-Chat-Session": mcpAppSessionQuery.data,
       "Gram-Project": project.slug,
       ...(environmentSlug ? { "Gram-Environment": environmentSlug } : {}),
-      ...userProvidedHeaders,
     };
-  }, [
-    environmentSlug,
-    mcpAppSessionQuery.data,
-    project.slug,
-    userProvidedHeaders,
-  ]);
+  }, [environmentSlug, mcpAppSessionQuery.data, project.slug]);
 
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {
@@ -201,7 +195,6 @@ export function PlaygroundElements({
           session: getSession,
           headers: {
             "X-Gram-Source": "playground",
-            ...userProvidedHeaders,
           },
         },
         history: {
@@ -210,10 +203,8 @@ export function PlaygroundElements({
           initialThreadId,
         },
         mcp: mcpUrl,
-        gramEnvironment: environmentSlug ?? undefined,
-        environment: {
-          ...userProvidedHeaders,
-        },
+        gramEnvironment:
+          playgroundEnvironmentSlug ?? environmentSlug ?? undefined,
         variant: "standalone",
         model: {
           defaultModel: model as Model,
