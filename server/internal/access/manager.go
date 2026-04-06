@@ -28,20 +28,11 @@ func NewManager(logger *slog.Logger, features FeatureChecker) *Manager {
 }
 
 func (m *Manager) Require(ctx context.Context, checks ...Check) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.SessionID == nil {
-		return nil
-	}
-
-	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	enforce, err := m.shouldEnforce(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, m.logger)
+		return err
 	}
-	if !enabled {
+	if !enforce {
 		return nil
 	}
 
@@ -53,20 +44,11 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 }
 
 func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.SessionID == nil {
-		return nil
-	}
-
-	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	enforce, err := m.shouldEnforce(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, m.logger)
+		return err
 	}
-	if !enabled {
+	if !enforce {
 		return nil
 	}
 
@@ -78,20 +60,11 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 }
 
 func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.SessionID == nil {
-		return resourceIDs, nil
-	}
-
-	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	enforce, err := m.shouldEnforce(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, m.logger)
+		return nil, err
 	}
-	if !enabled {
+	if !enforce {
 		return resourceIDs, nil
 	}
 
@@ -101,6 +74,24 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 	}
 
 	return resourceIDs, nil
+}
+
+func (m *Manager) shouldEnforce(ctx context.Context) (bool, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return false, oops.C(oops.CodeUnauthorized)
+	}
+
+	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.SessionID == nil {
+		return false, nil
+	}
+
+	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, m.logger)
+	}
+
+	return enabled, nil
 }
 
 func (m *Manager) mapError(ctx context.Context, err error) error {
