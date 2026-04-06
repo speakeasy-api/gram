@@ -306,8 +306,8 @@ export default function OrgApiKeys() {
                         <div className="flex items-center gap-3">
                           <RadioGroupItem value="hooks" id="r4" />
                           <Label className="leading-normal" htmlFor="r4">
-                            Hooks: can send hook events and OTEL logs from
-                            Claude Code integrations.
+                            Hooks: can send hook events and OTEL logs from agent
+                            integrations.
                           </Label>
                         </div>
                       </RadioGroup>
