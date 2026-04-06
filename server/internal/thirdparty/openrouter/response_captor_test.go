@@ -173,7 +173,7 @@ func TestResponseCaptor_UsageTracking(t *testing.T) {
 	t.Parallel()
 
 	chunks := []string{
-		"data: {\"id\":\"msg_123\",\"model\":\"openai/gpt-4o\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n",
+		"data: {\"id\":\"msg_123\",\"model\":\"openai/gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n",
 		"data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n",
 		"data: [DONE]\n",
 	}
@@ -193,7 +193,7 @@ func TestResponseCaptor_UsageTracking(t *testing.T) {
 
 	// Verify metadata was captured
 	require.Equal(t, "msg_123", reader.messageID)
-	require.Equal(t, "openai/gpt-4o", reader.model)
+	require.Equal(t, "openai/gpt-5.4", reader.model)
 	require.Equal(t, "Hello", reader.messageContent.String())
 	require.NotNil(t, reader.finishReason)
 	require.Equal(t, "stop", *reader.finishReason)

@@ -25,7 +25,7 @@ const questionCheckSchema = z.object({
     ),
 });
 
-const SUGGESTIONS_MODEL = "openai/gpt-4o-mini";
+const SUGGESTIONS_MODEL = "openai/gpt-5.4-mini";
 
 /**
  * Hook to fetch follow-on suggestions after the assistant finishes responding.

@@ -135,7 +135,7 @@ export interface ElementsConfig {
    * @example
    * const config: ElementsConfig = {
    *   model: {
-   *     defaultModel: 'openai/gpt-4o',
+   *     defaultModel: 'openai/gpt-5.4',
    *     showModelPicker: true,
    *   },
    * }
@@ -434,7 +434,7 @@ export type ApiConfig =
  * @example
  * const config: ElementsConfig = {
  *   model: {
- *     defaultModel: 'openai/gpt-4o',
+ *     defaultModel: 'openai/gpt-5.4',
  *   },
  * }
  */

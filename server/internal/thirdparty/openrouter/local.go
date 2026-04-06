@@ -31,7 +31,7 @@ func (o *Development) GetModelUsage(ctx context.Context, generationID string, or
 		TotalCost:             &totalCost,
 		CacheDiscount:         0,
 		UpstreamInferenceCost: 0,
-		Model:                 "gpt-4o",
+		Model:                 "gpt-5.4",
 		TokensPrompt:          100,
 		TokensCompletion:      100,
 		NativeTokensCached:    100,

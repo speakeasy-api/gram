@@ -39,7 +39,7 @@ type TelemetryService interface {
 }
 
 const (
-	DefaultChatModel = "openai/gpt-4o"
+	DefaultChatModel = "openai/gpt-5.4"
 )
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
