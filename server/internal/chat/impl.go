@@ -80,11 +80,12 @@ func NewService(
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
+	accessLoader auth.AccessLoader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions),
+		auth:             auth.New(logger, db, sessions, accessLoader),
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,

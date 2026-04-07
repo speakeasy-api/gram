@@ -89,6 +89,7 @@ func NewService(
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
+	accessLoader auth.AccessLoader,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 ) *Service {
@@ -97,7 +98,7 @@ func NewService(
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryService:   telemetryService,
-		auth:               auth.New(logger, db, sessionsMgr),
+		auth:               auth.New(logger, db, sessionsMgr, accessLoader),
 		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),

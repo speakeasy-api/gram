@@ -1,4 +1,4 @@
-package access_test
+package access
 
 import (
 	"testing"
@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -31,10 +30,10 @@ func TestService_ListRoles(t *testing.T) {
 		mockMember("org_workos_test", "membership_3", "user_3", "custom-builder"),
 	}, nil).Once()
 
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "admin"), access.ScopeOrgAdmin, access.WildcardResource)
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-2")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeMCPConnect, access.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "admin"), ScopeOrgAdmin, WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-2")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeMCPConnect, WildcardResource)
 
 	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
 	require.NoError(t, err)
@@ -53,7 +52,7 @@ func TestService_ListRoles(t *testing.T) {
 	require.Equal(t, mockRoleTimestamp, adminRole.CreatedAt)
 	require.Equal(t, mockRoleTimestamp, adminRole.UpdatedAt)
 	require.Len(t, adminRole.Grants, 1)
-	require.Equal(t, string(access.ScopeOrgAdmin), adminRole.Grants[0].Scope)
+	require.Equal(t, string(ScopeOrgAdmin), adminRole.Grants[0].Scope)
 	require.Nil(t, adminRole.Grants[0].Resources)
 
 	customRole := rolesByID["role_custom"]
@@ -68,6 +67,6 @@ func TestService_ListRoles(t *testing.T) {
 	for _, grant := range customRole.Grants {
 		grantsByScope[grant.Scope] = grant
 	}
-	require.ElementsMatch(t, []string{"project-1", "project-2"}, grantsByScope[string(access.ScopeBuildRead)].Resources)
-	require.Nil(t, grantsByScope[string(access.ScopeMCPConnect)].Resources)
+	require.ElementsMatch(t, []string{"project-1", "project-2"}, grantsByScope[string(ScopeBuildRead)].Resources)
+	require.Nil(t, grantsByScope[string(ScopeMCPConnect)].Resources)
 }

@@ -45,7 +45,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("environments"))
 	envRepo := repo.New(db)
 	mcpMetadataRepo := mcpmetadata_repo.New(db)
@@ -55,7 +55,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:  logger,
 		db:      db,
 		repo:    envRepo,
-		auth:    auth.New(logger, db, sessions),
+		auth:    auth.New(logger, db, sessions, accessLoader),
 		entries: NewEnvironmentEntries(logger, db, enc, mcpMetadataRepo),
 	}
 }

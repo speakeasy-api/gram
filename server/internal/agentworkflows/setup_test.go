@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
@@ -88,7 +90,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 	funcs := testenv.NewFunctionsTestOrchestrator(t, assetStorage)
 
 	// Create auth service
-	authService := auth.New(logger, conn, sessionManager)
+	authService := auth.New(logger, conn, sessionManager, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	// Create agents service for the background worker
 	agentsService := agents.NewService(

@@ -66,14 +66,14 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore, jwtSecret string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore, jwtSecret string, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
 	return &Service{
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
 		logger:       logger,
 		db:           db,
-		auth:         auth.New(logger, db, sessions),
+		auth:         auth.New(logger, db, sessions, accessLoader),
 		storage:      storage,
 		jwtSecret:    jwtSecret,
 		chatSessions: chatSessions,

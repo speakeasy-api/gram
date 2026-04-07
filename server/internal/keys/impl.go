@@ -50,7 +50,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, env string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, env string, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
 
 	var keyEnv string
@@ -70,7 +70,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:      logger,
 		db:          db,
 		repo:        repo.New(db),
-		auth:        auth.New(logger, db, sessions),
+		auth:        auth.New(logger, db, sessions, accessLoader),
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
 		keyPrefix:   fullKeyPrefix,

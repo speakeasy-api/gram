@@ -44,13 +44,13 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
 		logger:        logger,
-		auth:          auth.New(logger, db, sessions),
+		auth:          auth.New(logger, db, sessions, accessLoader),
 		serverURL:     serverURL,
 		repo:          repo.New(db),
 		billingRepo:   billingRepo,

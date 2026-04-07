@@ -31,14 +31,14 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, chatSessionsManager *chatsessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, chatSessionsManager *chatsessions.Manager, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("chat_sessions"))
 
 	return &Service{
 		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chatsessions"),
 		logger:              logger,
 		db:                  db,
-		auth:                auth.New(logger, db, sessions),
+		auth:                auth.New(logger, db, sessions, accessLoader),
 		chatSessionsManager: chatSessionsManager,
 	}
 }

@@ -56,7 +56,7 @@ func NewService(
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
-	posthogClient PosthogClient) *Service {
+	posthogClient PosthogClient, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
 
@@ -65,7 +65,7 @@ func NewService(
 	// API auth methods (APIKeyAuth, JWTAuth) will return unauthorized errors.
 	var a *auth.Auth
 	if sessions != nil {
-		a = auth.New(logger, db, sessions)
+		a = auth.New(logger, db, sessions, accessLoader)
 	}
 
 	return &Service{
