@@ -24,6 +24,13 @@ function toServerSlug(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+export interface SaveResult {
+  /** True if a new environment was created by this save. */
+  created: boolean;
+  /** True if the save was skipped (nothing meaningful to persist). */
+  skipped: boolean;
+}
+
 export interface UsePlaygroundEnvironmentReturn {
   slug: string;
   exists: boolean;
@@ -31,7 +38,7 @@ export interface UsePlaygroundEnvironmentReturn {
   save: (
     entriesToUpdate: { name: string; value: string }[],
     entriesToRemove: string[],
-  ) => Promise<void>;
+  ) => Promise<SaveResult>;
   isSaving: boolean;
 }
 
@@ -73,9 +80,14 @@ export function usePlaygroundEnvironment(
     async (
       entriesToUpdate: { name: string; value: string }[],
       entriesToRemove: string[],
-    ): Promise<void> => {
+    ): Promise<SaveResult> => {
       try {
         if (!existingEnvironment) {
+          // Don't create an empty environment when the user only cleared
+          // fields (entriesToRemove is meaningless without an existing env).
+          if (entriesToUpdate.length === 0) {
+            return { created: false, skipped: true };
+          }
           await createMutation.mutateAsync({
             request: {
               createEnvironmentForm: {
@@ -85,18 +97,20 @@ export function usePlaygroundEnvironment(
               },
             },
           });
-        } else {
-          await updateMutation.mutateAsync({
-            request: {
-              slug,
-              updateEnvironmentRequestBody: {
-                entriesToUpdate,
-                entriesToRemove,
-              },
-            },
-          });
+          invalidateAllListEnvironments(queryClient);
+          return { created: true, skipped: false };
         }
+        await updateMutation.mutateAsync({
+          request: {
+            slug,
+            updateEnvironmentRequestBody: {
+              entriesToUpdate,
+              entriesToRemove,
+            },
+          },
+        });
         invalidateAllListEnvironments(queryClient);
+        return { created: false, skipped: false };
       } catch (err) {
         toast.error("Failed to save credentials");
         throw err;

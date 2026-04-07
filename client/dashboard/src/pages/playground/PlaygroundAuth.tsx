@@ -407,7 +407,13 @@ export function PlaygroundAuth({
       return;
     }
     try {
-      await playgroundEnv.save(entriesToUpdate, entriesToRemove);
+      const result = await playgroundEnv.save(entriesToUpdate, entriesToRemove);
+      // On first-time create, propagate the slug to the parent
+      // immediately so chat requests fired before the environments
+      // list refetches still use the new playground environment.
+      if (result.created) {
+        onPlaygroundEnvironmentSlug?.(playgroundEnv.slug);
+      }
       // Only clear edited state on success — on failure, keep the typed
       // values so the user can retry without retyping.
       setEditedKeys(new Set());

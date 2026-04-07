@@ -87,10 +87,12 @@ export function PlaygroundElements({
 
   // ToolsetEntry from useListToolsets is structurally compatible with Toolset
   // for the fields useMissingRequiredEnvVars accesses (same pattern as Playground.tsx)
+  // Prefer the playground environment slug when it exists so the warning
+  // banner reflects the same environment the MCP requests will actually use.
   const missingAuthCount = useMissingRequiredEnvVars(
     toolset as Toolset | undefined,
     environments,
-    environmentSlug ?? defaultEnvironmentSlug,
+    playgroundEnvironmentSlug ?? environmentSlug ?? defaultEnvironmentSlug,
     mcpMetadata,
   );
 
