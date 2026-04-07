@@ -101,8 +101,6 @@ type OrganizationInvitation struct {
 	AcceptedAt *string
 	// When the invitation was revoked.
 	RevokedAt *string
-	// Gram organization ID.
-	OrganizationID string
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string
 	// When the invitation expires.

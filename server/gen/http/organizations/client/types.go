@@ -34,8 +34,6 @@ type SendInviteResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram organization ID.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// When the invitation expires.
@@ -1196,8 +1194,6 @@ type OrganizationInvitationResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram organization ID.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// When the invitation expires.
@@ -1234,16 +1230,15 @@ func NewSendInviteRequestBody(p *organizations.SendInvitePayload) *SendInviteReq
 // "sendInvite" endpoint result from a HTTP "OK" response.
 func NewSendInviteOrganizationInvitationOK(body *SendInviteResponseBody) *organizations.OrganizationInvitation {
 	v := &organizations.OrganizationInvitation{
-		ID:             *body.ID,
-		Email:          *body.Email,
-		State:          *body.State,
-		AcceptedAt:     body.AcceptedAt,
-		RevokedAt:      body.RevokedAt,
-		OrganizationID: *body.OrganizationID,
-		InviterUserID:  body.InviterUserID,
-		ExpiresAt:      body.ExpiresAt,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:            *body.ID,
+		Email:         *body.Email,
+		State:         *body.State,
+		AcceptedAt:    body.AcceptedAt,
+		RevokedAt:     body.RevokedAt,
+		InviterUserID: body.InviterUserID,
+		ExpiresAt:     body.ExpiresAt,
+		CreatedAt:     *body.CreatedAt,
+		UpdatedAt:     *body.UpdatedAt,
 	}
 
 	return v
@@ -2205,9 +2200,6 @@ func ValidateSendInviteResponseBody(body *SendInviteResponseBody) (err error) {
 	}
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3744,9 +3736,6 @@ func ValidateOrganizationInvitationResponseBody(body *OrganizationInvitationResp
 	}
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

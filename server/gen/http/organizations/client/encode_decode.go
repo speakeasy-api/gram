@@ -1386,16 +1386,15 @@ func DecodeRemoveUserResponse(decoder func(*http.Response) goahttp.Decoder, rest
 // type *OrganizationInvitationResponseBody.
 func unmarshalOrganizationInvitationResponseBodyToOrganizationsOrganizationInvitation(v *OrganizationInvitationResponseBody) *organizations.OrganizationInvitation {
 	res := &organizations.OrganizationInvitation{
-		ID:             *v.ID,
-		Email:          *v.Email,
-		State:          *v.State,
-		AcceptedAt:     v.AcceptedAt,
-		RevokedAt:      v.RevokedAt,
-		OrganizationID: *v.OrganizationID,
-		InviterUserID:  v.InviterUserID,
-		ExpiresAt:      v.ExpiresAt,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:            *v.ID,
+		Email:         *v.Email,
+		State:         *v.State,
+		AcceptedAt:    v.AcceptedAt,
+		RevokedAt:     v.RevokedAt,
+		InviterUserID: v.InviterUserID,
+		ExpiresAt:     v.ExpiresAt,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
 	}
 
 	return res

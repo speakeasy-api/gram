@@ -66,7 +66,6 @@ func TestService_ListInvites(t *testing.T) {
 	require.Equal(t, "test-invitation-id", inv0.ID)
 	require.Equal(t, "test@example.com", inv0.Email)
 	require.Equal(t, "pending", inv0.State)
-	require.Equal(t, authCtx.ActiveOrganizationID, inv0.OrganizationID)
 	require.NotNil(t, inv0.InviterUserID)
 	require.Equal(t, authCtx.UserID, *inv0.InviterUserID)
 	require.NotNil(t, inv0.ExpiresAt)

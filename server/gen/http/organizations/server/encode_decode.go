@@ -1211,16 +1211,15 @@ func EncodeRemoveUserError(encoder func(context.Context, http.ResponseWriter) go
 // type *organizations.OrganizationInvitation.
 func marshalOrganizationsOrganizationInvitationToOrganizationInvitationResponseBody(v *organizations.OrganizationInvitation) *OrganizationInvitationResponseBody {
 	res := &OrganizationInvitationResponseBody{
-		ID:             v.ID,
-		Email:          v.Email,
-		State:          v.State,
-		AcceptedAt:     v.AcceptedAt,
-		RevokedAt:      v.RevokedAt,
-		OrganizationID: v.OrganizationID,
-		InviterUserID:  v.InviterUserID,
-		ExpiresAt:      v.ExpiresAt,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:            v.ID,
+		Email:         v.Email,
+		State:         v.State,
+		AcceptedAt:    v.AcceptedAt,
+		RevokedAt:     v.RevokedAt,
+		InviterUserID: v.InviterUserID,
+		ExpiresAt:     v.ExpiresAt,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
 	}
 
 	return res

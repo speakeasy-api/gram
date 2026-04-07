@@ -153,7 +153,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "send invitation").Log(ctx, logger)
 	}
 
-	out := invitationToGen(invite, ac.ActiveOrganizationID, &ac.UserID)
+	out := invitationToGen(invite, &ac.UserID)
 	return out, nil
 }
 
@@ -231,7 +231,7 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 		if invite.InviterUserID != "" {
 			inviterGram = s.gramUserIDForWorkosID(ctx, invite.InviterUserID)
 		}
-		out = append(out, invitationToGen(invite, ac.ActiveOrganizationID, inviterGram))
+		out = append(out, invitationToGen(invite, inviterGram))
 	}
 	return &gen.ListInvitesResult{Invitations: out}, nil
 }
@@ -268,10 +268,6 @@ func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
-	}
-
-	if ac.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	logger := s.logger.With(
@@ -391,10 +387,6 @@ func (s *Service) orgContext(ctx context.Context) (*contextvalues.AuthContext, s
 		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
 	}
 
-	if ac.ActiveOrganizationID == "" {
-		return nil, "", oops.C(oops.CodeUnauthorized)
-	}
-
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
@@ -408,13 +400,6 @@ func (s *Service) orgContext(ctx context.Context) (*contextvalues.AuthContext, s
 	)
 
 	return ac, org.WorkosID.String, nil
-}
-
-func optionalTimeString(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
 }
 
 func (s *Service) requireOrgTeamManagementAccess(ctx context.Context, logger *slog.Logger, ac *contextvalues.AuthContext, workosOrgID string) error {
@@ -495,7 +480,7 @@ func (s *Service) resolveGramUserWorkOSUserID(ctx context.Context, gramUserID st
 
 // invitationToGen maps a WorkOS invitation into the public API shape. gramOrganizationID
 // and inviterGramUserID are Gram identifiers; WorkOS IDs are not exposed for those fields.
-func invitationToGen(inv *workos.Invitation, gramOrganizationID string, inviterGramUserID *string) *gen.OrganizationInvitation {
+func invitationToGen(inv *workos.Invitation, inviterGramUserID *string) *gen.OrganizationInvitation {
 	if inv == nil {
 		return nil
 	}
@@ -504,16 +489,15 @@ func invitationToGen(inv *workos.Invitation, gramOrganizationID string, inviterG
 		inviter = inviterGramUserID
 	}
 	return &gen.OrganizationInvitation{
-		ID:             inv.ID,
-		Email:          inv.Email,
-		State:          string(inv.State),
-		AcceptedAt:     optionalTimeString(inv.AcceptedAt),
-		RevokedAt:      optionalTimeString(inv.RevokedAt),
-		OrganizationID: gramOrganizationID,
-		InviterUserID:  inviter,
-		ExpiresAt:      optionalTimeString(inv.ExpiresAt),
-		CreatedAt:      inv.CreatedAt,
-		UpdatedAt:      inv.UpdatedAt,
+		ID:            inv.ID,
+		Email:         inv.Email,
+		State:         string(inv.State),
+		AcceptedAt:    conv.PtrEmpty(inv.AcceptedAt),
+		RevokedAt:     conv.PtrEmpty(inv.RevokedAt),
+		InviterUserID: inviter,
+		ExpiresAt:     conv.PtrEmpty(inv.ExpiresAt),
+		CreatedAt:     inv.CreatedAt,
+		UpdatedAt:     inv.UpdatedAt,
 	}
 }
 

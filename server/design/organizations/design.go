@@ -19,7 +19,6 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 	Attribute("revoked_at", String, "When the invitation was revoked.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("organization_id", String, "Gram organization ID.")
 	Attribute("inviter_user_id", String, "Gram user ID of the inviter, when known.")
 	Attribute("expires_at", String, "When the invitation expires.", func() {
 		Format(FormatDateTime)
@@ -31,7 +30,7 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "email", "state", "organization_id", "created_at", "updated_at")
+	Required("id", "email", "state", "created_at", "updated_at")
 })
 
 // OrganizationInvitationAccept is the public accept-flow view: enough to render copy and redirect,

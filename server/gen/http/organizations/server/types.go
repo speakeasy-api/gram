@@ -34,8 +34,6 @@ type SendInviteResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram organization ID.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// When the invitation expires.
@@ -1196,8 +1194,6 @@ type OrganizationInvitationResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram organization ID.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// When the invitation expires.
@@ -1224,16 +1220,15 @@ type OrganizationUserResponseBody struct {
 // the "sendInvite" endpoint of the "organizations" service.
 func NewSendInviteResponseBody(res *organizations.OrganizationInvitation) *SendInviteResponseBody {
 	body := &SendInviteResponseBody{
-		ID:             res.ID,
-		Email:          res.Email,
-		State:          res.State,
-		AcceptedAt:     res.AcceptedAt,
-		RevokedAt:      res.RevokedAt,
-		OrganizationID: res.OrganizationID,
-		InviterUserID:  res.InviterUserID,
-		ExpiresAt:      res.ExpiresAt,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:            res.ID,
+		Email:         res.Email,
+		State:         res.State,
+		AcceptedAt:    res.AcceptedAt,
+		RevokedAt:     res.RevokedAt,
+		InviterUserID: res.InviterUserID,
+		ExpiresAt:     res.ExpiresAt,
+		CreatedAt:     res.CreatedAt,
+		UpdatedAt:     res.UpdatedAt,
 	}
 	return body
 }

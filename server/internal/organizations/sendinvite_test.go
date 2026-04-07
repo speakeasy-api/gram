@@ -50,7 +50,6 @@ func TestService_SendInvite(t *testing.T) {
 	require.Equal(t, "test-invitation-id", invite.ID)
 	require.Equal(t, "test@example.com", invite.Email)
 	require.Equal(t, "pending", invite.State)
-	require.Equal(t, authCtx.ActiveOrganizationID, invite.OrganizationID)
 	require.NotNil(t, invite.InviterUserID)
 	require.Equal(t, authCtx.UserID, *invite.InviterUserID)
 	require.NotNil(t, invite.ExpiresAt)

@@ -18746,9 +18746,6 @@ components:
                 inviter_user_id:
                     type: string
                     description: Gram user ID of the inviter, when known.
-                organization_id:
-                    type: string
-                    description: Gram organization ID.
                 revoked_at:
                     type: string
                     description: When the invitation was revoked.
@@ -18768,7 +18765,6 @@ components:
                 - id
                 - email
                 - state
-                - organization_id
                 - created_at
                 - updated_at
         OrganizationInvitationAccept:
