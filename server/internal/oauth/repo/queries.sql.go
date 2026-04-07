@@ -465,8 +465,9 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($4::text[], token_endpoint_auth_methods_supported),
     secrets = COALESCE($5::jsonb, secrets),
     updated_at = clock_timestamp()
-WHERE oauth_proxy_server_id = $6
-  AND project_id = $7
+WHERE id = $6
+  AND oauth_proxy_server_id = $7
+  AND project_id = $8
   AND deleted IS FALSE
 RETURNING id, project_id, oauth_proxy_server_id, slug, provider_type, authorization_endpoint, token_endpoint, registration_endpoint, scopes_supported, response_types_supported, response_modes_supported, grant_types_supported, token_endpoint_auth_methods_supported, security_key_names, secrets, created_at, updated_at, deleted_at, deleted
 `
@@ -477,6 +478,7 @@ type UpdateOAuthProxyProviderFieldsParams struct {
 	ScopesSupported                   []string
 	TokenEndpointAuthMethodsSupported []string
 	Secrets                           []byte
+	ID                                uuid.UUID
 	OauthProxyServerID                uuid.UUID
 	ProjectID                         uuid.UUID
 }
@@ -488,6 +490,7 @@ func (q *Queries) UpdateOAuthProxyProviderFields(ctx context.Context, arg Update
 		arg.ScopesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.Secrets,
+		arg.ID,
 		arg.OauthProxyServerID,
 		arg.ProjectID,
 	)
@@ -521,20 +524,20 @@ UPDATE oauth_proxy_servers
 SET
     audience = $1,
     updated_at = clock_timestamp()
-WHERE id = $2
-  AND project_id = $3
+WHERE project_id = $2
+  AND id = $3
   AND deleted IS FALSE
 RETURNING id, project_id, slug, audience, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOAuthProxyServerAudienceParams struct {
 	Audience  pgtype.Text
-	ID        uuid.UUID
 	ProjectID uuid.UUID
+	ID        uuid.UUID
 }
 
 func (q *Queries) UpdateOAuthProxyServerAudience(ctx context.Context, arg UpdateOAuthProxyServerAudienceParams) (OauthProxyServer, error) {
-	row := q.db.QueryRow(ctx, updateOAuthProxyServerAudience, arg.Audience, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateOAuthProxyServerAudience, arg.Audience, arg.ProjectID, arg.ID)
 	var i OauthProxyServer
 	err := row.Scan(
 		&i.ID,

@@ -54,8 +54,8 @@ UPDATE oauth_proxy_servers
 SET
     audience = @audience,
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id
+WHERE project_id = @project_id
+  AND id = @id
   AND deleted IS FALSE
 RETURNING *;
 
@@ -138,7 +138,8 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     secrets = COALESCE(sqlc.narg('secrets')::jsonb, secrets),
     updated_at = clock_timestamp()
-WHERE oauth_proxy_server_id = @oauth_proxy_server_id
+WHERE id = @id
+  AND oauth_proxy_server_id = @oauth_proxy_server_id
   AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
