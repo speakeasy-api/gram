@@ -70,7 +70,8 @@ type ListInvitesPayload struct {
 // ListInvitesResult is the result type of the organizations service
 // listInvites method.
 type ListInvitesResult struct {
-	// Pending and historical invitations for the organization.
+	// Pending invitations for the organization only; accepted, expired, and
+	// revoked invitations are omitted.
 	Invitations []*OrganizationInvitation
 }
 

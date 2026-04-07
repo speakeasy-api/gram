@@ -49,7 +49,8 @@ type SendInviteResponseBody struct {
 // ListInvitesResponseBody is the type of the "organizations" service
 // "listInvites" endpoint HTTP response body.
 type ListInvitesResponseBody struct {
-	// Pending and historical invitations for the organization.
+	// Pending invitations for the organization only; accepted, expired, and
+	// revoked invitations are omitted.
 	Invitations []*OrganizationInvitationResponseBody `form:"invitations" json:"invitations" xml:"invitations"`
 }
 

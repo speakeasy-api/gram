@@ -65,7 +65,7 @@ var OrganizationUser = Type("OrganizationUser", func() {
 
 var ListInvitesResult = Type("ListInvitesResult", func() {
 	Required("invitations")
-	Attribute("invitations", ArrayOf(OrganizationInvitation), "Pending and historical invitations for the organization.")
+	Attribute("invitations", ArrayOf(OrganizationInvitation), "Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.")
 })
 
 var ListUsersResult = Type("ListUsersResult", func() {

@@ -13,7 +13,7 @@ import {
 
 export type ListInvitesResult = {
   /**
-   * Pending and historical invitations for the organization.
+   * Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.
    */
   invitations: Array<OrganizationInvitation>;
 };

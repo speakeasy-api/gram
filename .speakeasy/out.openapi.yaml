@@ -18092,7 +18092,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrganizationInvitation'
-          description: Pending and historical invitations for the organization.
+          description: Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.
       required:
         - invitations
     ListKeysResult:
