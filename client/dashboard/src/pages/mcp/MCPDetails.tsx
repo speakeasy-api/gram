@@ -67,6 +67,7 @@ import {
   Download,
   Globe,
   LockIcon,
+  Pencil,
   Play,
   Trash2,
   XCircleIcon,
@@ -926,6 +927,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+  const [isOAuthEditModalOpen, setIsOAuthEditModalOpen] = useState(false);
 
   // Delete mcp server state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -1421,6 +1423,17 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         toolsetSlug={toolset.slug}
         toolset={toolset}
       />
+      <ConnectOAuthModal
+        isOpen={isOAuthEditModalOpen}
+        onClose={() => setIsOAuthEditModalOpen(false)}
+        toolsetSlug={toolset.slug}
+        toolset={toolset}
+        editMode={
+          toolset.oauthProxyServer
+            ? { proxyServer: toolset.oauthProxyServer }
+            : undefined
+        }
+      />
       <GramOAuthProxyModal
         isOpen={isGramOAuthModalOpen}
         onClose={() => setIsGramOAuthModalOpen(false)}
@@ -1430,6 +1443,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
+        onEditRequest={() => setIsOAuthEditModalOpen(true)}
       />
     </Stack>
   );
@@ -1674,10 +1688,12 @@ function OAuthDetailsModal({
   isOpen,
   onClose,
   toolset,
+  onEditRequest,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolset: Toolset;
+  onEditRequest: () => void;
 }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const queryClient = useQueryClient();
@@ -1737,19 +1753,32 @@ function OAuthDetailsModal({
               <>
                 <div className="flex items-center justify-between">
                   <Type className="font-medium">OAuth Proxy Server</Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="hover:bg-destructive hover:text-white border-none"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Unlink
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      onClick={() => {
+                        onClose();
+                        onEditRequest();
+                      }}
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      className="hover:bg-destructive hover:text-white border-none"
+                      onClick={() =>
+                        removeOAuthMutation.mutate({
+                          request: { slug: toolset.slug },
+                        })
+                      }
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Unlink
+                    </Button>
+                  </div>
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>
