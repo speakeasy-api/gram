@@ -257,7 +257,7 @@ func (s *StubClient) FindInvitationByToken(_ context.Context, token string) (*In
 		}
 	}
 
-	return nil, nil
+	return nil, ErrNotFound
 }
 
 func (s *StubClient) GetInvitation(_ context.Context, invitationID string) (*Invitation, error) {
@@ -271,7 +271,7 @@ func (s *StubClient) GetInvitation(_ context.Context, invitationID string) (*Inv
 		}
 	}
 
-	return nil, nil
+	return nil, ErrNotFound
 }
 
 func (s *StubClient) DeleteOrganizationMembership(_ context.Context, membershipID string) error {

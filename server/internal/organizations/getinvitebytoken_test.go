@@ -1,7 +1,6 @@
 package organizations_test
 
 import (
-	"fmt"
 	"testing"
 
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
@@ -48,26 +47,7 @@ func TestService_GetInviteByToken_NotFound(t *testing.T) {
 	_, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	notFound := fmt.Errorf("not found")
-
-	ti.orgs.On("FindInvitationByToken", mock.Anything, "test-token").Return(nil, notFound)
-
-	res, err := ti.service.GetInviteByToken(ctx, &gen.GetInviteByTokenPayload{
-		Token: "test-token",
-	})
-	require.Error(t, err)
-	require.ErrorIs(t, err, notFound)
-	require.Nil(t, res)
-}
-
-func TestService_GetInviteByToken_NilInvitation(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsService(t)
-	_, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	ti.orgs.On("FindInvitationByToken", mock.Anything, "test-token").Return(nil, nil)
+	ti.orgs.On("FindInvitationByToken", mock.Anything, "test-token").Return(nil, thirdpartyworkos.ErrNotFound)
 
 	res, err := ti.service.GetInviteByToken(ctx, &gen.GetInviteByTokenPayload{
 		Token: "test-token",

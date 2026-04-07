@@ -10,6 +10,9 @@ import (
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 )
 
+// ErrNotFound is returned when a WorkOS resource (invitation, user, etc.) does not exist.
+var ErrNotFound = errors.New("workos: not found")
+
 type InvitationState string
 
 const (
@@ -114,14 +117,13 @@ func (wc *Client) ResendInvitation(ctx context.Context, invitationID string) (*I
 }
 
 // FindInvitationByToken resolves an invitation from its token.
-// Returns (nil, nil) when the token does not match any invitation (WorkOS 404).
+// Returns ErrNotFound when the token does not match any invitation (WorkOS 404).
 func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Invitation, error) {
 	inv, err := wc.um.FindInvitationByToken(ctx, usermanagement.FindInvitationByTokenOpts{InvitationToken: token})
-	if err != nil {
-		var httpErr workos_errors.HTTPError
-		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
-			return nil, nil
-		}
+	switch {
+	case isWorkOSNotFound(err):
+		return nil, ErrNotFound
+	case err != nil:
 		return nil, fmt.Errorf("find invitation by token: %w", err)
 	}
 
@@ -130,17 +132,22 @@ func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Inv
 }
 
 // GetInvitation returns an invitation by ID.
-// Returns (nil, nil) when the invitation does not exist (WorkOS 404).
+// Returns ErrNotFound when the invitation does not exist (WorkOS 404).
 func (wc *Client) GetInvitation(ctx context.Context, invitationID string) (*Invitation, error) {
 	inv, err := wc.um.GetInvitation(ctx, usermanagement.GetInvitationOpts{Invitation: invitationID})
-	if err != nil {
-		var httpErr workos_errors.HTTPError
-		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
-			return nil, nil
-		}
+	switch {
+	case isWorkOSNotFound(err):
+		return nil, ErrNotFound
+	case err != nil:
 		return nil, fmt.Errorf("get invitation: %w", err)
 	}
 
 	converted := convertInvitation(inv)
 	return &converted, nil
+}
+
+// isWorkOSNotFound checks whether the error from the WorkOS SDK represents an HTTP 404.
+func isWorkOSNotFound(err error) bool {
+	var httpErr workos_errors.HTTPError
+	return err != nil && errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound
 }

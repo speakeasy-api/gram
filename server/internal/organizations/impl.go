@@ -178,11 +178,11 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 	)
 
 	invite, err := s.orgs.GetInvitation(ctx, payload.InvitationID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get invitation").Log(ctx, logger)
-	}
-	if invite == nil {
+	switch {
+	case errors.Is(err, workos.ErrNotFound):
 		return oops.C(oops.CodeNotFound).Log(ctx, logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "get invitation").Log(ctx, logger)
 	}
 	if invite.OrganizationID != workosOrgID {
 		return oops.E(oops.CodeForbidden, nil, "invitation does not belong to this organization").Log(ctx, logger)
@@ -238,11 +238,11 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 
 func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteByTokenPayload) (*gen.OrganizationInvitationAccept, error) {
 	invite, err := s.orgs.FindInvitationByToken(ctx, payload.Token)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "find invitation by token").Log(ctx, s.logger)
-	}
-	if invite == nil {
+	switch {
+	case errors.Is(err, workos.ErrNotFound):
 		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "find invitation by token").Log(ctx, s.logger)
 	}
 
 	orgName := ""
@@ -339,10 +339,10 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		OrganizationID: ac.ActiveOrganizationID,
 		UserID:         payload.UserID,
 	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, nil, "user is not a member of this organization").Log(ctx, logger)
-		}
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, nil, "user is not a member of this organization").Log(ctx, logger)
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "get organization user relationship").Log(ctx, logger)
 	}
 

@@ -772,7 +772,7 @@ func TestRoleClient_FindInvitationByToken_NotFound(t *testing.T) {
 	client, _ := newTestClient(t, fake)
 
 	invite, err := client.FindInvitationByToken(context.Background(), "nonexistent-token")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, workos.ErrNotFound)
 	require.Nil(t, invite)
 }
 
@@ -793,7 +793,7 @@ func TestRoleClient_GetInvitation_NotFound(t *testing.T) {
 	client, _ := newTestClient(t, fake)
 
 	invite, err := client.GetInvitation(context.Background(), "nonexistent-id")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, workos.ErrNotFound)
 	require.Nil(t, invite)
 }
 

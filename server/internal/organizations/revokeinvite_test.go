@@ -1,17 +1,15 @@
 package organizations_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 const testWorkosOrgID = "org_workos_test"
@@ -60,14 +58,15 @@ func TestService_RevokeInvite_NotFound(t *testing.T) {
 
 	expectWorkOSOrgAdminRole(t, ti.orgs)
 
-	notFound := fmt.Errorf("not found")
-	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(nil, notFound).Once()
+	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(nil, thirdpartyworkos.ErrNotFound).Once()
 
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
 		InvitationID: "test-invitation-id",
 	})
 	require.Error(t, err)
-	require.ErrorIs(t, err, notFound)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 func TestService_RevokeInvite_WrongOrganization(t *testing.T) {
