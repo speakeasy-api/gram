@@ -122,9 +122,11 @@ function HooksContent() {
   const initialHookTypes = searchParams.get("hookTypes");
   const defaultHookTypes: TypesToInclude[] = ["mcp", "local", "skill"];
   const parsedHookTypes: TypesToInclude[] = initialHookTypes
-    ? (initialHookTypes.split(",").filter(t =>
-        ["mcp", "local", "skill"].includes(t)
-      ) as TypesToInclude[])
+    ? (initialHookTypes
+        .split(",")
+        .filter((t) =>
+          ["mcp", "local", "skill"].includes(t),
+        ) as TypesToInclude[])
     : defaultHookTypes;
 
   // Active filter chips
@@ -320,7 +322,8 @@ function HooksContent() {
               from,
               to,
               filters: logFilters,
-              typesToInclude: selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
+              typesToInclude:
+                selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -1220,7 +1223,9 @@ function HooksServerTable({
           })
         }
         tabValue={summaryView}
-        onTabChange={(v) => onSummaryViewChange(v as "servers" | "users" | "skills")}
+        onTabChange={(v) =>
+          onSummaryViewChange(v as "servers" | "users" | "skills")
+        }
         tabs={[
           { value: "servers", label: "Servers" },
           { value: "users", label: "Users" },
@@ -1297,7 +1302,9 @@ function HooksUserTable({
         })
       }
       tabValue={summaryView}
-      onTabChange={(v) => onSummaryViewChange(v as "servers" | "users" | "skills")}
+      onTabChange={(v) =>
+        onSummaryViewChange(v as "servers" | "users" | "skills")
+      }
       tabs={[
         { value: "servers", label: "Servers" },
         { value: "users", label: "Users" },
@@ -1336,7 +1343,9 @@ function HooksSkillTable({
         })
       }
       tabValue={summaryView}
-      onTabChange={(v) => onSummaryViewChange(v as "servers" | "users" | "skills")}
+      onTabChange={(v) =>
+        onSummaryViewChange(v as "servers" | "users" | "skills")
+      }
       tabs={[
         { value: "servers", label: "Servers" },
         { value: "users", label: "Users" },
@@ -1556,7 +1565,9 @@ function HookTraceRow({
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {serverNameBadge}
           <span className="text-sm font-mono truncate">
-            {toolName === "Skill" && skillName ? skillName : toolName || "unknown"}
+            {toolName === "Skill" && skillName
+              ? skillName
+              : toolName || "unknown"}
           </span>
         </div>
 
