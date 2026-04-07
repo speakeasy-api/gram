@@ -766,6 +766,16 @@ func TestRoleClient_FindInvitationByToken(t *testing.T) {
 	require.Equal(t, "tok_1", invite.Token)
 }
 
+func TestRoleClient_FindInvitationByToken_NotFound(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	client, _ := newTestClient(t, fake)
+
+	invite, err := client.FindInvitationByToken(context.Background(), "nonexistent-token")
+	require.NoError(t, err)
+	require.Nil(t, invite)
+}
+
 func TestRoleClient_GetInvitation(t *testing.T) {
 	t.Parallel()
 	fake := newFakeWorkOS()
@@ -775,6 +785,16 @@ func TestRoleClient_GetInvitation(t *testing.T) {
 	invite, err := client.GetInvitation(context.Background(), "inv_1")
 	require.NoError(t, err)
 	require.Equal(t, "alice@example.com", invite.Email)
+}
+
+func TestRoleClient_GetInvitation_NotFound(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	client, _ := newTestClient(t, fake)
+
+	invite, err := client.GetInvitation(context.Background(), "nonexistent-id")
+	require.NoError(t, err)
+	require.Nil(t, invite)
 }
 
 func TestRoleClient_DeleteOrganizationMembership(t *testing.T) {
