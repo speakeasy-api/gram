@@ -447,7 +447,7 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 
 		// Link the organization to its WorkOS org ID if not already linked.
 		if _, err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
-			WorkosID:       conv.ToPGText(org.ID),
+			WorkosID:       conv.ToPGText(orgMembership.OrganizationID),
 			OrganizationID: org.ID,
 		}); err != nil {
 			// SetOrgWorkosID only updates when workos_id IS NULL, so
