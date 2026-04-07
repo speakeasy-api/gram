@@ -215,7 +215,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
-        - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).LoadIntoContext("
+        - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).PrepareContext("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("
