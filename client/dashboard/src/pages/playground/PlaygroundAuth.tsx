@@ -383,11 +383,17 @@ export function PlaygroundAuth({
     mcpMetadata,
   );
 
-  // Notify parent component of the playground environment slug
+  // Notify parent component of the playground environment slug.
+  // The cleanup clears the slug on unmount so the parent never holds
+  // a stale value while remounting (e.g. on toolset switch via the
+  // key={toolset.slug} prop).
   useEffect(() => {
     onPlaygroundEnvironmentSlug?.(
       playgroundEnv.exists ? playgroundEnv.slug : undefined,
     );
+    return () => {
+      onPlaygroundEnvironmentSlug?.(undefined);
+    };
   }, [playgroundEnv.exists, playgroundEnv.slug, onPlaygroundEnvironmentSlug]);
 
   const handleSave = async () => {

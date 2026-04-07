@@ -10,6 +10,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 
+/**
+ * Mirror of server-side `conv.ToSlug` (server/internal/conv/from.go).
+ * Strips characters not in [a-zA-Z0-9\s-], lowercases, collapses runs of
+ * dashes/whitespace into a single dash, and trims leading/trailing dashes.
+ * Keep this in sync with the server implementation.
+ */
+function toServerSlug(s: string): string {
+  return s
+    .replace(/[^a-zA-Z0-9\s-]/g, "")
+    .toLowerCase()
+    .replace(/[-\s]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export interface UsePlaygroundEnvironmentReturn {
   slug: string;
   exists: boolean;
@@ -30,7 +44,10 @@ export function usePlaygroundEnvironment(
 
   // The slug doubles as the environment name so that the server's
   // conv.ToSlug(name) produces exactly this slug on creation.
-  const slug = `playground-${user.id}-${toolset.slug}`;
+  // We normalize on the client to match the server's transformation
+  // (server/internal/conv/from.go:163), otherwise IDs containing
+  // characters like underscores would diverge between client and server.
+  const slug = toServerSlug(`playground-${user.id}-${toolset.slug}`);
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
