@@ -138,6 +138,7 @@ export * from "./templates.js";
 export * from "./toolset.js";
 export * from "./updateEnvironment.js";
 export * from "./updateMemberRole.js";
+export * from "./updateOAuthProxyServer.js";
 export * from "./updatePackage.js";
 export * from "./updateRole.js";
 export * from "./updateSlackApp.js";

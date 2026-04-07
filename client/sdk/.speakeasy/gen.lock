@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0717608bae282a03fd6c4f77011cd1e7
+  docChecksum: 471accb22f1f9316a4a9fe6bd1a698fc
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.41
-  configChecksum: fbbf4f430b0c5621a1d752eff5327d24
+  releaseVersion: 0.32.20
+  configChecksum: c8bfa9fe36cb1b81fc98f25eb074ee91
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -397,6 +397,8 @@ trackedFiles:
     last_write_checksum: sha1:53c3e40e1c8081dcd723a48423f048226c45c190
   docs/models/components/oauthproxyserverformprovidertype.md:
     last_write_checksum: sha1:b2687a20820d6e78e3fa0ebf3645e42f5f8861a6
+  docs/models/components/oauthproxyserverupdateform.md:
+    last_write_checksum: sha1:e43e2c2124c136c907fa266ab6ec9ba00c8043d4
   docs/models/components/observabilitysummary.md:
     last_write_checksum: sha1:199f8c677365516877dd8e0d7562e5d080eade98
   docs/models/components/openapiv3deploymentasset.md:
@@ -607,6 +609,8 @@ trackedFiles:
     last_write_checksum: sha1:857f7719ac65c86650daee98bc50a523abc12b5e
   docs/models/components/updatememberroleform.md:
     last_write_checksum: sha1:fc16ab2515659459bd0f6249777a6b685b3f78d3
+  docs/models/components/updateoauthproxyserverrequestbody.md:
+    last_write_checksum: sha1:38f9762fad603cb7142e8443eea343204faf4b88
   docs/models/components/updatepackageform.md:
     last_write_checksum: sha1:e0d10c31236e4439b64c6b107163d44ba7040e2b
   docs/models/components/updatepackageresult.md:
@@ -1489,6 +1493,14 @@ trackedFiles:
     last_write_checksum: sha1:4990de52bd7e6c2091b9a4180b6580db70aafaba
   docs/models/operations/updatememberrolesecurity.md:
     last_write_checksum: sha1:b8c1a631b77e111380bda55e33cb31ff0f6fa4b7
+  docs/models/operations/updateoauthproxyserverrequest.md:
+    last_write_checksum: sha1:275e690e26084dfcb020d87dacf35cf07a2c796b
+  docs/models/operations/updateoauthproxyserversecurity.md:
+    last_write_checksum: sha1:0a4fcddf67bda9805039dd59ae0122912246c96f
+  docs/models/operations/updateoauthproxyserversecurityoption1.md:
+    last_write_checksum: sha1:38fe1546b81e041eb56c749765649d1895290da9
+  docs/models/operations/updateoauthproxyserversecurityoption2.md:
+    last_write_checksum: sha1:33da29d774996ddd62101c8f175c3e358bbc0673
   docs/models/operations/updatepackagerequest.md:
     last_write_checksum: sha1:f2adb1afd0daf9f2aadec1a84114c0c72b4d9e1b
   docs/models/operations/updatepackageresponse.md:
@@ -1638,7 +1650,7 @@ trackedFiles:
   docs/sdks/tools/README.md:
     last_write_checksum: sha1:73c0e5a99b2d5a2bfa29e1937f9255e5228d1a86
   docs/sdks/toolsets/README.md:
-    last_write_checksum: sha1:d4fe4f5d5cd1ac16e28dc8875a24a99890d5e56a
+    last_write_checksum: sha1:9d67f059222cdd8d465d7809207e0dd8968adf4c
   docs/sdks/usage/README.md:
     last_write_checksum: sha1:49dd4432d8fc21406bbcee1c80f1aa1dd3459080
   docs/sdks/variations/README.md:
@@ -1663,11 +1675,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:838c0bf9ddf0d6cd4c00665249cbb30736444cdb
+    last_write_checksum: sha1:05ed5cda97959e202c8e329fe2b56e6ca870af92
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:57746baaaf325c3f64ae474586e3c78861935b3e
+    last_write_checksum: sha1:2b29c136d5cd4dd50af3f2c9576e123f7190f755
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2133,6 +2145,8 @@ trackedFiles:
     id: 11ddf65847cb
     last_write_checksum: sha1:f5744e9ac43cdea5f946443aca2443e441a45437
     pristine_git_object: 28bab5415ea1190e7b53e6af9cc767ae0e398cc3
+  src/funcs/toolsetsUpdateOAuthProxyServer.ts:
+    last_write_checksum: sha1:8b9bac3ce4ca805e63f78d04ef7c4ec9334fc7ea
   src/funcs/usageCreateCheckout.ts:
     id: c1c1286d55a5
     last_write_checksum: sha1:3b00c13f8620dc9089ba80c0113746a2a499c95b
@@ -2183,7 +2197,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:b670b2123240ae179fe7c728e39f2eeeb34b9a3b
+    last_write_checksum: sha1:81ca8297a58ab24ff2db521ca5e9104d09eb2a83
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2565,7 +2579,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:5cef35f9ef39a09dae6865452d45ac1841ccb050
+    last_write_checksum: sha1:9afbf2db2592e241e14116233be3cb7de5b00b44
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -2729,6 +2743,8 @@ trackedFiles:
     id: c3a558471e17
     last_write_checksum: sha1:2adbafa721b12cbf018a763f504b50d0d5714d3a
     pristine_git_object: 60ab02cc21b5ce5c90ddb2c1303be5661976196a
+  src/models/components/oauthproxyserverupdateform.ts:
+    last_write_checksum: sha1:39601abb61a44578f7ab0d0ad7813d3f3275de33
   src/models/components/observabilitysummary.ts:
     last_write_checksum: sha1:b6b186601d2092fe94ed2e4c5dd1f006e6a594f6
   src/models/components/openapiv3deploymentasset.ts:
@@ -2985,6 +3001,8 @@ trackedFiles:
     pristine_git_object: 3e15e3d02ae85bf6332035aed3be013620771c6c
   src/models/components/updatememberroleform.ts:
     last_write_checksum: sha1:51b48e1eae3b41468a844cd4bc9c761d42afa0db
+  src/models/components/updateoauthproxyserverrequestbody.ts:
+    last_write_checksum: sha1:81954061fa03a0e0e86804d9ea2903ebeb3f2d7b
   src/models/components/updatepackageform.ts:
     id: ef9273a03dfe
     last_write_checksum: sha1:5562d2bbd71e2f5f61790d213285ab66f1bf718f
@@ -3319,7 +3337,7 @@ trackedFiles:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:68da936be064fed97001a2f28e38d9f6e09a1bd3
+    last_write_checksum: sha1:39b46ac6f7ebbf4ae0c33536c13ea3201e2c1de9
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3541,6 +3559,8 @@ trackedFiles:
     pristine_git_object: 022db0e1885a00ab0839de0a69e1e973f770d22f
   src/models/operations/updatememberrole.ts:
     last_write_checksum: sha1:7999cd1903d9ba673475602ca5e278165508f434
+  src/models/operations/updateoauthproxyserver.ts:
+    last_write_checksum: sha1:b0c6f4291a2ae2b179824448464fa0414c54a68c
   src/models/operations/updatepackage.ts:
     id: 3137e339dc54
     last_write_checksum: sha1:4b92bc1b7cf6695c5aa13e4ef9c742a3c21ee14c
@@ -3877,7 +3897,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:ea6c41a34b26e5f2c9cf22c53ddbcf917c26808b
+    last_write_checksum: sha1:a094ca52dd02ee8b859ea9d29a95beb52dd05d74
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -4259,6 +4279,8 @@ trackedFiles:
     pristine_git_object: 2cf356c08feca9a3e7c51a8c3549076780ac8ea5
   src/react-query/updateMemberRole.ts:
     last_write_checksum: sha1:77757f9e2c0f7a2ba89cbf34eb08435146bfd663
+  src/react-query/updateOAuthProxyServer.ts:
+    last_write_checksum: sha1:c38508d79fd4cb060a7dbd19acc3686ef17fc69e
   src/react-query/updatePackage.ts:
     id: 50a0d18b0a84
     last_write_checksum: sha1:1a95152d4fea7d9b8ad74ad5905ed748d327b4f6
@@ -4409,7 +4431,7 @@ trackedFiles:
     pristine_git_object: 4c7e184e2d9dee5ccd82b2ef46f3236d7ec30efb
   src/sdk/toolsets.ts:
     id: 0715c1588060
-    last_write_checksum: sha1:096078383f9ff6e93052e4d054f3457b9bb44117
+    last_write_checksum: sha1:0b2de4247308e5908ea36686674b2ae2b959f355
     pristine_git_object: 499da61dc8ecf32ab1637b84167ecef2052c32b2
   src/sdk/usage.ts:
     id: e4cbe77b260e
@@ -6266,15 +6288,20 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listToolsetsForOrg:
-    speakeasy-default-list-toolsets-for-org:
+  updateOAuthProxyServer:
+    speakeasy-default-update-O-auth-proxy-server:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {"oauth_proxy_server": {}}
       responses:
         "200":
-          application/json: {"toolsets": [{"created_at": "2024-09-08T20:49:34.635Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"id": "<id>", "name": "<value>"}], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-08-06T06:46:02.744Z"}]}
+          application/json: {"account_type": "<value>", "created_at": "2025-12-15T09:07:12.816Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 108041}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2026-04-28T22:58:22.798Z", "description": "pillow dazzling twin equally when inculcate", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>"], "updated_at": "2024-01-01T22:57:51.926Z"}], "resource_urns": ["<value 1>", "<value 2>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 477020, "updated_at": "2024-03-09T13:04:57.481Z"}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
