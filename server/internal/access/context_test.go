@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -16,19 +16,19 @@ func TestLoadIntoContext_LoadsUserGrants(t *testing.T) {
 	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	trequire.True(t, ok)
+	require.True(t, ok)
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeBuildRead, WildcardResource)
 
 	ctx, err := manager.PrepareContext(ctx)
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	grants, ok := GrantsFromContext(ctx)
-	trequire.True(t, ok)
-	trequire.NotNil(t, grants)
-	trequire.NoError(t, manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}))
+	require.True(t, ok)
+	require.NotNil(t, grants)
+	require.NoError(t, manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}))
 }
 
 func TestLoadIntoContext_SkipsNonSessionAuth(t *testing.T) {
@@ -38,17 +38,17 @@ func TestLoadIntoContext_SkipsNonSessionAuth(t *testing.T) {
 	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	trequire.True(t, ok)
+	require.True(t, ok)
 	authCtx.SessionID = nil
 	authCtx.APIKeyID = "api-key-123"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	ctx, err := manager.PrepareContext(ctx)
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	grants, ok := GrantsFromContext(ctx)
-	trequire.False(t, ok)
-	trequire.Nil(t, grants)
+	require.False(t, ok)
+	require.Nil(t, grants)
 }
 
 func TestLoadIntoContext_SkipsNonEnterpriseOrgs(t *testing.T) {
@@ -58,16 +58,16 @@ func TestLoadIntoContext_SkipsNonEnterpriseOrgs(t *testing.T) {
 	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	trequire.True(t, ok)
+	require.True(t, ok)
 	authCtx.AccountType = "pro"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeBuildRead, WildcardResource)
 
 	ctx, err := manager.PrepareContext(ctx)
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	grants, ok := GrantsFromContext(ctx)
-	trequire.False(t, ok)
-	trequire.Nil(t, grants)
+	require.False(t, ok)
+	require.Nil(t, grants)
 }

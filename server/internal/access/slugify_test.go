@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSlugify(t *testing.T) {
@@ -31,8 +31,8 @@ func TestSlugify(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := slugify(tt.in)
-			trequire.NoError(t, err)
-			trequire.Equal(t, tt.want, got)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -41,14 +41,14 @@ func TestSlugifyRejectsEmptyString(t *testing.T) {
 	t.Parallel()
 
 	_, err := slugify("")
-	trequire.Error(t, err)
-	trequire.Contains(t, err.Error(), "role name must contain at least one letter or digit")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "role name must contain at least one letter or digit")
 }
 
 func TestSlugifyRejectsInvalidCharacters(t *testing.T) {
 	t.Parallel()
 
 	_, err := slugify("special!@#chars")
-	trequire.Error(t, err)
-	trequire.Contains(t, err.Error(), "role name contains invalid characters")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "role name contains invalid characters")
 }

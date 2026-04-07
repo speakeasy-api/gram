@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/mock"
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -25,7 +25,7 @@ func newMockRoleProvider(t *testing.T) *MockRoleProvider {
 
 	roles := &MockRoleProvider{}
 	t.Cleanup(func() {
-		trequire.True(t, roles.AssertExpectations(t))
+		require.True(t, roles.AssertExpectations(t))
 	})
 
 	return roles

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRoleGrantPayloadsPreservesNilAndEmptyResources(t *testing.T) {
@@ -15,8 +15,8 @@ func TestRoleGrantPayloadsPreservesNilAndEmptyResources(t *testing.T) {
 		{Scope: string(ScopeBuildWrite), Resources: []string{}},
 	})
 
-	trequire.Len(t, grants, 2)
-	trequire.Nil(t, grants[0].Resources)
-	trequire.NotNil(t, grants[1].Resources)
-	trequire.Empty(t, grants[1].Resources)
+	require.Len(t, grants, 2)
+	require.Nil(t, grants[0].Resources)
+	require.NotNil(t, grants[1].Resources)
+	require.Empty(t, grants[1].Resources)
 }

@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -15,18 +15,18 @@ func TestService_ListScopes(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
-	trequire.NoError(t, err)
-	trequire.Len(t, result.Scopes, 7)
+	require.NoError(t, err)
+	require.Len(t, result.Scopes, 7)
 
 	bySlug := make(map[string]*gen.ScopeDefinition, len(result.Scopes))
 	for _, scope := range result.Scopes {
 		bySlug[scope.Slug] = scope
 	}
 
-	trequire.Equal(t, "org", bySlug[string(ScopeOrgRead)].ResourceType)
-	trequire.Equal(t, "project", bySlug[string(ScopeBuildWrite)].ResourceType)
-	trequire.Equal(t, "mcp", bySlug[string(ScopeMCPConnect)].ResourceType)
-	trequire.Equal(t, "Read organization metadata and members.", bySlug[string(ScopeOrgRead)].Description)
+	require.Equal(t, "org", bySlug[string(ScopeOrgRead)].ResourceType)
+	require.Equal(t, "project", bySlug[string(ScopeBuildWrite)].ResourceType)
+	require.Equal(t, "mcp", bySlug[string(ScopeMCPConnect)].ResourceType)
+	require.Equal(t, "Read organization metadata and members.", bySlug[string(ScopeOrgRead)].Description)
 }
 
 func TestService_ListScopes_Unauthorized(t *testing.T) {
@@ -36,6 +36,6 @@ func TestService_ListScopes_Unauthorized(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, nil)
 
 	_, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
-	trequire.Error(t, err)
-	trequire.Contains(t, err.Error(), "missing auth context")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing auth context")
 }

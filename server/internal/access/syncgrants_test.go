@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -36,20 +36,20 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 			Resources: []string{},
 		},
 	})
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	rows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: organizationID,
 		PrincipalUrn:   rolePrincipal.String(),
 	})
-	trequire.NoError(t, err)
-	trequire.Len(t, rows, 3)
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
 
 	got := make([]string, 0, len(rows))
 	for _, row := range rows {
 		got = append(got, row.Scope+"|"+row.Resource)
 	}
-	trequire.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{
 		string(ScopeBuildRead) + "|" + WildcardResource,
 		string(ScopeMCPConnect) + "|tool:analytics",
 		string(ScopeMCPConnect) + "|tool:payments",
@@ -59,9 +59,9 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 		OrganizationID: organizationID,
 		PrincipalUrn:   "role:other-role",
 	})
-	trequire.NoError(t, err)
-	trequire.Len(t, otherRows, 1)
-	trequire.Equal(t, "project-other", otherRows[0].Resource)
+	require.NoError(t, err)
+	require.Len(t, otherRows, 1)
+	require.Equal(t, "project-other", otherRows[0].Resource)
 }
 
 func TestService_syncGrants_clearsRoleGrantsWhenEmpty(t *testing.T) {
@@ -77,12 +77,12 @@ func TestService_syncGrants_clearsRoleGrantsWhenEmpty(t *testing.T) {
 	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(ScopeMCPRead), "tool:payments")
 
 	err := syncGrants(ctx, svc.logger, conn, organizationID, roleSlug, nil)
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	rows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: organizationID,
 		PrincipalUrn:   rolePrincipal.String(),
 	})
-	trequire.NoError(t, err)
-	trequire.Empty(t, rows)
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -41,7 +41,7 @@ func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
@@ -61,7 +61,7 @@ func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
-	trequire.ErrorIs(t, err, ErrMissingGrants)
+	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
 func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
@@ -93,8 +93,8 @@ func TestManagerFilter_returnsAllowedSubset(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}}})
 
 	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
-	trequire.NoError(t, err)
-	trequire.Equal(t, []string{"proj_123"}, resourceIDs)
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj_123"}, resourceIDs)
 }
 
 func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
@@ -105,7 +105,7 @@ func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
 	requireOopsCode(t, err, oops.CodeUnexpected)
-	trequire.ErrorIs(t, err, ErrInvalidCheck)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
 func TestManagerRequire_requiresChecks(t *testing.T) {
@@ -116,7 +116,7 @@ func TestManagerRequire_requiresChecks(t *testing.T) {
 
 	err := manager.Require(ctx)
 	requireOopsCode(t, err, oops.CodeUnexpected)
-	trequire.ErrorIs(t, err, ErrNoChecks)
+	require.ErrorIs(t, err, ErrNoChecks)
 }
 
 func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
@@ -141,7 +141,7 @@ func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
 	})
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
@@ -166,8 +166,8 @@ func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	})
 
 	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
-	trequire.NoError(t, err)
-	trequire.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }
 
 func enterpriseSessionCtx(t *testing.T) context.Context {
@@ -195,8 +195,8 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 
 	var shareableErr *oops.ShareableError
-	trequire.ErrorAs(t, err, &shareableErr)
-	trequire.Equal(t, code, shareableErr.Code)
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, code, shareableErr.Code)
 }
 
 func testLogger(t *testing.T) *slog.Logger {

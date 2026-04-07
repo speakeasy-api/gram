@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -22,12 +22,12 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	seedGrant(t, ctx, conn, organizationID, rolePrincipal, ScopeMCPConnect, "toolA")
 
 	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{userPrincipal, rolePrincipal, rolePrincipal})
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
 	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true})
-	trequire.NoError(t, manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj:123"}))
-	trequire.NoError(t, manager.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
+	require.NoError(t, manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj:123"}))
+	require.NoError(t, manager.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
@@ -38,8 +38,8 @@ func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
 	grants, err := LoadGrants(t.Context(), conn, "", []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "user_123"),
 	})
-	trequire.Error(t, err)
-	trequire.Nil(t, grants)
+	require.Error(t, err)
+	require.Nil(t, grants)
 }
 
 func TestLoadGrants_rejectsMissingPrincipals(t *testing.T) {
@@ -53,8 +53,8 @@ func TestLoadGrants_rejectsMissingPrincipals(t *testing.T) {
 	seedOrganization(t, ctx, conn, organizationID)
 
 	grants, err := LoadGrants(ctx, conn, organizationID, nil)
-	trequire.Error(t, err)
-	trequire.Nil(t, grants)
+	require.Error(t, err)
+	require.Nil(t, grants)
 }
 
 func TestLoadGrants_rejectsInvalidPrincipal(t *testing.T) {
@@ -67,8 +67,8 @@ func TestLoadGrants_rejectsInvalidPrincipal(t *testing.T) {
 	seedOrganization(t, ctx, conn, organizationID)
 
 	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{{}})
-	trequire.Error(t, err)
-	trequire.Nil(t, grants)
+	require.Error(t, err)
+	require.Nil(t, grants)
 }
 
 func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
@@ -83,11 +83,11 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "user_123"),
 	})
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
 	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true})
 	projectIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj:123"})
-	trequire.NoError(t, err)
-	trequire.Empty(t, projectIDs)
+	require.NoError(t, err)
+	require.Empty(t, projectIDs)
 }

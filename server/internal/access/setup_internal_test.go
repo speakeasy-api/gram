@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -18,16 +18,16 @@ func newInternalTestService(t *testing.T) (context.Context, *Service, *pgxpool.P
 	t.Helper()
 
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		trequire.NoError(t, cleanup())
+		require.NoError(t, cleanup())
 	})
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 
 	conn, err := res.CloneTestDatabase(t, "testdb")
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	return ctx, &Service{tracer: nil, logger: logger, db: conn, auth: nil}, conn
 }
@@ -41,7 +41,7 @@ func seedInternalOrganization(t *testing.T, ctx context.Context, conn *pgxpool.P
 		Slug:            "test-org",
 		SsoConnectionID: conv.PtrToPGText(nil),
 	})
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope string, resource string) {
@@ -53,5 +53,5 @@ func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 		Scope:          scope,
 		Resource:       resource,
 	})
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 }

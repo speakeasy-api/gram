@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/mock"
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -30,22 +30,22 @@ func TestService_ListMembers(t *testing.T) {
 	}, nil).Once()
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
-	trequire.NoError(t, err)
-	trequire.Len(t, result.Members, 2)
+	require.NoError(t, err)
+	require.Len(t, result.Members, 2)
 
 	byID := map[string]*gen.AccessMember{}
 	for _, member := range result.Members {
 		byID[member.ID] = member
 	}
 
-	trequire.Equal(t, "Ada Lovelace", byID["user_1"].Name)
-	trequire.Equal(t, "ada@example.com", byID["user_1"].Email)
-	trequire.Equal(t, "role_admin", byID["user_1"].RoleID)
-	trequire.Nil(t, byID["user_1"].PhotoURL)
-	trequire.Equal(t, "2024-11-15T15:04:05Z", byID["user_1"].JoinedAt)
+	require.Equal(t, "Ada Lovelace", byID["user_1"].Name)
+	require.Equal(t, "ada@example.com", byID["user_1"].Email)
+	require.Equal(t, "role_admin", byID["user_1"].RoleID)
+	require.Nil(t, byID["user_1"].PhotoURL)
+	require.Equal(t, "2024-11-15T15:04:05Z", byID["user_1"].JoinedAt)
 
-	trequire.Equal(t, "Grace", byID["user_2"].Name)
-	trequire.Equal(t, "role_builder", byID["user_2"].RoleID)
+	require.Equal(t, "Grace", byID["user_2"].Name)
+	require.Equal(t, "role_builder", byID["user_2"].RoleID)
 }
 
 func TestService_ListMembers_WorkOSUsersFailure(t *testing.T) {
@@ -61,6 +61,6 @@ func TestService_ListMembers_WorkOSUsersFailure(t *testing.T) {
 	ti.roles.On("ListOrgUsers", mock.Anything, "org_workos_test").Return(map[string]thirdpartyworkos.User(nil), errors.New("workos unavailable")).Once()
 
 	_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
-	trequire.Error(t, err)
-	trequire.Contains(t, err.Error(), "list org users from workos")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "list org users from workos")
 }

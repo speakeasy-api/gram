@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/mock"
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -20,8 +20,8 @@ func TestService_UpdateRole(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	trequire.True(t, ok)
-	trequire.NotNil(t, authCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
 	name := "Platform Builder"
 	description := "Updated description"
 
@@ -75,18 +75,18 @@ func TestService_UpdateRole(t *testing.T) {
 		},
 		MemberIds: []string{"user_1", "user_2"},
 	})
-	trequire.NoError(t, err)
-	trequire.Equal(t, "role_custom", role.ID)
-	trequire.Equal(t, name, role.Name)
-	trequire.Equal(t, description, role.Description)
-	trequire.False(t, role.IsSystem)
-	trequire.Equal(t, 3, role.MemberCount)
-	trequire.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	trequire.Equal(t, mockRoleTimestamp, role.UpdatedAt)
-	trequire.Len(t, role.Grants, 2)
+	require.NoError(t, err)
+	require.Equal(t, "role_custom", role.ID)
+	require.Equal(t, name, role.Name)
+	require.Equal(t, description, role.Description)
+	require.False(t, role.IsSystem)
+	require.Equal(t, 3, role.MemberCount)
+	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
+	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
+	require.Len(t, role.Grants, 2)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
-	trequire.Len(t, grants, 3)
+	require.Len(t, grants, 3)
 }
 
 func TestService_UpdateRole_NotFound(t *testing.T) {
@@ -96,8 +96,8 @@ func TestService_UpdateRole_NotFound(t *testing.T) {
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_missing"})
-	trequire.Error(t, err)
-	trequire.Contains(t, err.Error(), "role not found")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "role not found")
 }
 
 func TestService_UpdateRole_WorkOSUpdateFailure(t *testing.T) {
@@ -111,8 +111,8 @@ func TestService_UpdateRole_WorkOSUpdateFailure(t *testing.T) {
 	ti.roles.On("UpdateRole", mock.Anything, "org_workos_test", "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return((*thirdpartyworkos.Role)(nil), errors.New("workos unavailable")).Once()
 
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_custom"})
-	trequire.Error(t, err)
-	trequire.Contains(t, err.Error(), "update role in workos")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "update role in workos")
 }
 
 func TestService_UpdateRole_AuditLog(t *testing.T) {
@@ -120,10 +120,10 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	trequire.True(t, ok)
-	trequire.NotNil(t, authCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 
 	name := "Audit Builder"
 	description := "After description"
@@ -160,46 +160,46 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 			Resources: []string{"project-1"},
 		}},
 	})
-	trequire.NoError(t, err)
-	trequire.NotNil(t, updated)
+	require.NoError(t, err)
+	require.NotNil(t, updated)
 
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
-	trequire.NoError(t, err)
-	trequire.Equal(t, string(audit.ActionAccessRoleUpdate), record.Action)
-	trequire.Equal(t, "access_role", record.SubjectType)
-	trequire.Equal(t, updated.Name, record.SubjectDisplay)
-	trequire.Equal(t, "custom-builder", record.SubjectSlug)
-	trequire.NotNil(t, record.BeforeSnapshot)
-	trequire.NotNil(t, record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionAccessRoleUpdate), record.Action)
+	require.Equal(t, "access_role", record.SubjectType)
+	require.Equal(t, updated.Name, record.SubjectDisplay)
+	require.Equal(t, "custom-builder", record.SubjectSlug)
+	require.NotNil(t, record.BeforeSnapshot)
+	require.NotNil(t, record.AfterSnapshot)
 
 	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
-	trequire.NoError(t, err)
+	require.NoError(t, err)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
-	trequire.NoError(t, err)
-	trequire.Equal(t, "Before Builder", beforeSnapshot["Name"])
-	trequire.Equal(t, updated.Name, afterSnapshot["Name"])
+	require.NoError(t, err)
+	require.Equal(t, "Before Builder", beforeSnapshot["Name"])
+	require.Equal(t, updated.Name, afterSnapshot["Name"])
 	beforeGrants, ok := beforeSnapshot["Grants"].([]any)
-	trequire.True(t, ok)
-	trequire.Len(t, beforeGrants, 1)
+	require.True(t, ok)
+	require.Len(t, beforeGrants, 1)
 	beforeGrant, ok := beforeGrants[0].(map[string]any)
-	trequire.True(t, ok)
-	trequire.Equal(t, string(ScopeBuildRead), beforeGrant["Scope"])
+	require.True(t, ok)
+	require.Equal(t, string(ScopeBuildRead), beforeGrant["Scope"])
 	beforeResources, ok := beforeGrant["Resources"].([]any)
-	trequire.True(t, ok)
-	trequire.Len(t, beforeResources, 1)
-	trequire.Equal(t, "project-old", beforeResources[0])
+	require.True(t, ok)
+	require.Len(t, beforeResources, 1)
+	require.Equal(t, "project-old", beforeResources[0])
 	afterGrants, ok := afterSnapshot["Grants"].([]any)
-	trequire.True(t, ok)
-	trequire.Len(t, afterGrants, 1)
+	require.True(t, ok)
+	require.Len(t, afterGrants, 1)
 	afterGrant, ok := afterGrants[0].(map[string]any)
-	trequire.True(t, ok)
-	trequire.Equal(t, string(ScopeBuildWrite), afterGrant["Scope"])
+	require.True(t, ok)
+	require.Equal(t, string(ScopeBuildWrite), afterGrant["Scope"])
 	afterResources, ok := afterGrant["Resources"].([]any)
-	trequire.True(t, ok)
-	trequire.Len(t, afterResources, 1)
-	trequire.Equal(t, "project-1", afterResources[0])
+	require.True(t, ok)
+	require.Len(t, afterResources, 1)
+	require.Equal(t, "project-1", afterResources[0])
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
-	trequire.NoError(t, err)
-	trequire.Equal(t, beforeCount+1, afterCount)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }

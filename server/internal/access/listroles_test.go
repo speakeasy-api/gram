@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/mock"
-	trequire "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -17,8 +17,8 @@ func TestService_ListRoles(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	trequire.True(t, ok)
-	trequire.NotNil(t, authCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
 
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
@@ -36,8 +36,8 @@ func TestService_ListRoles(t *testing.T) {
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeMCPConnect, WildcardResource)
 
 	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
-	trequire.NoError(t, err)
-	trequire.Len(t, result.Roles, 2)
+	require.NoError(t, err)
+	require.Len(t, result.Roles, 2)
 
 	rolesByID := make(map[string]*gen.Role, len(result.Roles))
 	for _, role := range result.Roles {
@@ -45,28 +45,28 @@ func TestService_ListRoles(t *testing.T) {
 	}
 
 	adminRole := rolesByID["role_admin"]
-	trequire.NotNil(t, adminRole)
-	trequire.Equal(t, "Admin", adminRole.Name)
-	trequire.True(t, adminRole.IsSystem)
-	trequire.Equal(t, 1, adminRole.MemberCount)
-	trequire.Equal(t, mockRoleTimestamp, adminRole.CreatedAt)
-	trequire.Equal(t, mockRoleTimestamp, adminRole.UpdatedAt)
-	trequire.Len(t, adminRole.Grants, 1)
-	trequire.Equal(t, string(ScopeOrgAdmin), adminRole.Grants[0].Scope)
-	trequire.Nil(t, adminRole.Grants[0].Resources)
+	require.NotNil(t, adminRole)
+	require.Equal(t, "Admin", adminRole.Name)
+	require.True(t, adminRole.IsSystem)
+	require.Equal(t, 1, adminRole.MemberCount)
+	require.Equal(t, mockRoleTimestamp, adminRole.CreatedAt)
+	require.Equal(t, mockRoleTimestamp, adminRole.UpdatedAt)
+	require.Len(t, adminRole.Grants, 1)
+	require.Equal(t, string(ScopeOrgAdmin), adminRole.Grants[0].Scope)
+	require.Nil(t, adminRole.Grants[0].Resources)
 
 	customRole := rolesByID["role_custom"]
-	trequire.NotNil(t, customRole)
-	trequire.Equal(t, "Custom Builder", customRole.Name)
-	trequire.False(t, customRole.IsSystem)
-	trequire.Equal(t, 2, customRole.MemberCount)
-	trequire.Equal(t, "Can build selected resources", customRole.Description)
-	trequire.Len(t, customRole.Grants, 2)
+	require.NotNil(t, customRole)
+	require.Equal(t, "Custom Builder", customRole.Name)
+	require.False(t, customRole.IsSystem)
+	require.Equal(t, 2, customRole.MemberCount)
+	require.Equal(t, "Can build selected resources", customRole.Description)
+	require.Len(t, customRole.Grants, 2)
 
 	grantsByScope := make(map[string]*gen.RoleGrant, len(customRole.Grants))
 	for _, grant := range customRole.Grants {
 		grantsByScope[grant.Scope] = grant
 	}
-	trequire.ElementsMatch(t, []string{"project-1", "project-2"}, grantsByScope[string(ScopeBuildRead)].Resources)
-	trequire.Nil(t, grantsByScope[string(ScopeMCPConnect)].Resources)
+	require.ElementsMatch(t, []string{"project-1", "project-2"}, grantsByScope[string(ScopeBuildRead)].Resources)
+	require.Nil(t, grantsByScope[string(ScopeMCPConnect)].Resources)
 }
