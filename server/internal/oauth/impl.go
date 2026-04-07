@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -39,6 +41,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+)
+
+var (
+	errToolsetNotFound      = errors.New("toolset not found")
+	errCustomDomainNotFound = errors.New("custom domain not found")
+	errOAuthUnavailable     = errors.New("oauth unavailable for private mcp server")
 )
 
 //go:embed hosted_oauth_success_page.html.tmpl
@@ -188,12 +196,15 @@ func (s *Service) loadToolsetFromCurrentURLContext(ctx context.Context, mcpSlug 
 		mcpURL = s.serverURL.String() + "/mcp/" + mcpSlug
 	}
 
-	if toolsetErr != nil {
-		return nil, "", oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(toolsetErr, pgx.ErrNoRows):
+		return nil, "", fmt.Errorf("%w: %w", errToolsetNotFound, toolsetErr)
+	case toolsetErr != nil:
+		return nil, "", fmt.Errorf("lookup toolset: %w", toolsetErr)
 	}
 
 	if !toolset.McpIsPublic && !toolset.OauthProxyServerID.Valid {
-		return nil, "", oops.E(oops.CodeNotFound, nil, "mcp server not found").Log(ctx, s.logger)
+		return nil, "", errOAuthUnavailable
 	}
 
 	return &toolset, mcpURL, nil
@@ -204,16 +215,23 @@ func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID
 		ProjectID: projectID,
 		McpSlug:   conv.ToPGText(mcpSlug),
 	})
-	if err != nil {
-		return nil, "", oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, "", fmt.Errorf("%w: %w", errToolsetNotFound, err)
+	case err != nil:
+		return nil, "", fmt.Errorf("lookup toolset: %w", err)
 	}
 
 	mcpURL := fmt.Sprintf("%s/mcp/%s", s.serverURL.String(), mcpSlug)
 	if toolset.CustomDomainID.Valid {
 		domain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
-		if err != nil {
-			return nil, "", oops.E(oops.CodeNotFound, err, "custom domain not found").Log(ctx, s.logger)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, "", fmt.Errorf("%w: %w", errCustomDomainNotFound, err)
+		case err != nil:
+			return nil, "", fmt.Errorf("lookup custom domain: %w", err)
 		}
+
 		mcpURL = fmt.Sprintf("https://%s/mcp/%s", domain.Domain, mcpSlug)
 	}
 	return &toolset, mcpURL, nil
@@ -231,8 +249,11 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	// Load toolset from MCP slug
 	toolset, fullMCPURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load authorization details for mcp server").Log(ctx, s.logger)
 	}
 
 	// Parse authorization request
@@ -436,8 +457,11 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	toolset, fullMCPURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load token exchange details for mcp server").Log(ctx, s.logger)
 	}
 
 	if err := r.ParseForm(); err != nil {
@@ -493,8 +517,11 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 	}
 
 	_, fullMcpURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load client registration details for mcp server").Log(ctx, s.logger)
 	}
 
 	bodyBytes, err := io.ReadAll(r.Body)
@@ -550,8 +577,11 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	toolset, fullMCPURL, err := s.loadToolsetForProjectAndMCPSlug(ctx, projectID, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, errToolsetNotFound), errors.Is(err, errCustomDomainNotFound):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load authorization details for mcp server").Log(ctx, s.logger)
 	}
 
 	externalCode := r.URL.Query().Get("code")
