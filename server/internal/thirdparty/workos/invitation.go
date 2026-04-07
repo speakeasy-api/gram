@@ -2,6 +2,7 @@ package workos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
