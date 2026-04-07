@@ -1465,22 +1465,20 @@ type GetSkillsSummaryParams struct {
 }
 
 // GetSkillsSummary retrieves aggregated skills usage metrics.
-// Skills are identified by tool_name where tool_name = 'Skill' in the attributes.
+// Skills are identified by skill_name in trace_summaries.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryParams) ([]SkillSummaryRow, error) {
 	sb := sq.Select(
-		"JSONExtractString(toString(attributes.`gen_ai.tool.call.arguments`), 'skill') as skill_name",
+		"skill_name",
 		"count(*) as use_count",
 		"uniqExact(user_email) as unique_users",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
-		Where("tool_name = 'Skill'").
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("JSONExtractString(toString(attributes.`gen_ai.tool.call.arguments`), 'skill') != ''").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
+		Where("skill_name != ''").
 		GroupBy("skill_name").
 		OrderBy("use_count DESC")
 
