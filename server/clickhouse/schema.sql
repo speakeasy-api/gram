@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     toolset_slug String MATERIALIZED toString(attributes.gram.toolset.slug) COMMENT 'Toolset slug (materialized from attributes.gram.toolset.slug).',
     user_email String MATERIALIZED toString(attributes.user.email) COMMENT 'User email (materialized from attributes.user.email).',
     hook_source String MATERIALIZED toString(attributes.gram.hook.source) COMMENT 'Hook source (materialized from attributes.gram.hook.source).',
-    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.`gen_ai.tool.call.arguments`), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
+    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)

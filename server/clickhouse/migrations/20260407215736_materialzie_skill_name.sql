@@ -1,6 +1,6 @@
 -- Drop "trace_summaries_mv" view
 DROP VIEW `trace_summaries_mv`;
-ALTER TABLE `telemetry_logs` ADD COLUMN `skill_name` String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.`gen_ai.tool.call.arguments`), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `skill_name` String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).';
 ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_skill_name` ((skill_name)) TYPE bloom_filter(0.01) GRANULARITY 1;
 ALTER TABLE `trace_summaries` ADD COLUMN `skill_name` SimpleAggregateFunction(any, String);
 -- Create "trace_summaries_mv" view
