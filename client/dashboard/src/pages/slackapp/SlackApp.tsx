@@ -50,14 +50,14 @@ function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8 rounded-xl border border-dashed bg-muted/20">
       <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-        <Icon name="slack" className="w-6 h-6 text-muted-foreground" />
+        <Icon name="bot" className="w-6 h-6 text-muted-foreground" />
       </div>
       <Type variant="subheading" className="mb-1">
         No assistants yet
       </Type>
       <Type small muted className="text-center mb-4 max-w-md">
         Create an assistant to let your team interact with Gram toolsets
-        directly from Slack.
+        directly.
       </Type>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
