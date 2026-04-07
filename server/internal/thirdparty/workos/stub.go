@@ -292,6 +292,24 @@ func (s *StubClient) ListOrgMemberships(_ context.Context, orgID string) ([]Memb
 	return s.ListMembers(context.Background(), orgID)
 }
 
+func (s *StubClient) GetOrgMembership(_ context.Context, workOSUserID, workOSOrgID string) (*Member, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state, ok := s.orgs[workOSOrgID]
+	if !ok {
+		return nil, nil
+	}
+	for _, m := range state.memberships {
+		if m.UserID == workOSUserID && m.OrganizationID == workOSOrgID {
+			cp := m
+			return &cp, nil
+		}
+	}
+
+	return nil, nil
+}
+
 func (s *StubClient) ListOrgUsers(_ context.Context, orgID string) (map[string]User, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()

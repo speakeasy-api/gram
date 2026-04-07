@@ -24,6 +24,8 @@ func TestService_RevokeInvite(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
+	expectWorkOSOrgAdminRole(t, ti.orgs)
+
 	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
 		ID:             "test-invitation-id",
 		Email:          "test@example.com",
@@ -56,6 +58,8 @@ func TestService_RevokeInvite_NotFound(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
+	expectWorkOSOrgAdminRole(t, ti.orgs)
+
 	notFound := fmt.Errorf("not found")
 	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(nil, notFound).Once()
 
@@ -70,6 +74,8 @@ func TestService_RevokeInvite_WrongOrganization(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+
+	expectWorkOSOrgAdminRole(t, ti.orgs)
 
 	ti.orgs.On("GetInvitation", mock.Anything, "other-org-invitation-id").Return(&thirdpartyworkos.Invitation{
 		ID:             "other-org-invitation-id",
@@ -88,4 +94,14 @@ func TestService_RevokeInvite_WrongOrganization(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestService_RevokeInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	expectWorkOSOrgNonAdminRole(t, ti.orgs)
+
+	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "any-invitation-id"})
+	requireOrgManagementForbidden(t, err)
 }

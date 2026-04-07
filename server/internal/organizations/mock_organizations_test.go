@@ -109,6 +109,18 @@ func (m *MockOrganizationProvider) GetUserByEmail(ctx context.Context, email str
 	return nil, nil
 }
 
+func (m *MockOrganizationProvider) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*thirdpartyworkos.Member, error) {
+	args := m.Called(ctx, workOSUserID, workOSOrgID)
+	if err := args.Error(1); err != nil {
+		mem, _ := args.Get(0).(*thirdpartyworkos.Member)
+		return mem, mockErr(args, 1)
+	}
+	if mem, ok := args.Get(0).(*thirdpartyworkos.Member); ok {
+		return mem, nil
+	}
+	return nil, nil
+}
+
 func mockErr(args mock.Arguments, index int) error {
 	err := args.Error(index)
 	if err == nil {

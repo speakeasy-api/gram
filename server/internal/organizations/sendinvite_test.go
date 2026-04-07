@@ -9,11 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
-
-const testInviterWorkosUserID = "user_01WORKOS_INVITER"
 
 func TestService_SendInvite(t *testing.T) {
 	t.Parallel()
@@ -27,15 +24,12 @@ func TestService_SendInvite(t *testing.T) {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	updatedAt := time.Now().UTC().Format(time.RFC3339)
 
-	ti.orgs.On("GetUserByEmail", mock.Anything, mockidp.MockUserEmail).Return(&thirdpartyworkos.User{
-		ID:    testInviterWorkosUserID,
-		Email: mockidp.MockUserEmail,
-	}, nil).Once()
+	expectWorkOSOrgAdminRole(t, ti.orgs)
 
 	ti.orgs.On("SendInvitation", mock.Anything, thirdpartyworkos.SendInvitationOpts{
 		Email:          "test@example.com",
 		OrganizationID: "org_workos_test",
-		InviterUserID:  testInviterWorkosUserID,
+		InviterUserID:  testAuthUserWorkOSID,
 		ExpiresInDays:  7,
 	}).Return(&thirdpartyworkos.Invitation{
 		ID:             "test-invitation-id",
@@ -80,15 +74,12 @@ func TestService_SendInvite_WithRoleSlug(t *testing.T) {
 
 	roleSlug := "test-role"
 
-	ti.orgs.On("GetUserByEmail", mock.Anything, mockidp.MockUserEmail).Return(&thirdpartyworkos.User{
-		ID:    testInviterWorkosUserID,
-		Email: mockidp.MockUserEmail,
-	}, nil).Once()
+	expectWorkOSOrgAdminRole(t, ti.orgs)
 
 	ti.orgs.On("SendInvitation", mock.Anything, thirdpartyworkos.SendInvitationOpts{
 		Email:          "test@example.com",
 		OrganizationID: "org_workos_test",
-		InviterUserID:  testInviterWorkosUserID,
+		InviterUserID:  testAuthUserWorkOSID,
 		RoleSlug:       roleSlug,
 		ExpiresInDays:  7,
 	}).Return(&thirdpartyworkos.Invitation{
@@ -111,4 +102,14 @@ func TestService_SendInvite_WithRoleSlug(t *testing.T) {
 	require.Equal(t, "test-invitation-id", invite.ID)
 	require.NotNil(t, invite.RoleSlug)
 	require.Equal(t, "test-role", *invite.RoleSlug)
+}
+
+func TestService_SendInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	expectWorkOSOrgNonAdminRole(t, ti.orgs)
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
+	requireOrgManagementForbidden(t, err)
 }

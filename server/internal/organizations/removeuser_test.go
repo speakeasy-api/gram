@@ -36,6 +36,8 @@ func TestService_RemoveUser(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	expectWorkOSOrgAdminRole(t, ti.orgs)
+
 	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, testWorkosMembershipID).Return(nil).Once()
 
 	err = ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
@@ -48,6 +50,7 @@ func TestService_RemoveUser(t *testing.T) {
 	require.Empty(t, rows, "expected soft-deleted user to no longer appear in organization list")
 
 	// Check that the user is no longer a member of the organization
+	expectWorkOSOrgAdminRole(t, ti.orgs)
 	users, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
 	require.Empty(t, users.Users, "expected user to be removed from organization")
@@ -75,6 +78,8 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	expectWorkOSOrgAdminRole(t, ti.orgs)
+
 	workosErr := errors.New("workos error")
 	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, testWorkosMembershipID).Return(workosErr).Once()
 
@@ -101,6 +106,8 @@ func TestService_RemoveUser_NotAMember(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
+	expectWorkOSOrgAdminRole(t, ti.orgs)
+
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
 		UserID: "non-member-user-id",
 	})
@@ -111,4 +118,14 @@ func TestService_RemoveUser_NotAMember(t *testing.T) {
 	require.Equal(t, "user is not a member of this organization", oopsErr.Error())
 
 	ti.orgs.AssertExpectations(t)
+}
+
+func TestService_RemoveUser_ForbiddenWhenNotOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	expectWorkOSOrgNonAdminRole(t, ti.orgs)
+
+	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
+	requireOrgManagementForbidden(t, err)
 }

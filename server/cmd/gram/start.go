@@ -709,7 +709,7 @@ func newStartCommand() *cli.Command {
 					Environment:            c.String("environment"),
 				},
 			))
-			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient))
+			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, accessManager))

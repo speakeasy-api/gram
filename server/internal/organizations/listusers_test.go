@@ -17,6 +17,8 @@ func TestService_ListUsers(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
+	expectWorkOSOrgAdminRole(t, ti.orgs)
+
 	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		UserID:         authCtx.UserID,
@@ -56,5 +58,16 @@ func TestService_ListUsers_NoActiveOrganization(t *testing.T) {
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.Error(t, err)
+	require.Nil(t, res)
+}
+
+func TestService_ListUsers_ForbiddenWhenNotOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	expectWorkOSOrgNonAdminRole(t, ti.orgs)
+
+	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
+	requireOrgManagementForbidden(t, err)
 	require.Nil(t, res)
 }

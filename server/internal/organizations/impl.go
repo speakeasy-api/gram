@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/organizations/server"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
@@ -32,6 +34,9 @@ import (
 
 const (
 	defaultInviteExpiryDays = 7
+	// workosOrgAdminRoleSlug is the WorkOS organization role slug that may manage
+	// invites and membership when Gram enterprise RBAC is not authoritative.
+	workosOrgAdminRoleSlug = "admin"
 )
 
 // OrganizationProvider is the WorkOS surface the organizations service uses.
@@ -46,31 +51,38 @@ type OrganizationProvider interface {
 	GetInvitation(ctx context.Context, invitationID string) (*workos.Invitation, error)
 	RevokeInvitation(ctx context.Context, invitationID string) (*workos.Invitation, error)
 	FindInvitationByToken(ctx context.Context, token string) (*workos.Invitation, error)
+	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
 }
 
 var _ OrganizationProvider = (*workos.Client)(nil)
 
+type orgFeatureChecker interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+}
+
 type Service struct {
-	logger *slog.Logger
-	tracer trace.Tracer
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	orgs   OrganizationProvider
+	logger   *slog.Logger
+	tracer   trace.Tracer
+	db       *pgxpool.Pool
+	auth     *auth.Auth
+	orgs     OrganizationProvider
+	features orgFeatureChecker
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
-		logger: logger,
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
-		db:     db,
-		auth:   auth.New(logger, db, sessions),
-		orgs:   orgs,
+		logger:   logger,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
+		db:       db,
+		auth:     auth.New(logger, db, sessions),
+		orgs:     orgs,
+		features: features,
 	}
 }
 
@@ -85,7 +97,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, err
+	}
+
+	ctx, err = access.LoadIntoContext(ctx, s.logger, s.db)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
+	}
+
+	return ctx, nil
 }
 
 func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload) (*gen.OrganizationInvitation, error) {
@@ -98,6 +120,9 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
+	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+		return nil, err
+	}
 
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -144,6 +169,9 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		attr.SlogUserID(ac.UserID),
 		attr.SlogOrganizationInviteID(payload.InvitationID),
 	)
+	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+		return err
+	}
 
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -179,6 +207,10 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
+
+	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+		return nil, err
+	}
 
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -248,6 +280,18 @@ func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.
 		attr.SlogUserID(ac.UserID),
 	)
 
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
+	}
+	workosOrgID := ""
+	if org.WorkosID.Valid {
+		workosOrgID = org.WorkosID.String
+	}
+	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+		return nil, err
+	}
+
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
@@ -275,6 +319,9 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
+	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+		return err
+	}
 
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -367,6 +414,82 @@ func optionalTimeString(s string) *string {
 	return &s
 }
 
+func (s *Service) requireOrgTeamManagementAccess(ctx context.Context, logger *slog.Logger, ac *contextvalues.AuthContext, workosOrgID string) error {
+	if s.features == nil {
+		return oops.E(oops.CodeUnexpected, errors.New("product features checker not configured"), "internal configuration error").Log(ctx, logger)
+	}
+
+	enabled, err := s.features.IsFeatureEnabled(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, logger)
+	}
+
+	if enabled && ac.AccountType == "enterprise" {
+		if err := access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+			return mapOrgAccessError(err)
+		}
+		return nil
+	}
+
+	if workosOrgID == "" {
+		return oops.E(oops.CodeForbidden, nil, "organization administrator privileges required").Log(ctx, logger)
+	}
+
+	workosUserID, err := s.resolveGramUserWorkOSUserID(ctx, ac.UserID, logger, "user not found", "user has no WorkOS user id; sign in via WorkOS first or link your account")
+	if err != nil {
+		return err
+	}
+
+	mem, err := s.orgs.GetOrgMembership(ctx, workosUserID, workosOrgID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check organization membership role").Log(ctx, logger)
+	}
+	if mem == nil || !strings.EqualFold(mem.RoleSlug, workosOrgAdminRoleSlug) {
+		return oops.C(oops.CodeForbidden).Log(ctx, logger)
+	}
+
+	return nil
+}
+
+func mapOrgAccessError(err error) error {
+	switch {
+	case errors.Is(err, access.ErrMissingGrants), errors.Is(err, access.ErrDenied):
+		return oops.C(oops.CodeForbidden)
+	default:
+		return oops.E(oops.CodeUnexpected, err, "check organization access")
+	}
+}
+
+// resolveGramUserWorkOSUserID returns the WorkOS user id for a Gram user, optionally persisting it from email lookup.
+func (s *Service) resolveGramUserWorkOSUserID(ctx context.Context, gramUserID string, logger *slog.Logger, notFoundMsg, noWorkOSMsg string) (string, error) {
+	u, err := userrepo.New(s.db).GetUser(ctx, gramUserID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", oops.E(oops.CodeNotFound, nil, "%s", notFoundMsg).Log(ctx, logger)
+		}
+		return "", oops.E(oops.CodeUnexpected, err, "get user").Log(ctx, logger)
+	}
+	if u.WorkosID.Valid && strings.TrimSpace(u.WorkosID.String) != "" {
+		return strings.TrimSpace(u.WorkosID.String), nil
+	}
+
+	wu, err := s.orgs.GetUserByEmail(ctx, u.Email)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "lookup WorkOS user by email").Log(ctx, logger)
+	}
+	if wu == nil {
+		return "", oops.E(oops.CodeBadRequest, nil, "%s", noWorkOSMsg).Log(ctx, logger)
+	}
+
+	if err := userrepo.New(s.db).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(wu.ID),
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to persist WorkOS user id", attr.SlogError(err))
+	}
+	return wu.ID, nil
+}
+
 // invitationToGen maps a WorkOS invitation into the public API shape. gramOrganizationID
 // and inviterGramUserID are Gram identifiers; WorkOS IDs are not exposed for those fields.
 func invitationToGen(inv *workos.Invitation, gramOrganizationID string, inviterGramUserID *string) *gen.OrganizationInvitation {
@@ -394,32 +517,10 @@ func invitationToGen(inv *workos.Invitation, gramOrganizationID string, inviterG
 
 // workosInviterUserID returns the WorkOS user id for the Gram user sending an invitation.
 func (s *Service) workosInviterUserID(ctx context.Context, gramUserID string, logger *slog.Logger) (string, error) {
-	u, err := userrepo.New(s.db).GetUser(ctx, gramUserID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", oops.E(oops.CodeNotFound, nil, "inviting user not found").Log(ctx, logger)
-		}
-		return "", oops.E(oops.CodeUnexpected, err, "get inviting user").Log(ctx, logger)
-	}
-	if u.WorkosID.Valid && strings.TrimSpace(u.WorkosID.String) != "" {
-		return strings.TrimSpace(u.WorkosID.String), nil
-	}
-
-	wu, err := s.orgs.GetUserByEmail(ctx, u.Email)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "lookup WorkOS user by email").Log(ctx, logger)
-	}
-	if wu == nil {
-		return "", oops.E(oops.CodeBadRequest, nil, "inviter has no WorkOS user id; sign in via WorkOS first or link your account").Log(ctx, logger)
-	}
-
-	if err := userrepo.New(s.db).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
-		ID:       gramUserID,
-		WorkosID: conv.ToPGText(wu.ID),
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to persist WorkOS user id for inviter", attr.SlogError(err))
-	}
-	return wu.ID, nil
+	return s.resolveGramUserWorkOSUserID(ctx, gramUserID, logger,
+		"inviting user not found",
+		"inviter has no WorkOS user id; sign in via WorkOS first or link your account",
+	)
 }
 
 func (s *Service) gramUserIDForWorkosID(ctx context.Context, workosUserID string) *string {

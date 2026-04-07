@@ -21,6 +21,8 @@ func TestService_ListInvites(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
+	expectWorkOSOrgAdminRole(t, ti.orgs)
+
 	now := time.Now().UTC()
 	expiresAt := now.Add(7 * 24 * time.Hour).Format(time.RFC3339)
 	createdAt := now.Format(time.RFC3339)
@@ -71,4 +73,15 @@ func TestService_ListInvites(t *testing.T) {
 	require.Equal(t, expiresAt, *inv0.ExpiresAt)
 	require.Equal(t, createdAt, inv0.CreatedAt)
 	require.Equal(t, updatedAt, inv0.UpdatedAt)
+}
+
+func TestService_ListInvites_ForbiddenWhenNotOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	expectWorkOSOrgNonAdminRole(t, ti.orgs)
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	requireOrgManagementForbidden(t, err)
+	require.Nil(t, res)
 }
