@@ -166,11 +166,14 @@ const (
 	OpenAPIVersionKey              = attribute.Key("gram.openapi.version")
 	OpenRouterKeyLimitKey          = attribute.Key("gram.openrouter.key.limit")
 	OrganizationAccountTypeKey     = attribute.Key("gram.org.account_type")
+	OrganizationInviteIDKey        = attribute.Key("gram.org.invite.id")
 	AccessMemberIDKey              = attribute.Key("gram.access.member.id")
 	AccessRoleIDKey                = attribute.Key("gram.access.role.id")
 	AccessRoleSlugKey              = attribute.Key("gram.access.role.slug")
 	OrganizationIDKey              = attribute.Key("gram.org.id")
 	OrganizationSlugKey            = attribute.Key("gram.org.slug")
+	WorkOSOrganizationIDKey        = attribute.Key("gram.workos.organization_id")
+	WorkOSUserIDKey                = attribute.Key("gram.workos.user_id")
 	OutcomeKey                     = attribute.Key("gram.outcome")
 	PackageNameKey                 = attribute.Key("gram.package.name")
 	PackageVersionKey              = attribute.Key("gram.package.version")
@@ -744,11 +747,24 @@ func SlogOrganizationID(v string) slog.Attr      { return slog.String(string(Org
 func OrganizationSlug(v string) attribute.KeyValue { return OrganizationSlugKey.String(v) }
 func SlogOrganizationSlug(v string) slog.Attr      { return slog.String(string(OrganizationSlugKey), v) }
 
+func WorkOSOrganizationID(v string) attribute.KeyValue { return WorkOSOrganizationIDKey.String(v) }
+func SlogWorkOSOrganizationID(v string) slog.Attr {
+	return slog.String(string(WorkOSOrganizationIDKey), v)
+}
+
+func WorkOSUserID(v string) attribute.KeyValue { return WorkOSUserIDKey.String(v) }
+func SlogWorkOSUserID(v string) slog.Attr      { return slog.String(string(WorkOSUserIDKey), v) }
+
 func OrganizationAccountType(v string) attribute.KeyValue {
 	return OrganizationAccountTypeKey.String(v)
 }
 func SlogOrganizationAccountType(v string) slog.Attr {
 	return slog.String(string(OrganizationAccountTypeKey), v)
+}
+
+func OrganizationInviteID(v string) attribute.KeyValue { return OrganizationInviteIDKey.String(v) }
+func SlogOrganizationInviteID(v string) slog.Attr {
+	return slog.String(string(OrganizationInviteIDKey), v)
 }
 
 func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }

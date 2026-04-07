@@ -34,6 +34,12 @@ SELECT *
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: GetOrganizationNameByWorkosID :one
+SELECT name
+FROM organization_metadata
+WHERE workos_id = @workos_id
+LIMIT 1;
+
 -- name: UpsertOrganizationUserRelationship :one
 INSERT INTO organization_user_relationships (
     organization_id,
@@ -54,6 +60,13 @@ SELECT EXISTS(
     AND user_id = @user_id
     AND deleted_at IS NULL
 ) AS exists;
+
+-- name: GetOrganizationUserRelationship :one
+SELECT *
+FROM organization_user_relationships
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND deleted_at IS NULL;
 
 -- name: ListOrganizationUsers :many
 SELECT *

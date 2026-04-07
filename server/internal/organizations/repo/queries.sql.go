@@ -85,6 +85,49 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 	return i, err
 }
 
+const getOrganizationNameByWorkosID = `-- name: GetOrganizationNameByWorkosID :one
+SELECT name
+FROM organization_metadata
+WHERE workos_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizationNameByWorkosID(ctx context.Context, workosID pgtype.Text) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationNameByWorkosID, workosID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
+const getOrganizationUserRelationship = `-- name: GetOrganizationUserRelationship :one
+SELECT id, organization_id, user_id, workos_membership_id, created_at, updated_at, deleted_at, deleted
+FROM organization_user_relationships
+WHERE organization_id = $1
+  AND user_id = $2
+  AND deleted_at IS NULL
+`
+
+type GetOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOrganizationUserRelationshipParams) (OrganizationUserRelationship, error) {
+	row := q.db.QueryRow(ctx, getOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	var i OrganizationUserRelationship
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.WorkosMembershipID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const hasOrganizationUserRelationship = `-- name: HasOrganizationUserRelationship :one
 SELECT EXISTS(
   SELECT 1

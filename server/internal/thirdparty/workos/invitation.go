@@ -111,10 +111,11 @@ func (wc *Client) ResendInvitation(ctx context.Context, invitationID string) (*I
 }
 
 // FindInvitationByToken resolves an invitation from its token.
+// Returns an error matching IsNotFound when the token does not match any invitation.
 func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Invitation, error) {
 	inv, err := wc.um.FindInvitationByToken(ctx, usermanagement.FindInvitationByTokenOpts{InvitationToken: token})
 	if err != nil {
-		return nil, fmt.Errorf("find invitation by token: %w", err)
+		return nil, wrapSDKError(err, "find invitation by token")
 	}
 
 	converted := convertInvitation(inv)
@@ -122,10 +123,11 @@ func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Inv
 }
 
 // GetInvitation returns an invitation by ID.
+// Returns an error matching IsNotFound when the invitation does not exist.
 func (wc *Client) GetInvitation(ctx context.Context, invitationID string) (*Invitation, error) {
 	inv, err := wc.um.GetInvitation(ctx, usermanagement.GetInvitationOpts{Invitation: invitationID})
 	if err != nil {
-		return nil, fmt.Errorf("get invitation: %w", err)
+		return nil, wrapSDKError(err, "get invitation")
 	}
 
 	converted := convertInvitation(inv)

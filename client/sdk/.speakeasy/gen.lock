@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e212a64c9b359536b1aadd926e023025
+  docChecksum: 6d8d0c6d6200acac4893fa7641a2d10f
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.20
-  configChecksum: c8bfa9fe36cb1b81fc98f25eb074ee91
+  releaseVersion: 0.32.26
+  configChecksum: 84d8c0a7001c17b7a657abbaeccfb35a
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -331,6 +331,8 @@ trackedFiles:
     last_write_checksum: sha1:d225a13c045feb2ea2cb826c6058b56542f0691e
   docs/models/components/listintegrationsresult.md:
     last_write_checksum: sha1:dbd19d7f8194a90e03634ec4a636f07d426409a1
+  docs/models/components/listinvitesresult.md:
+    last_write_checksum: sha1:0a025f8294cb7e7c873065b41b1024d53b35a232
   docs/models/components/listkeysresult.md:
     last_write_checksum: sha1:2e73cc249c8a20495db89e5f22beded14375b0fd
   docs/models/components/listmembersresult.md:
@@ -355,6 +357,8 @@ trackedFiles:
     last_write_checksum: sha1:13fbd207037ed62fa67feccc920b593ee9fc8170
   docs/models/components/listtoolsresult.md:
     last_write_checksum: sha1:962086dafa9244f0c8884e6e91da75181e498762
+  docs/models/components/listusersresult.md:
+    last_write_checksum: sha1:484d5dca0d966130193ffed82988599b8a1e4d8c
   docs/models/components/listvariationsresult.md:
     last_write_checksum: sha1:aee8e4ff0d8905002a493221986452d34b7c2c42
   docs/models/components/listversionsresult.md:
@@ -399,6 +403,14 @@ trackedFiles:
     last_write_checksum: sha1:a278250c76553362effdfb720017a38808eb6283
   docs/models/components/organizationentry.md:
     last_write_checksum: sha1:69a03a891f0032a56e074a49b7e8447f40aabc9f
+  docs/models/components/organizationinvitation.md:
+    last_write_checksum: sha1:f475d1717d144a756f11e994e4196a9977855b9c
+  docs/models/components/organizationinvitationaccept.md:
+    last_write_checksum: sha1:2cd52404b964a1238080dc485fde3611ba39fbb5
+  docs/models/components/organizationinvitationstate.md:
+    last_write_checksum: sha1:21bf402c8b8a8af0667f469cda7adcd506d81ec1
+  docs/models/components/organizationuser.md:
+    last_write_checksum: sha1:1791e3601f7995d2441d54c15b0170a7740f3920
   docs/models/components/otelattribute.md:
     last_write_checksum: sha1:a893f2d5835427f5e9750589b9d8703c2a9d30c1
   docs/models/components/otelattributevalue.md:
@@ -509,6 +521,8 @@ trackedFiles:
     last_write_checksum: sha1:56ee4b00c88b7a2f716e60637afbc398ddd3266b
   docs/models/components/securityvariable.md:
     last_write_checksum: sha1:c9440e44db862ae2ab790d1f490d7a145a23cd9d
+  docs/models/components/sendinviterequestbody.md:
+    last_write_checksum: sha1:0e198484928f538a25089e08a8082cced7ed28fc
   docs/models/components/serveimageform.md:
     last_write_checksum: sha1:530060f0cc468c392b1fd32052fc990c4a5c17c5
   docs/models/components/servernameoverride.md:
@@ -543,6 +557,8 @@ trackedFiles:
     last_write_checksum: sha1:d34e383d6aa5b404cb36e0b38a1f8e54e9de13f7
   docs/models/components/sourcekind.md:
     last_write_checksum: sha1:fafa28d5e2ea4b5deaa83ef06953c04ba3012577
+  docs/models/components/state.md:
+    last_write_checksum: sha1:1b69fe2f9161323b9855df7105dec46a6bf20938
   docs/models/components/status.md:
     last_write_checksum: sha1:efc8aeab38f388e688f1f3bed23d5f48b2955ce4
   docs/models/components/submitfeedbackrequestbody.md:
@@ -943,6 +959,8 @@ trackedFiles:
     last_write_checksum: sha1:803c0fd53a2b7255e96c0fecd23e74368f54ee0d
   docs/models/operations/getinstancesecurityoption4.md:
     last_write_checksum: sha1:21c23e6f66303065b1f087dfcc3deadfa1cceb3b
+  docs/models/operations/getinvitebytokenrequest.md:
+    last_write_checksum: sha1:4db4affafe03f7e87f24d3de10a0d0b9dea050b2
   docs/models/operations/getlatestdeploymentrequest.md:
     last_write_checksum: sha1:5284ff5704acb1a861a4b80ad7f1566d38394256
   docs/models/operations/getlatestdeploymentsecurity.md:
@@ -1147,6 +1165,10 @@ trackedFiles:
     last_write_checksum: sha1:173228c86a11b2ec44275a97e4c2c1191797bef7
   docs/models/operations/listintegrationssecurity.md:
     last_write_checksum: sha1:cd22113cd36d545ebb5d905ce4700063dda4ad0d
+  docs/models/operations/listinvitesrequest.md:
+    last_write_checksum: sha1:0ef1160c363c84b9749b990764a85c3da55b8b56
+  docs/models/operations/listinvitessecurity.md:
+    last_write_checksum: sha1:36d6c78d225046b6e497213c23c4f8c0bd9e29ed
   docs/models/operations/listmcpcatalogrequest.md:
     last_write_checksum: sha1:8a63e9e02c15d98fab2ce26876422ef4366ac9e2
   docs/models/operations/listmcpcatalogsecurity.md:
@@ -1167,6 +1189,10 @@ trackedFiles:
     last_write_checksum: sha1:868be2bbd95372b4d1be4ccfbb244b0bf63d21c4
   docs/models/operations/listmemberssecurity.md:
     last_write_checksum: sha1:05dff1fe87e6a1cb933274c527acb9a32b4063d3
+  docs/models/operations/listorganizationusersrequest.md:
+    last_write_checksum: sha1:fb41a43ae15e8784fee82526858e6a378ec9802d
+  docs/models/operations/listorganizationuserssecurity.md:
+    last_write_checksum: sha1:37c70d092c06d3abddbfb006d90f79b7134931af
   docs/models/operations/listpackagesrequest.md:
     last_write_checksum: sha1:f960843985065215b6e9341f361047228462358d
   docs/models/operations/listpackagessecurity.md:
@@ -1279,6 +1305,10 @@ trackedFiles:
     last_write_checksum: sha1:4d49eec046867a586c6c4a208add27969f87a242
   docs/models/operations/removeoauthserversecurityoption2.md:
     last_write_checksum: sha1:e78cef1e11e98ea4df935d292f3b80fb9b73edff
+  docs/models/operations/removeorganizationuserrequest.md:
+    last_write_checksum: sha1:bae5579b0e5146502948b3d9d807b8dea4ac295f
+  docs/models/operations/removeorganizationusersecurity.md:
+    last_write_checksum: sha1:7335b5de6c34f98c08e3374ff5d74ab38a726619
   docs/models/operations/rendertemplatebyidrequest.md:
     last_write_checksum: sha1:323a27f709e3e41372777dbb4178a808aba1fbb1
   docs/models/operations/rendertemplatebyidsecurity.md:
@@ -1311,6 +1341,10 @@ trackedFiles:
     last_write_checksum: sha1:36788d434463fc9a1ad21e14d4d6196c02b39d80
   docs/models/operations/revokechatsessionsecurityoption2.md:
     last_write_checksum: sha1:d0d238def6c2e97cb47a063044b936612e13e949
+  docs/models/operations/revokeinviterequest.md:
+    last_write_checksum: sha1:fe549c61a3f832b059732450e341e3672cca4cce
+  docs/models/operations/revokeinvitesecurity.md:
+    last_write_checksum: sha1:e924243abbc5c4a0d3ed01156e314fb773dd0a36
   docs/models/operations/searchchatsrequest.md:
     last_write_checksum: sha1:41b07c102a4dd518b6a031f1421013e6045164a1
   docs/models/operations/searchchatssecurity.md:
@@ -1343,6 +1377,10 @@ trackedFiles:
     last_write_checksum: sha1:cfb2803d0ea5da660c1e5d7f62f1555eff125eb3
   docs/models/operations/searchuserssecurityoption2.md:
     last_write_checksum: sha1:0b76a2a1d256a669c500a2845b41755f9fbfd195
+  docs/models/operations/sendinviterequest.md:
+    last_write_checksum: sha1:73372bdb9e63c9d912761855f2b97fb001f66e4f
+  docs/models/operations/sendinvitesecurity.md:
+    last_write_checksum: sha1:6f4dafe005f18cf0de16addb3cb699044ab4386d
   docs/models/operations/servechatattachmentrequest.md:
     last_write_checksum: sha1:7e1a04eb865c8be48cdab979f815188de644389b
   docs/models/operations/servechatattachmentresponse.md:
@@ -1567,6 +1605,8 @@ trackedFiles:
     last_write_checksum: sha1:c6b5740a3f5a951130dc2f63d5de659165147e50
   docs/sdks/mcpregistries/README.md:
     last_write_checksum: sha1:6e0e53ab4f9d91a9685bc9bfd5517dc99fc47f4c
+  docs/sdks/organizations/README.md:
+    last_write_checksum: sha1:ff31d04fb18732503d8eedb6230d9d300af1a07a
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/projects/README.md:
@@ -1607,11 +1647,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:05ed5cda97959e202c8e329fe2b56e6ca870af92
+    last_write_checksum: sha1:3d710fb4254452470cdeac6df4b93444e6da3568
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:2b29c136d5cd4dd50af3f2c9576e123f7190f755
+    last_write_checksum: sha1:f654883b37158b9d03bb96ffcfc7ca8b1366bfd4
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1893,6 +1933,18 @@ trackedFiles:
     pristine_git_object: 4b1c888c9c0c75bcdcc63d37d4a1be92c135c3e8
   src/funcs/mcpRegistriesListRegistries.ts:
     last_write_checksum: sha1:bf5407c5bda22d4b0c2965e1e8e876276d2ef4ef
+  src/funcs/organizationsGetInviteByToken.ts:
+    last_write_checksum: sha1:3aa386ba87041f8c80dba9c044e6d3116296083a
+  src/funcs/organizationsListInvites.ts:
+    last_write_checksum: sha1:4e5011ee86420b528cee3a45f41ba556a32962fb
+  src/funcs/organizationsListUsers.ts:
+    last_write_checksum: sha1:bb9114a7b63696e58ef5ff8fc9d8eb248de08fec
+  src/funcs/organizationsRemoveUser.ts:
+    last_write_checksum: sha1:a7d2ce703fda7b17afea02a972ea1349fdff5c93
+  src/funcs/organizationsRevokeInvite.ts:
+    last_write_checksum: sha1:4fea492b55ea1f99efd2e2ee15fdbb7089ba055c
+  src/funcs/organizationsSendInvite.ts:
+    last_write_checksum: sha1:54b2bfcf5c4f4387b03b5aacc863ee8ba3307596
   src/funcs/packagesCreate.ts:
     id: b7d4f4a09722
     last_write_checksum: sha1:e5c93edada4390f85a419c6edcefdecdead1e808
@@ -2111,7 +2163,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:81ca8297a58ab24ff2db521ca5e9104d09eb2a83
+    last_write_checksum: sha1:398511595506412ceb70b19d54fab0be8060dc30
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2493,7 +2545,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:50e7e432cc364a2aae2c6d0748c85525c4b2f1d3
+    last_write_checksum: sha1:bb8f81c3bf54ab2914a50909d574d1d7a36d33d2
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -2563,6 +2615,8 @@ trackedFiles:
     id: ebf76f602049
     last_write_checksum: sha1:6ebe0905ba888340ee36a5e0043288692d1cdcc1
     pristine_git_object: 03da4b0f5acfe47bcff18625d35caf1907560285
+  src/models/components/listinvitesresult.ts:
+    last_write_checksum: sha1:888711adf37c44924fc96cd2260117133bd0365b
   src/models/components/listkeysresult.ts:
     id: 247f9e3ea8d8
     last_write_checksum: sha1:bc223e6e1171e90e3a99a93dbcfc2a708655ea2b
@@ -2601,6 +2655,8 @@ trackedFiles:
     id: 164b2f8908ed
     last_write_checksum: sha1:bf250ba5854a75781df2885c958bbf0db58021e9
     pristine_git_object: 8123919551c59765c6e44c66e3a4e6e7a84902b6
+  src/models/components/listusersresult.ts:
+    last_write_checksum: sha1:489369641b730817a42f3b7762ae24545e95f7a7
   src/models/components/listvariationsresult.ts:
     id: 9c6b1db2a84b
     last_write_checksum: sha1:abc5de620e65a741db86086158c6ac9955c4d908
@@ -2661,6 +2717,12 @@ trackedFiles:
     id: aa6032ffcddc
     last_write_checksum: sha1:80ae8c75259b4645abcc14af57a495f6e6ab77c5
     pristine_git_object: f2f7295b4ead4d4db3f38f721e08e3aa294ddafd
+  src/models/components/organizationinvitation.ts:
+    last_write_checksum: sha1:0fcf62d7978a20f641d6d96b6880857ae5b8a163
+  src/models/components/organizationinvitationaccept.ts:
+    last_write_checksum: sha1:61da98eda71adefdd4f4f6f80eb9f623bb957116
+  src/models/components/organizationuser.ts:
+    last_write_checksum: sha1:5efaa19c6bd1ec7c5937285593e3b0677d8c03c4
   src/models/components/otelattribute.ts:
     last_write_checksum: sha1:73d5182c8e167121b1b0993f33c638df9d5a1f46
   src/models/components/otelattributevalue.ts:
@@ -2801,6 +2863,8 @@ trackedFiles:
     id: 4aa96a84a4f9
     last_write_checksum: sha1:b6435b1d385bc4ce89a1a172f494119f689414cb
     pristine_git_object: 3f1430d434bf71f00ca1101ef800ddac5e4d1a59
+  src/models/components/sendinviterequestbody.ts:
+    last_write_checksum: sha1:7f8b96e7dbb98bd5d702627bb6ee08d3e4df36c3
   src/models/components/serveimageform.ts:
     id: 220ace29ab1d
     last_write_checksum: sha1:02556f1de78b6d7b643c4bee99807bd701536d2a
@@ -3173,6 +3237,8 @@ trackedFiles:
     id: 092f009f4915
     last_write_checksum: sha1:fa4f6c75644d7dca1021abd8c688ea1e53acf263
     pristine_git_object: 4ddefe66b75214871b981c9cd71f35e4b069c96b
+  src/models/operations/getinvitebytoken.ts:
+    last_write_checksum: sha1:5133e1c34fc88790d8b4fdc2883e93803816f0c8
   src/models/operations/getlatestdeployment.ts:
     id: 30c24354b615
     last_write_checksum: sha1:14645332c9374d7e925b4d32b800b809001c5ea1
@@ -3227,7 +3293,7 @@ trackedFiles:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:5d66d5d1345e634c62905fc4e46bd22a95090566
+    last_write_checksum: sha1:c0f87d9571bcf92564358b46ea5775ca8ccd1403
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3277,6 +3343,8 @@ trackedFiles:
     id: 3875c615ae12
     last_write_checksum: sha1:d1f5efb2f10fa5721caffca10b95c3fa9834f1e0
     pristine_git_object: 032d845554f40af585874974233b4c0bf7d66b93
+  src/models/operations/listinvites.ts:
+    last_write_checksum: sha1:a77c9efc64975d7b8609433e162bb5241fcb9ecb
   src/models/operations/listmcpcatalog.ts:
     id: e2dd4f72060b
     last_write_checksum: sha1:05c3d0176e6b370110860a1c7f7eb40c4d7a58f6
@@ -3285,6 +3353,8 @@ trackedFiles:
     last_write_checksum: sha1:6b175c98e3cc549235af1d2e56a63351d047cf93
   src/models/operations/listmembers.ts:
     last_write_checksum: sha1:007387e1747a7d3ae18fa14884d5564a840f68ec
+  src/models/operations/listorganizationusers.ts:
+    last_write_checksum: sha1:f82ef56f73c02dec040994e6c9af6b2fa5a23f9b
   src/models/operations/listpackages.ts:
     id: 5fda120afaa5
     last_write_checksum: sha1:2b0dea4c7f15d2696461616e714e7979d88c1168
@@ -3349,6 +3419,8 @@ trackedFiles:
     id: 53f39ff70e58
     last_write_checksum: sha1:7b170dfbd4e01565da034764a2dfb4d32bf2462b
     pristine_git_object: 4ec2bf5f21e80c03b4bacb7566a5c46b81b4ea2b
+  src/models/operations/removeorganizationuser.ts:
+    last_write_checksum: sha1:b152f3c11d4a4371db5e230e21de2915f2ce3aac
   src/models/operations/rendertemplate.ts:
     id: 660eac6cc945
     last_write_checksum: sha1:7240fd3ed8df5f09a4b14f2ea91bc7390ae7ff9e
@@ -3365,6 +3437,8 @@ trackedFiles:
     id: 13285d3c8c94
     last_write_checksum: sha1:32ac2c23c54d3499b0babc87ddc1121ce5e72c1e
     pristine_git_object: b7820ace16325a38fedb556b26f71553396419f2
+  src/models/operations/revokeinvite.ts:
+    last_write_checksum: sha1:341307b9e9a0fcf4ba091ea559cb33846673e3b4
   src/models/operations/searchchats.ts:
     last_write_checksum: sha1:a2c7fb671397ec9fc87fce9b0899da3d6ce4aa88
   src/models/operations/searchlogs.ts:
@@ -3377,6 +3451,8 @@ trackedFiles:
     pristine_git_object: 5c546918e70f72378726fe727f4f9617d5294e77
   src/models/operations/searchusers.ts:
     last_write_checksum: sha1:ccc538d2d9c78bf1adb52afcb0e2323af5896e51
+  src/models/operations/sendinvite.ts:
+    last_write_checksum: sha1:65f16d139e14830c560dbde697b99945ed48f79d
   src/models/operations/servechatattachment.ts:
     id: 8c7c2f77b4ec
     last_write_checksum: sha1:5d8bd998697604f4d6889643111a65993ea7278b
@@ -3683,6 +3759,10 @@ trackedFiles:
     last_write_checksum: sha1:fb5c3f66f6db70a6921f34d310d386e070ce658c
   src/react-query/getHooksSummary.ts:
     last_write_checksum: sha1:09132178e0f2e0358d80c1512f365b24a9c3d5cb
+  src/react-query/getInviteByToken.core.ts:
+    last_write_checksum: sha1:2e27c7ddfbcf7a2ca632286e2ba78043f62e0e83
+  src/react-query/getInviteByToken.ts:
+    last_write_checksum: sha1:692a8e93cfaeca41bee9e1ca6ad9c75353ac42b7
   src/react-query/getMcpMetadata.core.ts:
     id: 5756d2981450
     last_write_checksum: sha1:92ae5db5f3a77376284cdc9fb969618803905e3e
@@ -3763,7 +3843,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:d688859349695d496e391a5d058ee2fb2d9e3f81
+    last_write_checksum: sha1:b1027416bb01818f8e0bda5f02a73c658427738d
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -3861,6 +3941,10 @@ trackedFiles:
     id: 544106b3ca71
     last_write_checksum: sha1:2fb01e62b4006c28551b9857ba508b9b3a9ee935
     pristine_git_object: c0a616b6bf243b7b8db412c29d60fc50ad6fde45
+  src/react-query/listInvites.core.ts:
+    last_write_checksum: sha1:24202267589d616800fef477e0aede271a488358
+  src/react-query/listInvites.ts:
+    last_write_checksum: sha1:db27f90b7be24881a9d86ac9c42cb2aebf361e20
   src/react-query/listMCPCatalog.core.ts:
     id: 6e92352ca855
     last_write_checksum: sha1:fd5322ae229e7f44b0986969b69322ad7602a9c5
@@ -3873,6 +3957,10 @@ trackedFiles:
     last_write_checksum: sha1:5d4f21c40cd43e5590bd78340e51b52601fc57c2
   src/react-query/listMCPRegistries.ts:
     last_write_checksum: sha1:08832107160b4a8b5d64f6ec02090c71368fa484
+  src/react-query/listOrganizationUsers.core.ts:
+    last_write_checksum: sha1:93ad658e002d6b9e4ff01e4c8889915d521a4985
+  src/react-query/listOrganizationUsers.ts:
+    last_write_checksum: sha1:e97dea929c5e53405d2b7878a79eeff8a1d71329
   src/react-query/listPackages.core.ts:
     id: 43a3feea8750
     last_write_checksum: sha1:ccc1743493a1b294a38fa86dd90cef3fc1e6505e
@@ -3985,6 +4073,8 @@ trackedFiles:
     id: 8a451126703b
     last_write_checksum: sha1:7379aef75e33f6ff7b9964466e5a11361be1450a
     pristine_git_object: a5e064397d9337ad9ba6f11e1c7bc2148bc56e25
+  src/react-query/removeOrganizationUser.ts:
+    last_write_checksum: sha1:82fae8d1ac640779c2eff7b1ba2f0b95e91b20dd
   src/react-query/renderTemplate.core.ts:
     id: dd751d28d8df
     last_write_checksum: sha1:baad0bd673c147a17e8a1b8f64c7c55cdd1829a8
@@ -4005,6 +4095,8 @@ trackedFiles:
     id: 2fb6a2648b4e
     last_write_checksum: sha1:7568c9c29d9c2691aaf4439708cb2437af23a00a
     pristine_git_object: 5d2842afac7c0f4f205484d0a4c10823c0b9dec0
+  src/react-query/revokeInvite.ts:
+    last_write_checksum: sha1:c9d2649c48cf91f57fbd290db31179030afc08db
   src/react-query/role.core.ts:
     last_write_checksum: sha1:a9274b43865562043787b65fe4607e3a166879a5
   src/react-query/role.ts:
@@ -4029,6 +4121,8 @@ trackedFiles:
     last_write_checksum: sha1:304a0d48442ce9848580dd96427992f4037e8578
   src/react-query/searchUsers.ts:
     last_write_checksum: sha1:1aed86190eb13de376440fc48529c7a208791c2f
+  src/react-query/sendInvite.ts:
+    last_write_checksum: sha1:e8ddaa87274318dee9be969d0c320125e8897f5f
   src/react-query/serveChatAttachment.core.ts:
     id: 9a0c82e0ca6c
     last_write_checksum: sha1:d53265dd850bfdb90ae6f209676b4993db1177d1
@@ -4241,6 +4335,8 @@ trackedFiles:
     id: ed029413aa4e
     last_write_checksum: sha1:3f43cbc58c4fda6b886ab4f80f73b4993de92d3f
     pristine_git_object: dfebfc79f3a9812d656d81002e00f583178b86dd
+  src/sdk/organizations.ts:
+    last_write_checksum: sha1:8dd85eb155db8331d8ab2f56f82fd40f426cafe5
   src/sdk/packages.ts:
     id: d71e5e0d5096
     last_write_checksum: sha1:cd45c1746ab2a619fb53b913e0398d80731df1dc
@@ -4255,7 +4351,7 @@ trackedFiles:
     pristine_git_object: 35d99232a58259bee5d74ed936ddbd70301bf0ee
   src/sdk/sdk.ts:
     id: 784571af2f69
-    last_write_checksum: sha1:76fc3af7ed46163412848c80644de8a59985de71
+    last_write_checksum: sha1:7a7b34eadf6c116267255364d703092be0fddf9f
     pristine_git_object: 02357477f876788c1d5316789aca538a95c1070a
   src/sdk/slack.ts:
     id: bbd98c55f3c0
@@ -6041,6 +6137,86 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getInviteByID:
+    speakeasy-default-get-invite-by-ID:
+      parameters:
+        query:
+          invitation_id: "<id>"
+      responses:
+        "200":
+          application/json: {"created_at": "2025-06-24T11:37:36.088Z", "email": "Dovie_Rempel@yahoo.com", "id": "<id>", "organization_id": "<id>", "state": "pending", "updated_at": "2026-12-13T03:10:10.526Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getInviteByToken:
+    speakeasy-default-get-invite-by-token:
+      parameters:
+        query:
+          token: "<value>"
+      responses:
+        "200":
+          application/json: {"accept_invitation_url": "https://glass-bend.info", "email": "Delpha88@gmail.com", "organization_name": "<value>", "state": "revoked"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listInvites:
+    speakeasy-default-list-invites:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"invitations": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listOrganizationUsers:
+    speakeasy-default-list-organization-users:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"users": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  removeOrganizationUser:
+    speakeasy-default-remove-organization-user:
+      parameters:
+        query:
+          organization_id: "<id>"
+          user_id: "<id>"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  revokeInvite:
+    speakeasy-default-revoke-invite:
+      parameters:
+        query:
+          invitation_id: "<id>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  sendInvite:
+    speakeasy-default-send-invite:
+      requestBody:
+        application/json: {"email": "Jeremy.Buckridge60@hotmail.com"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-06-10T20:46:31.392Z", "email": "Ricardo_Vandervort87@hotmail.com", "id": "<id>", "state": "accepted", "updated_at": "2025-04-21T23:51:05.957Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   hooks#cursor:
     speakeasy-default-hooks#cursor:
       requestBody:

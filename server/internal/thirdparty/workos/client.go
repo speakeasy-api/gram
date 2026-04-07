@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -30,6 +32,22 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("workos api %s %s: status %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
+}
+
+// IsNotFound reports whether err is an APIError with a 404 status code.
+func IsNotFound(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
+}
+
+// wrapSDKError translates WorkOS SDK errors into APIError so that all WorkOS
+// errors surface through a single type. Non-HTTP errors are wrapped normally.
+func wrapSDKError(err error, context string) error {
+	var httpErr workos_errors.HTTPError
+	if errors.As(err, &httpErr) {
+		return &APIError{Method: "", Path: "", StatusCode: httpErr.Code, Body: httpErr.Message}
+	}
+	return fmt.Errorf("%s: %w", context, err)
 }
 
 // Client wraps WorkOS API calls for role and membership management.
@@ -65,7 +83,7 @@ func NewClient(apiKey string, opts ...ClientOpts) *Client {
 	httpClient := opt.HTTPClient
 	if httpClient == nil {
 		rc := retryablehttp.NewClient()
-		rc.HTTPClient.Timeout = 30 * time.Second
+		rc.HTTPClient.Timeout = 10 * time.Second
 		httpClient = rc.StandardClient()
 	}
 
