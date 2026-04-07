@@ -1086,10 +1086,21 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 
 	Attribute("servers", ArrayOf(HooksServerSummaryType), "Aggregated metrics grouped by server")
 	Attribute("users", ArrayOf(HooksUserSummaryType), "Aggregated metrics grouped by user")
+	Attribute("skills", ArrayOf(SkillSummaryType), "Aggregated metrics grouped by skill")
 	Attribute("total_events", Int64, "Total number of hook events")
 	Attribute("total_sessions", Int64, "Total number of unique sessions")
 
-	Required("servers", "users", "total_events", "total_sessions")
+	Required("servers", "users", "skills", "total_events", "total_sessions")
+})
+
+var SkillSummaryType = Type("SkillSummary", func() {
+	Description("Aggregated skills metrics for a single skill")
+
+	Attribute("skill_name", String, "Skill name (extracted from tool name)")
+	Attribute("use_count", Int64, "Total number of times this skill was used")
+	Attribute("unique_users", Int64, "Number of unique users who used this skill")
+
+	Required("skill_name", "use_count", "unique_users")
 })
 
 var HooksServerSummaryType = Type("HooksServerSummary", func() {
@@ -1132,6 +1143,12 @@ var ListHooksTracesPayload = Type("ListHooksTracesPayload", func() {
 		Example("2025-12-19T11:00:00Z")
 	})
 	Attribute("filters", ArrayOf(LogFilter), "Filter conditions for the search query")
+	Attribute("types_to_include", ArrayOf(String), "Hook types to include (mcp, local, skill). If empty or not provided, includes all types.", func() {
+		Elem(func() {
+			Enum("mcp", "local", "skill")
+		})
+		Example([]string{"mcp", "skill"})
+	})
 	Attribute("cursor", String, "Cursor for pagination (trace_id)")
 	Attribute("sort", String, "Sort order", func() {
 		Enum("asc", "desc")

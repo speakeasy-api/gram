@@ -150,6 +150,8 @@ type GetHooksSummaryResult struct {
 	Servers []*HooksServerSummary
 	// Aggregated metrics grouped by user
 	Users []*HooksUserSummary
+	// Aggregated metrics grouped by skill
+	Skills []*SkillSummary
 	// Total number of hook events
 	TotalEvents int64
 	// Total number of unique sessions
@@ -343,6 +345,9 @@ type ListHooksTracesPayload struct {
 	To string
 	// Filter conditions for the search query
 	Filters []*LogFilter
+	// Hook types to include (mcp, local, skill). If empty or not provided,
+	// includes all types.
+	TypesToInclude []string
 	// Cursor for pagination (trace_id)
 	Cursor *string
 	// Sort order
@@ -645,6 +650,16 @@ type ServiceInfo struct {
 	Name string
 	// Service version
 	Version *string
+}
+
+// Aggregated skills metrics for a single skill
+type SkillSummary struct {
+	// Skill name (extracted from tool name)
+	SkillName string
+	// Total number of times this skill was used
+	UseCount int64
+	// Number of unique users who used this skill
+	UniqueUsers int64
 }
 
 // OpenTelemetry log record

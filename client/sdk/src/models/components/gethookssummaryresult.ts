@@ -15,6 +15,7 @@ import {
   HooksUserSummary,
   HooksUserSummary$inboundSchema,
 } from "./hooksusersummary.js";
+import { SkillSummary, SkillSummary$inboundSchema } from "./skillsummary.js";
 
 /**
  * Result of hooks summary query
@@ -24,6 +25,10 @@ export type GetHooksSummaryResult = {
    * Aggregated metrics grouped by server
    */
   servers: Array<HooksServerSummary>;
+  /**
+   * Aggregated metrics grouped by skill
+   */
+  skills: Array<SkillSummary>;
   /**
    * Total number of hook events
    */
@@ -45,6 +50,7 @@ export const GetHooksSummaryResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     servers: z.array(HooksServerSummary$inboundSchema),
+    skills: z.array(SkillSummary$inboundSchema),
     total_events: z.int(),
     total_sessions: z.int(),
     users: z.array(HooksUserSummary$inboundSchema),

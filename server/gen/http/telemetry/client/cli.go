@@ -634,7 +634,7 @@ func BuildListHooksTracesPayload(telemetryListHooksTracesBody string, telemetryL
 	{
 		err = json.Unmarshal([]byte(telemetryListHooksTracesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"types_to_include\": [\n         \"mcp\",\n         \"skill\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -643,6 +643,11 @@ func BuildListHooksTracesPayload(telemetryListHooksTracesBody string, telemetryL
 				if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
+			}
+		}
+		for _, e := range body.TypesToInclude {
+			if !(e == "mcp" || e == "local" || e == "skill") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.types_to_include[*]", e, []any{"mcp", "local", "skill"}))
 			}
 		}
 		if !(body.Sort == "asc" || body.Sort == "desc") {
@@ -691,6 +696,12 @@ func BuildListHooksTracesPayload(telemetryListHooksTracesBody string, telemetryL
 				continue
 			}
 			v.Filters[i] = marshalLogFilterRequestBodyToTelemetryLogFilter(val)
+		}
+	}
+	if body.TypesToInclude != nil {
+		v.TypesToInclude = make([]string, len(body.TypesToInclude))
+		for i, val := range body.TypesToInclude {
+			v.TypesToInclude[i] = val
 		}
 	}
 	{
