@@ -38,7 +38,7 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" {
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return ctx, nil
 	}
 
