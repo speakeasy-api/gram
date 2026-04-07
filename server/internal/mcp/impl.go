@@ -729,7 +729,7 @@ func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*
 		})
 		customDomainCtx = domainCtx
 	} else {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug)) //
+		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
 
 	if toolsetErr != nil {
