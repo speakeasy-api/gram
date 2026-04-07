@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -17,14 +18,20 @@ type FeatureChecker interface {
 
 type Manager struct {
 	logger   *slog.Logger
+	db       accessrepo.DBTX
 	features FeatureChecker
 }
 
-func NewManager(logger *slog.Logger, features FeatureChecker) *Manager {
+func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker) *Manager {
 	return &Manager{
 		logger:   logger.With(attr.SlogComponent("access")),
+		db:       db,
 		features: features,
 	}
+}
+
+func (m *Manager) LoadIntoContext(ctx context.Context) (context.Context, error) {
+	return LoadIntoContext(ctx, m.logger, m.db)
 }
 
 func (m *Manager) Require(ctx context.Context, checks ...Check) error {

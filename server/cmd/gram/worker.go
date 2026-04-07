@@ -454,7 +454,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
-			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
+			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient, nil)
 
 			/**
 			 * BEGIN -- MCP service setup for agent client
@@ -517,6 +517,7 @@ func newWorkerCommand() *cli.Command {
 				productFeatures,
 				ragService,
 				temporalEnv,
+				nil,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

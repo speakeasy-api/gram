@@ -79,7 +79,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	roles := newMockRoleProvider(t)
 
-	svc := access.NewService(logger, tracerProvider, conn, sessionManager, roles)
+	svc := access.NewService(logger, tracerProvider, conn, sessionManager, roles, access.NewManager(logger, conn, nil))
 
 	return ctx, &testInstance{
 		service: svc,

@@ -94,7 +94,7 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, stubFeatureChecker{enabled: enableRBAC})
+	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, stubFeatureChecker{enabled: enableRBAC}, access.NewManager(logger, conn, stubFeatureChecker{enabled: enableRBAC}))
 
 	return ctx, &testInstance{
 		service:        svc,

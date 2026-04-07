@@ -76,13 +76,14 @@ func NewService(
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
+	accessLoader auth.AccessLoader,
 ) *Service {
 	return &Service{
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:           logger.With(attr.SlogComponent("hooks")),
 		db:               db,
 		telemetryService: telemetryService,
-		auth:             auth.New(logger, db, sessionsMgr),
+		auth:             auth.New(logger, db, sessionsMgr, accessLoader),
 		cache:            cacheAdapter,
 		temporalEnv:      temporalEnv,
 		repo:             repo.New(db),

@@ -55,7 +55,7 @@ type featureChecker interface {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, features featureChecker) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, features featureChecker, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
@@ -65,7 +65,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		repo:     repo.New(db),
 		envRepo:  envrepo.New(db),
 		sessions: sessions,
-		auth:     auth.New(logger, db, sessions),
+		auth:     auth.New(logger, db, sessions, accessLoader),
 		features: features,
 	}
 }
@@ -81,17 +81,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	ctx, err := s.auth.Authorize(ctx, key, schema)
-	if err != nil {
-		return ctx, err
-	}
-
-	ctx, err = access.LoadIntoContext(ctx, s.logger, s.db)
-	if err != nil {
-		return ctx, oops.E(oops.CodeUnexpected, err, "error loading access grants").Log(ctx, s.logger)
-	}
-
-	return ctx, nil
+	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload) (*gen.GetProjectResult, error) {

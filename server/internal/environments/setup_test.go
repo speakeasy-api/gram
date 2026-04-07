@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -67,7 +68,7 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 
 	enc := testenv.NewEncryptionClient(t)
 
-	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc)
+	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, access.NewManager(logger, conn, nil))
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -134,6 +134,7 @@ func NewService(
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal *temporal.Environment,
+	accessLoader auth.AccessLoader,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -150,7 +151,7 @@ func NewService(
 		orgsRepo:        organizations_repo.New(db),
 		deploymentsRepo: deployments_repo.New(db),
 		externalmcpRepo: externalmcp_repo.New(db),
-		auth:            auth.New(logger, db, sessions),
+		auth:            auth.New(logger, db, sessions, accessLoader),
 		env:             env,
 		serverURL:       serverURL,
 		posthog:         posthog,

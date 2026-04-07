@@ -20,21 +20,31 @@ import (
 )
 
 type Auth struct {
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	sessions *sessions.Manager
-	keys     *ByKey
-	repo     *repo.Queries
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	sessions     *sessions.Manager
+	keys         *ByKey
+	repo         *repo.Queries
+	accessLoader AccessLoader
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Auth {
+type AccessLoader interface {
+	LoadIntoContext(ctx context.Context) (context.Context, error)
+}
+
+func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader AccessLoader) *Auth {
+	if accessLoader == nil {
+		panic("auth access loader is required")
+	}
+
 	logger = logger.With(attr.SlogComponent("authorizer"))
 	return &Auth{
-		logger:   logger,
-		db:       db,
-		keys:     NewKeyAuth(db, logger, sessions.Billing()),
-		sessions: sessions,
-		repo:     repo.New(db),
+		logger:       logger,
+		db:           db,
+		keys:         NewKeyAuth(db, logger, sessions.Billing()),
+		sessions:     sessions,
+		repo:         repo.New(db),
+		accessLoader: accessLoader,
 	}
 }
 
@@ -60,6 +70,10 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	}
 	if err != nil {
 		return ctx, err
+	}
+	ctx, err = s.accessLoader.LoadIntoContext(ctx)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
 	}
 
 	return ctx, nil

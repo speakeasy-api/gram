@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type stubFeatureChecker struct {
@@ -30,7 +29,7 @@ func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ prod
 func TestManagerRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
 
 	err := manager.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
@@ -39,7 +38,7 @@ func TestManagerRequire_requiresAuthContext(t *testing.T) {
 func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), stubFeatureChecker{enabled: false})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
@@ -48,7 +47,7 @@ func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: nil})
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
@@ -58,7 +57,7 @@ func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
@@ -68,7 +67,7 @@ func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), stubFeatureChecker{err: errors.New("boom")})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")})
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
@@ -105,5 +104,5 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 
 func testLogger(t *testing.T) *slog.Logger {
 	t.Helper()
-	return testenv.NewLogger(t)
+	return slog.New(slog.DiscardHandler)
 }

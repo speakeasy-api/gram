@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -64,7 +65,7 @@ func newTestVariationsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := variations.NewService(logger, tracerProvider, conn, sessionManager)
+	svc := variations.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, nil))
 
 	return ctx, &testInstance{
 		service:        svc,
