@@ -33,6 +33,10 @@ func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker
 }
 
 func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
+	if grants, ok := GrantsFromContext(ctx); ok && grants != nil {
+		return ctx, nil
+	}
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" {
 		return ctx, nil
