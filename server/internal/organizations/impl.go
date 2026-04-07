@@ -66,6 +66,7 @@ type Service struct {
 	tracer   trace.Tracer
 	db       *pgxpool.Pool
 	auth     *auth.Auth
+	access   *access.Manager
 	orgs     OrganizationProvider
 	features orgFeatureChecker
 }
@@ -74,14 +75,15 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
 		logger:   logger,
 		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
 		db:       db,
-		auth:     auth.New(logger, db, sessions),
+		auth:     auth.New(logger, db, sessions, accessManager),
+		access:   accessManager,
 		orgs:     orgs,
 		features: features,
 	}
@@ -98,17 +100,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	ctx, err := s.auth.Authorize(ctx, key, schema)
-	if err != nil {
-		return ctx, err
-	}
-
-	ctx, err = access.LoadIntoContext(ctx, s.logger, s.db)
-	if err != nil {
-		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
-	}
-
-	return ctx, nil
+	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload) (*gen.OrganizationInvitation, error) {
@@ -414,7 +406,7 @@ func (s *Service) requireOrgTeamManagementAccess(ctx context.Context, logger *sl
 	}
 
 	if enabled && ac.AccountType == "enterprise" {
-		if err := access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 			return mapOrgAccessError(err)
 		}
 		return nil
