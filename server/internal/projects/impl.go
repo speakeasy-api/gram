@@ -97,7 +97,6 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	//nolint:wrapcheck // access.Manager already returns handler-ready oops errors.
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: proj.ID.String()}); err != nil {
 		var shareableErr *oops.ShareableError
 		if errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden {
@@ -129,7 +128,6 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
 	}
 
-	//nolint:wrapcheck // access.Manager already returns handler-ready oops errors.
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: payload.OrganizationID}); err != nil {
 		return nil, err
 	}
@@ -251,7 +249,6 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 
 	allowedProjectIDs, err := s.access.Filter(ctx, access.ScopeBuildRead, projectIDs)
 	if err != nil {
-		//nolint:wrapcheck // access.Manager already returns handler-ready oops errors.
 		return nil, err
 	}
 
@@ -284,7 +281,6 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	//nolint:wrapcheck // access.Manager already returns handler-ready oops errors.
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
@@ -351,7 +347,6 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	//nolint:wrapcheck // access.Manager already returns handler-ready oops errors.
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
@@ -384,7 +379,6 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	//nolint:wrapcheck // access.Manager already returns handler-ready oops errors.
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
@@ -427,7 +421,6 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeInvalid, err, "invalid project id").Log(ctx, s.logger)
 	}
 
-	//nolint:wrapcheck // access.Manager already returns handler-ready oops errors.
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
 		return err
 	}
