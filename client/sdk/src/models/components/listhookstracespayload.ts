@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
   LogFilter,
@@ -21,6 +22,13 @@ export const Sort = {
  * Sort order
  */
 export type Sort = ClosedEnum<typeof Sort>;
+
+export const TypesToInclude = {
+  Mcp: "mcp",
+  Local: "local",
+  Skill: "skill",
+} as const;
+export type TypesToInclude = ClosedEnum<typeof TypesToInclude>;
 
 /**
  * Payload for listing hook traces
@@ -50,10 +58,19 @@ export type ListHooksTracesPayload = {
    * End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
    */
   to: Date;
+  /**
+   * Hook types to include (mcp, local, skill). If empty or not provided, includes all types.
+   */
+  typesToInclude?: Array<TypesToInclude> | undefined;
 };
 
 /** @internal */
 export const Sort$outboundSchema: z.ZodMiniEnum<typeof Sort> = z.enum(Sort);
+
+/** @internal */
+export const TypesToInclude$outboundSchema: z.ZodMiniEnum<
+  typeof TypesToInclude
+> = z.enum(TypesToInclude);
 
 /** @internal */
 export type ListHooksTracesPayload$Outbound = {
@@ -63,20 +80,29 @@ export type ListHooksTracesPayload$Outbound = {
   limit: number;
   sort: string;
   to: string;
+  types_to_include?: Array<string> | undefined;
 };
 
 /** @internal */
 export const ListHooksTracesPayload$outboundSchema: z.ZodMiniType<
   ListHooksTracesPayload$Outbound,
   ListHooksTracesPayload
-> = z.object({
-  cursor: z.optional(z.string()),
-  filters: z.optional(z.array(LogFilter$outboundSchema)),
-  from: z.pipe(z.date(), z.transform(v => v.toISOString())),
-  limit: z._default(z.int(), 50),
-  sort: z._default(Sort$outboundSchema, "desc"),
-  to: z.pipe(z.date(), z.transform(v => v.toISOString())),
-});
+> = z.pipe(
+  z.object({
+    cursor: z.optional(z.string()),
+    filters: z.optional(z.array(LogFilter$outboundSchema)),
+    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    limit: z._default(z.int(), 50),
+    sort: z._default(Sort$outboundSchema, "desc"),
+    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    typesToInclude: z.optional(z.array(TypesToInclude$outboundSchema)),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      typesToInclude: "types_to_include",
+    });
+  }),
+);
 
 export function listHooksTracesPayloadToJSON(
   listHooksTracesPayload: ListHooksTracesPayload,

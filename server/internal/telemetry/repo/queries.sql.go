@@ -1450,15 +1450,75 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 	return summaries, nil
 }
 
-// ListHooksTracesParams contains the parameters for listing hook traces.
-type ListHooksTracesParams struct {
+// SkillSummaryRow contains aggregated skills metrics for a single skill.
+type SkillSummaryRow struct {
+	SkillName   string `ch:"skill_name"`
+	UseCount    uint64 `ch:"use_count"`
+	UniqueUsers uint64 `ch:"unique_users"`
+}
+
+// GetSkillsSummaryParams defines the parameters for getting skills summary.
+type GetSkillsSummaryParams struct {
 	GramProjectID string
 	TimeStart     int64
 	TimeEnd       int64
-	Filters       []AttributeFilter
-	SortOrder     string
-	Cursor        string // trace_id to paginate from
-	Limit         int
+}
+
+// GetSkillsSummary retrieves aggregated skills usage metrics.
+// Skills are identified by skill_name in trace_summaries.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryParams) ([]SkillSummaryRow, error) {
+	sb := sq.Select(
+		"skill_name",
+		"count(*) as use_count",
+		"uniqExact(user_email) as unique_users",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
+		Where("skill_name != ''").
+		GroupBy("skill_name").
+		OrderBy("use_count DESC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building skills summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []SkillSummaryRow
+	for rows.Next() {
+		var summary SkillSummaryRow
+		if err = rows.ScanStruct(&summary); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		summaries = append(summaries, summary)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return summaries, nil
+}
+
+// ListHooksTracesParams contains the parameters for listing hook traces.
+type ListHooksTracesParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string // Hook types to include: "mcp", "local", "skill"
+	SortOrder      string
+	Cursor         string // trace_id to paginate from
+	Limit          int
 }
 
 // ListHooksTraces retrieves aggregated hook trace summaries grouped by trace_id.
@@ -1477,6 +1537,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"event_source",
 		"user_email",
 		"hook_source",
+		"skill_name",
 		"multiIf(max(hook_has_failure) = 1, 'failure', max(hook_has_success) = 1, 'success', 'pending') as hook_status",
 	).
 		From("trace_summaries").
@@ -1532,7 +1593,25 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		}
 	}
 
-	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source")
+	// Apply hook type filtering if specified
+	if len(arg.TypesToInclude) > 0 {
+		typeConditions := make([]string, 0, len(arg.TypesToInclude))
+		for _, hookType := range arg.TypesToInclude {
+			switch hookType {
+			case "skill":
+				typeConditions = append(typeConditions, "tool_name = 'Skill'")
+			case "mcp":
+				typeConditions = append(typeConditions, "(tool_source != '' AND tool_name != 'Skill')")
+			case "local":
+				typeConditions = append(typeConditions, "(tool_source = '' AND tool_name != 'Skill')")
+			}
+		}
+		if len(typeConditions) > 0 {
+			sb = sb.Where(fmt.Sprintf("(%s)", strings.Join(typeConditions, " OR ")))
+		}
+	}
+
+	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name")
 
 	// Pagination based on trace_id cursor
 	if arg.Cursor != "" {

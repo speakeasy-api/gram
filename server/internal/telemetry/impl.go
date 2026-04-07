@@ -1112,6 +1112,16 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks user summary: %v", err)
 	}
 
+	// Get skills summary
+	skillRows, err := s.chRepo.GetSkillsSummary(ctx, repo.GetSkillsSummaryParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting skills summary: %v", err)
+	}
+
 	// Transform server rows into response
 	servers := make([]*telem_gen.HooksServerSummary, 0, len(serverRows))
 	var totalEvents, totalSessions int64
@@ -1140,6 +1150,16 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 	}
 
+	// Transform skills rows into response
+	skills := make([]*telem_gen.SkillSummary, 0, len(skillRows))
+	for _, row := range skillRows {
+		skills = append(skills, &telem_gen.SkillSummary{
+			SkillName:   row.SkillName,
+			UseCount:    int64(row.UseCount),    //nolint:gosec // Bounded count
+			UniqueUsers: int64(row.UniqueUsers), //nolint:gosec // Bounded count
+		})
+	}
+
 	// Get unique session count
 	sessionCount, err := s.chRepo.GetHooksSessionCount(ctx, repo.GetHooksSessionCountParams{
 		GramProjectID: authCtx.ProjectID.String(),
@@ -1154,6 +1174,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	return &telem_gen.GetHooksSummaryResult{
 		Servers:       servers,
 		Users:         users,
+		Skills:        skills,
 		TotalEvents:   totalEvents,
 		TotalSessions: totalSessions,
 	}, nil
@@ -1172,13 +1193,14 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
-		GramProjectID: params.projectID,
-		TimeStart:     params.timeStart,
-		TimeEnd:       params.timeEnd,
-		Filters:       attributeFilters,
-		SortOrder:     params.sortOrder,
-		Cursor:        params.cursor,
-		Limit:         params.limit + 1,
+		GramProjectID:  params.projectID,
+		TimeStart:      params.timeStart,
+		TimeEnd:        params.timeEnd,
+		Filters:        attributeFilters,
+		TypesToInclude: payload.TypesToInclude,
+		SortOrder:      params.sortOrder,
+		Cursor:         params.cursor,
+		Limit:          params.limit + 1,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error listing hooks traces", attr.SlogError(err))
@@ -1206,6 +1228,7 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 			EventSource:       item.EventSource,
 			UserEmail:         item.UserEmail,
 			HookSource:        item.HookSource,
+			SkillName:         item.SkillName,
 		}
 	}
 

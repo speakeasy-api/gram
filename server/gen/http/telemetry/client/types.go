@@ -163,6 +163,9 @@ type ListHooksTracesRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Filter conditions for the search query
 	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Hook types to include (mcp, local, skill). If empty or not provided,
+	// includes all types.
+	TypesToInclude []string `form:"types_to_include,omitempty" json:"types_to_include,omitempty" xml:"types_to_include,omitempty"`
 	// Cursor for pagination (trace_id)
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Sort order
@@ -266,6 +269,8 @@ type GetHooksSummaryResponseBody struct {
 	Servers []*HooksServerSummaryResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Aggregated metrics grouped by user
 	Users []*HooksUserSummaryResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+	// Aggregated metrics grouped by skill
+	Skills []*SkillSummaryResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
 	// Total number of hook events
 	TotalEvents *int64 `form:"total_events,omitempty" json:"total_events,omitempty" xml:"total_events,omitempty"`
 	// Total number of unique sessions
@@ -2887,6 +2892,16 @@ type HooksUserSummaryResponseBody struct {
 	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
 }
 
+// SkillSummaryResponseBody is used to define fields on response body types.
+type SkillSummaryResponseBody struct {
+	// Skill name (extracted from tool name)
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// Total number of times this skill was used
+	UseCount *int64 `form:"use_count,omitempty" json:"use_count,omitempty" xml:"use_count,omitempty"`
+	// Number of unique users who used this skill
+	UniqueUsers *int64 `form:"unique_users,omitempty" json:"unique_users,omitempty" xml:"unique_users,omitempty"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -2909,6 +2924,8 @@ type HookTraceSummaryResponseBody struct {
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// Hook source (from attributes.gram.hook.source)
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Skill name (from materialized column, only for Skill tool)
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
 }
 
 // NewSearchLogsRequestBody builds the HTTP request body from the payload of
@@ -3139,6 +3156,12 @@ func NewListHooksTracesRequestBody(p *telemetry.ListHooksTracesPayload) *ListHoo
 				continue
 			}
 			body.Filters[i] = marshalTelemetryLogFilterToLogFilterRequestBody(val)
+		}
+	}
+	if p.TypesToInclude != nil {
+		body.TypesToInclude = make([]string, len(p.TypesToInclude))
+		for i, val := range p.TypesToInclude {
+			body.TypesToInclude[i] = val
 		}
 	}
 	{
@@ -4843,6 +4866,14 @@ func NewGetHooksSummaryResultOK(body *GetHooksSummaryResponseBody) *telemetry.Ge
 		}
 		v.Users[i] = unmarshalHooksUserSummaryResponseBodyToTelemetryHooksUserSummary(val)
 	}
+	v.Skills = make([]*telemetry.SkillSummary, len(body.Skills))
+	for i, val := range body.Skills {
+		if val == nil {
+			v.Skills[i] = nil
+			continue
+		}
+		v.Skills[i] = unmarshalSkillSummaryResponseBodyToTelemetrySkillSummary(val)
+	}
 
 	return v
 }
@@ -5355,6 +5386,9 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	if body.Users == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
 	}
+	if body.Skills == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skills", "body"))
+	}
 	if body.TotalEvents == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_events", "body"))
 	}
@@ -5371,6 +5405,13 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	for _, e := range body.Users {
 		if e != nil {
 			if err2 := ValidateHooksUserSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Skills {
+		if e != nil {
+			if err2 := ValidateSkillSummaryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -8805,6 +8846,21 @@ func ValidateHooksUserSummaryResponseBody(body *HooksUserSummaryResponseBody) (e
 	}
 	if body.FailureRate == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failure_rate", "body"))
+	}
+	return
+}
+
+// ValidateSkillSummaryResponseBody runs the validations defined on
+// SkillSummaryResponseBody
+func ValidateSkillSummaryResponseBody(body *SkillSummaryResponseBody) (err error) {
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.UseCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_count", "body"))
+	}
+	if body.UniqueUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unique_users", "body"))
 	}
 	return
 }

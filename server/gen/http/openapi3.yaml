@@ -16963,6 +16963,11 @@ components:
                     items:
                         $ref: '#/components/schemas/HooksServerSummary'
                     description: Aggregated metrics grouped by server
+                skills:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillSummary'
+                    description: Aggregated metrics grouped by skill
                 total_events:
                     type: integer
                     description: Total number of hook events
@@ -16980,6 +16985,7 @@ components:
             required:
                 - servers
                 - users
+                - skills
                 - total_events
                 - total_sessions
         GetInstanceForm:
@@ -17377,6 +17383,9 @@ components:
                     type: integer
                     description: Total number of logs in this trace
                     format: int64
+                skill_name:
+                    type: string
+                    description: Skill name (from materialized column, only for Skill tool)
                 start_time_unix_nano:
                     type: string
                     description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
@@ -17890,6 +17899,18 @@ components:
                     description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
                     example: "2025-12-19T11:00:00Z"
                     format: date-time
+                types_to_include:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - mcp
+                            - local
+                            - skill
+                    description: Hook types to include (mcp, local, skill). If empty or not provided, includes all types.
+                    example:
+                        - mcp
+                        - skill
             description: Payload for listing hook traces
             required:
                 - from
@@ -20156,6 +20177,25 @@ components:
             required:
                 - toolset_id
                 - environment_id
+        SkillSummary:
+            type: object
+            properties:
+                skill_name:
+                    type: string
+                    description: Skill name (extracted from tool name)
+                unique_users:
+                    type: integer
+                    description: Number of unique users who used this skill
+                    format: int64
+                use_count:
+                    type: integer
+                    description: Total number of times this skill was used
+                    format: int64
+            description: Aggregated skills metrics for a single skill
+            required:
+                - skill_name
+                - use_count
+                - unique_users
         SlackAppResult:
             type: object
             properties:

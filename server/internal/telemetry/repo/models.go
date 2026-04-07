@@ -93,6 +93,7 @@ type HookTraceSummary struct {
 	EventSource       *string `ch:"event_source"`         // String - event source from materialized column
 	UserEmail         *string `ch:"user_email"`           // String - user email from attributes.user.email
 	HookSource        *string `ch:"hook_source"`          // String - hook source from attributes.gram.hook.source
+	SkillName         *string `ch:"skill_name"`           // String - skill name from materialized column (only for Skill tool)
 }
 
 // ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).

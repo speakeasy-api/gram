@@ -47,6 +47,10 @@ export type HookTraceSummary = {
    */
   logCount: number;
   /**
+   * Skill name (from materialized column, only for Skill tool)
+   */
+  skillName?: string | undefined;
+  /**
    * Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
    */
   startTimeUnixNano: string;
@@ -83,6 +87,7 @@ export const HookTraceSummary$inboundSchema: z.ZodMiniType<
     hook_source: z.optional(z.string()),
     hook_status: z.optional(HookStatus$inboundSchema),
     log_count: z.int(),
+    skill_name: z.optional(z.string()),
     start_time_unix_nano: z.string(),
     tool_name: z.optional(z.string()),
     tool_source: z.optional(z.string()),
@@ -96,6 +101,7 @@ export const HookTraceSummary$inboundSchema: z.ZodMiniType<
       "hook_source": "hookSource",
       "hook_status": "hookStatus",
       "log_count": "logCount",
+      "skill_name": "skillName",
       "start_time_unix_nano": "startTimeUnixNano",
       "tool_name": "toolName",
       "tool_source": "toolSource",
