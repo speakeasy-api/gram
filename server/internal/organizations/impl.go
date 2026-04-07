@@ -323,6 +323,10 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		return err
 	}
 
+	if payload.UserID == ac.UserID {
+		return oops.E(oops.CodeBadRequest, nil, "cannot remove yourself from the organization").Log(ctx, logger)
+	}
+
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),

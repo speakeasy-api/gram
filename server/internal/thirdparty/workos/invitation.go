@@ -3,8 +3,10 @@ package workos
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 )
 
 type InvitationState string
@@ -111,9 +113,14 @@ func (wc *Client) ResendInvitation(ctx context.Context, invitationID string) (*I
 }
 
 // FindInvitationByToken resolves an invitation from its token.
+// Returns (nil, nil) when the token does not match any invitation (WorkOS 404).
 func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Invitation, error) {
 	inv, err := wc.um.FindInvitationByToken(ctx, usermanagement.FindInvitationByTokenOpts{InvitationToken: token})
 	if err != nil {
+		var httpErr workos_errors.HTTPError
+		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("find invitation by token: %w", err)
 	}
 
@@ -122,9 +129,14 @@ func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Inv
 }
 
 // GetInvitation returns an invitation by ID.
+// Returns (nil, nil) when the invitation does not exist (WorkOS 404).
 func (wc *Client) GetInvitation(ctx context.Context, invitationID string) (*Invitation, error) {
 	inv, err := wc.um.GetInvitation(ctx, usermanagement.GetInvitationOpts{Invitation: invitationID})
 	if err != nil {
+		var httpErr workos_errors.HTTPError
+		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("get invitation: %w", err)
 	}
 
