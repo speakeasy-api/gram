@@ -182,6 +182,3 @@ func TestToolsetsService_UpdateOAuthProxyServer_ScopesAndEndpoints(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
 }
-
-//go:fix inline
-func ptr[T any](v T) *T { return new(v) }

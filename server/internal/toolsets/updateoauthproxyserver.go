@@ -44,14 +44,9 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 
 	// Validate token_endpoint_auth_methods_supported values if provided.
 	if form.TokenEndpointAuthMethodsSupported != nil {
-		validAuthMethods := map[string]bool{
-			"client_secret_basic": true,
-			"client_secret_post":  true,
-			"none":                true,
-		}
 		for _, method := range form.TokenEndpointAuthMethodsSupported {
-			if !validAuthMethods[method] {
-				return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s (must be client_secret_basic or client_secret_post)", method).Log(ctx, s.logger)
+			if !validOAuthProxyAuthMethods[method] {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s (must be client_secret_basic, client_secret_post, or none)", method).Log(ctx, s.logger)
 			}
 		}
 	}
@@ -102,6 +97,9 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 
 	// Validate environment_slug if provided.
 	if form.EnvironmentSlug != nil {
+		if string(*form.EnvironmentSlug) == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment_slug cannot be empty").Log(ctx, s.logger)
+		}
 		_, err = s.environmentRepo.WithTx(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
 			Slug:      string(*form.EnvironmentSlug),
 			ProjectID: *authCtx.ProjectID,
@@ -122,6 +120,9 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 			Audience:  conv.PtrToPGText(form.Audience),
 		})
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy server not found").Log(ctx, s.logger)
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to update OAuth proxy server audience").Log(ctx, s.logger)
 		}
 	}
@@ -163,6 +164,9 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 			Secrets:                           secretsBytes,
 		})
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy provider not found").Log(ctx, s.logger)
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to update OAuth proxy provider fields").Log(ctx, s.logger)
 		}
 	}
