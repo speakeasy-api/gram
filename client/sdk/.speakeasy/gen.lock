@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 05bce0320c275700d0fad744aef134e1
+  docChecksum: 5a9eede0a2d983e0252b8bdb547da1f2
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.22
-  configChecksum: ec57feb6545520c8542c6f245c2f0960
+  releaseVersion: 0.32.23
+  configChecksum: 96d5499f4685059ca4cfcb7f9c46aff0
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -102,13 +102,13 @@ trackedFiles:
   docs/models/components/captureeventresult.md:
     last_write_checksum: sha1:832ac883ea96cdb0e257df7e20eb79f6252b81bf
   docs/models/components/chat.md:
-    last_write_checksum: sha1:1d9147e1dd95d38eae1c3172acd445187fc08bbd
+    last_write_checksum: sha1:05cec6b86f389d8b2309a02dfa650e4e25340795
   docs/models/components/chatmessage.md:
     last_write_checksum: sha1:3e557f117bcc3c5dd1156ed113d3f49ddcb452c0
   docs/models/components/chatoverview.md:
-    last_write_checksum: sha1:ce67585a7097159bb08d62af32cb6374bbfe3769
+    last_write_checksum: sha1:21c26d2ed7b4b369067a1f03e421f09817576f96
   docs/models/components/chatoverviewwithresolutions.md:
-    last_write_checksum: sha1:900c1b2e8717e49be4788989c61ad726a0a5edc2
+    last_write_checksum: sha1:ed69a1f9a2c7a4278ca4f6c137ada3dc658f8144
   docs/models/components/chatresolution.md:
     last_write_checksum: sha1:f056a2c0377fd38d04bc53c8a3ebe45ede6abff2
   docs/models/components/chatsummary.md:
@@ -116,9 +116,9 @@ trackedFiles:
   docs/models/components/chatsummarystatus.md:
     last_write_checksum: sha1:543bad7e7c81392fa16e4f5616d9b8f95dfb3f99
   docs/models/components/claudehookpayload.md:
-    last_write_checksum: sha1:a71065a9eb90745c37d9b9a2b5e5e384873f10a1
+    last_write_checksum: sha1:9aeeb4a542ec059884f17b4d64a4200ea5f462f5
   docs/models/components/claudehookresult.md:
-    last_write_checksum: sha1:654b2e17e370fbb8c75ad4288989e56cf103af4f
+    last_write_checksum: sha1:21d6844ca377ca3ef5137263cb8e9bdca5f81b69
   docs/models/components/configureslackapprequestbody.md:
     last_write_checksum: sha1:028d8866b4e7924ecf4569eba1335fa533fb7f9c
   docs/models/components/confirm.md:
@@ -167,6 +167,10 @@ trackedFiles:
     last_write_checksum: sha1:6413aeb4482c72ada977215ba9599509551de263
   docs/models/components/creditusageresponsebody.md:
     last_write_checksum: sha1:34bbdfb51d51d5942a0c7f19f4d3fd408867dc64
+  docs/models/components/cursorhookpayload.md:
+    last_write_checksum: sha1:e58db614e11101637175b09bc2de73e441932f60
+  docs/models/components/cursorhookresult.md:
+    last_write_checksum: sha1:e1e5df116f30a73a8c2055353de5324971ba53b1
   docs/models/components/customdomain.md:
     last_write_checksum: sha1:408cf80dec9f85399ba97808d4742548dc857798
   docs/models/components/deleteglobaltoolvariationresult.md:
@@ -216,7 +220,7 @@ trackedFiles:
   docs/models/components/externaloauthserverform.md:
     last_write_checksum: sha1:2dfca2bf1f6cf89befb98dabc7e7db5d83523c65
   docs/models/components/featurename.md:
-    last_write_checksum: sha1:029f5ab7d6a3f18636d24c23f534f37581e1c696
+    last_write_checksum: sha1:0002ce40c13e29d6b6b0e29defd6491f63b56d17
   docs/models/components/feedback.md:
     last_write_checksum: sha1:ef93dc1781469531617f39432611ded991048862
   docs/models/components/fetchopenapiv3fromurlform2.md:
@@ -268,9 +272,9 @@ trackedFiles:
   docs/models/components/getusermetricssummaryresult.md:
     last_write_checksum: sha1:ac240bdca58bda277c914ab6c834110171a5050f
   docs/models/components/gramproductfeatures.md:
-    last_write_checksum: sha1:e13a3260b468b705a4d29c806220a5dc2fce7677
+    last_write_checksum: sha1:e321c7730ebee7ade692078391369b191180cd3a
   docs/models/components/hookeventname.md:
-    last_write_checksum: sha1:a65f76212e9e7d2ead94207d68b46748b276497a
+    last_write_checksum: sha1:40dbdeaa22786c8ecbcf0b2118412046293ed619
   docs/models/components/hooksserversummary.md:
     last_write_checksum: sha1:65f741f7c4c0dd72b7fcc482bdc7b586b2419629
   docs/models/components/hookstatus.md:
@@ -1055,6 +1059,10 @@ trackedFiles:
     last_write_checksum: sha1:d4dc1f5cd35b48ee47957f682f1ad657f0cdcad1
   docs/models/operations/getusermetricssummarysecurityoption2.md:
     last_write_checksum: sha1:b15a0cb73ae463e5e0a6d861957fc2874cd1c855
+  docs/models/operations/hooksnumbercursorrequest.md:
+    last_write_checksum: sha1:2566d56a8fe47f8c625cbbec942123d26181b866
+  docs/models/operations/hooksnumbercursorsecurity.md:
+    last_write_checksum: sha1:a111411fdeb6fd7d0224a332c1853bd55ccf2c45
   docs/models/operations/hooksnumberlogsrequest.md:
     last_write_checksum: sha1:5f3ffbef78d03e1b5fa564832dd104b4a1888798
   docs/models/operations/hooksnumberlogssecurity.md:
@@ -1584,7 +1592,7 @@ trackedFiles:
   docs/sdks/features/README.md:
     last_write_checksum: sha1:79ab0259791f46a8d2ecd959a4ee69dd4551bea5
   docs/sdks/hooks/README.md:
-    last_write_checksum: sha1:8cb24d8ace458ded17f66d1588f19b0afe0ada8a
+    last_write_checksum: sha1:97614bc7ff356d8bd115dbd36e457c7b680a9092
   docs/sdks/hooksservernames/README.md:
     last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
@@ -1639,11 +1647,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:82342a86fa43ab7ed2b147e326732210477fef7b
+    last_write_checksum: sha1:6036dd3f7eefe23e1ae660a008261961bce5f31e
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:cdbdf796dcb4b717c56351c8a83a3f825cf018bf
+    last_write_checksum: sha1:681ea50eecc6b04018f89082423e92547034e23a
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1867,6 +1875,8 @@ trackedFiles:
     pristine_git_object: 680533ea7917230ef71927dfe370d54d02598082
   src/funcs/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:d2a72cb590c74f9878eee245be17ec020f991dd2
+  src/funcs/hooksHooksNumberCursor.ts:
+    last_write_checksum: sha1:3c3b9361c278122cf994dea1f9723790c0a78b06
   src/funcs/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
   src/funcs/hooksServerNamesDeleteServerNameOverride.ts:
@@ -2153,7 +2163,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:9913495d19bd3358e297ce4d963155553b6a7a30
+    last_write_checksum: sha1:71b7e1878a02537696129a1bdc10f3a43fa4c5e2
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2267,7 +2277,7 @@ trackedFiles:
     pristine_git_object: b3f51a2a16660622475c230ee52c6a4be4beef00
   src/models/components/chat.ts:
     id: 9ced5127d17b
-    last_write_checksum: sha1:2dbf20b919e0823a29032d4134b43533cce050d3
+    last_write_checksum: sha1:5c0aef2e394dff8349590192dc910f298cea4dc9
     pristine_git_object: d74d2ff627fec7af63710786888c09ce919dbf87
   src/models/components/chatmessage.ts:
     id: 64060926ed56
@@ -2275,18 +2285,18 @@ trackedFiles:
     pristine_git_object: 9bdc3bfc1f7458c0044bb61b2382f8301c0828bf
   src/models/components/chatoverview.ts:
     id: b060f6650726
-    last_write_checksum: sha1:36919268e2b1656c027eff6bea606b1e224932f4
+    last_write_checksum: sha1:092ecca9f452ee43e160a0731c11eedccc27e2e7
     pristine_git_object: 60c3257be0907ff0b08bb4ee07a7dd6e300350be
   src/models/components/chatoverviewwithresolutions.ts:
-    last_write_checksum: sha1:88ab540ed6d5047994540b44f308ad86f176ffd0
+    last_write_checksum: sha1:a7dacb47c26e654d36b89b5dc6bf7583339b7d60
   src/models/components/chatresolution.ts:
     last_write_checksum: sha1:9084f3031124e2ab8ef5698a96e7a5a5f43bf71b
   src/models/components/chatsummary.ts:
     last_write_checksum: sha1:aff9564e3cb1d2ecaa44e06c99bc75b4fc5d7115
   src/models/components/claudehookpayload.ts:
-    last_write_checksum: sha1:023b0a4526fe96e7867c8e1f8e1c1c7183c02ff4
+    last_write_checksum: sha1:f990486e8333c922eb2244e05361ba69c4c472b7
   src/models/components/claudehookresult.ts:
-    last_write_checksum: sha1:53b102e44e8fd791d36b94d52af7aa4b6885ed49
+    last_write_checksum: sha1:78599a3249e3de7cd79124005c7d2cba73d3204c
   src/models/components/configureslackapprequestbody.ts:
     last_write_checksum: sha1:62c8dae3e65243772f909cb6862a7c4e768fe912
   src/models/components/createdeploymentrequestbody.ts:
@@ -2363,6 +2373,10 @@ trackedFiles:
     id: 54eee7097f6b
     last_write_checksum: sha1:4dadf315b4b01174dc91b836b05d74186fbe65e0
     pristine_git_object: 087b1ed2f1f241f72f016744c7abdf7f0d647852
+  src/models/components/cursorhookpayload.ts:
+    last_write_checksum: sha1:41de0c32cf785cb67d9a29007770454c7a927f10
+  src/models/components/cursorhookresult.ts:
+    last_write_checksum: sha1:e19dfcfc5a734e842ebae2b852c4298ef7000090
   src/models/components/customdomain.ts:
     id: 0931e77e04a5
     last_write_checksum: sha1:8793582a898d08c48da8a062952def456132e664
@@ -2518,7 +2532,7 @@ trackedFiles:
   src/models/components/getusermetricssummaryresult.ts:
     last_write_checksum: sha1:c45ae48235990ba664b1fa62cc0a9df2406ea25d
   src/models/components/gramproductfeatures.ts:
-    last_write_checksum: sha1:53db3d8c6f6f23596dd8c8bf47b345bde94af207
+    last_write_checksum: sha1:8e7d5b6d52e1b0a2909ca4abf3d071cffd08a784
   src/models/components/hooksserversummary.ts:
     last_write_checksum: sha1:654233f904a052364881cbe25a2092a9fe85eb4c
   src/models/components/hooksusersummary.ts:
@@ -2531,7 +2545,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:560d3800236b20922d448e49e287ce8713d2a5f1
+    last_write_checksum: sha1:bb8f81c3bf54ab2914a50909d574d1d7a36d33d2
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -2873,7 +2887,7 @@ trackedFiles:
     last_write_checksum: sha1:4c096b2cd203f95604375437283e11226adb2841
   src/models/components/setproductfeaturerequestbody.ts:
     id: 777e1e95ac32
-    last_write_checksum: sha1:4268425897c86e737c3c46240a64bde78ba80d26
+    last_write_checksum: sha1:fa575a3e22da689572bcb546bd750bb0bd47e720
     pristine_git_object: 9fb7bac3d53f59bb384ae78dee065d0fb9f9a21e
   src/models/components/setprojectlogoresult.ts:
     id: 88cdb2cc5e3d
@@ -3273,11 +3287,13 @@ trackedFiles:
     pristine_git_object: c847d55d0e1a60c6f2aafe8e29c62fe699a75588
   src/models/operations/getusermetricssummary.ts:
     last_write_checksum: sha1:ce121229f9e0be0fe1eeba1361ab61bf384d3785
+  src/models/operations/hooksnumbercursor.ts:
+    last_write_checksum: sha1:16bd35acfd65f1e23d0bf088ecab54fd8758a057
   src/models/operations/hooksnumberlogs.ts:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:93044bb52754ffe000171846b8c981745206fc1f
+    last_write_checksum: sha1:c0f87d9571bcf92564358b46ea5775ca8ccd1403
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3813,6 +3829,8 @@ trackedFiles:
     pristine_git_object: 48f56cd5f501f734c3428170db837bbe2568246f
   src/react-query/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:65daa7cbd33c503edad39c7ca638137b35727049
+  src/react-query/hooksHooksNumberCursor.ts:
+    last_write_checksum: sha1:8908df760d02edc946c833ae6454c191f7c97c93
   src/react-query/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:71f93fe368921c0b23f8da768c8d6b424852bb96
   src/react-query/hooksServerNamesDeleteServerNameOverride.ts:
@@ -3825,7 +3843,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:1cec522a3967f7f11560a5fcd4b651e828d34943
+    last_write_checksum: sha1:b1027416bb01818f8e0bda5f02a73c658427738d
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -4290,7 +4308,7 @@ trackedFiles:
     last_write_checksum: sha1:f9453df020a022530a0fb97a2e7099343c930b13
     pristine_git_object: 3b4e49a565f809818b5f48673f81835a7d83f884
   src/sdk/hooks.ts:
-    last_write_checksum: sha1:10d8205f23245a643949abb21b313f55d21f163d
+    last_write_checksum: sha1:cba2c0a04747313c22798423da3402397b8a8c45
   src/sdk/hooksservernames.ts:
     last_write_checksum: sha1:46e1603a1bda6de118b0cfbf7ce1590e01a38c42
   src/sdk/index.ts:
@@ -5842,7 +5860,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"logs_enabled": false, "tool_io_logs_enabled": false}
+          application/json: {"logs_enabled": false, "session_capture_enabled": false, "tool_io_logs_enabled": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6195,6 +6213,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2025-06-10T20:46:31.392Z", "email": "Ricardo_Vandervort87@hotmail.com", "id": "<id>", "organization_id": "<id>", "state": "accepted", "updated_at": "2025-04-21T23:51:05.957Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  hooks#cursor:
+    speakeasy-default-hooks#cursor:
+      requestBody:
+        application/json: {"hook_event_name": "<value>"}
+      responses:
+        "200":
+          application/json: {}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
