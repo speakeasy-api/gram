@@ -1,4 +1,4 @@
-h1:vpCX+atMWO0oBlUzNPL/rdbUyCSdpMAJl+jjRpJctx8=
+h1:06fBNU9AOXMAlgCEVJt9ZyrD2dZhm7pZz8GrGI8X06A=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -32,3 +32,4 @@ h1:vpCX+atMWO0oBlUzNPL/rdbUyCSdpMAJl+jjRpJctx8=
 20260326183210_add-user-email-hook-source-cols.sql h1:N0mZcdbqqlg8Ml9XBw9lWXu+l6SF9qzd8SQtdsLVN4s=
 20260326185334_add-user-email-hook-source-to-trace-summaries.sql h1:5Qkgq91xvqA3CRt/ELCc/zbSRF8i7/RTUKoOf+GJKWA=
 20260327155404_add-hook-status-to-trace-summaries.sql h1:qoLmWslLKmxush52MV577I+EaDonKduMSYDsrMQI8v8=
+20260407215736_materialzie_skill_name.sql h1:ABWCBVdRlBeTDkrl6JZJS+GYS+4tuHYLJspsVpdhtxM=
