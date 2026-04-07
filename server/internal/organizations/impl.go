@@ -129,7 +129,10 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		attr.UserID(ac.UserID),
 	)
 
-	inviterWorkosUserID, err := s.workosInviterUserID(ctx, ac.UserID, logger)
+	inviterWorkosUserID, err := s.resolveGramUserWorkOSUserID(ctx, ac.UserID, logger,
+		"inviting user not found",
+		"inviter has no WorkOS user id; sign in via WorkOS first or link your account",
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -512,14 +515,6 @@ func invitationToGen(inv *workos.Invitation, gramOrganizationID string, inviterG
 		CreatedAt:      inv.CreatedAt,
 		UpdatedAt:      inv.UpdatedAt,
 	}
-}
-
-// workosInviterUserID returns the WorkOS user id for the Gram user sending an invitation.
-func (s *Service) workosInviterUserID(ctx context.Context, gramUserID string, logger *slog.Logger) (string, error) {
-	return s.resolveGramUserWorkOSUserID(ctx, gramUserID, logger,
-		"inviting user not found",
-		"inviter has no WorkOS user id; sign in via WorkOS first or link your account",
-	)
 }
 
 func (s *Service) gramUserIDForWorkosID(ctx context.Context, workosUserID string) *string {
