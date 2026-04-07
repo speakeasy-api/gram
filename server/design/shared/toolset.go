@@ -230,5 +230,6 @@ var OAuthProxyServerUpdateForm = Type("OAuthProxyServerUpdateForm", func() {
 	Attribute("scopes_supported", ArrayOf(String), "OAuth scopes to request (omit = no change, empty array = clear)")
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Auth methods (omit = no change, empty array = clear)")
 	Attribute("environment_slug", Slug, "The environment slug to store secrets")
+	// provider_type and slug are intentionally excluded — they are immutable after creation.
 	// No Required() — every field is optional for partial updates.
 })

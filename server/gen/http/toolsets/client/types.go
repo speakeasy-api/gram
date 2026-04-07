@@ -75,7 +75,7 @@ type AddOAuthProxyServerRequestBody struct {
 // UpdateOAuthProxyServerRequestBody is the type of the "toolsets" service
 // "updateOAuthProxyServer" endpoint HTTP request body.
 type UpdateOAuthProxyServerRequestBody struct {
-	// Editable OAuth proxy server fields
+	// The OAuth proxy server fields to update
 	OauthProxyServer *OAuthProxyServerUpdateFormRequestBody `form:"oauth_proxy_server" json:"oauth_proxy_server" xml:"oauth_proxy_server"`
 }
 

@@ -373,7 +373,7 @@ var AddOAuthProxyServerForm = Type("AddOAuthProxyServerForm", func() {
 
 var UpdateOAuthProxyServerForm = Type("UpdateOAuthProxyServerForm", func() {
 	Attribute("slug", shared.Slug, "The slug of the toolset whose OAuth proxy server to update")
-	Attribute("oauth_proxy_server", shared.OAuthProxyServerUpdateForm, "Editable OAuth proxy server fields")
+	Attribute("oauth_proxy_server", shared.OAuthProxyServerUpdateForm, "The OAuth proxy server fields to update")
 	security.ProjectPayload()
 	Required("slug", "oauth_proxy_server")
 })

@@ -186,7 +186,7 @@ type UpdateOAuthProxyServerPayload struct {
 	ApikeyToken  *string
 	// The slug of the toolset whose OAuth proxy server to update
 	Slug types.Slug
-	// Editable OAuth proxy server fields
+	// The OAuth proxy server fields to update
 	OauthProxyServer *types.OAuthProxyServerUpdateForm
 	ProjectSlugInput *string
 }
