@@ -65,7 +65,7 @@ func NewClient(apiKey string, opts ...ClientOpts) *Client {
 	httpClient := opt.HTTPClient
 	if httpClient == nil {
 		rc := retryablehttp.NewClient()
-		rc.HTTPClient.Timeout = 30 * time.Second
+		rc.HTTPClient.Timeout = 10 * time.Second
 		httpClient = rc.StandardClient()
 	}
 
