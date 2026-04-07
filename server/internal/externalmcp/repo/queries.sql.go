@@ -13,6 +13,61 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 )
 
+const createCollection = `-- name: CreateCollection :one
+INSERT INTO organization_mcp_collections (registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+`
+
+type CreateCollectionParams struct {
+	RegistryID           uuid.UUID
+	OrganizationID       string
+	Name                 string
+	Description          pgtype.Text
+	Slug                 string
+	McpRegistryNamespace string
+	Visibility           string
+}
+
+type CreateCollectionRow struct {
+	ID                   uuid.UUID
+	RegistryID           uuid.UUID
+	OrganizationID       string
+	Name                 string
+	Description          pgtype.Text
+	Slug                 string
+	McpRegistryNamespace string
+	Visibility           string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+func (q *Queries) CreateCollection(ctx context.Context, arg CreateCollectionParams) (CreateCollectionRow, error) {
+	row := q.db.QueryRow(ctx, createCollection,
+		arg.RegistryID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Description,
+		arg.Slug,
+		arg.McpRegistryNamespace,
+		arg.Visibility,
+	)
+	var i CreateCollectionRow
+	err := row.Scan(
+		&i.ID,
+		&i.RegistryID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.Slug,
+		&i.McpRegistryNamespace,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createExternalMCPAttachment = `-- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
 VALUES ($1, $2, $3, $4, $5)
@@ -211,12 +266,101 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 	return i, err
 }
 
+const deleteCollection = `-- name: DeleteCollection :exec
+UPDATE organization_mcp_collections SET deleted_at = clock_timestamp()
+WHERE id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) DeleteCollection(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCollection, id)
+	return err
+}
+
+const getCollectionByID = `-- name: GetCollectionByID :one
+SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+FROM organization_mcp_collections
+WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetCollectionByIDRow struct {
+	ID                   uuid.UUID
+	RegistryID           uuid.UUID
+	OrganizationID       string
+	Name                 string
+	Description          pgtype.Text
+	Slug                 string
+	McpRegistryNamespace string
+	Visibility           string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+func (q *Queries) GetCollectionByID(ctx context.Context, id uuid.UUID) (GetCollectionByIDRow, error) {
+	row := q.db.QueryRow(ctx, getCollectionByID, id)
+	var i GetCollectionByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.RegistryID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.Slug,
+		&i.McpRegistryNamespace,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCollectionByNamespace = `-- name: GetCollectionByNamespace :one
+SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+FROM organization_mcp_collections
+WHERE mcp_registry_namespace = $1 AND organization_id = $2 AND deleted IS FALSE
+`
+
+type GetCollectionByNamespaceParams struct {
+	McpRegistryNamespace string
+	OrganizationID       string
+}
+
+type GetCollectionByNamespaceRow struct {
+	ID                   uuid.UUID
+	RegistryID           uuid.UUID
+	OrganizationID       string
+	Name                 string
+	Description          pgtype.Text
+	Slug                 string
+	McpRegistryNamespace string
+	Visibility           string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+func (q *Queries) GetCollectionByNamespace(ctx context.Context, arg GetCollectionByNamespaceParams) (GetCollectionByNamespaceRow, error) {
+	row := q.db.QueryRow(ctx, getCollectionByNamespace, arg.McpRegistryNamespace, arg.OrganizationID)
+	var i GetCollectionByNamespaceRow
+	err := row.Scan(
+		&i.ID,
+		&i.RegistryID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.Slug,
+		&i.McpRegistryNamespace,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getExternalMCPToolDefinitionByURN = `-- name: GetExternalMCPToolDefinitionByURN :one
 WITH deployment AS (
     SELECT d.id
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
-    WHERE d.project_id = $2
+    WHERE d.project_id = $1
     AND ds.status = 'completed'
     ORDER BY d.seq DESC
     LIMIT 1
@@ -252,15 +396,15 @@ SELECT
   e.registry_server_specifier
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
-WHERE t.tool_urn = $1
+WHERE t.tool_urn = $2
   AND e.deployment_id = (SELECT id FROM deployment)
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE
 `
 
 type GetExternalMCPToolDefinitionByURNParams struct {
-	ToolUrn   string
 	ProjectID uuid.UUID
+	ToolUrn   string
 }
 
 type GetExternalMCPToolDefinitionByURNRow struct {
@@ -295,7 +439,7 @@ type GetExternalMCPToolDefinitionByURNRow struct {
 }
 
 func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, arg GetExternalMCPToolDefinitionByURNParams) (GetExternalMCPToolDefinitionByURNRow, error) {
-	row := q.db.QueryRow(ctx, getExternalMCPToolDefinitionByURN, arg.ToolUrn, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getExternalMCPToolDefinitionByURN, arg.ProjectID, arg.ToolUrn)
 	var i GetExternalMCPToolDefinitionByURNRow
 	err := row.Scan(
 		&i.ID,
@@ -448,7 +592,7 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 const getMCPRegistryByID = `-- name: GetMCPRegistryByID :one
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries
-WHERE id = $1 AND deleted IS FALSE AND url IS NOT NULL
+WHERE id = $1 AND deleted IS FALSE
 `
 
 type GetMCPRegistryByIDRow struct {
@@ -470,6 +614,116 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const isToolsetInstalledFromCatalog = `-- name: IsToolsetInstalledFromCatalog :one
+SELECT EXISTS (
+  SELECT 1 FROM toolset_versions, unnest(tool_urns) AS urn
+  WHERE toolset_id = $1 AND deleted IS FALSE
+  AND urn LIKE 'tools:externalmcp:%'
+)
+`
+
+func (q *Queries) IsToolsetInstalledFromCatalog(ctx context.Context, toolsetID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isToolsetInstalledFromCatalog, toolsetID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isToolsetOwnedByProject = `-- name: IsToolsetOwnedByProject :one
+SELECT EXISTS (
+  SELECT 1 FROM mcp_registry_toolsets rt
+  JOIN toolsets t ON rt.toolset_id = t.id
+  WHERE rt.collection_id = $1
+    AND t.mcp_slug = $2
+    AND t.project_id = $3
+    AND rt.deleted IS FALSE
+    AND t.deleted IS FALSE
+)
+`
+
+type IsToolsetOwnedByProjectParams struct {
+	CollectionID uuid.UUID
+	McpSlug      pgtype.Text
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) IsToolsetOwnedByProject(ctx context.Context, arg IsToolsetOwnedByProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isToolsetOwnedByProject, arg.CollectionID, arg.McpSlug, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isToolsetPublished = `-- name: IsToolsetPublished :one
+SELECT EXISTS (
+  SELECT 1 FROM mcp_registry_toolsets
+  WHERE collection_id = $1 AND toolset_id = $2 AND deleted IS FALSE
+)
+`
+
+type IsToolsetPublishedParams struct {
+	CollectionID uuid.UUID
+	ToolsetID    uuid.UUID
+}
+
+func (q *Queries) IsToolsetPublished(ctx context.Context, arg IsToolsetPublishedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isToolsetPublished, arg.CollectionID, arg.ToolsetID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listCollectionsForOrganization = `-- name: ListCollectionsForOrganization :many
+SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+FROM organization_mcp_collections
+WHERE organization_id = $1 AND deleted IS FALSE
+ORDER BY name ASC
+`
+
+type ListCollectionsForOrganizationRow struct {
+	ID                   uuid.UUID
+	RegistryID           uuid.UUID
+	OrganizationID       string
+	Name                 string
+	Description          pgtype.Text
+	Slug                 string
+	McpRegistryNamespace string
+	Visibility           string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+func (q *Queries) ListCollectionsForOrganization(ctx context.Context, organizationID string) ([]ListCollectionsForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listCollectionsForOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCollectionsForOrganizationRow
+	for rows.Next() {
+		var i ListCollectionsForOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RegistryID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Description,
+			&i.Slug,
+			&i.McpRegistryNamespace,
+			&i.Visibility,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listExternalMCPAttachments = `-- name: ListExternalMCPAttachments :many
@@ -641,7 +895,6 @@ const listMCPRegistries = `-- name: ListMCPRegistries :many
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries
 WHERE deleted IS FALSE
-  AND url IS NOT NULL
 ORDER BY name ASC
 `
 
@@ -677,4 +930,153 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 		return nil, err
 	}
 	return items, nil
+}
+
+const listPublishedToolsets = `-- name: ListPublishedToolsets :many
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
+JOIN mcp_registry_toolsets rt ON t.id = rt.toolset_id
+WHERE rt.collection_id = $1 AND rt.deleted IS FALSE AND t.mcp_enabled IS TRUE AND t.deleted IS FALSE
+ORDER BY rt.published_at DESC
+`
+
+func (q *Queries) ListPublishedToolsets(ctx context.Context, collectionID uuid.UUID) ([]Toolset, error) {
+	rows, err := q.db.Query(ctx, listPublishedToolsets, collectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Toolset
+	for rows.Next() {
+		var i Toolset
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.DefaultEnvironmentSlug,
+			&i.McpSlug,
+			&i.McpIsPublic,
+			&i.McpEnabled,
+			&i.ToolSelectionMode,
+			&i.CustomDomainID,
+			&i.ExternalOauthServerID,
+			&i.OauthProxyServerID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const publishToolsetToCollection = `-- name: PublishToolsetToCollection :one
+INSERT INTO mcp_registry_toolsets (collection_id, toolset_id, published_by)
+VALUES ($1, $2, $3)
+ON CONFLICT (collection_id, toolset_id) WHERE deleted IS FALSE DO UPDATE
+SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
+RETURNING published_at, created_at, updated_at, deleted_at, published_by, id, collection_id, toolset_id, deleted
+`
+
+type PublishToolsetToCollectionParams struct {
+	CollectionID uuid.UUID
+	ToolsetID    uuid.UUID
+	PublishedBy  pgtype.Text
+}
+
+func (q *Queries) PublishToolsetToCollection(ctx context.Context, arg PublishToolsetToCollectionParams) (McpRegistryToolset, error) {
+	row := q.db.QueryRow(ctx, publishToolsetToCollection,
+		arg.CollectionID,
+		arg.ToolsetID,
+		arg.PublishedBy,
+	)
+	var i McpRegistryToolset
+	err := row.Scan(
+		&i.PublishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.PublishedBy,
+		&i.ID,
+		&i.CollectionID,
+		&i.ToolsetID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const unpublishToolsetFromCollection = `-- name: UnpublishToolsetFromCollection :exec
+UPDATE mcp_registry_toolsets SET deleted_at = clock_timestamp()
+WHERE collection_id = $1 AND toolset_id = $2 AND deleted IS FALSE
+`
+
+type UnpublishToolsetFromCollectionParams struct {
+	CollectionID uuid.UUID
+	ToolsetID    uuid.UUID
+}
+
+func (q *Queries) UnpublishToolsetFromCollection(ctx context.Context, arg UnpublishToolsetFromCollectionParams) error {
+	_, err := q.db.Exec(ctx, unpublishToolsetFromCollection, arg.CollectionID, arg.ToolsetID)
+	return err
+}
+
+const updateCollection = `-- name: UpdateCollection :one
+UPDATE organization_mcp_collections
+SET name = COALESCE($1, name),
+    description = COALESCE($2, description),
+    visibility = COALESCE($3, visibility),
+    updated_at = clock_timestamp()
+WHERE id = $4 AND deleted IS FALSE
+RETURNING id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+`
+
+type UpdateCollectionParams struct {
+	Name        pgtype.Text
+	Description pgtype.Text
+	Visibility  pgtype.Text
+	ID          uuid.UUID
+}
+
+type UpdateCollectionRow struct {
+	ID                   uuid.UUID
+	RegistryID           uuid.UUID
+	OrganizationID       string
+	Name                 string
+	Description          pgtype.Text
+	Slug                 string
+	McpRegistryNamespace string
+	Visibility           string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (UpdateCollectionRow, error) {
+	row := q.db.QueryRow(ctx, updateCollection,
+		arg.Name,
+		arg.Description,
+		arg.Visibility,
+		arg.ID,
+	)
+	var i UpdateCollectionRow
+	err := row.Scan(
+		&i.ID,
+		&i.RegistryID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.Slug,
+		&i.McpRegistryNamespace,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
