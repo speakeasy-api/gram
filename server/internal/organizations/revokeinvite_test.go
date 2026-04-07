@@ -7,11 +7,14 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
+
+const testWorkosOrgID = "org_workos_test"
 
 func TestService_RevokeInvite(t *testing.T) {
 	t.Parallel()
@@ -21,11 +24,20 @@ func TestService_RevokeInvite(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
+	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
+		ID:             "test-invitation-id",
+		Email:          "test@example.com",
+		State:          thirdpartyworkos.InvitationStatePending,
+		OrganizationID: testWorkosOrgID,
+		InviterUserID:  authCtx.UserID,
+		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339),
+	}, nil).Once()
+
 	ti.orgs.On("RevokeInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
 		ID:             "test-invitation-id",
 		Email:          "test@example.com",
 		State:          thirdpartyworkos.InvitationStateRevoked,
-		OrganizationID: authCtx.ActiveOrganizationID,
+		OrganizationID: testWorkosOrgID,
 		InviterUserID:  authCtx.UserID,
 		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339),
 	}, nil).Once()
@@ -45,11 +57,35 @@ func TestService_RevokeInvite_NotFound(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	notFound := fmt.Errorf("not found")
-	ti.orgs.On("RevokeInvitation", mock.Anything, "test-invitation-id").Return(nil, notFound).Once()
+	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(nil, notFound).Once()
 
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
 		InvitationID: "test-invitation-id",
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, notFound)
+}
+
+func TestService_RevokeInvite_WrongOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+
+	ti.orgs.On("GetInvitation", mock.Anything, "other-org-invitation-id").Return(&thirdpartyworkos.Invitation{
+		ID:             "other-org-invitation-id",
+		Email:          "victim@example.com",
+		State:          thirdpartyworkos.InvitationStatePending,
+		OrganizationID: "org_workos_someone_else",
+		InviterUserID:  "user_01OTHER",
+		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339),
+	}, nil).Once()
+
+	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
+		InvitationID: "other-org-invitation-id",
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }

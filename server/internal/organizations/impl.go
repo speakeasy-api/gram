@@ -43,6 +43,7 @@ type OrganizationProvider interface {
 	GetUserByEmail(ctx context.Context, email string) (*workos.User, error)
 	SendInvitation(ctx context.Context, opts workos.SendInvitationOpts) (*workos.Invitation, error)
 	ListInvitations(ctx context.Context, orgID string) ([]workos.Invitation, error)
+	GetInvitation(ctx context.Context, invitationID string) (*workos.Invitation, error)
 	RevokeInvitation(ctx context.Context, invitationID string) (*workos.Invitation, error)
 	FindInvitationByToken(ctx context.Context, token string) (*workos.Invitation, error)
 }
@@ -133,7 +134,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 }
 
 func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePayload) error {
-	ac, _, err := s.orgContext(ctx)
+	ac, workosOrgID, err := s.orgContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -148,6 +149,17 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 	)
+
+	invite, err := s.orgs.GetInvitation(ctx, payload.InvitationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get invitation").Log(ctx, logger)
+	}
+	if invite == nil {
+		return oops.C(oops.CodeNotFound).Log(ctx, logger)
+	}
+	if invite.OrganizationID != workosOrgID {
+		return oops.E(oops.CodeForbidden, nil, "invitation does not belong to this organization").Log(ctx, logger)
+	}
 
 	_, err = s.orgs.RevokeInvitation(ctx, payload.InvitationID)
 	if err != nil {
