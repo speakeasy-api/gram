@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 9a05bd02af9c38cdc9871a75b246de87
+  docChecksum: 4a8dfca09b914cb6394950299a49234a
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.24
-  configChecksum: 2246e062b348ba7a8b641ebccfb211f2
+  releaseVersion: 0.32.25
+  configChecksum: 1aec33c688af0704e44dbd56bd139fa9
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -404,7 +404,7 @@ trackedFiles:
   docs/models/components/organizationentry.md:
     last_write_checksum: sha1:69a03a891f0032a56e074a49b7e8447f40aabc9f
   docs/models/components/organizationinvitation.md:
-    last_write_checksum: sha1:90e9949e83a1a80a4585e0e4fc588db42c252577
+    last_write_checksum: sha1:bc306749b38490b12fb78daa0a656636ef82b140
   docs/models/components/organizationinvitationaccept.md:
     last_write_checksum: sha1:2cd52404b964a1238080dc485fde3611ba39fbb5
   docs/models/components/organizationinvitationstate.md:
@@ -1647,11 +1647,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:170c0d25253c3b8b00f1ffc535f55410fdca1844
+    last_write_checksum: sha1:379b5be1428c167618320abaffb7e7eb3c082884
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:2a5886a67413e10e419eac176af70e356a3a055d
+    last_write_checksum: sha1:db65564f26823f64e497f42530021dbbfb779c93
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2163,7 +2163,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:9f5621d4d6649cf70f7b7047697ebf85baeb1e0c
+    last_write_checksum: sha1:ad7e47e28bf5aebaa6c97846caf5cbaebaa493dc
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2718,7 +2718,7 @@ trackedFiles:
     last_write_checksum: sha1:80ae8c75259b4645abcc14af57a495f6e6ab77c5
     pristine_git_object: f2f7295b4ead4d4db3f38f721e08e3aa294ddafd
   src/models/components/organizationinvitation.ts:
-    last_write_checksum: sha1:3a533d1dbd550dd630f92e79e376e63e60fc0c58
+    last_write_checksum: sha1:d27981eda3b2bc06bcf7a3f4a8b9d4a0c8a98268
   src/models/components/organizationinvitationaccept.ts:
     last_write_checksum: sha1:61da98eda71adefdd4f4f6f80eb9f623bb957116
   src/models/components/organizationuser.ts:

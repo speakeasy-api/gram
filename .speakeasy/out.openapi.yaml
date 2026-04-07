@@ -18913,9 +18913,6 @@ components:
           type: string
           description: When the invitation was revoked.
           format: date-time
-        role_slug:
-          type: string
-          description: WorkOS role slug for the invitee.
         state:
           type: string
           description: Invitation lifecycle state.
