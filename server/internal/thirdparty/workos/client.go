@@ -45,7 +45,7 @@ func IsNotFound(err error) bool {
 func wrapSDKError(err error, context string) error {
 	var httpErr workos_errors.HTTPError
 	if errors.As(err, &httpErr) {
-		return &APIError{StatusCode: httpErr.Code, Body: httpErr.Message}
+		return &APIError{Method: "", Path: "", StatusCode: httpErr.Code, Body: httpErr.Message}
 	}
 	return fmt.Errorf("%s: %w", context, err)
 }
