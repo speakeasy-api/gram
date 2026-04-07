@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -331,7 +332,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	qtx := orgrepo.New(tx)
 
