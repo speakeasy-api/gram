@@ -1118,6 +1118,10 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	return toolsetDetails, nil
 }
 
+func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.UpdateOAuthProxyServerPayload) (*types.Toolset, error) {
+	return nil, oops.E(oops.CodeUnexpected, nil, "not implemented").Log(ctx, s.logger)
+}
+
 // createToolsetVersion creates a toolset version using the tool URNs and resource URNs from the payload
 func (s *Service) createToolsetVersion(ctx context.Context, toolUrnStrings []string, resourceUrnStrings []string, toolsetID uuid.UUID, tr *repo.Queries) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
