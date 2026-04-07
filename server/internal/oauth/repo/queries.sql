@@ -49,6 +49,16 @@ UPDATE oauth_proxy_servers SET
     updated_at = clock_timestamp()
 WHERE project_id = @project_id AND id = @id;
 
+-- name: UpdateOAuthProxyServerAudience :one
+UPDATE oauth_proxy_servers
+SET
+    audience = @audience,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- OAuth Proxy Providers Queries
 
 -- name: UpsertOAuthProxyProvider :one
@@ -108,6 +118,30 @@ WHERE project_id = @project_id AND id = @id;
 SELECT * FROM oauth_proxy_providers
 WHERE oauth_proxy_server_id = @oauth_proxy_server_id AND project_id = @project_id AND deleted IS FALSE
 ORDER BY created_at ASC;
+
+-- name: GetOAuthProxyProviderByServer :one
+-- Used by the update path to load existing provider state before applying the patch.
+SELECT *
+FROM oauth_proxy_providers
+WHERE oauth_proxy_server_id = @oauth_proxy_server_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at ASC
+LIMIT 1;
+
+-- name: UpdateOAuthProxyProviderFields :one
+UPDATE oauth_proxy_providers
+SET
+    authorization_endpoint = COALESCE(sqlc.narg('authorization_endpoint')::text, authorization_endpoint),
+    token_endpoint = COALESCE(sqlc.narg('token_endpoint')::text, token_endpoint),
+    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
+    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    secrets = COALESCE(sqlc.narg('secrets')::jsonb, secrets),
+    updated_at = clock_timestamp()
+WHERE oauth_proxy_server_id = @oauth_proxy_server_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
 
 -- User OAuth Tokens Queries
 -- Stores tokens obtained from external OAuth providers for users authenticating to external MCP servers
