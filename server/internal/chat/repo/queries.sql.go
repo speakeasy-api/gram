@@ -429,6 +429,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = $1
 ORDER BY c.updated_at DESC
@@ -447,6 +448,7 @@ type ListAllChatsRow struct {
 	Deleted        bool
 	NumMessages    int32
 	TotalTokens    int32
+	Source         pgtype.Text
 }
 
 func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]ListAllChatsRow, error) {
@@ -471,6 +473,7 @@ func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]List
 			&i.Deleted,
 			&i.NumMessages,
 			&i.TotalTokens,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -591,6 +594,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = $1 AND c.external_user_id = $2
 ORDER BY c.updated_at DESC
@@ -614,6 +618,7 @@ type ListChatsForExternalUserRow struct {
 	Deleted        bool
 	NumMessages    int32
 	TotalTokens    int32
+	Source         pgtype.Text
 }
 
 func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsForExternalUserParams) ([]ListChatsForExternalUserRow, error) {
@@ -638,6 +643,7 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 			&i.Deleted,
 			&i.NumMessages,
 			&i.TotalTokens,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -664,6 +670,7 @@ SELECT
             0
         )
     )::integer as total_tokens
+    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
 FROM chats c
 WHERE c.project_id = $1 AND c.user_id = $2
 ORDER BY c.updated_at DESC
@@ -687,6 +694,7 @@ type ListChatsForUserRow struct {
 	Deleted        bool
 	NumMessages    int32
 	TotalTokens    int32
+	Source         pgtype.Text
 }
 
 func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserParams) ([]ListChatsForUserRow, error) {
@@ -711,6 +719,7 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 			&i.Deleted,
 			&i.NumMessages,
 			&i.TotalTokens,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -732,6 +741,7 @@ WITH limited_chats AS (
     c.created_at,
     c.updated_at,
     (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source,
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
@@ -777,6 +787,7 @@ SELECT
     lc.title,
     lc.user_id,
     lc.external_user_id,
+    lc.source,
     lc.created_at,
     lc.updated_at,
     lc.num_messages,
@@ -826,6 +837,7 @@ type ListChatsWithResolutionsRow struct {
 	Title               pgtype.Text
 	UserID              pgtype.Text
 	ExternalUserID      pgtype.Text
+	Source              pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	NumMessages         int32
@@ -864,6 +876,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 			&i.Title,
 			&i.UserID,
 			&i.ExternalUserID,
+			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.NumMessages,

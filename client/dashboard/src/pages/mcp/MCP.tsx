@@ -22,7 +22,7 @@ const BUILT_IN_SERVERS = [
   {
     name: "MCP Logs",
     description:
-      "Search and analyze your project's MCP server logs, tool calls, and chat sessions.",
+      "Search and analyze your project's MCP server logs, tool calls, and agent sessions.",
     slug: "logs",
   },
 ];

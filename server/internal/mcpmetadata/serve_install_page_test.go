@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -294,4 +295,105 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 	body := rr.Body.String()
 	assert.Contains(t, body, "Server Instructions", "Should contain instructions section header")
 	assert.Contains(t, body, "Test Hub - Search and analyze test data", "Should contain instructions content")
+}
+
+func TestServeInstallPage_ToolDetails(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "Auth context should be available from test setup")
+	require.NotNil(t, authCtx.ProjectID, "Project ID should be available from test setup")
+
+	// Create a public toolset
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Tool Details Test Server",
+		Slug:                   "tool-details-test",
+		McpSlug:                conv.ToPGText("tool-details-test"),
+		Description:            conv.ToPGText("A test MCP server with tools"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Make it public
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	// Create a completed deployment so tools can be resolved
+	var deploymentID uuid.UUID
+	err = testInstance.conn.QueryRow(ctx, `
+		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
+		VALUES ($1, $2, 'test-user', $3)
+		RETURNING id
+	`, *authCtx.ProjectID, authCtx.ActiveOrganizationID, uuid.New().String()).Scan(&deploymentID)
+	require.NoError(t, err)
+
+	_, err = testInstance.conn.Exec(ctx, `
+		INSERT INTO deployment_statuses (deployment_id, status)
+		VALUES ($1, 'completed')
+	`, deploymentID)
+	require.NoError(t, err)
+
+	// Create an HTTP tool with description and annotation hints
+	toolURN := "tools:http:test-api:" + uuid.New().String()[:8]
+	_, err = testInstance.conn.Exec(ctx, `
+		INSERT INTO http_tool_definitions (
+			project_id, deployment_id, tool_urn, name, untruncated_name,
+			summary, description, tags, http_method, path,
+			schema_version, schema, server_env_var, security,
+			header_settings, query_settings, path_settings,
+			read_only_hint, idempotent_hint
+		) VALUES (
+			$1, $2, $3, 'search_records', '', 'Search records',
+			'Search and filter records by various criteria',
+			'{}', 'GET', '/api/records', '3.0.0', '{}', 'TEST_SERVER_URL',
+			'[]', '{}', '{}', '{}',
+			true, true
+		)
+	`, *authCtx.ProjectID, deploymentID, toolURN)
+	require.NoError(t, err)
+
+	// Link the tool to the toolset via a toolset version
+	_, err = testInstance.conn.Exec(ctx, `
+		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
+		VALUES ($1, 1, $2, '{}')
+	`, toolset.ID, []string{toolURN})
+	require.NoError(t, err)
+
+	// Create request
+	req := httptest.NewRequest("GET", "/mcp/tool-details-test/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", "tool-details-test")
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	// Create response recorder
+	rr := httptest.NewRecorder()
+
+	// Call the handler
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+
+	// Verify response basics
+	assert.Equal(t, http.StatusOK, rr.Code, "Expected successful response")
+	assert.Equal(t, "text/html", rr.Header().Get("Content-Type"), "Expected HTML content type")
+
+	body := rr.Body.String()
+
+	// Verify new table markup is present
+	assert.Contains(t, body, `class="tools-table"`, "Should contain tools-table class")
+	assert.Contains(t, body, `class="tool-name"`, "Should contain tool-name class")
+	assert.Contains(t, body, "search_records", "Should contain the tool name")
+	assert.Contains(t, body, "Search and filter records by various criteria", "Should contain the tool description")
+
+	// Verify annotation badges are rendered
+	assert.Contains(t, body, `class="annotation-badges"`, "Should contain annotation-badges container")
+	assert.Contains(t, body, "Read-only", "Should contain Read-only annotation badge")
+	assert.Contains(t, body, "Idempotent", "Should contain Idempotent annotation badge")
+
+	// Verify the old badge markup is gone (no tool-names class)
+	assert.NotContains(t, body, `class="tool-names"`, "Should not contain old tool-names class")
 }

@@ -38,7 +38,14 @@ type GenerateChatTitleArgs struct {
 	ProjectID string
 }
 
-const defaultChatTitle = "New Chat"
+const (
+	defaultChatTitle       = "New Chat"
+	DefaultClaudeChatTitle = "Claude Code Session"
+)
+
+func isDefaultChatTitle(title string) bool {
+	return title == defaultChatTitle || title == DefaultClaudeChatTitle
+}
 
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {
 	chatID, err := uuid.Parse(args.ChatID)
@@ -52,7 +59,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	}
 
 	// Already has a meaningful title — nothing to do.
-	if chat.Title.Valid && chat.Title.String != defaultChatTitle {
+	if chat.Title.Valid && !isDefaultChatTitle(chat.Title.String) {
 		return nil
 	}
 
@@ -86,12 +93,13 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	return nil
 }
 
-// buildTitleContext concatenates the first few user/assistant messages into a
+// buildTitleContext concatenates the last few user/assistant messages into a
 // single string suitable for LLM title generation.
 func buildTitleContext(messages []repo.ChatMessage) string {
 	var b strings.Builder
 	count := 0
-	for _, msg := range messages {
+	for i := len(messages) - 1; i >= 0; i-- { // Start from the last message and work backwards to make sure we capture the most recent messages
+		msg := messages[i]
 		if (msg.Role != "user" && msg.Role != "assistant") || strings.TrimSpace(msg.Content) == "" {
 			continue
 		}

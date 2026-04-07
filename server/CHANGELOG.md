@@ -1,5 +1,20 @@
 # server
 
+## 0.35.0
+
+### Minor Changes
+
+- ba10ce4: Add Cursor hooks support with authenticated endpoint, plugin, and setup
+
+### Patch Changes
+
+- 0a3af53: Adds support for full session capture from Claude. Complete transcripts of prompts, responses, and tool calls
+- c28788e: Add MCP App support across the playground, local functions runner, and the functions SDK.
+
+  Improve local runner lifecycle handling for proxied tool and resource responses, and only seed MCP App function assets when the functions backend is local.
+
+- 86dbcd6: Redesign the Available Tools section on MCP install pages to use a compact expandable table instead of overflowing badges. Each tool row shows its name and description, with an inline detail panel revealing the title and color-coded annotation badges (read-only, destructive, idempotent, open-world) on click. Servers with more than 10 tools show a "Show N more" button.
+
 ## 0.34.2
 
 ### Patch Changes

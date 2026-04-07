@@ -462,7 +462,12 @@ export async function main(args = process.argv, codePath = USER_CODE_PATH) {
 
 if (import.meta.url.startsWith("file:")) {
   const modulePath = url.fileURLToPath(import.meta.url);
-  if (process.argv[1] === modulePath) {
+  const argvPath =
+    typeof process.argv[1] === "string" ? path.resolve(process.argv[1]) : "";
+  if (
+    argvPath === path.resolve(modulePath) ||
+    path.basename(argvPath) === path.basename(modulePath)
+  ) {
     main();
   }
 }

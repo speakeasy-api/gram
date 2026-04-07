@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.32.20
+
+### Patch Changes
+
+- 0a3af53: Adds support for full session capture from Claude. Complete transcripts of prompts, responses, and tool calls
+
 ## 0.33.0
 
 ### Minor Changes

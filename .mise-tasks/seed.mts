@@ -7,19 +7,23 @@ import { createServer } from "node:http";
 import crypto from "node:crypto";
 import { exec } from "node:child_process";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
+import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
 import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
+import { deploymentsGetById } from "@gram/client/funcs/deploymentsGetById.js";
 import { keysCreate } from "@gram/client/funcs/keysCreate.js";
 import { keysList } from "@gram/client/funcs/keysList.js";
 import { keysRevokeById } from "@gram/client/funcs/keysRevokeById.js";
 import { keysValidate } from "@gram/client/funcs/keysValidate.js";
 import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "@gram/client/funcs/projectsRead.js";
+import { resourcesList } from "@gram/client/funcs/resourcesList.js";
 import { toolsList } from "@gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
@@ -29,10 +33,22 @@ import { ServiceError } from "@gram/client/models/errors";
 import { $ } from "zx";
 
 type Asset = {
-  type: "openapi";
   slug: string;
-  storybookDefault?: boolean;
-} & ({ filename: string } | { url: string });
+} & (
+  | ({
+      type: "openapi";
+      storybookDefault?: boolean;
+    } & ({ filename: string } | { url: string }))
+  | {
+      type: "functions";
+      runtime: "nodejs:22" | "nodejs:24";
+      resourceUris: string[];
+    }
+);
+
+const PLAYGROUND_MCP_APP_SLUG = "playground-mcp-app";
+const PLAYGROUND_MCP_APP_TOOL_NAME = "show_dashboard";
+const PLAYGROUND_MCP_APP_RESOURCE_URI = `ui://${PLAYGROUND_MCP_APP_SLUG}/dashboard`;
 
 const SEED_PROJECTS: {
   name: string;
@@ -57,6 +73,12 @@ const SEED_PROJECTS: {
         type: "openapi",
         slug: "gram",
         filename: path.join("server", "gen", "http", "openapi3.yaml"),
+      },
+      {
+        type: "functions",
+        slug: PLAYGROUND_MCP_APP_SLUG,
+        runtime: "nodejs:22",
+        resourceUris: [PLAYGROUND_MCP_APP_RESOURCE_URI],
       },
     ],
   },
@@ -189,6 +211,13 @@ async function seed() {
   if (!serverURL) {
     throw new Error("GRAM_SERVER_URL is not set");
   }
+  const functionsProvider = process.env["GRAM_FUNCTIONS_PROVIDER"] ?? "local";
+  const shouldSeedFunctions = functionsProvider === "local";
+  if (!shouldSeedFunctions) {
+    log.info(
+      `Skipping seeded MCP app function assets because GRAM_FUNCTIONS_PROVIDER is '${functionsProvider}', not 'local'.`,
+    );
+  }
 
   const gram = new GramCore({ serverURL });
 
@@ -236,6 +265,10 @@ async function seed() {
   const projectToolUrns: Record<string, string[]> = {};
 
   for (const { name, slug, assets, mcpPublic } of SEED_PROJECTS) {
+    const seedAssets = shouldSeedFunctions
+      ? assets
+      : assets.filter((asset) => asset.type !== "functions");
+
     const {
       created,
       id,
@@ -251,24 +284,30 @@ async function seed() {
     let verb = created ? "Created" : "Found existing";
     log.info(`${verb} project '${projectSlug}' (project_id = ${id})`);
 
+    if (seedAssets.length === 0) {
+      log.info(`No seed assets selected for '${projectSlug}', skipping.`);
+      continue;
+    }
+
     const deploymentId = await deployAssets({
       gram,
       sessionId,
       projectSlug,
       projectName: name,
-      assets,
+      assets: seedAssets,
     });
     log.info(
       `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
     );
 
-    for (const asset of assets) {
+    for (const asset of seedAssets) {
       const toolset = await upsertToolset({
         gram,
         serverURL,
         sessionId,
         projectSlug,
-        assetSlug: asset.slug,
+        deploymentId,
+        asset,
         mcpPublic,
       });
       verb = toolset.created ? "Created" : "Updated";
@@ -279,7 +318,7 @@ async function seed() {
       // Collect tool URNs for observability seeding
       projectToolUrns[projectSlug].push(...toolset.toolUrns);
 
-      if (asset.storybookDefault) {
+      if (asset.type === "openapi" && asset.storybookDefault) {
         await $`mise set --file mise.local.toml \
         VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG=${projectSlug} \
         VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL=${toolset.mcpURL}`;
@@ -495,30 +534,65 @@ async function deployAssets(init: {
   const { sessionId, projectSlug, projectName, assets } = init;
 
   const oapi: Array<{ assetId: string; name: string; slug: string }> = [];
+  const functions: Array<{
+    assetId: string;
+    name: string;
+    runtime: string;
+    slug: string;
+  }> = [];
 
   for (const asset of assets) {
-    let spec: string;
-    let contentType: string;
+    if (asset.type === "openapi") {
+      let spec: string;
+      let contentType: string;
 
-    if ("url" in asset) {
-      const response = await fetch(asset.url);
-      if (!response.ok) {
-        abort(
-          `Failed to fetch OpenAPI spec from ${asset.url}`,
-          response.statusText,
-        );
+      if ("url" in asset) {
+        const response = await fetch(asset.url);
+        if (!response.ok) {
+          abort(
+            `Failed to fetch OpenAPI spec from ${asset.url}`,
+            response.statusText,
+          );
+        }
+        spec = await response.text();
+        contentType = "application/json";
+      } else {
+        spec = await fs.readFile(asset.filename, "utf-8");
+        contentType = asset.filename.endsWith(".yaml")
+          ? "application/x-yaml"
+          : "application/json";
       }
-      spec = await response.text();
-      contentType = "application/json";
-    } else {
-      spec = await fs.readFile(asset.filename, "utf-8");
-      contentType = asset.filename.endsWith(".yaml")
-        ? "application/x-yaml"
-        : "application/json";
+
+      const requestBody = new Blob([spec], { type: contentType });
+      const res = await assetsUploadOpenAPIv3(
+        init.gram,
+        {
+          contentLength: requestBody.size,
+          requestBody,
+        },
+        {
+          option2: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: sessionId,
+          },
+        },
+      );
+
+      if (!res.ok) {
+        const source = "url" in asset ? asset.url : asset.filename;
+        abort(`Failed to upload asset \`${source}\``, res.error);
+      }
+
+      const { id: assetId } = await res.value.asset;
+      oapi.push({ assetId, name: asset.slug, slug: asset.slug });
+      continue;
     }
 
-    const requestBody = new Blob([spec], { type: contentType });
-    const res = await assetsUploadOpenAPIv3(
+    const archive = await buildSeedFunctionArchive(asset);
+    const requestBody = new Blob([new Uint8Array(archive)], {
+      type: "application/zip",
+    });
+    const res = await assetsUploadFunctions(
       init.gram,
       {
         contentLength: requestBody.size,
@@ -533,12 +607,16 @@ async function deployAssets(init: {
     );
 
     if (!res.ok) {
-      const source = "url" in asset ? asset.url : asset.filename;
-      abort(`Failed to upload asset \`${source}\``, res.error);
+      abort(`Failed to upload functions asset \`${asset.slug}\``, res.error);
     }
 
     const { id: assetId } = await res.value.asset;
-    oapi.push({ assetId, name: asset.slug, slug: asset.slug });
+    functions.push({
+      assetId,
+      name: asset.slug,
+      runtime: asset.runtime,
+      slug: asset.slug,
+    });
   }
 
   const evolveRes = await deploymentsEvolveDeployment(
@@ -546,6 +624,7 @@ async function deployAssets(init: {
     {
       evolveForm: {
         upsertOpenapiv3Assets: oapi,
+        upsertFunctions: functions,
       },
     },
     {
@@ -565,7 +644,532 @@ async function deployAssets(init: {
     abort("Deployment ID not found", evolveRes.value);
   }
 
+  await waitForDeploymentCompletion({
+    deploymentId,
+    gram: init.gram,
+    projectSlug,
+    sessionId,
+  });
+
   return deploymentId;
+}
+
+async function waitForDeploymentCompletion(init: {
+  deploymentId: string;
+  gram: GramCore;
+  projectSlug: string;
+  sessionId: string;
+}): Promise<void> {
+  const { deploymentId, gram, projectSlug, sessionId } = init;
+  const startedAt = Date.now();
+  const timeoutMs = 2 * 60 * 1000;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const res = await deploymentsGetById(
+      gram,
+      { id: deploymentId },
+      {
+        option2: {
+          projectSlugHeaderGramProject: projectSlug,
+          sessionHeaderGramSession: sessionId,
+        },
+      },
+    );
+    if (!res.ok) {
+      abort(
+        `Failed to fetch deployment \`${deploymentId}\` while waiting for completion`,
+        res.error,
+      );
+    }
+
+    const deployment = res.value;
+
+    switch (deployment.status) {
+      case "completed":
+        return;
+      case "failed":
+        abort(`Deployment \`${deploymentId}\` failed`, deployment);
+    }
+
+    await sleep(1500);
+  }
+
+  abort(`Timed out waiting for deployment \`${deploymentId}\` to complete`, {
+    deploymentId,
+    timeoutMs,
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function buildSeedFunctionArchive(
+  asset: Extract<Asset, { type: "functions" }>,
+): Promise<Buffer> {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "gram-seed-functions-"),
+  );
+  const archivePath = path.join(tmpDir, "bundle.zip");
+  const manifestPath = path.join(tmpDir, "manifest.json");
+  const functionsPath = path.join(tmpDir, "functions.js");
+
+  try {
+    await fs.writeFile(
+      manifestPath,
+      JSON.stringify(
+        {
+          version: "0.0.0",
+          tools: [
+            {
+              name: PLAYGROUND_MCP_APP_TOOL_NAME,
+              description:
+                "Return demo data for the seeded MCP Apps playground example",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  query: {
+                    type: "string",
+                    description:
+                      "A short topic to render inside the seeded dashboard",
+                  },
+                },
+                required: ["query"],
+                additionalProperties: false,
+              },
+              meta: {
+                "ui/resourceUri": PLAYGROUND_MCP_APP_RESOURCE_URI,
+              },
+            },
+          ],
+          resources: [
+            {
+              name: "playground_dashboard",
+              title: "Playground MCP App",
+              description:
+                "A tiny interactive HTML dashboard for validating MCP Apps in the playground",
+              uri: PLAYGROUND_MCP_APP_RESOURCE_URI,
+              mimeType: "text/html;profile=mcp-app",
+              meta: {
+                ui: {
+                  prefersBorder: true,
+                },
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+    await fs.writeFile(functionsPath, buildSeedFunctionsSource(asset.slug));
+    await $({
+      cwd: tmpDir,
+    })`zip -q -j ${archivePath} manifest.json functions.js`;
+
+    return await fs.readFile(archivePath);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+function buildSeedFunctionsSource(functionSlug: string): string {
+  const dashboardHtml = String.raw`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gram MCP App Demo</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f8fafc;
+        --surface: rgba(255, 255, 255, 0.92);
+        --surface-strong: #ffffff;
+        --border: rgba(15, 23, 42, 0.12);
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #0f766e;
+        --accent-soft: rgba(15, 118, 110, 0.12);
+        --shadow: 0 24px 48px rgba(15, 23, 42, 0.12);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #020617;
+          --surface: rgba(15, 23, 42, 0.92);
+          --surface-strong: #0f172a;
+          --border: rgba(148, 163, 184, 0.18);
+          --text: #e2e8f0;
+          --muted: #94a3b8;
+          --accent: #2dd4bf;
+          --accent-soft: rgba(45, 212, 191, 0.18);
+          --shadow: 0 24px 48px rgba(2, 6, 23, 0.5);
+        }
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "IBM Plex Sans", "Inter", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(45, 212, 191, 0.18), transparent 32rem),
+          linear-gradient(180deg, rgba(15, 23, 42, 0.04), transparent 24rem),
+          var(--bg);
+        color: var(--text);
+      }
+
+      main {
+        padding: 18px;
+      }
+
+      .shell {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(20px);
+      }
+
+      .hero {
+        display: grid;
+        gap: 10px;
+        padding: 18px 18px 14px;
+        background:
+          linear-gradient(135deg, var(--accent-soft), transparent 68%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(15, 118, 110, 0.12);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.1;
+      }
+
+      .lede {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .grid {
+        display: grid;
+        gap: 12px;
+        padding: 0 18px 18px;
+      }
+
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface-strong);
+        padding: 14px;
+      }
+
+      .panel h2 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 10px;
+      }
+
+      .timeline-item {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        align-items: start;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        margin-top: 5px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 6px var(--accent-soft);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="shell">
+        <div class="hero">
+          <span class="eyebrow">MCP App Demo</span>
+          <h1 id="title">Waiting for tool result</h1>
+          <p class="lede" id="subtitle">The playground host should initialize this iframe and stream the tool result in.</p>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <h2>Query</h2>
+            <div class="value" id="query">...</div>
+            <p class="muted" id="timestamp">No payload yet</p>
+          </div>
+          <div class="panel">
+            <h2>Result JSON</h2>
+            <pre id="payload">Awaiting ui/notifications/tool-result</pre>
+          </div>
+          <div class="panel">
+            <h2>Host Bridge</h2>
+            <div class="timeline" id="events"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script>
+      const state = {
+        toolInput: null,
+        toolResult: null,
+        hostContext: null,
+        events: [],
+      };
+
+      const nodes = {
+        title: document.getElementById("title"),
+        subtitle: document.getElementById("subtitle"),
+        query: document.getElementById("query"),
+        timestamp: document.getElementById("timestamp"),
+        payload: document.getElementById("payload"),
+        events: document.getElementById("events"),
+      };
+
+      function addEvent(label, detail) {
+        state.events.unshift({ label, detail });
+        state.events = state.events.slice(0, 4);
+        nodes.events.innerHTML = state.events
+          .map((entry) => {
+            const safeLabel = escapeHtml(entry.label);
+            const safeDetail = escapeHtml(entry.detail || "");
+            return '<div class="timeline-item"><span class="dot"></span><div><strong>' + safeLabel + '</strong><div class="muted">' + safeDetail + "</div></div></div>";
+          })
+          .join("");
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function sendRequest(method, params) {
+        const id = Math.random().toString(36).slice(2);
+        window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+        return new Promise((resolve, reject) => {
+          function onMessage(event) {
+            if (event.source !== window.parent) {
+              return;
+            }
+            const message = event.data;
+            if (!message || message.id !== id) {
+              return;
+            }
+            window.removeEventListener("message", onMessage);
+            if (message.error) {
+              reject(new Error(message.error.message || "Request failed"));
+              return;
+            }
+            resolve(message.result);
+          }
+          window.addEventListener("message", onMessage);
+        });
+      }
+
+      function parseToolResult(result) {
+        const textPart = result?.content?.find((entry) => entry?.type === "text");
+        const rawText = textPart?.text;
+        if (typeof rawText !== "string") {
+          return result;
+        }
+        try {
+          return JSON.parse(rawText);
+        } catch {
+          return { text: rawText };
+        }
+      }
+
+      function render() {
+        const parsed = parseToolResult(state.toolResult);
+        const query = state.toolInput?.arguments?.query || parsed?.query || "No query";
+        nodes.query.textContent = query;
+        nodes.title.textContent = state.hostContext?.toolInfo?.tool?.name || "Seeded MCP App";
+        nodes.subtitle.textContent =
+          state.hostContext?.userAgent
+            ? "Connected to " + state.hostContext.userAgent
+            : "Connected to the playground host";
+        nodes.timestamp.textContent = parsed?.generatedAt
+          ? "Generated at " + parsed.generatedAt
+          : "Awaiting structured payload";
+        nodes.payload.textContent = JSON.stringify(
+          {
+            input: state.toolInput,
+            result: state.toolResult,
+            parsed,
+            hostContext: state.hostContext,
+          },
+          null,
+          2,
+        );
+      }
+
+      window.addEventListener("message", (event) => {
+        if (event.source !== window.parent) {
+          return;
+        }
+
+        const message = event.data;
+        if (!message || typeof message.method !== "string") {
+          return;
+        }
+
+        if (message.method === "ui/notifications/tool-input") {
+          state.toolInput = message.params;
+          addEvent("tool-input", "Received tool arguments from host");
+          render();
+          return;
+        }
+
+        if (message.method === "ui/notifications/tool-result") {
+          state.toolResult = message.params;
+          addEvent("tool-result", "Received tool result from host");
+          render();
+          return;
+        }
+
+        if (message.method === "ui/notifications/host-context-changed") {
+          state.hostContext = {
+            ...(state.hostContext || {}),
+            ...(message.params || {}),
+          };
+          addEvent("host-context", "Theme: " + (state.hostContext.theme || "unknown"));
+          render();
+        }
+      });
+
+      (async () => {
+        addEvent("boot", "Sending ui/initialize");
+        const init = await sendRequest("ui/initialize", {
+          protocolVersion: "2025-06-18",
+          appCapabilities: {
+            availableDisplayModes: ["inline"],
+          },
+          appInfo: {
+            name: "gram-seed-app",
+            version: "0.0.1",
+          },
+        });
+        state.hostContext = init?.hostContext || null;
+        render();
+        window.parent.postMessage(
+          {
+            jsonrpc: "2.0",
+            method: "ui/notifications/initialized",
+            params: {},
+          },
+          "*",
+        );
+        addEvent("initialized", "Waiting for tool data");
+      })().catch((error) => {
+        nodes.payload.textContent = String(error && error.stack ? error.stack : error);
+        addEvent("error", String(error && error.message ? error.message : error));
+      });
+    </script>
+  </body>
+</html>`;
+
+  return `
+const TOOL_NAME = ${JSON.stringify(PLAYGROUND_MCP_APP_TOOL_NAME)};
+const RESOURCE_URI = ${JSON.stringify(PLAYGROUND_MCP_APP_RESOURCE_URI)};
+const FUNCTION_SLUG = ${JSON.stringify(functionSlug)};
+const HTML = ${JSON.stringify(dashboardHtml)};
+
+export default {
+  async handleToolCall({ name, input }) {
+    if (name !== TOOL_NAME) {
+      return new Response(JSON.stringify({ error: "Unknown tool", name }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const query =
+      typeof input?.query === "string" && input.query.trim().length > 0
+        ? input.query.trim()
+        : "Gram MCP Apps";
+
+    const payload = {
+      slug: FUNCTION_SLUG,
+      query,
+      generatedAt: new Date().toISOString(),
+      cards: [
+        "UI metadata comes from the tool + resource definitions",
+        "The playground host fetches the UI resource with resources/read",
+        "The iframe receives tool-input and tool-result notifications",
+      ],
+    };
+
+    return new Response(JSON.stringify(payload), {
+      headers: { "Content-Type": "application/json" },
+    });
+  },
+
+  async handleResources({ uri }) {
+    if (uri !== RESOURCE_URI) {
+      return new Response("Unknown resource", {
+        status: 404,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    return new Response(HTML, {
+      headers: { "Content-Type": "text/html;profile=mcp-app" },
+    });
+  },
+};
+`;
 }
 
 type Toolset = {
@@ -580,16 +1184,29 @@ async function upsertToolset(init: {
   serverURL: string;
   sessionId: string;
   projectSlug: string;
-  assetSlug: string;
+  deploymentId: string;
+  asset: Asset;
   mcpPublic: boolean;
 }): Promise<Toolset> {
-  const { gram, serverURL, sessionId, projectSlug, assetSlug, mcpPublic } =
-    init;
+  const {
+    gram,
+    serverURL,
+    sessionId,
+    projectSlug,
+    deploymentId,
+    asset,
+    mcpPublic,
+  } = init;
+
+  const urnPrefix =
+    asset.type === "functions"
+      ? `tools:function:${asset.slug}`
+      : `tools:http:${asset.slug}`;
 
   // Fetch tools filtered by URN prefix
   const toolRes = await toolsList(
     gram,
-    { urnPrefix: `tools:http:${assetSlug}` },
+    { urnPrefix },
     {
       projectSlugHeaderGramProject: projectSlug,
       sessionHeaderGramSession: sessionId,
@@ -613,15 +1230,50 @@ async function upsertToolset(init: {
     }
   });
 
+  let resourceUrns: string[] | undefined;
+  if (asset.type === "functions" && asset.resourceUris.length > 0) {
+    const resourceRes = await resourcesList(
+      gram,
+      {
+        deploymentId,
+      },
+      {
+        projectSlugHeaderGramProject: projectSlug,
+        sessionHeaderGramSession: sessionId,
+      },
+    );
+    if (!resourceRes.ok) {
+      abort(
+        `Failed to list resources for project \`${projectSlug}\``,
+        resourceRes.error,
+      );
+    }
+
+    const wantedUris = new Set(asset.resourceUris);
+    resourceUrns = resourceRes.value.resources
+      .map((resource) => resource.functionResourceDefinition)
+      .filter((resource) => resource !== undefined)
+      .filter((resource) => wantedUris.has(resource.uri))
+      .map((resource) => resource.resourceUrn);
+
+    if (resourceUrns.length !== wantedUris.size) {
+      abort(
+        `Failed to resolve seeded MCP app resources for asset \`${asset.slug}\``,
+        resourceRes.value.resources,
+      );
+    }
+  }
+
   let toolset: Toolset;
-  const name = assetSlug + "-seed";
+  const name = asset.slug + "-seed";
 
   const createRes = await toolsetsCreate(
     gram,
     {
       createToolsetRequestBody: {
         name,
-        toolUrns: toolUrns,
+        resourceUrns,
+        toolUrns,
       },
     },
     {
@@ -640,7 +1292,8 @@ async function upsertToolset(init: {
         {
           slug: name,
           updateToolsetRequestBody: {
-            toolUrns: toolUrns,
+            resourceUrns,
+            toolUrns,
           },
         },
         {

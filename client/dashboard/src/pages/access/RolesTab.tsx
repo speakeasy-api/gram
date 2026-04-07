@@ -22,10 +22,13 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
+import { DeleteRoleDialog } from "./DeleteRoleDialog";
+import { Ellipsis } from "lucide-react";
 
 export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [deletingRole, setDeletingRole] = useState<Role | null>(null);
   const queryClient = useQueryClient();
   const { data: rolesData, isLoading } = useRoles();
   const roles = rolesData?.roles ?? [];
@@ -91,7 +94,10 @@ export function RolesTab() {
               size="sm"
               className="opacity-50 hover:opacity-100"
             >
-              <Icon name="ellipsis" className="h-4 w-4" />
+              <Button.LeftIcon>
+                <Ellipsis className="h-4 w-4" />
+              </Button.LeftIcon>
+              <span className="hidden">Actions</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -104,7 +110,7 @@ export function RolesTab() {
             {!role.isSystem && (
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => deleteRole.mutate({ request: { id: role.id } })}
+                onSelect={() => setTimeout(() => setDeletingRole(role), 0)}
               >
                 Delete
               </DropdownMenuItem>
@@ -186,6 +192,21 @@ export function RolesTab() {
           }
         }}
         editingRole={editingRole}
+      />
+
+      <DeleteRoleDialog
+        isOpen={!!deletingRole}
+        onOpenChange={(open) => {
+          if (!open) setDeletingRole(null);
+        }}
+        handleDeleteRole={async () => {
+          if (deletingRole) {
+            await deleteRole.mutateAsync({ request: { id: deletingRole.id } });
+            setDeletingRole(null);
+          }
+        }}
+        handleCancel={() => setDeletingRole(null)}
+        role={deletingRole}
       />
     </div>
   );

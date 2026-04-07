@@ -175,7 +175,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"id": "msg_123",
-			"model": "openai/gpt-4o",
+			"model": "openai/gpt-5.4",
 			"choices": [{
 				"message": {
 					"role": "assistant",
@@ -237,7 +237,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, "msg_123", resp.MessageID)
-	assert.Equal(t, "openai/gpt-4o", resp.Model)
+	assert.Equal(t, "openai/gpt-5.4", resp.Model)
 	assert.Equal(t, "Hello, world!", resp.Content)
 	assert.Equal(t, 10, resp.Usage.PromptTokens)
 	assert.Equal(t, 5, resp.Usage.CompletionTokens)
@@ -295,7 +295,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		}
 
 		// Send initial chunk with ID and model
-		_, _ = fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-4o\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
 		flusher.Flush()
 
 		// Send content chunk
@@ -381,7 +381,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 
 	// Verify captured data
 	assert.Equal(t, "msg_456", captureStrategy.capturedResponse.MessageID)
-	assert.Equal(t, "openai/gpt-4o", captureStrategy.capturedResponse.Model)
+	assert.Equal(t, "openai/gpt-5.4", captureStrategy.capturedResponse.Model)
 	assert.Equal(t, "Hello streaming", captureStrategy.capturedResponse.Content)
 	assert.Equal(t, 10, captureStrategy.capturedResponse.Usage.PromptTokens)
 	assert.Equal(t, 5, captureStrategy.capturedResponse.Usage.CompletionTokens)
@@ -397,7 +397,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"id": "msg_789",
-			"model": "openai/gpt-4o",
+			"model": "openai/gpt-5.4",
 			"choices": [{
 				"message": {
 					"role": "assistant",
@@ -569,7 +569,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 		w.Header().Set("Content-Type", "application/json")
 		response := fmt.Sprintf(`{
 			"id": "msg_%d",
-			"model": "openai/gpt-4o",
+			"model": "openai/gpt-5.4",
 			"choices": [{
 				"message": {
 					"role": "assistant",
@@ -730,7 +730,7 @@ func newMockServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		response := fmt.Sprintf(`{
 			"id": "msg_%d",
-			"model": "openai/gpt-4o",
+			"model": "openai/gpt-5.4",
 			"choices": [{
 				"message": {
 					"role": "assistant",
@@ -961,7 +961,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"id": "msg_schema_test",
-			"model": "openai/gpt-4o-mini",
+			"model": "openai/gpt-5.4-mini",
 			"choices": [{
 				"message": {
 					"role": "assistant",
@@ -1071,7 +1071,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"id": "msg_no_schema",
-			"model": "openai/gpt-4o",
+			"model": "openai/gpt-5.4",
 			"choices": [{
 				"message": {
 					"role": "assistant",

@@ -1445,6 +1445,7 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		NumMessages:    v.NumMessages,
+		Source:         v.Source,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,
 	}
@@ -1481,6 +1482,7 @@ func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponse
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		NumMessages:    v.NumMessages,
+		Source:         v.Source,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,
 	}

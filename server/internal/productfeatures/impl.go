@@ -158,8 +158,9 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	}
 
 	return &gen.GramProductFeatures{
-		LogsEnabled:       isEnabled(FeatureLogs),
-		ToolIoLogsEnabled: isEnabled(FeatureToolIOLogs),
+		LogsEnabled:           isEnabled(FeatureLogs),
+		ToolIoLogsEnabled:     isEnabled(FeatureToolIOLogs),
+		SessionCaptureEnabled: isEnabled(FeatureSessionCapture),
 	}, nil
 }
 

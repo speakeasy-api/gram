@@ -3,7 +3,7 @@ import { getServerURL } from "@/lib/utils";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 export const useMiniModel = () => {
-  return useModel("openai/gpt-4o-mini");
+  return useModel("openai/gpt-5.4-mini");
 };
 
 export const useModel = (

@@ -603,6 +603,12 @@ func newStartCommand() *cli.Command {
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient, accessManager)
 
+			// Wrap cache for hooks service in local development
+			var hooksCache cache.Cache = cache.NewRedisCacheAdapter(redisClient)
+			if c.String("environment") == "local" {
+				hooksCache = hooks.NewLocalSessionCache(hooksCache, db)
+			}
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				openRouter,
@@ -691,7 +697,7 @@ func newStartCommand() *cli.Command {
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, accessManager))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, cache.NewRedisCacheAdapter(redisClient), chatClient, temporalEnv, accessManager))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, hooksCache, chatClient, temporalEnv, accessManager, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authorizer, temporalEnv))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			auth.Attach(mux, auth.NewService(

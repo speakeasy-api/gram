@@ -41,11 +41,12 @@ type resourceReadResult struct {
 }
 
 type resourceContent struct {
-	URI      string  `json:"uri"`
-	Name     *string `json:"name,omitempty"`
-	MimeType *string `json:"mimeType,omitempty"`
-	Text     string  `json:"text,omitempty"`
-	Blob     string  `json:"blob,omitempty"`
+	URI      string         `json:"uri"`
+	Name     *string        `json:"name,omitempty"`
+	MimeType *string        `json:"mimeType,omitempty"`
+	Text     string         `json:"text,omitempty"`
+	Blob     string         `json:"blob,omitempty"`
+	Meta     map[string]any `json:"_meta,omitempty"`
 }
 
 func handleResourcesRead(
@@ -249,6 +250,7 @@ func handleResourcesRead(
 		MimeType: &mimeType,
 		Text:     "",
 		Blob:     "",
+		Meta:     resourceDef.Meta,
 	}
 
 	if isBinary {

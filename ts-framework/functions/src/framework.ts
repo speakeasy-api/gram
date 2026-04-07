@@ -35,6 +35,11 @@ export type ToolDefinition<
    */
   annotations?: ToolAnnotations;
   /**
+   * Optional metadata for the tool. Use `"ui/resourceUri"` to link a tool
+   * to a UI resource (MCP Apps / SEP-1865).
+   */
+  meta?: Record<string, unknown>;
+  /**
    * The function that implements the tool call.
    */
   execute: (
@@ -109,6 +114,15 @@ export type Manifest = {
   version: string;
   tools?: ManifestTool[];
   resources?: ManifestResource[];
+};
+
+export type ResourceEntry = {
+  name: string;
+  uri: string;
+  description: string;
+  mimeType?: string;
+  title?: string;
+  content: string | (() => string | Promise<string>);
 };
 
 export function assert<V extends { error: string; stack?: never }>(
@@ -228,6 +242,7 @@ export class Gram<
   },
 > {
   #tools: Map<string, ToolConfig<string, z.core.$ZodShape, any, Response>>;
+  #resources: Map<string, ResourceEntry>;
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
   #envSchema?: EnvSchema;
@@ -271,6 +286,7 @@ export class Gram<
     };
   }) {
     this.#tools = new Map();
+    this.#resources = new Map();
     this.#lax = Boolean(opts?.lax);
     this.#inputEnv = opts?.env;
     this.#envSchema = opts?.envSchema;
@@ -297,6 +313,97 @@ export class Gram<
 
   protected get inputEnv() {
     return this.#inputEnv;
+  }
+
+  protected get resources() {
+    return this.#resources;
+  }
+
+  /**
+   * Registers a resource with the Gram instance.
+   */
+  resource(def: ResourceEntry): this {
+    this.#resources.set(def.uri, def);
+    return this;
+  }
+
+  /**
+   * Registers a UI resource (MCP Apps / SEP-1865) with
+   * `text/html;profile=mcp-app` MIME type.
+   *
+   * Accepts either raw `content` (full HTML string) or `body` + optional `styles`
+   * which are wrapped in an HTML scaffold with a `Gram.onData(cb)` helper injected.
+   *
+   * If `uri` is omitted, it defaults to `ui://{name}`.
+   *
+   * @example
+   * ```ts
+   * gram.experimental_uiResource({
+   *   name: "bar-chart",
+   *   description: "Interactive bar chart",
+   *   title: "Bar Chart",
+   *   styles: `.chart { display: flex; align-items: end; gap: 4px; }`,
+   *   body: `
+   *     <div id="chart"></div>
+   *     <script>
+   *       Gram.onData((data) => {
+   *         document.getElementById("chart").textContent = JSON.stringify(data);
+   *       });
+   *     </script>
+   *   `,
+   * });
+   * ```
+   */
+  experimental_uiResource(
+    def: {
+      name: string;
+      description: string;
+      title?: string;
+      uri?: string;
+    } & (
+      | {
+          /** Raw HTML content for the resource. */
+          content: string | (() => string | Promise<string>);
+        }
+      | {
+          /** HTML body content — will be wrapped in a scaffold with Gram.onData() helper. */
+          body: string;
+          /** CSS styles injected into the scaffold's <style> tag. */
+          styles?: string;
+        }
+    ),
+  ): this {
+    const uri = def.uri ?? `ui://${def.name}`;
+    const content =
+      "body" in def ? buildUIScaffold(def.body, def.styles) : def.content;
+    return this.resource({
+      name: def.name,
+      uri,
+      description: def.description,
+      title: def.title,
+      mimeType: "text/html;profile=mcp-app",
+      content,
+    });
+  }
+
+  /**
+   * Reads a registered resource by URI and returns its content as a Response.
+   */
+  async handleResourceRead(request: { uri: string }): Promise<Response> {
+    const resource = this.#resources.get(request.uri);
+    if (!resource) {
+      throw new Error(`Resource not found: ${request.uri}`);
+    }
+    const content =
+      typeof resource.content === "function"
+        ? await resource.content()
+        : resource.content;
+    return new Response(content, {
+      status: 200,
+      headers: {
+        "Content-Type": resource.mimeType || "text/plain",
+      },
+    });
   }
 
   /**
@@ -345,6 +452,9 @@ export class Gram<
   ): Gram<Prettify<TTools & OtherTools>, Prettify<EnvSchema & OtherEnvSchema>> {
     for (const [name, tool] of other.tools) {
       this.tools.set(name, tool);
+    }
+    for (const [uri, resource] of other.resources) {
+      this.resources.set(uri, resource);
     }
 
     return this as any;
@@ -425,6 +535,7 @@ export class Gram<
           variable: string;
           gramEmail?: boolean;
         };
+        meta?: Record<string, unknown>;
       } = {
         name: tool.name,
         inputSchema: inputSchema,
@@ -435,6 +546,10 @@ export class Gram<
 
       if (tool.annotations != null) {
         result.annotations = tool.annotations;
+      }
+
+      if (tool.meta != null) {
+        result.meta = tool.meta;
       }
 
       if (tool.envSchema != null) {
@@ -453,11 +568,51 @@ export class Gram<
       return result;
     });
 
+    const resources: ManifestResource[] = Array.from(
+      this.#resources.values(),
+    ).map((r) => {
+      const entry: ManifestResource = {
+        name: r.name,
+        uri: r.uri,
+        description: r.description,
+      };
+      if (r.mimeType != null) {
+        entry.mimeType = r.mimeType;
+      }
+      if (r.title != null) {
+        entry.title = r.title;
+      }
+      return entry;
+    });
+
     return {
       version: "0.0.0",
       tools,
+      ...(resources.length > 0 ? { resources } : {}),
     };
   }
+}
+
+/**
+ * Wraps body HTML and optional styles in a full HTML document with the
+ * Gram.onData() communication helper injected.
+ */
+function buildUIScaffold(body: string, styles?: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<style>
+body{margin:0;padding:16px;font-family:system-ui,sans-serif}
+${styles ?? ""}
+</style>
+</head>
+<body>
+${body}
+<script>
+window.Gram={onData(cb){window.addEventListener("message",e=>{if(e.data!=null)cb(e.data)})}};
+</script>
+</body>
+</html>`;
 }
 
 function envMapFromJSONSchema(jsonSchema: unknown): ManifestVariables {

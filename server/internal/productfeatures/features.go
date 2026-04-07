@@ -10,9 +10,10 @@ import (
 type Feature string
 
 const (
-	FeatureLogs       Feature = "logs"
-	FeatureToolIOLogs Feature = "tool_io_logs"
-	FeatureRBAC       Feature = "rbac"
+	FeatureLogs           Feature = "logs"
+	FeatureToolIOLogs     Feature = "tool_io_logs"
+	FeatureRBAC           Feature = "rbac"
+	FeatureSessionCapture Feature = "session_capture"
 )
 
 type FeatureCache struct {

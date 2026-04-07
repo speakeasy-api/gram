@@ -17,6 +17,10 @@ export type GramProductFeatures = {
    */
   logsEnabled: boolean;
   /**
+   * Whether Claude Code session capture is enabled
+   */
+  sessionCaptureEnabled: boolean;
+  /**
    * Whether tool I/O logging is enabled
    */
   toolIoLogsEnabled: boolean;
@@ -29,11 +33,13 @@ export const GramProductFeatures$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     logs_enabled: z.boolean(),
+    session_capture_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "logs_enabled": "logsEnabled",
+      "session_capture_enabled": "sessionCaptureEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
     });
   }),

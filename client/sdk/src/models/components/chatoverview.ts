@@ -26,6 +26,10 @@ export type ChatOverview = {
    */
   numMessages: number;
   /**
+   * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
+   */
+  source?: string | undefined;
+  /**
    * The title of the chat
    */
   title: string;
@@ -50,6 +54,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
       external_user_id: z.optional(z.string()),
       id: z.string(),
       num_messages: z.int(),
+      source: z.optional(z.string()),
       title: z.string(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),

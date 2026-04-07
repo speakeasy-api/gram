@@ -6,7 +6,7 @@ import { FeatureName } from "@gram/client/models/components";
 import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText } from "lucide-react";
+import { Eye, FileText, Monitor } from "lucide-react";
 import { useState } from "react";
 
 export default function OrgLogs() {
@@ -15,29 +15,28 @@ export default function OrgLogs() {
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
     null,
   );
+  const [sessionCaptureEnabled, setSessionCaptureEnabled] = useState<
+    boolean | null
+  >(null);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
   const effectiveToolIoLogsEnabled =
     toolIoLogsEnabled ?? featuresData?.toolIoLogsEnabled ?? false;
+  const effectiveSessionCaptureEnabled =
+    sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
       onSuccess: (_, variables) => {
-        if (
-          variables.request.setProductFeatureRequestBody.featureName ===
-          FeatureName.Logs
-        ) {
-          setLogsEnabled(
-            variables.request.setProductFeatureRequestBody.enabled,
-          );
-        } else if (
-          variables.request.setProductFeatureRequestBody.featureName ===
-          FeatureName.ToolIoLogs
-        ) {
-          setToolIoLogsEnabled(
-            variables.request.setProductFeatureRequestBody.enabled,
-          );
+        const { featureName, enabled } =
+          variables.request.setProductFeatureRequestBody;
+        if (featureName === FeatureName.Logs) {
+          setLogsEnabled(enabled);
+        } else if (featureName === FeatureName.ToolIoLogs) {
+          setToolIoLogsEnabled(enabled);
+        } else if (featureName === FeatureName.SessionCapture) {
+          setSessionCaptureEnabled(enabled);
         }
       },
     });
@@ -71,6 +70,17 @@ export default function OrgLogs() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.ToolIoLogs,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleSetSessionCapture = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.SessionCapture,
           enabled,
         },
       },
@@ -150,6 +160,38 @@ export default function OrgLogs() {
                   onCheckedChange={handleSetToolIoLogs}
                   disabled={isMutatingLogs || !effectiveLogsEnabled}
                   aria-label="Record tool inputs and outputs"
+                />
+              )}
+            </Stack>
+
+            <div className="border-t border-border" />
+
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+            >
+              <Stack gap={1}>
+                <Stack direction="horizontal" align="center" gap={2}>
+                  <Monitor className="h-4 w-4 text-muted-foreground" />
+                  <Type variant="body" className="font-medium">
+                    Claude Code Session Capture
+                  </Type>
+                </Stack>
+                <Type
+                  variant="body"
+                  className="text-muted-foreground text-sm ml-6"
+                >
+                  Capture user prompts and assistant responses from Claude Code
+                  sessions. Sessions appear in the Agent Sessions tab.
+                </Type>
+              </Stack>
+              {!featuresLoading && (
+                <Switch
+                  checked={effectiveSessionCaptureEnabled}
+                  onCheckedChange={handleSetSessionCapture}
+                  disabled={isMutatingLogs || !effectiveLogsEnabled}
+                  aria-label="Enable Claude Code session capture"
                 />
               )}
             </Stack>

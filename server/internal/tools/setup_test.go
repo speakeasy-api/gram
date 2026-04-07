@@ -92,7 +92,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
-	funcs := testenv.NewFunctionsTestOrchestrator(t)
+	funcs := testenv.NewFunctionsTestOrchestrator(t, assetStorage)
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	f := &feature.InMemory{}

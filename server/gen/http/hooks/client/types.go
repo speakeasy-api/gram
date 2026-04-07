@@ -31,8 +31,31 @@ type ClaudeRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// The Claude Code session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// The working directory when the event fired
+	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
+	// Path to the conversation transcript file
+	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
 	// Additional hook-specific data
 	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
+	// How the session started: startup, resume, clear, compact (SessionStart only)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// The model identifier (SessionStart, Stop)
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The user's prompt text (UserPromptSubmit only)
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// Claude's final response text (Stop only)
+	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
+	// Whether a stop hook continuation is active (Stop only)
+	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
+	// Why the session ended (SessionEnd only)
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Type of notification: permission_prompt, idle_prompt, auth_success,
+	// elicitation_dialog (Notification only)
+	NotificationType *string `form:"notification_type,omitempty" json:"notification_type,omitempty" xml:"notification_type,omitempty"`
+	// Notification message text (Notification only)
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Notification title (Notification only)
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
 // CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
@@ -82,6 +105,8 @@ type ClaudeResponseBody struct {
 	Continue *bool `form:"continue,omitempty" json:"continue,omitempty" xml:"continue,omitempty"`
 	// Reason if blocked (SessionStart only)
 	StopReason *string `form:"stopReason,omitempty" json:"stopReason,omitempty" xml:"stopReason,omitempty"`
+	// Whether to suppress the hook's output
+	SuppressOutput *bool `form:"suppressOutput,omitempty" json:"suppressOutput,omitempty" xml:"suppressOutput,omitempty"`
 	// Hook-specific output as JSON object
 	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
 }
@@ -718,14 +743,25 @@ type OTELAttributeRequestBody struct {
 // "claude" endpoint of the "hooks" service.
 func NewClaudeRequestBody(p *hooks.ClaudeHookPayload) *ClaudeRequestBody {
 	body := &ClaudeRequestBody{
-		HookEventName: p.HookEventName,
-		ToolName:      p.ToolName,
-		ToolUseID:     p.ToolUseID,
-		ToolInput:     p.ToolInput,
-		ToolResponse:  p.ToolResponse,
-		Error:         p.Error,
-		IsInterrupt:   p.IsInterrupt,
-		SessionID:     p.SessionID,
+		HookEventName:        p.HookEventName,
+		ToolName:             p.ToolName,
+		ToolUseID:            p.ToolUseID,
+		ToolInput:            p.ToolInput,
+		ToolResponse:         p.ToolResponse,
+		Error:                p.Error,
+		IsInterrupt:          p.IsInterrupt,
+		SessionID:            p.SessionID,
+		Cwd:                  p.Cwd,
+		TranscriptPath:       p.TranscriptPath,
+		Source:               p.Source,
+		Model:                p.Model,
+		Prompt:               p.Prompt,
+		LastAssistantMessage: p.LastAssistantMessage,
+		StopHookActive:       p.StopHookActive,
+		Reason:               p.Reason,
+		NotificationType:     p.NotificationType,
+		Message:              p.Message,
+		Title:                p.Title,
 	}
 	if p.AdditionalData != nil {
 		body.AdditionalData = make(map[string]any, len(p.AdditionalData))
@@ -792,6 +828,7 @@ func NewClaudeHookResultOK(body *ClaudeResponseBody) *hooks.ClaudeHookResult {
 	v := &hooks.ClaudeHookResult{
 		Continue:           body.Continue,
 		StopReason:         body.StopReason,
+		SuppressOutput:     body.SuppressOutput,
 		HookSpecificOutput: body.HookSpecificOutput,
 	}
 

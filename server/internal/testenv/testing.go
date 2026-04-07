@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -29,16 +30,11 @@ func DefaultSiteURL(t *testing.T) *url.URL {
 
 }
 
-func NewFunctionsTestOrchestrator(t *testing.T) functions.Orchestrator {
+func NewFunctionsTestOrchestrator(t *testing.T, assetStore assets.BlobStore) functions.Orchestrator {
 	t.Helper()
 
 	codeRoot := t.TempDir()
-	root, err := os.OpenRoot(codeRoot)
-	require.NoError(t, err, "expected local functions runner code root to open")
-	t.Cleanup(func() {
-		require.NoError(t, root.Close(), "test functions runner root should close without error")
-	})
-	return functions.NewLocalRunner(root)
+	return functions.NewLocalRunner(NewLogger(t), codeRoot, DefaultSiteURL(t), assetStore)
 }
 
 func NewEncryptionClient(t *testing.T) *encryption.Client {
