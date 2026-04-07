@@ -179,7 +179,7 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 
 	invite, err := s.orgs.GetInvitation(ctx, payload.InvitationID)
 	switch {
-	case errors.Is(err, workos.ErrNotFound):
+	case workos.IsNotFound(err):
 		return oops.C(oops.CodeNotFound).Log(ctx, logger)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "get invitation").Log(ctx, logger)
@@ -239,7 +239,7 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteByTokenPayload) (*gen.OrganizationInvitationAccept, error) {
 	invite, err := s.orgs.FindInvitationByToken(ctx, payload.Token)
 	switch {
-	case errors.Is(err, workos.ErrNotFound):
+	case workos.IsNotFound(err):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "find invitation by token").Log(ctx, s.logger)

@@ -58,7 +58,7 @@ func TestService_RevokeInvite_NotFound(t *testing.T) {
 
 	expectWorkOSOrgAdminRole(t, ti.orgs)
 
-	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(nil, thirdpartyworkos.ErrNotFound).Once()
+	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(nil, &thirdpartyworkos.APIError{StatusCode: 404}).Once()
 
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
 		InvitationID: "test-invitation-id",

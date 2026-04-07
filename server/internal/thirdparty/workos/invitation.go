@@ -10,9 +10,6 @@ import (
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 )
 
-// ErrNotFound is returned when a WorkOS resource (invitation, user, etc.) does not exist.
-var ErrNotFound = errors.New("workos: not found")
-
 type InvitationState string
 
 const (
@@ -117,12 +114,12 @@ func (wc *Client) ResendInvitation(ctx context.Context, invitationID string) (*I
 }
 
 // FindInvitationByToken resolves an invitation from its token.
-// Returns ErrNotFound when the token does not match any invitation (WorkOS 404).
+// Returns *APIError (404) when the token does not match any invitation.
 func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Invitation, error) {
 	inv, err := wc.um.FindInvitationByToken(ctx, usermanagement.FindInvitationByTokenOpts{InvitationToken: token})
 	switch {
 	case isWorkOSNotFound(err):
-		return nil, ErrNotFound
+		return nil, &APIError{Method: "GET", Path: "find_invitation_by_token", StatusCode: http.StatusNotFound}
 	case err != nil:
 		return nil, fmt.Errorf("find invitation by token: %w", err)
 	}
@@ -132,12 +129,12 @@ func (wc *Client) FindInvitationByToken(ctx context.Context, token string) (*Inv
 }
 
 // GetInvitation returns an invitation by ID.
-// Returns ErrNotFound when the invitation does not exist (WorkOS 404).
+// Returns *APIError (404) when the invitation does not exist.
 func (wc *Client) GetInvitation(ctx context.Context, invitationID string) (*Invitation, error) {
 	inv, err := wc.um.GetInvitation(ctx, usermanagement.GetInvitationOpts{Invitation: invitationID})
 	switch {
 	case isWorkOSNotFound(err):
-		return nil, ErrNotFound
+		return nil, &APIError{Method: "GET", Path: "get_invitation", StatusCode: http.StatusNotFound}
 	case err != nil:
 		return nil, fmt.Errorf("get invitation: %w", err)
 	}

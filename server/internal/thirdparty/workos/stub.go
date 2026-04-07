@@ -257,7 +257,7 @@ func (s *StubClient) FindInvitationByToken(_ context.Context, token string) (*In
 		}
 	}
 
-	return nil, ErrNotFound
+	return nil, &APIError{Method: "GET", Path: "find_invitation_by_token", StatusCode: 404}
 }
 
 func (s *StubClient) GetInvitation(_ context.Context, invitationID string) (*Invitation, error) {
@@ -271,7 +271,7 @@ func (s *StubClient) GetInvitation(_ context.Context, invitationID string) (*Inv
 		}
 	}
 
-	return nil, ErrNotFound
+	return nil, &APIError{Method: "GET", Path: "get_invitation", StatusCode: 404}
 }
 
 func (s *StubClient) DeleteOrganizationMembership(_ context.Context, membershipID string) error {

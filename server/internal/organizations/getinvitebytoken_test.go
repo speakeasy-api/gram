@@ -47,7 +47,7 @@ func TestService_GetInviteByToken_NotFound(t *testing.T) {
 	_, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	ti.orgs.On("FindInvitationByToken", mock.Anything, "test-token").Return(nil, thirdpartyworkos.ErrNotFound)
+	ti.orgs.On("FindInvitationByToken", mock.Anything, "test-token").Return(nil, &thirdpartyworkos.APIError{StatusCode: 404})
 
 	res, err := ti.service.GetInviteByToken(ctx, &gen.GetInviteByTokenPayload{
 		Token: "test-token",

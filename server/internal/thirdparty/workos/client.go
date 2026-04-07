@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +31,12 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("workos api %s %s: status %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
+}
+
+// IsNotFound reports whether err is a WorkOS APIError with a 404 status code.
+func IsNotFound(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }
 
 // Client wraps WorkOS API calls for role and membership management.
