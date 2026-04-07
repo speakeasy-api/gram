@@ -3,7 +3,6 @@ package workos
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -33,10 +32,6 @@ type UpdateRoleOpts struct {
 }
 
 func (wc *Client) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	resp, err := wc.orgs.ListOrganizationRoles(ctx, organizations.ListOrganizationRolesOpts{
 		OrganizationID: orgID,
 	})
@@ -54,10 +49,6 @@ func (wc *Client) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
 // CreateRole creates a custom role for an organization via the WorkOS REST API.
 // The Go SDK does not expose role CRUD, so we use raw HTTP against the /authorization/ endpoints.
 func (wc *Client) CreateRole(ctx context.Context, orgID string, opts CreateRoleOpts) (*Role, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	path, err := url.JoinPath("/authorization/organizations", orgID, "roles")
 	if err != nil {
 		return nil, fmt.Errorf("build path: %w", err)
@@ -78,10 +69,6 @@ func (wc *Client) CreateRole(ctx context.Context, orgID string, opts CreateRoleO
 
 // UpdateRole updates a role by slug via the WorkOS REST API (PATCH).
 func (wc *Client) UpdateRole(ctx context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*Role, error) {
-	if wc == nil {
-		return nil, errors.New("workos client is not initialized")
-	}
-
 	path, err := url.JoinPath("/authorization/organizations", orgID, "roles", roleSlug)
 	if err != nil {
 		return nil, fmt.Errorf("build path: %w", err)
@@ -102,10 +89,6 @@ func (wc *Client) UpdateRole(ctx context.Context, orgID string, roleSlug string,
 
 // DeleteRole deletes a role by slug via the WorkOS REST API.
 func (wc *Client) DeleteRole(ctx context.Context, orgID string, roleSlug string) error {
-	if wc == nil {
-		return errors.New("workos client is not initialized")
-	}
-
 	path, err := url.JoinPath("/authorization/organizations", orgID, "roles", roleSlug)
 	if err != nil {
 		return fmt.Errorf("build path: %w", err)
