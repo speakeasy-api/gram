@@ -1,4 +1,4 @@
-package access_test
+package access
 
 import (
 	"errors"
@@ -6,10 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
+	trequire "github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -23,8 +22,8 @@ func TestService_CreateRole(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
+	trequire.True(t, ok)
+	trequire.NotNil(t, authCtx)
 
 	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
 		Name:        "Custom Builder",
@@ -61,22 +60,22 @@ func TestService_CreateRole(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1", "project-2"}},
-			{Scope: string(access.ScopeMCPConnect), Resources: nil},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1", "project-2"}},
+			{Scope: string(ScopeMCPConnect), Resources: nil},
 		},
 		MemberIds: []string{"user_1", "user_2"},
 	})
-	require.NoError(t, err)
-	require.Equal(t, "Custom Builder", role.Name)
-	require.Equal(t, "Can build selected resources", role.Description)
-	require.False(t, role.IsSystem)
-	require.Equal(t, 2, role.MemberCount)
-	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
-	require.Len(t, role.Grants, 2)
+	trequire.NoError(t, err)
+	trequire.Equal(t, "Custom Builder", role.Name)
+	trequire.Equal(t, "Can build selected resources", role.Description)
+	trequire.False(t, role.IsSystem)
+	trequire.Equal(t, 2, role.MemberCount)
+	trequire.Equal(t, mockRoleTimestamp, role.CreatedAt)
+	trequire.Equal(t, mockRoleTimestamp, role.UpdatedAt)
+	trequire.Len(t, role.Grants, 2)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
-	require.Len(t, grants, 3)
+	trequire.Len(t, grants, 3)
 }
 
 func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
@@ -93,11 +92,11 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
 		},
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "create role in workos")
+	trequire.Error(t, err)
+	trequire.Contains(t, err.Error(), "create role in workos")
 }
 
 func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testing.T) {
@@ -105,8 +104,8 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 
 	ctx, ti := newTestAccessService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
+	trequire.True(t, ok)
+	trequire.NotNil(t, authCtx)
 	existingRole := mockRole("role_existing", "Custom Builder", "org-custom-builder", "Can build selected resources")
 	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
 		Name:        "Custom Builder",
@@ -119,16 +118,16 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
 		},
 	})
-	require.NoError(t, err)
-	require.Equal(t, "role_existing", role.ID)
-	require.Equal(t, "Custom Builder", role.Name)
+	trequire.NoError(t, err)
+	trequire.Equal(t, "role_existing", role.ID)
+	trequire.Equal(t, "Custom Builder", role.Name)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
-	require.Len(t, grants, 1)
-	require.Equal(t, authCtx.ActiveOrganizationID, grants[0].OrganizationID)
+	trequire.Len(t, grants, 1)
+	trequire.Equal(t, authCtx.ActiveOrganizationID, grants[0].OrganizationID)
 }
 
 func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
@@ -140,11 +139,11 @@ func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 		Name:        "!!!",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
 		},
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "role name must contain at least one letter or digit")
+	trequire.Error(t, err)
+	trequire.Contains(t, err.Error(), "role name must contain at least one letter or digit")
 }
 
 func TestService_CreateRole_AuditLog(t *testing.T) {
@@ -152,7 +151,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleCreate)
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
 		Name:        "Audit Builder",
@@ -171,39 +170,39 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 		Name:        "Audit Builder",
 		Description: "Tracks audit writes",
 		Grants: []*gen.RoleGrant{{
-			Scope:     string(access.ScopeBuildRead),
+			Scope:     string(ScopeBuildRead),
 			Resources: []string{"project-1"},
 		}},
 	})
-	require.NoError(t, err)
-	require.NotNil(t, role)
+	trequire.NoError(t, err)
+	trequire.NotNil(t, role)
 
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessRoleCreate)
-	require.NoError(t, err)
-	require.Equal(t, string(audit.ActionAccessRoleCreate), record.Action)
-	require.Equal(t, "access_role", record.SubjectType)
-	require.Equal(t, "Audit Builder", record.SubjectDisplay)
-	require.Equal(t, "org-audit-builder", record.SubjectSlug)
-	require.Nil(t, record.BeforeSnapshot)
-	require.NotNil(t, record.AfterSnapshot)
+	trequire.NoError(t, err)
+	trequire.Equal(t, string(audit.ActionAccessRoleCreate), record.Action)
+	trequire.Equal(t, "access_role", record.SubjectType)
+	trequire.Equal(t, "Audit Builder", record.SubjectDisplay)
+	trequire.Equal(t, "org-audit-builder", record.SubjectSlug)
+	trequire.Nil(t, record.BeforeSnapshot)
+	trequire.NotNil(t, record.AfterSnapshot)
 
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
-	require.NoError(t, err)
-	require.Equal(t, "Audit Builder", afterSnapshot["Name"])
+	trequire.NoError(t, err)
+	trequire.Equal(t, "Audit Builder", afterSnapshot["Name"])
 	grants, ok := afterSnapshot["Grants"].([]any)
-	require.True(t, ok)
-	require.Len(t, grants, 1)
+	trequire.True(t, ok)
+	trequire.Len(t, grants, 1)
 	grant, ok := grants[0].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, string(access.ScopeBuildRead), grant["Scope"])
+	trequire.True(t, ok)
+	trequire.Equal(t, string(ScopeBuildRead), grant["Scope"])
 	resources, ok := grant["Resources"].([]any)
-	require.True(t, ok)
-	require.Len(t, resources, 1)
-	require.Equal(t, "project-1", resources[0])
+	trequire.True(t, ok)
+	trequire.Len(t, resources, 1)
+	trequire.Equal(t, "project-1", resources[0])
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleCreate)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
+	trequire.NoError(t, err)
+	trequire.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
@@ -211,8 +210,8 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
+	trequire.True(t, ok)
+	trequire.NotNil(t, authCtx)
 
 	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
 		Name:        "Broken Builder",
@@ -230,24 +229,24 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 	}, nil).Once()
 
 	inspectConn, err := pgxpool.New(ctx, ti.conn.Config().ConnString())
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 	t.Cleanup(inspectConn.Close)
 
 	_, err = ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Broken Builder",
 		Description: "Will fail grant sync",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
 		},
 		MemberIds: []string{"user_1", "user_2"},
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "sync grants for created role")
+	trequire.Error(t, err)
+	trequire.Contains(t, err.Error(), "sync grants for created role")
 
 	grants, err := accessrepo.New(inspectConn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, "org-broken-builder").String(),
 	})
-	require.NoError(t, err)
-	require.Empty(t, grants)
+	trequire.NoError(t, err)
+	trequire.Empty(t, grants)
 }

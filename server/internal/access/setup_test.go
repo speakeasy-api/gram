@@ -1,4 +1,4 @@
-package access_test
+package access
 
 import (
 	"context"
@@ -7,9 +7,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/require"
+	trequire "github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -43,7 +42,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service *access.Service
+	service *Service
 	conn    *pgxpool.Pool
 	roles   *MockRoleProvider
 }
@@ -57,10 +56,10 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	tracerProvider := testenv.NewTracerProvider(t)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
@@ -68,18 +67,18 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
+	trequire.True(t, ok)
+	trequire.NotNil(t, authCtx)
 
 	_, err = orgrepo.New(conn).SetOrgWorkosID(ctx, orgrepo.SetOrgWorkosIDParams{
 		WorkosID:       conv.PtrToPGText(conv.PtrEmpty("org_workos_test")),
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	roles := newMockRoleProvider(t)
 
-	svc := access.NewService(logger, tracerProvider, conn, sessionManager, roles, access.NewManager(logger, conn, nil))
+	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, nil))
 
 	return ctx, &testInstance{
 		service: svc,
@@ -88,7 +87,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func enterpriseCtx(ctx context.Context) context.Context {
+func enterpriseTestCtx(ctx context.Context) context.Context {
 	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		AccountType: "enterprise",
 	})
@@ -98,7 +97,7 @@ func newTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	return conn
 }
@@ -112,10 +111,10 @@ func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 		Slug:            "test-org",
 		SsoConnectionID: conv.PtrToPGText(nil),
 	})
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 }
 
-func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope access.Scope, resource string) {
+func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope Scope, resource string) {
 	t.Helper()
 
 	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
@@ -124,7 +123,7 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 		Scope:          string(scope),
 		Resource:       resource,
 	})
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 }
 
 func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal) []accessrepo.PrincipalGrant {
@@ -134,7 +133,7 @@ func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal.String(),
 	})
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	return grants
 }
@@ -149,18 +148,18 @@ func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 		PhotoUrl:    conv.PtrToPGText(nil),
 		Admin:       false,
 	})
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
 		WorkosID: conv.PtrToPGText(conv.PtrEmpty(workosUserID)),
 		ID:       userID,
 	})
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	err = orgrepo.New(conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
 		OrganizationID:     organizationID,
 		UserID:             userID,
 		WorkosMembershipID: conv.PtrToPGText(conv.PtrEmpty(workosMembershipID)),
 	})
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 }

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	trequire "github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -41,7 +41,7 @@ func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 }
 
 func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
@@ -61,7 +61,7 @@ func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
-	require.ErrorIs(t, err, ErrMissingGrants)
+	trequire.ErrorIs(t, err, ErrMissingGrants)
 }
 
 func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
@@ -98,8 +98,8 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 
 	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, code, shareableErr.Code)
+	trequire.ErrorAs(t, err, &shareableErr)
+	trequire.Equal(t, code, shareableErr.Code)
 }
 
 func testLogger(t *testing.T) *slog.Logger {

@@ -1,14 +1,13 @@
-package access_test
+package access
 
 import (
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
+	trequire "github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -19,8 +18,8 @@ func TestService_GetRole(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
+	trequire.True(t, ok)
+	trequire.NotNil(t, authCtx)
 
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
@@ -32,26 +31,26 @@ func TestService_GetRole(t *testing.T) {
 		mockMember("org_workos_test", "membership_3", "user_3", "admin"),
 	}, nil).Once()
 
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeBuildRead, "project-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), access.ScopeMCPConnect, access.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeMCPConnect, WildcardResource)
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
-	require.NoError(t, err)
-	require.Equal(t, "role_custom", role.ID)
-	require.Equal(t, "Custom Builder", role.Name)
-	require.Equal(t, "Can build selected resources", role.Description)
-	require.False(t, role.IsSystem)
-	require.Equal(t, 2, role.MemberCount)
-	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
-	require.Len(t, role.Grants, 2)
+	trequire.NoError(t, err)
+	trequire.Equal(t, "role_custom", role.ID)
+	trequire.Equal(t, "Custom Builder", role.Name)
+	trequire.Equal(t, "Can build selected resources", role.Description)
+	trequire.False(t, role.IsSystem)
+	trequire.Equal(t, 2, role.MemberCount)
+	trequire.Equal(t, mockRoleTimestamp, role.CreatedAt)
+	trequire.Equal(t, mockRoleTimestamp, role.UpdatedAt)
+	trequire.Len(t, role.Grants, 2)
 
 	grantsByScope := make(map[string]*gen.RoleGrant, len(role.Grants))
 	for _, grant := range role.Grants {
 		grantsByScope[grant.Scope] = grant
 	}
-	require.ElementsMatch(t, []string{"project-1"}, grantsByScope[string(access.ScopeBuildRead)].Resources)
-	require.Nil(t, grantsByScope[string(access.ScopeMCPConnect)].Resources)
+	trequire.ElementsMatch(t, []string{"project-1"}, grantsByScope[string(ScopeBuildRead)].Resources)
+	trequire.Nil(t, grantsByScope[string(ScopeMCPConnect)].Resources)
 }
 
 func TestService_GetRole_NotFound(t *testing.T) {
@@ -61,8 +60,8 @@ func TestService_GetRole_NotFound(t *testing.T) {
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_missing"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "role not found")
+	trequire.Error(t, err)
+	trequire.Contains(t, err.Error(), "role not found")
 }
 
 func TestService_GetRole_OrganizationNotLinkedToWorkOS(t *testing.T) {
@@ -70,8 +69,8 @@ func TestService_GetRole_OrganizationNotLinkedToWorkOS(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
+	trequire.True(t, ok)
+	trequire.NotNil(t, authCtx)
 
 	missingLinkOrgID := "org_without_workos_link"
 	seedOrganization(t, ctx, ti.conn, missingLinkOrgID)
@@ -91,8 +90,8 @@ func TestService_GetRole_OrganizationNotLinkedToWorkOS(t *testing.T) {
 	})
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "organization is not linked to WorkOS")
+	trequire.Error(t, err)
+	trequire.Contains(t, err.Error(), "organization is not linked to WorkOS")
 }
 
 func TestService_GetRole_WorkOSListRolesFailure(t *testing.T) {
@@ -102,6 +101,6 @@ func TestService_GetRole_WorkOSListRolesFailure(t *testing.T) {
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role(nil), errors.New("workos unavailable")).Once()
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "list roles from workos")
+	trequire.Error(t, err)
+	trequire.Contains(t, err.Error(), "list roles from workos")
 }

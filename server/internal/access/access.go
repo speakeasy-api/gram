@@ -12,8 +12,8 @@ type Check struct {
 	ResourceID string
 }
 
-// Require enforces that every check is satisfied by the grants in context.
-func Require(ctx context.Context, checks ...Check) error {
+// checkAll enforces that every check is satisfied by the grants in context.
+func require(ctx context.Context, checks ...Check) error {
 	if !isEnterpriseOrg(ctx) || isAPIKeyAuth(ctx) {
 		return nil
 	}
@@ -41,8 +41,8 @@ func Require(ctx context.Context, checks ...Check) error {
 	return nil
 }
 
-// RequireAny enforces that at least one check is satisfied by the grants in context.
-func RequireAny(ctx context.Context, checks ...Check) error {
+// checkAny enforces that at least one check is satisfied by the grants in context.
+func requireAny(ctx context.Context, checks ...Check) error {
 	if !isEnterpriseOrg(ctx) || isAPIKeyAuth(ctx) {
 		return nil
 	}
@@ -72,8 +72,8 @@ func RequireAny(ctx context.Context, checks ...Check) error {
 	return Denied(checks[0].Scope, checks[0].ResourceID)
 }
 
-// Filter returns the subset of candidate resource IDs allowed for the scope.
-func Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
+// filterAllowed returns the subset of candidate resource IDs allowed for the scope.
+func filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
 	if !isEnterpriseOrg(ctx) || isAPIKeyAuth(ctx) {
 		return resourceIDs, nil
 	}

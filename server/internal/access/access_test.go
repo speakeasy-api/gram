@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	trequire "github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -40,8 +40,8 @@ func TestRequire_allowsScopedGrant(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
+	err := require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	trequire.NoError(t, err)
 }
 
 func TestRequire_allowsWildcardGrant(t *testing.T) {
@@ -56,8 +56,8 @@ func TestRequire_allowsWildcardGrant(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
+	err := require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	trequire.NoError(t, err)
 }
 
 func TestRequire_deniesMissingGrant(t *testing.T) {
@@ -72,14 +72,14 @@ func TestRequire_deniesMissingGrant(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_456"})
-	require.Error(t, err)
+	err := require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_456"})
+	trequire.Error(t, err)
 
 	var deniedErr *DeniedError
-	require.ErrorAs(t, err, &deniedErr)
-	require.ErrorIs(t, err, ErrDenied)
-	require.Equal(t, ScopeBuildRead, deniedErr.Scope)
-	require.Equal(t, "proj_456", deniedErr.ResourceID)
+	trequire.ErrorAs(t, err, &deniedErr)
+	trequire.ErrorIs(t, err, ErrDenied)
+	trequire.Equal(t, ScopeBuildRead, deniedErr.Scope)
+	trequire.Equal(t, "proj_456", deniedErr.ResourceID)
 }
 
 func TestRequire_appliesAdditiveGrants(t *testing.T) {
@@ -106,32 +106,32 @@ func TestRequire_appliesAdditiveGrants(t *testing.T) {
 
 	// Wildcard build access means project-level read is allowed for any project,
 	// while the explicit MCP grant allows connecting only to the payments MCP.
-	err := Require(ctx,
+	err := require(ctx,
 		Check{Scope: ScopeBuildRead, ResourceID: "proj_beta"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "mcp_payments"},
 	)
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
 	// The same wildcard build access still allows the project read, but MCP
 	// access is denied because only mcp_payments is granted.
-	err = Require(ctx,
+	err = require(ctx,
 		Check{Scope: ScopeBuildRead, ResourceID: "proj_beta"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "mcp_analytics"},
 	)
-	require.Error(t, err)
+	trequire.Error(t, err)
 
 	var deniedErr *DeniedError
-	require.ErrorAs(t, err, &deniedErr)
-	require.ErrorIs(t, err, ErrDenied)
-	require.Equal(t, ScopeMCPConnect, deniedErr.Scope)
-	require.Equal(t, "mcp_analytics", deniedErr.ResourceID)
+	trequire.ErrorAs(t, err, &deniedErr)
+	trequire.ErrorIs(t, err, ErrDenied)
+	trequire.Equal(t, ScopeMCPConnect, deniedErr.Scope)
+	trequire.Equal(t, "mcp_analytics", deniedErr.ResourceID)
 }
 
 func TestRequire_requiresGrantsInContext(t *testing.T) {
 	t.Parallel()
 
-	err := Require(enterpriseCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.ErrorIs(t, err, ErrMissingGrants)
+	err := require(enterpriseCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	trequire.ErrorIs(t, err, ErrMissingGrants)
 }
 
 func TestRequire_rejectsEmptyResourceID(t *testing.T) {
@@ -146,13 +146,13 @@ func TestRequire_rejectsEmptyResourceID(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
-	require.Error(t, err)
+	err := require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
+	trequire.Error(t, err)
 
 	var invalidErr *InvalidCheckError
-	require.ErrorAs(t, err, &invalidErr)
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
+	trequire.ErrorAs(t, err, &invalidErr)
+	trequire.ErrorIs(t, err, ErrInvalidCheck)
+	trequire.Equal(t, ScopeBuildRead, invalidErr.Scope)
 }
 
 func TestRequire_rejectsWildcardResourceID(t *testing.T) {
@@ -167,28 +167,28 @@ func TestRequire_rejectsWildcardResourceID(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: WildcardResource})
-	require.Error(t, err)
+	err := require(ctx, Check{Scope: ScopeBuildRead, ResourceID: WildcardResource})
+	trequire.Error(t, err)
 
 	var invalidErr *InvalidCheckError
-	require.ErrorAs(t, err, &invalidErr)
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
-	require.Equal(t, WildcardResource, invalidErr.ResourceID)
+	trequire.ErrorAs(t, err, &invalidErr)
+	trequire.ErrorIs(t, err, ErrInvalidCheck)
+	trequire.Equal(t, ScopeBuildRead, invalidErr.Scope)
+	trequire.Equal(t, WildcardResource, invalidErr.ResourceID)
 }
 
 func TestRequire_requiresAtLeastOneCheck(t *testing.T) {
 	t.Parallel()
 
-	err := Require(enterpriseCtx())
-	require.ErrorIs(t, err, ErrNoChecks)
+	err := require(enterpriseCtx())
+	trequire.ErrorIs(t, err, ErrNoChecks)
 }
 
 func TestRequire_skipsForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 
-	err := Require(nonEnterpriseCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
+	err := require(nonEnterpriseCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	trequire.NoError(t, err)
 }
 
 func TestRequireAny_allowsWhenAnyCheckMatches(t *testing.T) {
@@ -203,11 +203,11 @@ func TestRequireAny_allowsWhenAnyCheckMatches(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := RequireAny(ctx,
+	err := requireAny(ctx,
 		Check{Scope: ScopeMCPConnect, ResourceID: "mcp:a"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "tool:b"},
 	)
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 }
 
 func TestRequireAny_deniesWhenNoCheckMatches(t *testing.T) {
@@ -222,24 +222,24 @@ func TestRequireAny_deniesWhenNoCheckMatches(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := RequireAny(ctx,
+	err := requireAny(ctx,
 		Check{Scope: ScopeMCPConnect, ResourceID: "mcp:a"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "tool:b"},
 	)
-	require.Error(t, err)
+	trequire.Error(t, err)
 
 	var deniedErr *DeniedError
-	require.ErrorAs(t, err, &deniedErr)
-	require.ErrorIs(t, err, ErrDenied)
-	require.Equal(t, ScopeMCPConnect, deniedErr.Scope)
-	require.Equal(t, "mcp:a", deniedErr.ResourceID)
+	trequire.ErrorAs(t, err, &deniedErr)
+	trequire.ErrorIs(t, err, ErrDenied)
+	trequire.Equal(t, ScopeMCPConnect, deniedErr.Scope)
+	trequire.Equal(t, "mcp:a", deniedErr.ResourceID)
 }
 
 func TestRequireAny_requiresGrantsInContext(t *testing.T) {
 	t.Parallel()
 
-	err := RequireAny(enterpriseCtx(), Check{Scope: ScopeMCPConnect, ResourceID: "tool:b"})
-	require.ErrorIs(t, err, ErrMissingGrants)
+	err := requireAny(enterpriseCtx(), Check{Scope: ScopeMCPConnect, ResourceID: "tool:b"})
+	trequire.ErrorIs(t, err, ErrMissingGrants)
 }
 
 func TestRequireAny_rejectsEmptyResourceID(t *testing.T) {
@@ -254,16 +254,16 @@ func TestRequireAny_rejectsEmptyResourceID(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := RequireAny(ctx,
+	err := requireAny(ctx,
 		Check{Scope: ScopeMCPConnect, ResourceID: "mcp:a"},
 		Check{Scope: ScopeMCPConnect, ResourceID: ""},
 	)
-	require.Error(t, err)
+	trequire.Error(t, err)
 
 	var invalidErr *InvalidCheckError
-	require.ErrorAs(t, err, &invalidErr)
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	require.Equal(t, ScopeMCPConnect, invalidErr.Scope)
+	trequire.ErrorAs(t, err, &invalidErr)
+	trequire.ErrorIs(t, err, ErrInvalidCheck)
+	trequire.Equal(t, ScopeMCPConnect, invalidErr.Scope)
 }
 
 func TestRequireAny_rejectsWildcardResourceID(t *testing.T) {
@@ -278,31 +278,31 @@ func TestRequireAny_rejectsWildcardResourceID(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	err := RequireAny(ctx,
+	err := requireAny(ctx,
 		Check{Scope: ScopeMCPConnect, ResourceID: "mcp:a"},
 		Check{Scope: ScopeMCPConnect, ResourceID: WildcardResource},
 	)
-	require.Error(t, err)
+	trequire.Error(t, err)
 
 	var invalidErr *InvalidCheckError
-	require.ErrorAs(t, err, &invalidErr)
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	require.Equal(t, ScopeMCPConnect, invalidErr.Scope)
-	require.Equal(t, WildcardResource, invalidErr.ResourceID)
+	trequire.ErrorAs(t, err, &invalidErr)
+	trequire.ErrorIs(t, err, ErrInvalidCheck)
+	trequire.Equal(t, ScopeMCPConnect, invalidErr.Scope)
+	trequire.Equal(t, WildcardResource, invalidErr.ResourceID)
 }
 
 func TestRequireAny_requiresAtLeastOneCheck(t *testing.T) {
 	t.Parallel()
 
-	err := RequireAny(enterpriseCtx())
-	require.ErrorIs(t, err, ErrNoChecks)
+	err := requireAny(enterpriseCtx())
+	trequire.ErrorIs(t, err, ErrNoChecks)
 }
 
 func TestRequireAny_skipsForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 
-	err := RequireAny(nonEnterpriseCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
+	err := requireAny(nonEnterpriseCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	trequire.NoError(t, err)
 }
 
 func TestFilter_returnsAllToolsForWildcardMCPGrant(t *testing.T) {
@@ -317,9 +317,9 @@ func TestFilter_returnsAllToolsForWildcardMCPGrant(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	resourceIDs, err := Filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC", "toolD"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"toolA", "toolB", "toolC", "toolD"}, resourceIDs)
+	resourceIDs, err := filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC", "toolD"})
+	trequire.NoError(t, err)
+	trequire.Equal(t, []string{"toolA", "toolB", "toolC", "toolD"}, resourceIDs)
 }
 
 func TestFilter_returnsGrantedToolSubsetForMCPList(t *testing.T) {
@@ -340,9 +340,9 @@ func TestFilter_returnsGrantedToolSubsetForMCPList(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	resourceIDs, err := Filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC", "toolD"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"toolA", "toolB"}, resourceIDs)
+	resourceIDs, err := filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC", "toolD"})
+	trequire.NoError(t, err)
+	trequire.Equal(t, []string{"toolA", "toolB"}, resourceIDs)
 }
 
 func TestFilter_returnsAllProjectsForWildcardBuildGrant(t *testing.T) {
@@ -357,9 +357,9 @@ func TestFilter_returnsAllProjectsForWildcardBuildGrant(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	resourceIDs, err := Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"proj:123", "proj:456"}, resourceIDs)
+	resourceIDs, err := filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
+	trequire.NoError(t, err)
+	trequire.Equal(t, []string{"proj:123", "proj:456"}, resourceIDs)
 }
 
 func TestFilter_returnsOnlyGrantedProjectForProjectList(t *testing.T) {
@@ -374,18 +374,18 @@ func TestFilter_returnsOnlyGrantedProjectForProjectList(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	resourceIDs, err := Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"proj:123"}, resourceIDs)
+	resourceIDs, err := filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
+	trequire.NoError(t, err)
+	trequire.Equal(t, []string{"proj:123"}, resourceIDs)
 }
 
 func TestFilter_requiresGrantsInContext(t *testing.T) {
 	t.Parallel()
 
-	resourceIDs, err := Filter(enterpriseCtx(), ScopeBuildRead, []string{"proj_alpha"})
-	require.Error(t, err)
-	require.Nil(t, resourceIDs)
-	require.ErrorIs(t, err, ErrMissingGrants)
+	resourceIDs, err := filter(enterpriseCtx(), ScopeBuildRead, []string{"proj_alpha"})
+	trequire.Error(t, err)
+	trequire.Nil(t, resourceIDs)
+	trequire.ErrorIs(t, err, ErrMissingGrants)
 }
 
 func TestFilter_rejectsEmptyResourceID(t *testing.T) {
@@ -400,14 +400,14 @@ func TestFilter_rejectsEmptyResourceID(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	resourceIDs, err := Filter(ctx, ScopeBuildRead, []string{"proj_alpha", ""})
-	require.Error(t, err)
-	require.Nil(t, resourceIDs)
+	resourceIDs, err := filter(ctx, ScopeBuildRead, []string{"proj_alpha", ""})
+	trequire.Error(t, err)
+	trequire.Nil(t, resourceIDs)
 
 	var invalidErr *InvalidCheckError
-	require.ErrorAs(t, err, &invalidErr)
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
+	trequire.ErrorAs(t, err, &invalidErr)
+	trequire.ErrorIs(t, err, ErrInvalidCheck)
+	trequire.Equal(t, ScopeBuildRead, invalidErr.Scope)
 }
 
 func TestFilter_rejectsWildcardResourceID(t *testing.T) {
@@ -422,43 +422,43 @@ func TestFilter_rejectsWildcardResourceID(t *testing.T) {
 
 	ctx := GrantsToContext(enterpriseCtx(), grants)
 
-	resourceIDs, err := Filter(ctx, ScopeBuildRead, []string{"proj_alpha", WildcardResource})
-	require.Error(t, err)
-	require.Nil(t, resourceIDs)
+	resourceIDs, err := filter(ctx, ScopeBuildRead, []string{"proj_alpha", WildcardResource})
+	trequire.Error(t, err)
+	trequire.Nil(t, resourceIDs)
 
 	var invalidErr *InvalidCheckError
-	require.ErrorAs(t, err, &invalidErr)
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	require.Equal(t, ScopeBuildRead, invalidErr.Scope)
-	require.Equal(t, WildcardResource, invalidErr.ResourceID)
+	trequire.ErrorAs(t, err, &invalidErr)
+	trequire.ErrorIs(t, err, ErrInvalidCheck)
+	trequire.Equal(t, ScopeBuildRead, invalidErr.Scope)
+	trequire.Equal(t, WildcardResource, invalidErr.ResourceID)
 }
 
 func TestFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 
-	resourceIDs, err := Filter(nonEnterpriseCtx(), ScopeBuildRead, []string{"proj_123", "proj_456"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
+	resourceIDs, err := filter(nonEnterpriseCtx(), ScopeBuildRead, []string{"proj_123", "proj_456"})
+	trequire.NoError(t, err)
+	trequire.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }
 
 func TestRequire_skipsForAPIKeyAuth(t *testing.T) {
 	t.Parallel()
 
-	err := Require(enterpriseAPIKeyCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
+	err := require(enterpriseAPIKeyCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	trequire.NoError(t, err)
 }
 
 func TestRequireAny_skipsForAPIKeyAuth(t *testing.T) {
 	t.Parallel()
 
-	err := RequireAny(enterpriseAPIKeyCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
+	err := requireAny(enterpriseAPIKeyCtx(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	trequire.NoError(t, err)
 }
 
 func TestFilter_skipsForAPIKeyAuth(t *testing.T) {
 	t.Parallel()
 
-	resourceIDs, err := Filter(enterpriseAPIKeyCtx(), ScopeBuildRead, []string{"proj_123", "proj_456"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
+	resourceIDs, err := filter(enterpriseAPIKeyCtx(), ScopeBuildRead, []string{"proj_123", "proj_456"})
+	trequire.NoError(t, err)
+	trequire.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }

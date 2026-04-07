@@ -1,66 +1,65 @@
-package access_test
+package access
 
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	trequire "github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	t.Parallel()
 
-	ctx := enterpriseCtx(t.Context())
+	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
 	organizationID := "org_access_require_integration"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_require_integration")
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "role_require_integration")
 
 	seedOrganization(t, ctx, conn, organizationID)
-	seedGrant(t, ctx, conn, organizationID, userPrincipal, access.ScopeBuildRead, access.WildcardResource)
-	seedGrant(t, ctx, conn, organizationID, rolePrincipal, access.ScopeMCPConnect, "toolA")
+	seedGrant(t, ctx, conn, organizationID, userPrincipal, ScopeBuildRead, WildcardResource)
+	seedGrant(t, ctx, conn, organizationID, rolePrincipal, ScopeMCPConnect, "toolA")
 
-	grants, err := access.LoadGrants(ctx, conn, organizationID, []urn.Principal{userPrincipal, rolePrincipal})
-	require.NoError(t, err)
+	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{userPrincipal, rolePrincipal})
+	trequire.NoError(t, err)
 
-	ctx = access.GrantsToContext(ctx, grants)
+	ctx = GrantsToContext(ctx, grants)
 
-	err = access.Require(ctx,
-		access.Check{Scope: access.ScopeBuildRead, ResourceID: "proj:123"},
-		access.Check{Scope: access.ScopeMCPConnect, ResourceID: "toolA"},
+	err = require(ctx,
+		Check{Scope: ScopeBuildRead, ResourceID: "proj:123"},
+		Check{Scope: ScopeMCPConnect, ResourceID: "toolA"},
 	)
-	require.NoError(t, err)
+	trequire.NoError(t, err)
 
-	err = access.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: "toolB"})
-	require.Error(t, err)
+	err = require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolB"})
+	trequire.Error(t, err)
 }
 
 func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	t.Parallel()
 
-	ctx := enterpriseCtx(t.Context())
+	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
 	organizationID := "org_access_filter_integration"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_filter_integration")
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "role_filter_integration")
 
 	seedOrganization(t, ctx, conn, organizationID)
-	seedGrant(t, ctx, conn, organizationID, userPrincipal, access.ScopeBuildRead, "proj:123")
-	seedGrant(t, ctx, conn, organizationID, rolePrincipal, access.ScopeMCPConnect, "toolA")
-	seedGrant(t, ctx, conn, organizationID, rolePrincipal, access.ScopeMCPConnect, "toolB")
+	seedGrant(t, ctx, conn, organizationID, userPrincipal, ScopeBuildRead, "proj:123")
+	seedGrant(t, ctx, conn, organizationID, rolePrincipal, ScopeMCPConnect, "toolA")
+	seedGrant(t, ctx, conn, organizationID, rolePrincipal, ScopeMCPConnect, "toolB")
 
-	grants, err := access.LoadGrants(ctx, conn, organizationID, []urn.Principal{userPrincipal, rolePrincipal})
-	require.NoError(t, err)
+	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{userPrincipal, rolePrincipal})
+	trequire.NoError(t, err)
 
-	ctx = access.GrantsToContext(ctx, grants)
+	ctx = GrantsToContext(ctx, grants)
 
-	projectIDs, err := access.Filter(ctx, access.ScopeBuildRead, []string{"proj:123", "proj:456"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"proj:123"}, projectIDs)
+	projectIDs, err := filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
+	trequire.NoError(t, err)
+	trequire.Equal(t, []string{"proj:123"}, projectIDs)
 
-	toolIDs, err := access.Filter(ctx, access.ScopeMCPConnect, []string{"toolA", "toolB", "toolC"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"toolA", "toolB"}, toolIDs)
+	toolIDs, err := filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC"})
+	trequire.NoError(t, err)
+	trequire.Equal(t, []string{"toolA", "toolB"}, toolIDs)
 }

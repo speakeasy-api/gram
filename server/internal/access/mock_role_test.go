@@ -1,4 +1,4 @@
-package access_test
+package access
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
+	trequire "github.com/stretchr/testify/require"
 
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -25,7 +25,7 @@ func newMockRoleProvider(t *testing.T) *MockRoleProvider {
 
 	roles := &MockRoleProvider{}
 	t.Cleanup(func() {
-		require.True(t, roles.AssertExpectations(t))
+		trequire.True(t, roles.AssertExpectations(t))
 	})
 
 	return roles

@@ -43,7 +43,7 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 		return nil
 	}
 
-	if err := Require(ctx, checks...); err != nil {
+	if err := require(ctx, checks...); err != nil {
 		return m.mapError(ctx, err)
 	}
 
@@ -59,7 +59,7 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 		return nil
 	}
 
-	if err := RequireAny(ctx, checks...); err != nil {
+	if err := requireAny(ctx, checks...); err != nil {
 		return m.mapError(ctx, err)
 	}
 
@@ -75,7 +75,7 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 		return resourceIDs, nil
 	}
 
-	resourceIDs, err = Filter(ctx, scope, resourceIDs)
+	resourceIDs, err = filter(ctx, scope, resourceIDs)
 	if err != nil {
 		return nil, m.mapError(ctx, err)
 	}
