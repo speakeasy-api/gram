@@ -489,13 +489,20 @@ export function PlaygroundAuth({
               id={`auth-${envVar.id}`}
               value={displayValue}
               onChange={(newValue) => {
-                if (isEditable) {
-                  setEditedKeys((prev) => new Set(prev).add(envVar.key));
-                  setUserProvidedValues((prev) => ({
-                    ...prev,
-                    [envVar.key]: newValue,
-                  }));
+                if (!isEditable) return;
+                // If this is the first edit of a previously-masked field,
+                // strip the PASSWORD_MASK prefix so it doesn't contaminate
+                // the credential the user is typing.
+                const wasEditedBefore = editedKeys.has(envVar.key);
+                let cleanValue = newValue;
+                if (!wasEditedBefore && newValue.startsWith(PASSWORD_MASK)) {
+                  cleanValue = newValue.slice(PASSWORD_MASK.length);
                 }
+                setEditedKeys((prev) => new Set(prev).add(envVar.key));
+                setUserProvidedValues((prev) => ({
+                  ...prev,
+                  [envVar.key]: cleanValue,
+                }));
               }}
               placeholder={placeholder}
               className="font-mono text-xs h-7"
