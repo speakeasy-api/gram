@@ -312,9 +312,6 @@ export function ChatLogsTable({
                     <span className="truncate max-w-[120px]">
                       {chat.externalUserId || "anonymous"}
                     </span>
-                    {chat.externalUserId && (
-                      <CopyButton value={chat.externalUserId} label="User ID" />
-                    )}
                   </span>
                   {source && (
                     <span className="flex items-center gap-1.5">
