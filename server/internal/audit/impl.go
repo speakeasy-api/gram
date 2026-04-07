@@ -34,24 +34,36 @@ import (
 
 const listAuditLogsPageSize = 50
 
+type AccessContextPreparer interface {
+	PrepareContext(ctx context.Context) (context.Context, error)
+}
+
+// RequireOrgReadFn injects RBAC enforcement without importing access here,
+// which would create an import cycle because access depends on audit.
+type RequireOrgReadFn func(ctx context.Context, organizationID string) error
+
 type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
+	// access already depends on audit for log writers, so inject the concrete
+	// check here to avoid an import cycle.
+	requireOrgRead RequireOrgReadFn
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader AccessContextPreparer, requireOrgRead RequireOrgReadFn) *Service {
 	logger = logger.With(attr.SlogComponent("audit"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/audit"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, accessLoader),
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/audit"),
+		logger:         logger,
+		db:             db,
+		auth:           auth.New(logger, db, sessions, accessLoader),
+		requireOrgRead: requireOrgRead,
 	}
 }
 
@@ -73,6 +85,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.requireOrgRead(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
 	}
 
 	projectID, err := s.resolveProjectID(ctx, authCtx.ActiveOrganizationID, conv.PtrValOrEmpty(payload.ProjectSlug, ""))
@@ -130,6 +145,9 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.requireOrgRead(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
 	}
 
 	projectID, err := s.resolveProjectID(ctx, authCtx.ActiveOrganizationID, conv.PtrValOrEmpty(payload.ProjectSlug, ""))
