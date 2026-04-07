@@ -15,6 +15,7 @@ import (
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
@@ -132,9 +133,9 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 	)
 
 	// Create supporting services
-	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, access.NewManager(logger, conn, nil))
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthogClient, testenv.DefaultSiteURL(t), mcpRegistryClient, access.NewManager(logger, conn, nil))
-	assetsSvc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", access.NewManager(logger, conn, nil))
+	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthogClient, testenv.DefaultSiteURL(t), mcpRegistryClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	assetsSvc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		agentsService:  agentsService,

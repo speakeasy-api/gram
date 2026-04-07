@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
@@ -76,7 +77,7 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, storage, "test-jwt-secret", access.NewManager(logger, conn, nil))
+	svc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, storage, "test-jwt-secret", access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 	repository := repo.New(conn)
 
 	return ctx, &testInstance{

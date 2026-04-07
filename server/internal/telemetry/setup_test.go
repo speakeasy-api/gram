@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -107,7 +108,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient, access.NewManager(logger, conn, nil))
+	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		service:            svc,

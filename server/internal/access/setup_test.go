@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -78,7 +79,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	roles := newMockRoleProvider(t)
 
-	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, nil))
+	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		service: svc,
