@@ -687,8 +687,8 @@ function HooksInnerContent({
               (summaryData.users && summaryData.users.length > 0) ||
               (summaryData.skills && summaryData.skills.length > 0)) && (
               <div className="mb-4 border rounded-lg overflow-hidden">
-                {summaryView === "servers" &&
-                  summaryData.servers.length > 0 && (
+                {summaryData.servers.length > 0 && (
+                  <div className={summaryView !== "servers" ? "hidden" : ""}>
                     <HooksServerTable
                       servers={summaryData.servers}
                       onFilterSelect={addFilter}
@@ -696,26 +696,27 @@ function HooksInnerContent({
                       onSummaryViewChange={onSummaryViewChange}
                       serverNameMappings={serverNameMappings}
                     />
-                  )}
-                {summaryView === "users" &&
-                  summaryData.users &&
-                  summaryData.users.length > 0 && (
+                  </div>
+                )}
+                {summaryData.users && summaryData.users.length > 0 && (
+                  <div className={summaryView !== "users" ? "hidden" : ""}>
                     <HooksUserTable
                       users={summaryData.users}
                       onFilterSelect={addFilter}
                       summaryView={summaryView}
                       onSummaryViewChange={onSummaryViewChange}
                     />
-                  )}
-                {summaryView === "skills" &&
-                  summaryData.skills &&
-                  summaryData.skills.length > 0 && (
+                  </div>
+                )}
+                {summaryData.skills && summaryData.skills.length > 0 && (
+                  <div className={summaryView !== "skills" ? "hidden" : ""}>
                     <HooksSkillTable
                       skills={summaryData.skills}
                       summaryView={summaryView}
                       onSummaryViewChange={onSummaryViewChange}
                     />
-                  )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1475,6 +1476,7 @@ function HookTraceRow({
 
   const serverName = trace.toolSource;
   const toolName = trace.toolName;
+  const skillName = trace.skillName;
   const userEmail = trace.userEmail;
   const hookSource = trace.hookSource;
 
@@ -1485,6 +1487,15 @@ function HookTraceRow({
   }, [serverName, serverNameMappings.rawToDisplay]);
 
   const serverNameBadge = useMemo(() => {
+    // For skills, show [Skill] badge
+    if (toolName === "Skill" && skillName) {
+      return (
+        <span className="text-xs font-mono truncate px-2 py-1 rounded-md shrink-0 bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-medium">
+          Skill
+        </span>
+      );
+    }
+
     const isLocal = !serverName;
     return (
       <span
@@ -1498,7 +1509,7 @@ function HookTraceRow({
         {displayServerName || "local"}
       </span>
     );
-  }, [displayServerName]);
+  }, [displayServerName, toolName, skillName]);
 
   const statusConfig = useMemo(() => {
     if (trace.hookStatus === "failure") {
@@ -1545,7 +1556,7 @@ function HookTraceRow({
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {serverNameBadge}
           <span className="text-sm font-mono truncate">
-            {toolName || "unknown"}
+            {toolName === "Skill" && skillName ? skillName : toolName || "unknown"}
           </span>
         </div>
 
