@@ -1391,7 +1391,6 @@ func unmarshalOrganizationInvitationResponseBodyToOrganizationsOrganizationInvit
 		State:          *v.State,
 		AcceptedAt:     v.AcceptedAt,
 		RevokedAt:      v.RevokedAt,
-		RoleSlug:       v.RoleSlug,
 		OrganizationID: *v.OrganizationID,
 		InviterUserID:  v.InviterUserID,
 		ExpiresAt:      v.ExpiresAt,

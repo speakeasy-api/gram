@@ -101,8 +101,6 @@ type OrganizationInvitation struct {
 	AcceptedAt *string
 	// When the invitation was revoked.
 	RevokedAt *string
-	// WorkOS role slug for the invitee.
-	RoleSlug *string
 	// Gram organization ID.
 	OrganizationID string
 	// Gram user ID of the inviter, when known.

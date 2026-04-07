@@ -151,10 +151,6 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	}
 
 	out := invitationToGen(invite, ac.ActiveOrganizationID, &ac.UserID)
-	if payload.RoleSlug != nil && *payload.RoleSlug != "" {
-		rs := *payload.RoleSlug
-		out.RoleSlug = &rs
-	}
 	return out, nil
 }
 
@@ -510,7 +506,6 @@ func invitationToGen(inv *workos.Invitation, gramOrganizationID string, inviterG
 		State:          string(inv.State),
 		AcceptedAt:     optionalTimeString(inv.AcceptedAt),
 		RevokedAt:      optionalTimeString(inv.RevokedAt),
-		RoleSlug:       nil,
 		OrganizationID: gramOrganizationID,
 		InviterUserID:  inviter,
 		ExpiresAt:      optionalTimeString(inv.ExpiresAt),

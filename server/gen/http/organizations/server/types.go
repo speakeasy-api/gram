@@ -34,8 +34,6 @@ type SendInviteResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// WorkOS role slug for the invitee.
-	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 	// Gram organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Gram user ID of the inviter, when known.
@@ -1198,8 +1196,6 @@ type OrganizationInvitationResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// WorkOS role slug for the invitee.
-	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 	// Gram organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Gram user ID of the inviter, when known.
@@ -1233,7 +1229,6 @@ func NewSendInviteResponseBody(res *organizations.OrganizationInvitation) *SendI
 		State:          res.State,
 		AcceptedAt:     res.AcceptedAt,
 		RevokedAt:      res.RevokedAt,
-		RoleSlug:       res.RoleSlug,
 		OrganizationID: res.OrganizationID,
 		InviterUserID:  res.InviterUserID,
 		ExpiresAt:      res.ExpiresAt,

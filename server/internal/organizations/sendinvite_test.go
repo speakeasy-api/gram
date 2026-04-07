@@ -57,7 +57,6 @@ func TestService_SendInvite(t *testing.T) {
 	require.Equal(t, expiresAt, *invite.ExpiresAt)
 	require.Equal(t, createdAt, invite.CreatedAt)
 	require.Equal(t, updatedAt, invite.UpdatedAt)
-	require.Nil(t, invite.RoleSlug)
 }
 
 func TestService_SendInvite_WithRoleSlug(t *testing.T) {
@@ -100,8 +99,6 @@ func TestService_SendInvite_WithRoleSlug(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, invite)
 	require.Equal(t, "test-invitation-id", invite.ID)
-	require.NotNil(t, invite.RoleSlug)
-	require.Equal(t, "test-role", *invite.RoleSlug)
 }
 
 func TestService_SendInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {

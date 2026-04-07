@@ -19,7 +19,6 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 	Attribute("revoked_at", String, "When the invitation was revoked.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("role_slug", String, "WorkOS role slug for the invitee.")
 	Attribute("organization_id", String, "Gram organization ID.")
 	Attribute("inviter_user_id", String, "Gram user ID of the inviter, when known.")
 	Attribute("expires_at", String, "When the invitation expires.", func() {
