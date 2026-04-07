@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -441,6 +443,18 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		}
 		if orgMembership == nil {
 			continue
+		}
+
+		// Link the organization to its WorkOS org ID if not already linked.
+		if _, err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+			WorkosID:       conv.ToPGText(org.ID),
+			OrganizationID: org.ID,
+		}); err != nil {
+			// SetOrgWorkosID only updates when workos_id IS NULL, so
+			// pgx.ErrNoRows means it was already linked — not an error.
+			if !errors.Is(err, pgx.ErrNoRows) {
+				s.logger.ErrorContext(ctx, "failed to set org workos ID", attr.SlogError(err))
+			}
 		}
 
 		if err := s.orgRepo.AttachWorkOSUserToOrg(
