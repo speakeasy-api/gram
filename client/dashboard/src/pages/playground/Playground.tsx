@@ -418,6 +418,9 @@ export function ToolsetPanel({
         authSettings={
           toolset ? (
             <PlaygroundAuth
+              // Force remount on toolset change so user-provided values
+              // and edited keys reset and don't leak across toolsets.
+              key={toolset.slug}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               toolset={toolset as any}
               onPlaygroundEnvironmentSlug={onPlaygroundEnvironmentSlug}

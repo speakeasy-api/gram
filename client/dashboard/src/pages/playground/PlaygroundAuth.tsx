@@ -390,16 +390,24 @@ export function PlaygroundAuth({
     );
   }, [playgroundEnv.exists, playgroundEnv.slug, onPlaygroundEnvironmentSlug]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const entriesToUpdate = Object.entries(userProvidedValues)
       .filter(([key, value]) => value.trim() && editedKeys.has(key))
       .map(([name, value]) => ({ name, value }));
     const entriesToRemove = Array.from(editedKeys).filter(
       (key) => !userProvidedValues[key]?.trim(),
     );
-    if (entriesToUpdate.length > 0 || entriesToRemove.length > 0) {
-      playgroundEnv.save(entriesToUpdate, entriesToRemove);
+    if (entriesToUpdate.length === 0 && entriesToRemove.length === 0) {
+      return;
+    }
+    try {
+      await playgroundEnv.save(entriesToUpdate, entriesToRemove);
+      // Only clear edited state on success — on failure, keep the typed
+      // values so the user can retry without retyping.
       setEditedKeys(new Set());
+      setUserProvidedValues({});
+    } catch {
+      // Error toast is already shown by usePlaygroundEnvironment.
     }
   };
 

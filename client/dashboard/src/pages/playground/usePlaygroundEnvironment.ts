@@ -17,7 +17,7 @@ export interface UsePlaygroundEnvironmentReturn {
   save: (
     entriesToUpdate: { name: string; value: string }[],
     entriesToRemove: string[],
-  ) => void;
+  ) => Promise<void>;
   isSaving: boolean;
 }
 
@@ -53,20 +53,13 @@ export function usePlaygroundEnvironment(
   const updateMutation = useUpdateEnvironmentMutation();
 
   const save = useCallback(
-    (
+    async (
       entriesToUpdate: { name: string; value: string }[],
       entriesToRemove: string[],
-    ) => {
-      const onSuccess = () => {
-        invalidateAllListEnvironments(queryClient);
-      };
-      const onError = () => {
-        toast.error("Failed to save credentials");
-      };
-
-      if (!existingEnvironment) {
-        createMutation.mutate(
-          {
+    ): Promise<void> => {
+      try {
+        if (!existingEnvironment) {
+          await createMutation.mutateAsync({
             request: {
               createEnvironmentForm: {
                 name: slug,
@@ -74,12 +67,9 @@ export function usePlaygroundEnvironment(
                 entries: entriesToUpdate,
               },
             },
-          },
-          { onSuccess, onError },
-        );
-      } else {
-        updateMutation.mutate(
-          {
+          });
+        } else {
+          await updateMutation.mutateAsync({
             request: {
               slug,
               updateEnvironmentRequestBody: {
@@ -87,9 +77,12 @@ export function usePlaygroundEnvironment(
                 entriesToRemove,
               },
             },
-          },
-          { onSuccess, onError },
-        );
+          });
+        }
+        invalidateAllListEnvironments(queryClient);
+      } catch (err) {
+        toast.error("Failed to save credentials");
+        throw err;
       }
     },
     [
