@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4a8dfca09b914cb6394950299a49234a
+  docChecksum: 6d8d0c6d6200acac4893fa7641a2d10f
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.25
-  configChecksum: 1aec33c688af0704e44dbd56bd139fa9
+  releaseVersion: 0.32.26
+  configChecksum: 84d8c0a7001c17b7a657abbaeccfb35a
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -332,7 +332,7 @@ trackedFiles:
   docs/models/components/listintegrationsresult.md:
     last_write_checksum: sha1:dbd19d7f8194a90e03634ec4a636f07d426409a1
   docs/models/components/listinvitesresult.md:
-    last_write_checksum: sha1:9949e936b19c932dcafb7a51724de6f233700d1e
+    last_write_checksum: sha1:0a025f8294cb7e7c873065b41b1024d53b35a232
   docs/models/components/listkeysresult.md:
     last_write_checksum: sha1:2e73cc249c8a20495db89e5f22beded14375b0fd
   docs/models/components/listmembersresult.md:
@@ -404,7 +404,7 @@ trackedFiles:
   docs/models/components/organizationentry.md:
     last_write_checksum: sha1:69a03a891f0032a56e074a49b7e8447f40aabc9f
   docs/models/components/organizationinvitation.md:
-    last_write_checksum: sha1:bc306749b38490b12fb78daa0a656636ef82b140
+    last_write_checksum: sha1:f475d1717d144a756f11e994e4196a9977855b9c
   docs/models/components/organizationinvitationaccept.md:
     last_write_checksum: sha1:2cd52404b964a1238080dc485fde3611ba39fbb5
   docs/models/components/organizationinvitationstate.md:
@@ -1647,11 +1647,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:379b5be1428c167618320abaffb7e7eb3c082884
+    last_write_checksum: sha1:3d710fb4254452470cdeac6df4b93444e6da3568
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:db65564f26823f64e497f42530021dbbfb779c93
+    last_write_checksum: sha1:f654883b37158b9d03bb96ffcfc7ca8b1366bfd4
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2163,7 +2163,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:ad7e47e28bf5aebaa6c97846caf5cbaebaa493dc
+    last_write_checksum: sha1:398511595506412ceb70b19d54fab0be8060dc30
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2718,7 +2718,7 @@ trackedFiles:
     last_write_checksum: sha1:80ae8c75259b4645abcc14af57a495f6e6ab77c5
     pristine_git_object: f2f7295b4ead4d4db3f38f721e08e3aa294ddafd
   src/models/components/organizationinvitation.ts:
-    last_write_checksum: sha1:d27981eda3b2bc06bcf7a3f4a8b9d4a0c8a98268
+    last_write_checksum: sha1:0fcf62d7978a20f641d6d96b6880857ae5b8a163
   src/models/components/organizationinvitationaccept.ts:
     last_write_checksum: sha1:61da98eda71adefdd4f4f6f80eb9f623bb957116
   src/models/components/organizationuser.ts:
@@ -6212,7 +6212,7 @@ examples:
         application/json: {"email": "Jeremy.Buckridge60@hotmail.com"}
       responses:
         "200":
-          application/json: {"created_at": "2025-06-10T20:46:31.392Z", "email": "Ricardo_Vandervort87@hotmail.com", "id": "<id>", "organization_id": "<id>", "state": "accepted", "updated_at": "2025-04-21T23:51:05.957Z"}
+          application/json: {"created_at": "2025-06-10T20:46:31.392Z", "email": "Ricardo_Vandervort87@hotmail.com", "id": "<id>", "state": "accepted", "updated_at": "2025-04-21T23:51:05.957Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

@@ -48,10 +48,6 @@ export type OrganizationInvitation = {
    */
   inviterUserId?: string | undefined;
   /**
-   * Gram organization ID.
-   */
-  organizationId: string;
-  /**
    * When the invitation was revoked.
    */
   revokedAt?: Date | undefined;
@@ -86,7 +82,6 @@ export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     inviter_user_id: z.optional(z.string()),
-    organization_id: z.string(),
     revoked_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -102,7 +97,6 @@ export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "expires_at": "expiresAt",
       "inviter_user_id": "inviterUserId",
-      "organization_id": "organizationId",
       "revoked_at": "revokedAt",
       "updated_at": "updatedAt",
     });
