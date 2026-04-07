@@ -3447,6 +3447,7 @@ func unmarshalHookTraceSummaryResponseBodyToTelemetryHookTraceSummary(v *HookTra
 		EventSource:       v.EventSource,
 		UserEmail:         v.UserEmail,
 		HookSource:        v.HookSource,
+		SkillName:         v.SkillName,
 	}
 
 	return res

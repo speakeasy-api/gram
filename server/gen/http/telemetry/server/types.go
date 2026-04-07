@@ -2832,6 +2832,8 @@ type HookTraceSummaryResponseBody struct {
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// Hook source (from attributes.gram.hook.source)
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Skill name (from materialized column, only for Skill tool)
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
 }
 
 // LogFilterRequestBody is used to define fields on request body types.

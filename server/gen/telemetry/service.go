@@ -259,6 +259,8 @@ type HookTraceSummary struct {
 	UserEmail *string
 	// Hook source (from attributes.gram.hook.source)
 	HookSource *string
+	// Skill name (from materialized column, only for Skill tool)
+	SkillName *string
 }
 
 // Aggregated hooks metrics for a single server

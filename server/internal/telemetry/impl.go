@@ -1228,6 +1228,7 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 			EventSource:       item.EventSource,
 			UserEmail:         item.UserEmail,
 			HookSource:        item.HookSource,
+			SkillName:         item.SkillName,
 		}
 	}
 

@@ -17543,6 +17543,9 @@ components:
           type: integer
           description: Total number of logs in this trace
           format: int64
+        skill_name:
+          type: string
+          description: Skill name (from materialized column, only for Skill tool)
         start_time_unix_nano:
           type: string
           description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
