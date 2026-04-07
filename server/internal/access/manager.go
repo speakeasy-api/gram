@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -10,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type FeatureChecker interface {
@@ -30,8 +32,32 @@ func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker
 	}
 }
 
-func (m *Manager) LoadIntoContext(ctx context.Context) (context.Context, error) {
-	return LoadIntoContext(ctx, m.logger, m.db)
+func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" {
+		return ctx, nil
+	}
+
+	if authCtx.AccountType != "enterprise" {
+		return ctx, nil
+	}
+
+	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
+	// TODO: once we have role mapping we need to also add grants for roles here.
+
+	grants, err := LoadGrants(ctx, m.db, authCtx.ActiveOrganizationID, principals)
+	if err != nil {
+		m.logger.ErrorContext(
+			ctx,
+			"failed to load access grants",
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogUserID(authCtx.UserID),
+			attr.SlogError(err),
+		)
+		return ctx, fmt.Errorf("load access grants: %w", err)
+	}
+
+	return GrantsToContext(ctx, grants), nil
 }
 
 func (m *Manager) Require(ctx context.Context, checks ...Check) error {
@@ -42,9 +68,23 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 	if !enforce {
 		return nil
 	}
+	if len(checks) == 0 {
+		return m.mapError(ctx, ErrNoChecks)
+	}
 
-	if err := require(ctx, checks...); err != nil {
-		return m.mapError(ctx, err)
+	grants, ok := GrantsFromContext(ctx)
+	if !ok || grants == nil {
+		return m.mapError(ctx, ErrMissingGrants)
+	}
+
+	for _, check := range checks {
+		if err := validateCheck(check); err != nil {
+			return m.mapError(ctx, err)
+		}
+
+		if !grants.hasAccess(check.Scope, check.ResourceID) {
+			return m.mapError(ctx, Denied(check.Scope, check.ResourceID))
+		}
 	}
 
 	return nil
@@ -58,12 +98,28 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 	if !enforce {
 		return nil
 	}
-
-	if err := requireAny(ctx, checks...); err != nil {
-		return m.mapError(ctx, err)
+	if len(checks) == 0 {
+		return m.mapError(ctx, ErrNoChecks)
 	}
 
-	return nil
+	grants, ok := GrantsFromContext(ctx)
+	if !ok || grants == nil {
+		return m.mapError(ctx, ErrMissingGrants)
+	}
+
+	for _, check := range checks {
+		if err := validateCheck(check); err != nil {
+			return m.mapError(ctx, err)
+		}
+	}
+
+	for _, check := range checks {
+		if grants.hasAccess(check.Scope, check.ResourceID) {
+			return nil
+		}
+	}
+
+	return m.mapError(ctx, Denied(checks[0].Scope, checks[0].ResourceID))
 }
 
 func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
@@ -75,12 +131,23 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 		return resourceIDs, nil
 	}
 
-	resourceIDs, err = filter(ctx, scope, resourceIDs)
-	if err != nil {
-		return nil, m.mapError(ctx, err)
+	grants, ok := GrantsFromContext(ctx)
+	if !ok || grants == nil {
+		return nil, m.mapError(ctx, ErrMissingGrants)
 	}
 
-	return resourceIDs, nil
+	allowed := make([]string, 0, len(resourceIDs))
+	for _, resourceID := range resourceIDs {
+		if err := validateCheck(Check{Scope: scope, ResourceID: resourceID}); err != nil {
+			return nil, m.mapError(ctx, err)
+		}
+
+		if grants.hasAccess(scope, resourceID) {
+			allowed = append(allowed, resourceID)
+		}
+	}
+
+	return allowed, nil
 }
 
 func (m *Manager) shouldEnforce(ctx context.Context) (bool, error) {

@@ -88,8 +88,21 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 }
 
 func enterpriseTestCtx(ctx context.Context) context.Context {
+	sessionID := "session_test"
 	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		AccountType: "enterprise",
+		ActiveOrganizationID:  "org_test",
+		UserID:                "user_test",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		SessionID:             &sessionID,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "enterprise",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
 	})
 }
 

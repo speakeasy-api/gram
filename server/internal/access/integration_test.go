@@ -5,6 +5,7 @@ import (
 
 	trequire "github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -25,15 +26,16 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	trequire.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
+	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true})
 
-	err = require(ctx,
+	err = manager.Require(ctx,
 		Check{Scope: ScopeBuildRead, ResourceID: "proj:123"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "toolA"},
 	)
 	trequire.NoError(t, err)
 
-	err = require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolB"})
-	trequire.Error(t, err)
+	err = manager.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolB"})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
@@ -54,12 +56,13 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	trequire.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
+	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true})
 
-	projectIDs, err := filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
+	projectIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
 	trequire.NoError(t, err)
 	trequire.Equal(t, []string{"proj:123"}, projectIDs)
 
-	toolIDs, err := filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC"})
+	toolIDs, err := manager.Filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC"})
 	trequire.NoError(t, err)
 	trequire.Equal(t, []string{"toolA", "toolB"}, toolIDs)
 }

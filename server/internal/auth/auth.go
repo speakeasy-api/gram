@@ -29,7 +29,7 @@ type Auth struct {
 }
 
 type AccessLoader interface {
-	LoadIntoContext(ctx context.Context) (context.Context, error)
+	PrepareContext(ctx context.Context) (context.Context, error)
 }
 
 func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader AccessLoader) *Auth {
@@ -71,7 +71,7 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	if err != nil {
 		return ctx, err
 	}
-	ctx, err = s.accessLoader.LoadIntoContext(ctx)
+	ctx, err = s.accessLoader.PrepareContext(ctx)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
 	}

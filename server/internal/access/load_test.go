@@ -25,8 +25,9 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	trequire.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	trequire.NoError(t, require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj:123"}))
-	trequire.NoError(t, require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
+	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true})
+	trequire.NoError(t, manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj:123"}))
+	trequire.NoError(t, manager.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
@@ -85,7 +86,8 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	trequire.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	projectIDs, err := filter(ctx, ScopeBuildRead, []string{"proj:123"})
+	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true})
+	projectIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj:123"})
 	trequire.NoError(t, err)
 	trequire.Empty(t, projectIDs)
 }
