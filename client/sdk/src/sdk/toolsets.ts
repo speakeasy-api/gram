@@ -10,6 +10,7 @@ import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
 import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
+import { toolsetsListForOrg } from "../funcs/toolsetsListForOrg.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -163,6 +164,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListToolsetsResult> {
     return unwrapAsync(toolsetsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listToolsetsForOrg toolsets
+   *
+   * @remarks
+   * List all toolsets across the organization
+   */
+  async listForOrg(
+    request?: operations.ListToolsetsForOrgRequest | undefined,
+    security?: operations.ListToolsetsForOrgSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListToolsetsResult> {
+    return unwrapAsync(toolsetsListForOrg(
       this,
       request,
       security,

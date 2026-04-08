@@ -152,6 +152,15 @@ WHERE p.organization_id = @organization_id
   AND p.deleted IS FALSE
 ORDER BY t.created_at DESC;
 
+-- name: ListToolsetsByOrganization :many
+SELECT t.*
+FROM toolsets t
+JOIN projects p ON t.project_id = p.id
+WHERE p.organization_id = @organization_id
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY t.created_at DESC;
+
 -- name: UpdateToolsetExternalOAuthServer :one
 UPDATE toolsets
 SET

@@ -81,7 +81,7 @@ func UsageCommands() []string {
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
 		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout)",
 		"variations (upsert-global|delete-global|list-global)",
 	}
@@ -872,6 +872,10 @@ func ParseEndpoint(
 		toolsetsListToolsetsApikeyTokenFlag      = toolsetsListToolsetsFlags.String("apikey-token", "", "")
 		toolsetsListToolsetsProjectSlugInputFlag = toolsetsListToolsetsFlags.String("project-slug-input", "", "")
 
+		toolsetsListToolsetsForOrgFlags            = flag.NewFlagSet("list-toolsets-for-org", flag.ExitOnError)
+		toolsetsListToolsetsForOrgSessionTokenFlag = toolsetsListToolsetsForOrgFlags.String("session-token", "", "")
+		toolsetsListToolsetsForOrgApikeyTokenFlag  = toolsetsListToolsetsForOrgFlags.String("apikey-token", "", "")
+
 		toolsetsUpdateToolsetFlags                = flag.NewFlagSet("update-toolset", flag.ExitOnError)
 		toolsetsUpdateToolsetBodyFlag             = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
 		toolsetsUpdateToolsetSlugFlag             = toolsetsUpdateToolsetFlags.String("slug", "REQUIRED", "")
@@ -1144,6 +1148,7 @@ func ParseEndpoint(
 	toolsetsFlags.Usage = toolsetsUsage
 	toolsetsCreateToolsetFlags.Usage = toolsetsCreateToolsetUsage
 	toolsetsListToolsetsFlags.Usage = toolsetsListToolsetsUsage
+	toolsetsListToolsetsForOrgFlags.Usage = toolsetsListToolsetsForOrgUsage
 	toolsetsUpdateToolsetFlags.Usage = toolsetsUpdateToolsetUsage
 	toolsetsDeleteToolsetFlags.Usage = toolsetsDeleteToolsetUsage
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
@@ -1766,6 +1771,9 @@ func ParseEndpoint(
 			case "list-toolsets":
 				epf = toolsetsListToolsetsFlags
 
+			case "list-toolsets-for-org":
+				epf = toolsetsListToolsetsForOrgFlags
+
 			case "update-toolset":
 				epf = toolsetsUpdateToolsetFlags
 
@@ -2363,6 +2371,9 @@ func ParseEndpoint(
 			case "list-toolsets":
 				endpoint = c.ListToolsets()
 				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsSessionTokenFlag, *toolsetsListToolsetsApikeyTokenFlag, *toolsetsListToolsetsProjectSlugInputFlag)
+			case "list-toolsets-for-org":
+				endpoint = c.ListToolsetsForOrg()
+				data, err = toolsetsc.BuildListToolsetsForOrgPayload(*toolsetsListToolsetsForOrgSessionTokenFlag, *toolsetsListToolsetsForOrgApikeyTokenFlag)
 			case "update-toolset":
 				endpoint = c.UpdateToolset()
 				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetSlugFlag, *toolsetsUpdateToolsetSessionTokenFlag, *toolsetsUpdateToolsetApikeyTokenFlag, *toolsetsUpdateToolsetProjectSlugInputFlag)
@@ -5781,6 +5792,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-toolset: Create a new toolset with associated tools`)
 	fmt.Fprintln(os.Stderr, `    list-toolsets: List all toolsets for a project`)
+	fmt.Fprintln(os.Stderr, `    list-toolsets-for-org: List all toolsets across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-toolset: Update a toolset's properties including name, description, and HTTP tools`)
 	fmt.Fprintln(os.Stderr, `    delete-toolset: Delete a toolset by its ID`)
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
@@ -5837,6 +5849,26 @@ func toolsetsListToolsetsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-toolsets --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func toolsetsListToolsetsForOrgUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets list-toolsets-for-org", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all toolsets across the organization`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-toolsets-for-org --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func toolsetsUpdateToolsetUsage() {
