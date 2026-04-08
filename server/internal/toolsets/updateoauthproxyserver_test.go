@@ -124,14 +124,32 @@ func TestToolsetsService_UpdateOAuthProxyServer_AudienceOnly(t *testing.T) {
 	require.Equal(t, "toolset", record.SubjectType)
 	require.Equal(t, updated.Name, record.SubjectDisplay)
 	require.Equal(t, string(updated.Slug), record.SubjectSlug)
-	require.Nil(t, record.BeforeSnapshot)
-	require.Nil(t, record.AfterSnapshot)
 
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)
 	require.Equal(t, updated.OauthProxyServer.ID, metadata["oauth_proxy_server_id"])
 	require.Equal(t, string(updated.OauthProxyServer.Slug), metadata["oauth_proxy_server_slug"])
 	require.InDelta(t, updated.ToolsetVersion, metadata["toolset_version_after"], 0)
+
+	// Snapshot assertions: the audit log must capture the toolset state both
+	// before and after the update so investigators can reconstruct what changed.
+	require.NotNil(t, record.BeforeSnapshot, "audit log should capture pre-update toolset snapshot")
+	require.NotNil(t, record.AfterSnapshot, "audit log should capture post-update toolset snapshot")
+
+	beforeSnap, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnap, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+
+	// The before-snapshot should reflect the original audience and the after-snapshot the new one.
+	// Goa-generated types serialize with Go field names (no JSON tags), so the keys are PascalCase.
+	beforeProxy, ok := beforeSnap["OauthProxyServer"].(map[string]any)
+	require.True(t, ok, "before snapshot should embed OauthProxyServer")
+	require.Equal(t, "https://original-audience.example.com", beforeProxy["Audience"])
+
+	afterProxy, ok := afterSnap["OauthProxyServer"].(map[string]any)
+	require.True(t, ok, "after snapshot should embed OauthProxyServer")
+	require.Equal(t, "https://new-audience.example.com", afterProxy["Audience"])
 }
 
 func TestToolsetsService_UpdateOAuthProxyServer_ScopesAndEndpoints(t *testing.T) {

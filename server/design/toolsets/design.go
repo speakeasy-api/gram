@@ -299,7 +299,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("updateOAuthProxyServer", func() {
-		Description("Update an existing OAuth proxy server associated with a toolset (admin only)")
+		Description("Update an existing OAuth proxy server associated with a toolset")
 
 		Payload(func() {
 			Extend(UpdateOAuthProxyServerForm)

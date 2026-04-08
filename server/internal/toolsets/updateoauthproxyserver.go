@@ -67,6 +67,10 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy server attached to this toolset").Log(ctx, s.logger)
 	}
 
+	// Capture the pre-update state for the audit log. mv.DescribeToolset returns a fresh
+	// allocation each call, so this pointer remains stable through the re-fetch below.
+	toolsetSnapshotBefore := toolsetDetails
+
 	toolsetID, err := uuid.Parse(toolsetDetails.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, s.logger)
@@ -177,19 +181,23 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		return nil, err
 	}
 
-	// Emit audit event inside the transaction (before commit).
+	// Emit audit event inside the transaction (before commit). Pass before/after
+	// toolset snapshots so the audit log captures what actually changed, not just
+	// that an update occurred. Mirrors LogToolsetUpdate's snapshot pattern.
 	if err := audit.LogToolsetUpdateOAuthProxy(ctx, dbtx, audit.LogToolsetUpdateOAuthProxyEvent{
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            *authCtx.ProjectID,
-		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:     authCtx.Email,
-		ActorSlug:            nil,
-		ToolsetURN:           urn.NewToolset(toolsetID),
-		ToolsetName:          toolsetDetails.Name,
-		ToolsetSlug:          string(toolsetDetails.Slug),
-		ToolsetVersionAfter:  toolsetDetails.ToolsetVersion,
-		OAuthProxyServerID:   toolsetDetails.OauthProxyServer.ID,
-		OAuthProxyServerSlug: string(toolsetDetails.OauthProxyServer.Slug),
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             *authCtx.ProjectID,
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
+		ActorSlug:             nil,
+		ToolsetURN:            urn.NewToolset(toolsetID),
+		ToolsetName:           toolsetDetails.Name,
+		ToolsetSlug:           string(toolsetDetails.Slug),
+		ToolsetVersionAfter:   toolsetDetails.ToolsetVersion,
+		OAuthProxyServerID:    toolsetDetails.OauthProxyServer.ID,
+		OAuthProxyServerSlug:  string(toolsetDetails.OauthProxyServer.Slug),
+		ToolsetSnapshotBefore: toolsetSnapshotBefore,
+		ToolsetSnapshotAfter:  toolsetDetails,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").Log(ctx, s.logger)
 	}

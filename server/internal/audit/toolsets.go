@@ -429,10 +429,36 @@ type LogToolsetUpdateOAuthProxyEvent struct {
 
 	OAuthProxyServerID   string
 	OAuthProxyServerSlug string
+
+	ToolsetSnapshotBefore *types.Toolset
+	ToolsetSnapshotAfter  *types.Toolset
 }
 
 func LogToolsetUpdateOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateOAuthProxyEvent) error {
 	action := ActionToolsetUpdateOAuthProxy
+
+	// Clone snapshots and strip the Tools field to avoid serializing a potentially massive list of tools into the audit log.
+	var snapshotBefore, snapshotAfter *types.Toolset
+	if event.ToolsetSnapshotBefore != nil {
+		clone := *event.ToolsetSnapshotBefore
+		clone.Tools = nil
+		snapshotBefore = &clone
+	}
+	if event.ToolsetSnapshotAfter != nil {
+		clone := *event.ToolsetSnapshotAfter
+		clone.Tools = nil
+		snapshotAfter = &clone
+	}
+
+	beforeSnapshot, err := marshalAuditPayload(snapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(snapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
 
 	metadata, err := marshalAuditPayload(map[string]any{
 		"oauth_proxy_server_id":   event.OAuthProxyServerID,
@@ -460,8 +486,8 @@ func LogToolsetUpdateOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogTo
 		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
 
 		Metadata:       metadata,
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
 	}
 
 	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {

@@ -39,7 +39,7 @@ type Service interface {
 	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
 	// Associate an OAuth proxy server with a toolset (admin only)
 	AddOAuthProxyServer(context.Context, *AddOAuthProxyServerPayload) (res *types.Toolset, err error)
-	// Update an existing OAuth proxy server associated with a toolset (admin only)
+	// Update an existing OAuth proxy server associated with a toolset
 	UpdateOAuthProxyServer(context.Context, *UpdateOAuthProxyServerPayload) (res *types.Toolset, err error)
 }
 
