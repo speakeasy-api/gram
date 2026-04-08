@@ -95,6 +95,7 @@ export * from "./listScopes.js";
 export * from "./listSlackApps.js";
 export * from "./listTools.js";
 export * from "./listToolsets.js";
+export * from "./listToolsetsForOrg.js";
 export * from "./listVersions.js";
 export * from "./loadChat.js";
 export * from "./logout.js";
