@@ -932,9 +932,94 @@ jobs:
           - runtime: nodejs24
             apko-config: ./images/nodejs24-alpine3.23.yaml
     steps:
-      - name: Skip if no functions changes exist
-        if: ${{ needs.changes.outputs.functions != 'true' }}
+      - name: Skip if no functions changes exist (dependabot)
+        if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: echo "No functions changes detected — skipping functions-image (${{ matrix.runtime }})."
+
+      - name: Generate preview tag
+        id: preview
+        if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
+        run: |
+          SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
+          echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      # --- Re-tag path: no functions changes, tag existing main image with PR tags (DEV only) ---
+
+      - name: Checkout (re-tag)
+        if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Find source SHA from main
+        id: source
+        if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        run: |
+          SOURCE_SHA=$(git merge-base HEAD origin/main)
+          echo "sha_short=${SOURCE_SHA:0:7}" >> $GITHUB_OUTPUT
+          echo "sha_long=$SOURCE_SHA" >> $GITHUB_OUTPUT
+          echo "Source SHA: $SOURCE_SHA (short: ${SOURCE_SHA:0:7})"
+
+      - name: Setup Mise (re-tag)
+        if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3.6.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Install dependencies (re-tag)
+        if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: "[DEV] Create fly app (re-tag)"
+        id: flyCreateDevRetag
+        if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+          FLY_IMAGE: ${{ vars.FLY_IMAGE_DEV }}
+        run: |
+          mise run fly:init-runner \
+            --org ${{ secrets.FLY_ORG_DEV }} \
+            --image $FLY_IMAGE \
+            --force
+
+      - name: Extract Docker metadata (re-tag)
+        if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        id: metaRetag
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: |
+            ${{ steps.flyCreateDevRetag.outputs.flyAppRegistry }}
+          tags: |
+            type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }}
+            type=ref,event=tag,prefix=,suffix=-${{ matrix.runtime }}
+            type=raw,value=${{ steps.preview.outputs.tag }},suffix=-${{ matrix.runtime }}
+            type=schedule,pattern=nightly,prefix=,suffix=-${{ matrix.runtime }}
+            type=sha,prefix=,suffix=-${{ matrix.runtime }}
+            type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
+
+      - name: "Pull, re-tag, and push (DEV)"
+        if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+        run: |
+          set -x
+          fly auth docker
+
+          SOURCE_IMAGE="${{ steps.flyCreateDevRetag.outputs.flyAppRegistry }}:${{ steps.source.outputs.sha_short }}-${{ matrix.runtime }}"
+          echo "Pulling source image: $SOURCE_IMAGE"
+          docker pull "$SOURCE_IMAGE"
+
+          TAGS="${{ steps.metaRetag.outputs.tags }}"
+          for TAG in $TAGS; do
+            docker tag "$SOURCE_IMAGE" "$TAG"
+          done
+
+          docker push --all-tags "${{ steps.flyCreateDevRetag.outputs.flyAppRegistry }}"
+
+      # --- Full build path: functions changes detected ---
 
       - name: Checkout
         if: ${{ needs.changes.outputs.functions == 'true' }}
@@ -1039,6 +1124,7 @@ jobs:
           tags: |
             type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }}
             type=ref,event=tag,prefix=,suffix=-${{ matrix.runtime }}
+            type=raw,value=${{ steps.preview.outputs.tag }},suffix=-${{ matrix.runtime }}
             type=schedule,pattern=nightly,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
