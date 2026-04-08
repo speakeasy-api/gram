@@ -1320,8 +1320,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_namespa
   ON organization_mcp_collection_registries (namespace)
   WHERE deleted IS FALSE;
 
--- Join table linking toolsets to collections (for catalog publishing)
-CREATE TABLE IF NOT EXISTS mcp_registry_toolsets (
+-- Join table linking servers to collections (for catalog publishing)
+CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
   published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1332,13 +1332,13 @@ CREATE TABLE IF NOT EXISTS mcp_registry_toolsets (
   toolset_id uuid NOT NULL,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT mcp_registry_toolsets_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_registry_toolsets_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_registry_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
+  CONSTRAINT organization_mcp_collection_server_attachments_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_mcp_collection_server_attachments_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
+  CONSTRAINT organization_mcp_collection_server_attachments_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_toolsets_collection_toolset_key
-  ON mcp_registry_toolsets (collection_id, toolset_id)
+CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_toolset_key
+  ON organization_mcp_collection_server_attachments (collection_id, toolset_id)
   WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS external_mcp_attachments (

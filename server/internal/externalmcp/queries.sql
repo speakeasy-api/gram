@@ -57,31 +57,31 @@ SELECT * FROM organization_mcp_collection_registries
 WHERE namespace = @namespace AND deleted IS FALSE;
 
 -- name: PublishToolsetToCollection :one
-INSERT INTO mcp_registry_toolsets (collection_id, toolset_id, published_by)
+INSERT INTO organization_mcp_collection_server_attachments (collection_id, toolset_id, published_by)
 VALUES (@collection_id, @toolset_id, @published_by)
 ON CONFLICT (collection_id, toolset_id) WHERE deleted IS FALSE DO UPDATE
 SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
 RETURNING *;
 
 -- name: UnpublishToolsetFromCollection :exec
-UPDATE mcp_registry_toolsets SET deleted_at = clock_timestamp()
+UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
 WHERE collection_id = @collection_id AND toolset_id = @toolset_id AND deleted IS FALSE;
 
 -- name: ListPublishedToolsets :many
 SELECT t.* FROM toolsets t
-JOIN mcp_registry_toolsets rt ON t.id = rt.toolset_id
+JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 WHERE rt.collection_id = @collection_id AND rt.deleted IS FALSE AND t.mcp_enabled IS TRUE AND t.deleted IS FALSE
 ORDER BY rt.published_at DESC;
 
 -- name: IsToolsetPublished :one
 SELECT EXISTS (
-  SELECT 1 FROM mcp_registry_toolsets
+  SELECT 1 FROM organization_mcp_collection_server_attachments
   WHERE collection_id = @collection_id AND toolset_id = @toolset_id AND deleted IS FALSE
 );
 
 -- name: IsToolsetOwnedByProject :one
 SELECT EXISTS (
-  SELECT 1 FROM mcp_registry_toolsets rt
+  SELECT 1 FROM organization_mcp_collection_server_attachments rt
   JOIN toolsets t ON rt.toolset_id = t.id
   WHERE rt.collection_id = @collection_id
     AND t.mcp_slug = @mcp_slug

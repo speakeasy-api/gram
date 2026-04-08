@@ -514,18 +514,6 @@ type McpRegistry struct {
 	Deleted   bool
 }
 
-type McpRegistryToolset struct {
-	PublishedAt  pgtype.Timestamptz
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	PublishedBy  pgtype.Text
-	ID           uuid.UUID
-	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
-	Deleted      bool
-}
-
 type OauthProxyClientInfo struct {
 	McpSlug                 string
 	ClientID                string
@@ -618,6 +606,18 @@ type OrganizationMcpCollectionRegistry struct {
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
+type OrganizationMcpCollectionServerAttachment struct {
+	PublishedAt  pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	PublishedBy  pgtype.Text
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	ToolsetID    uuid.UUID
 	Deleted      bool
 }
 

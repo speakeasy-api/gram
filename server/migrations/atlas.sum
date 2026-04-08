@@ -1,4 +1,4 @@
-h1:yVDMw31PXgi+S5j6uU0YO84l1HWAryspBa1Au1whCNs=
+h1:pAu3qsGnSz8KXf5pwpdH2aLplP+vRBtAfd/2657qnIQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -119,5 +119,5 @@ h1:yVDMw31PXgi+S5j6uU0YO84l1HWAryspBa1Au1whCNs=
 20260325201319_free_trials.sql h1:reqksVNP6kO6o8DKyLmiC+w5Pxr+GJGoBi9cSplCLD0=
 20260326000001_drop-team-invites.sql h1:tRCEHgR9d9tz5w13AEzVSH2Sf1LE54/vcQ51PuC6kTk=
 20260326195347_org_whitelist.sql h1:s2i7TnWXO1Y7i8mV/0Oi1YNDps2S3ap8hUGYVgwUFnM=
-20260403010404_registry-model-update.sql h1:IWuSeb7Odgf71gUefFULoo6FLcB5cmbSygbF2JfaNYY=
-20260406170119_registry-unique-constraints.sql h1:AbI78aTWuYtRPJj7BHaXsBf83nNV9xCJvR6norQUNbg=
+20260403010404_registry-model-update.sql h1:VWyGLwmXNKBu0IIEWRsWaDvu5hvTVdtcGQJ/sVEkTT4=
+20260406170119_registry-unique-constraints.sql h1:2h/FbhbWUfagjejRDq6VyxAll3ZgR2Fuf5NQ5LIjwOM=

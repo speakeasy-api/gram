@@ -9,18 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type McpRegistryToolset struct {
-	PublishedAt  pgtype.Timestamptz
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	PublishedBy  pgtype.Text
-	ID           uuid.UUID
-	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
-	Deleted      bool
-}
-
 type OrganizationMcpCollectionRegistry struct {
 	ID           uuid.UUID
 	CollectionID uuid.UUID
@@ -29,6 +17,18 @@ type OrganizationMcpCollectionRegistry struct {
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
+type OrganizationMcpCollectionServerAttachment struct {
+	PublishedAt  pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	PublishedBy  pgtype.Text
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	ToolsetID    uuid.UUID
 	Deleted      bool
 }
 

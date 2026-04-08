@@ -691,7 +691,7 @@ func (q *Queries) IsToolsetInstalledFromCatalog(ctx context.Context, toolsetID u
 
 const isToolsetOwnedByProject = `-- name: IsToolsetOwnedByProject :one
 SELECT EXISTS (
-  SELECT 1 FROM mcp_registry_toolsets rt
+  SELECT 1 FROM organization_mcp_collection_server_attachments rt
   JOIN toolsets t ON rt.toolset_id = t.id
   WHERE rt.collection_id = $1
     AND t.mcp_slug = $2
@@ -716,7 +716,7 @@ func (q *Queries) IsToolsetOwnedByProject(ctx context.Context, arg IsToolsetOwne
 
 const isToolsetPublished = `-- name: IsToolsetPublished :one
 SELECT EXISTS (
-  SELECT 1 FROM mcp_registry_toolsets
+  SELECT 1 FROM organization_mcp_collection_server_attachments
   WHERE collection_id = $1 AND toolset_id = $2 AND deleted IS FALSE
 )
 `
@@ -988,7 +988,7 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 
 const listPublishedToolsets = `-- name: ListPublishedToolsets :many
 SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
-JOIN mcp_registry_toolsets rt ON t.id = rt.toolset_id
+JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 WHERE rt.collection_id = $1 AND rt.deleted IS FALSE AND t.mcp_enabled IS TRUE AND t.deleted IS FALSE
 ORDER BY rt.published_at DESC
 `
@@ -1033,7 +1033,7 @@ func (q *Queries) ListPublishedToolsets(ctx context.Context, collectionID uuid.U
 }
 
 const publishToolsetToCollection = `-- name: PublishToolsetToCollection :one
-INSERT INTO mcp_registry_toolsets (collection_id, toolset_id, published_by)
+INSERT INTO organization_mcp_collection_server_attachments (collection_id, toolset_id, published_by)
 VALUES ($1, $2, $3)
 ON CONFLICT (collection_id, toolset_id) WHERE deleted IS FALSE DO UPDATE
 SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
@@ -1046,9 +1046,9 @@ type PublishToolsetToCollectionParams struct {
 	PublishedBy  pgtype.Text
 }
 
-func (q *Queries) PublishToolsetToCollection(ctx context.Context, arg PublishToolsetToCollectionParams) (McpRegistryToolset, error) {
+func (q *Queries) PublishToolsetToCollection(ctx context.Context, arg PublishToolsetToCollectionParams) (OrganizationMcpCollectionServerAttachment, error) {
 	row := q.db.QueryRow(ctx, publishToolsetToCollection, arg.CollectionID, arg.ToolsetID, arg.PublishedBy)
-	var i McpRegistryToolset
+	var i OrganizationMcpCollectionServerAttachment
 	err := row.Scan(
 		&i.PublishedAt,
 		&i.CreatedAt,
@@ -1064,7 +1064,7 @@ func (q *Queries) PublishToolsetToCollection(ctx context.Context, arg PublishToo
 }
 
 const unpublishToolsetFromCollection = `-- name: UnpublishToolsetFromCollection :exec
-UPDATE mcp_registry_toolsets SET deleted_at = clock_timestamp()
+UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
 WHERE collection_id = $1 AND toolset_id = $2 AND deleted IS FALSE
 `
 

@@ -29,8 +29,8 @@ CREATE TABLE "organization_mcp_collection_registries" (
   CONSTRAINT "organization_mcp_collection_registries_collection_id_fkey" FOREIGN KEY ("collection_id") REFERENCES "organization_mcp_collections" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "organization_mcp_collection_registries_registry_id_fkey" FOREIGN KEY ("registry_id") REFERENCES "mcp_registries" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create "mcp_registry_toolsets" table
-CREATE TABLE "mcp_registry_toolsets" (
+-- Create "organization_mcp_collection_server_attachments" table
+CREATE TABLE "organization_mcp_collection_server_attachments" (
   "published_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -41,6 +41,6 @@ CREATE TABLE "mcp_registry_toolsets" (
   "toolset_id" uuid NOT NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "mcp_registry_toolsets_collection_id_fkey" FOREIGN KEY ("collection_id") REFERENCES "organization_mcp_collections" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "mcp_registry_toolsets_toolset_id_fkey" FOREIGN KEY ("toolset_id") REFERENCES "toolsets" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "organization_mcp_collection_server_attachments_collection_id_fkey" FOREIGN KEY ("collection_id") REFERENCES "organization_mcp_collections" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "organization_mcp_collection_server_attachments_toolset_id_fkey" FOREIGN KEY ("toolset_id") REFERENCES "toolsets" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
