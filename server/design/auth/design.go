@@ -55,7 +55,6 @@ var _ = Service("auth", func() {
 
 		Payload(func() {
 			Attribute("redirect", String, "Optional URL to redirect to after successful authentication")
-			Attribute("invite_token", String, "Optional invite token to process after authentication")
 		})
 
 		Result(func() {
@@ -66,7 +65,6 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.login")
 			Param("redirect")
-			Param("invite_token")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
