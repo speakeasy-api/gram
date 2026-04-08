@@ -63,7 +63,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer"}
+var MethodNames = [12]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.

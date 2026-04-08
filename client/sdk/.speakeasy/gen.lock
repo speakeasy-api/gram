@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 91a9b33893bfaa8ba589fa613c863b52
+  docChecksum: f6e560b010518d695cfbefa80e9615e8
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.30
-  configChecksum: 780f050639fed31c16c2ef74e298d3ed
+  releaseVersion: 0.32.38
+  configChecksum: bb1f3c6f7f2285f2b786eabcfb05b3b7
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -1650,7 +1650,7 @@ trackedFiles:
   docs/sdks/tools/README.md:
     last_write_checksum: sha1:73c0e5a99b2d5a2bfa29e1937f9255e5228d1a86
   docs/sdks/toolsets/README.md:
-    last_write_checksum: sha1:69df583c8be1803ce81f237f75d37b6134ecb839
+    last_write_checksum: sha1:805ea3b30f2ac2c5a69d215c2e049c04253ce837
   docs/sdks/usage/README.md:
     last_write_checksum: sha1:49dd4432d8fc21406bbcee1c80f1aa1dd3459080
   docs/sdks/variations/README.md:
@@ -1675,11 +1675,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:8b1cbf51c7e62b13b38c13e9797f3a85e3ea0d42
+    last_write_checksum: sha1:7de76785b0642ad03f4a49b9fe3d41cb62e20d75
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:d39d782add4d3359c1fcfd5788681f59578eee6b
+    last_write_checksum: sha1:057b72c268c2c32a48d803839a366f084edb4a12
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2197,7 +2197,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:876a42fc14c9213bb8d9cfc7d6b4a71ec358111a
+    last_write_checksum: sha1:b7c56b6ce2f9937ae55651f8598f5a17cdc8528a
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2579,7 +2579,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:2cac9bba036986e6289bcff513c85ff440fcc7ec
+    last_write_checksum: sha1:81398215de43b75efe5fdb3c6dd74bba803c9602
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3337,7 +3337,7 @@ trackedFiles:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:f76f5d253da691abe33b058a08d8717fe33b7bb7
+    last_write_checksum: sha1:7c3456284374b1b613c06d56d02a46bf1d1bc053
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3897,7 +3897,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:92a7808036554bfc720a5a773798ef6775a8cb57
+    last_write_checksum: sha1:4bc5598af8aea6387e0bfd5fa602369d5f966d33
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -4431,7 +4431,7 @@ trackedFiles:
     pristine_git_object: 4c7e184e2d9dee5ccd82b2ef46f3236d7ec30efb
   src/sdk/toolsets.ts:
     id: 0715c1588060
-    last_write_checksum: sha1:c4b7d3b4ca520cabbf7af41aee1cd4236b07c83d
+    last_write_checksum: sha1:b94bb6bb33dd843b6c0bda247ada93fdc9d075f2
     pristine_git_object: 499da61dc8ecf32ab1637b84167ecef2052c32b2
   src/sdk/usage.ts:
     id: e4cbe77b260e
@@ -6302,6 +6302,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listToolsetsForOrg:
+    speakeasy-default-list-toolsets-for-org:
+      responses:
+        "200":
+          application/json: {"toolsets": [{"created_at": "2024-09-08T20:49:34.635Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"id": "<id>", "name": "<value>"}], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-08-06T06:46:02.744Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

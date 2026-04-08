@@ -31,7 +31,7 @@ type Client struct {
 }
 
 // NewClient initializes a "toolsets" service client given the endpoints.
-func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability, cloneToolset, addExternalOAuthServer, removeOAuthServer, addOAuthProxyServer, updateOAuthProxyServer goa.Endpoint) *Client {
+func NewClient(createToolset, listToolsets, listToolsetsForOrg, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability, cloneToolset, addExternalOAuthServer, removeOAuthServer, addOAuthProxyServer, updateOAuthProxyServer goa.Endpoint) *Client {
 	return &Client{
 		CreateToolsetEndpoint:            createToolset,
 		ListToolsetsEndpoint:             listToolsets,
