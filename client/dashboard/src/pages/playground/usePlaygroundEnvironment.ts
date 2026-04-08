@@ -81,6 +81,11 @@ export function usePlaygroundEnvironment(
       entriesToUpdate: { name: string; value: string }[],
       entriesToRemove: string[],
     ): Promise<SaveResult> => {
+      // If nothing meaningful to persist, skip without calling the API.
+      // This protects against server edge-cases with empty-payload updates.
+      if (entriesToUpdate.length === 0 && entriesToRemove.length === 0) {
+        return { created: false, skipped: true };
+      }
       try {
         if (!existingEnvironment) {
           // Don't create an empty environment when the user only cleared
@@ -112,7 +117,8 @@ export function usePlaygroundEnvironment(
         invalidateAllListEnvironments(queryClient);
         return { created: false, skipped: false };
       } catch (err) {
-        toast.error("Failed to save credentials");
+        const message = err instanceof Error ? err.message : "Unknown error";
+        toast.error(`Failed to save credentials: ${message}`);
         throw err;
       }
     },

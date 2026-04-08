@@ -400,10 +400,21 @@ export function PlaygroundAuth({
     const entriesToUpdate = Object.entries(userProvidedValues)
       .filter(([key, value]) => value.trim() && editedKeys.has(key))
       .map(([name, value]) => ({ name, value }));
+    // Only request removal of keys that actually have a stored value
+    // on the server. This avoids sending phantom deletes when a user
+    // typed then cleared a field that was never persisted.
+    const storedKeys = new Set(
+      playgroundEnv.storedEntries
+        .filter((e) => e.hasStoredValue)
+        .map((e) => e.name),
+    );
     const entriesToRemove = Array.from(editedKeys).filter(
-      (key) => !userProvidedValues[key]?.trim(),
+      (key) => !userProvidedValues[key]?.trim() && storedKeys.has(key),
     );
     if (entriesToUpdate.length === 0 && entriesToRemove.length === 0) {
+      // Nothing meaningful to persist — just clear local edit state.
+      setEditedKeys(new Set());
+      setUserProvidedValues({});
       return;
     }
     try {
