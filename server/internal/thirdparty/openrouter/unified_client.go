@@ -30,7 +30,7 @@ type ChatTitleGenerator interface {
 
 // ChatResolutionAnalyzer schedules async chat resolution analysis.
 type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID, userEmail string) error
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
 // TelemetryService emits telemetry events for observability.
@@ -224,7 +224,6 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionReques
 			projectID,
 			req.OrgID,
 			req.APIKeyID,
-			req.UserEmail,
 		); err != nil {
 			c.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 		}

@@ -20,21 +20,19 @@ type AnalyzeChatResolutionsParams struct {
 	ProjectID uuid.UUID
 	OrgID     string
 	APIKeyID  string
-	UserEmail string
 }
 
 // ChatResolutionAnalyzer schedules async chat resolution analysis.
 type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID, userEmail string) error
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
-func ScheduleChatResolutionAnalysis(ctx context.Context, env *tenv.Environment, chatID, projectID uuid.UUID, orgID, apiKeyID, userEmail string) error {
+func ScheduleChatResolutionAnalysis(ctx context.Context, env *tenv.Environment, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
 	_, err := ExecuteAnalyzeChatResolutionsWorkflow(ctx, env, AnalyzeChatResolutionsParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
 		OrgID:     orgID,
 		APIKeyID:  apiKeyID,
-		UserEmail: userEmail,
 	})
 	return err
 }
@@ -117,7 +115,6 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 				StartIndex:   segment.StartIndex,
 				EndIndex:     segment.EndIndex,
 				APIKeyID:     params.APIKeyID,
-				UserEmail:    params.UserEmail,
 				UserFeedback: feedbackResult.UserFeedback,
 			},
 		).Get(ctx, nil)

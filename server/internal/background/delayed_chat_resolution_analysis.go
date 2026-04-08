@@ -23,7 +23,6 @@ type DelayedChatResolutionAnalysisParams struct {
 	ProjectID uuid.UUID
 	OrgID     string
 	APIKeyID  string
-	UserEmail string
 }
 
 // TemporalDelayedChatResolutionAnalyzer schedules delayed chat resolution analysis with inactivity detection.
@@ -31,7 +30,7 @@ type TemporalDelayedChatResolutionAnalyzer struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (t *TemporalDelayedChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID, userEmail string) error {
+func (t *TemporalDelayedChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
 	workflowID := fmt.Sprintf("v1:delayed-chat-resolution-analysis:%s", chatID.String())
 
 	// First, try to signal an existing workflow to reset the timer
@@ -47,7 +46,6 @@ func (t *TemporalDelayedChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(c
 		ProjectID: projectID,
 		OrgID:     orgID,
 		APIKeyID:  apiKeyID,
-		UserEmail: userEmail,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start delayed analysis workflow: %w", err)

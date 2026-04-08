@@ -127,7 +127,7 @@ type mockChatResolutionAnalyzer struct {
 	callCount int
 }
 
-func (m *mockChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID, userEmail string) error {
+func (m *mockChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.called = true
