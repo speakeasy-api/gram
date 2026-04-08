@@ -8,7 +8,8 @@ import { Button } from "@speakeasy-api/moonshine";
 export default function AcceptInvite() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const token = searchParams.get("token");
+  const token =
+    searchParams.get("invitation_token") ?? searchParams.get("token");
   const error = searchParams.get("error");
 
   // Prevent invite token from leaking via HTTP Referer headers
