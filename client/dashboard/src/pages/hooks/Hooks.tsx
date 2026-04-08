@@ -2042,6 +2042,123 @@ function HooksTotalTimeSeries({
   );
 }
 
+function UniqueUsersTimeSeries({
+  traces,
+  from,
+  to,
+}: {
+  traces: HookTrace[];
+  from: Date;
+  to: Date;
+}) {
+  const timeRangeMs = to.getTime() - from.getTime();
+
+  const { labels, data } = useMemo(() => {
+    if (traces.length === 0) return { labels: [], data: [] };
+
+    const bucketMs =
+      timeRangeMs <= 24 * 60 * 60 * 1000 ? 5 * 60 * 1000 : 60 * 60 * 1000;
+    const buckets = new Map<number, Set<string>>();
+
+    for (const t of traces) {
+      const ms = Number(t.startTimeUnixNano) / 1_000_000;
+      if (!ms || !t.userEmail) continue;
+      const bucket = Math.floor(ms / bucketMs) * bucketMs;
+      const users = buckets.get(bucket) ?? new Set<string>();
+      users.add(t.userEmail);
+      buckets.set(bucket, users);
+    }
+
+    const sorted = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]);
+    return {
+      labels: sorted.map(([ts]) => formatChartLabel(new Date(ts), timeRangeMs)),
+      data: sorted.map(([, users]) => users.size),
+    };
+  }, [traces, timeRangeMs]);
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: " Active Users",
+        data,
+        borderColor: "#f59e0b",
+        backgroundColor: "rgba(245, 158, 11, 0.1)",
+        pointBackgroundColor: "#f59e0b",
+        fill: true,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index" as const, intersect: false },
+    plugins: {
+      legend: {
+        position: "top" as const,
+        align: "end" as const,
+        labels: {
+          boxWidth: 12,
+          boxHeight: 12,
+          useBorderRadius: true,
+          borderRadius: 2,
+          padding: 16,
+          color: "#9ca3af",
+          font: { size: 12 },
+        },
+      },
+      tooltip: {
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        borderWidth: 1,
+        padding: 12,
+        boxPadding: 4,
+        usePointStyle: true,
+        callbacks: {
+          label: (ctx: TooltipItem<"line">) =>
+            ` Active Users: ${Math.round(ctx.parsed.y ?? 0)}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: true,
+          color: "rgba(128, 128, 128, 0.1)",
+          lineWidth: 1,
+        },
+        ticks: { maxTicksLimit: 8 },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: "rgba(128, 128, 128, 0.2)" },
+        ticks: { precision: 0 },
+      },
+    },
+  };
+
+  if (labels.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
+        No data
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative", height: 200 }}>
+      <Line data={chartData} options={options} />
+    </div>
+  );
+}
+
 function HooksAnalytics({
   summaryData,
   groupedTraces,
@@ -2159,6 +2276,14 @@ function HooksAnalytics({
             Success & Error Rate Over Time
           </h3>
           <HooksTotalTimeSeries traces={groupedTraces} from={from} to={to} />
+        </div>
+      )}
+
+      {/* Unique Users Over Time */}
+      {groupedTraces.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold mb-4">Active Users Over Time</h3>
+          <UniqueUsersTimeSeries traces={groupedTraces} from={from} to={to} />
         </div>
       )}
     </div>
