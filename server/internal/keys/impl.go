@@ -20,6 +20,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/keys/server"
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -43,6 +44,7 @@ type Service struct {
 	db          *pgxpool.Pool
 	repo        *repo.Queries
 	auth        *auth.Auth
+	access      *access.Manager
 	projectRepo *project_repo.Queries
 	orgsRepo    *organizations_repo.Queries
 	keyPrefix   string
@@ -50,7 +52,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, env string, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, env string, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
 
 	var keyEnv string
@@ -70,7 +72,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:      logger,
 		db:          db,
 		repo:        repo.New(db),
-		auth:        auth.New(logger, db, sessions, accessLoader),
+		auth:        auth.New(logger, db, sessions, accessManager),
+		access:      accessManager,
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
 		keyPrefix:   fullKeyPrefix,
@@ -95,6 +98,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return nil, err
 	}
 
 	token, err := s.generateToken()
@@ -192,6 +198,9 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
 
 	keys, err := s.repo.ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
@@ -228,6 +237,9 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
