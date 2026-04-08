@@ -1,0 +1,239 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`getDangerousApiKeyComponentCode > renders for nextjs with defaults 1`] = `
+""use client";
+
+import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  api: {
+    dangerousApiKey: process.env.GRAM_API_KEY!,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
+exports[`getDangerousApiKeyComponentCode > renders for react with defaults 1`] = `
+"import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  api: {
+    dangerousApiKey: process.env.GRAM_API_KEY!,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
+exports[`getDangerousApiKeyComponentCode > renders with widget variant and modal options 1`] = `
+""use client";
+
+import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  variant: "widget",
+  modal: {
+    title: "Help",
+    position: "top-left",
+    defaultOpen: true,
+  },
+  api: {
+    dangerousApiKey: process.env.GRAM_API_KEY!,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
+exports[`getDangerousApiKeyEnvContent > renders with placeholder when no key provided 1`] = `"GRAM_API_KEY=your_api_key_here"`;
+
+exports[`getDangerousApiKeyEnvContent > renders with provided API key 1`] = `"GRAM_API_KEY=sk_test_123"`;
+
+exports[`getElementsInstall > renders for nextjs 1`] = `"npm add @gram-ai/elements"`;
+
+exports[`getElementsInstall > renders for react 1`] = `"pnpm add @gram-ai/elements"`;
+
+exports[`getEnvContent > renders with placeholder when no key provided 1`] = `
+"GRAM_API_KEY=your_api_key_here
+EMBED_ORIGIN=http://localhost:3000 # Replace with your actual origin"
+`;
+
+exports[`getEnvContent > renders with provided API key 1`] = `
+"GRAM_API_KEY=sk_test_123
+EMBED_ORIGIN=http://localhost:3000 # Replace with your actual origin"
+`;
+
+exports[`getNextjsApiRoute > renders the Next.js session API route 1`] = `
+"// pages/api/session.ts
+import type { NextApiRequest, NextApiResponse } from "next";
+import { createElementsServerHandlers } from "@gram-ai/elements/server";
+
+// Disable Next.js body parsing so the handler can read the raw stream.
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+const handlers = createElementsServerHandlers();
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  await handlers.session(req, res, {
+    userIdentifier: "user-123", // Replace with actual user ID
+    embedOrigin: process.env.EMBED_ORIGIN || "http://localhost:3000",
+  });
+}"
+`;
+
+exports[`getPeerDeps > renders for nextjs 1`] = `"npm add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki"`;
+
+exports[`getPeerDeps > renders for react 1`] = `"pnpm add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki"`;
+
+exports[`getSessionComponentCode > renders for nextjs with defaults 1`] = `
+""use client";
+
+import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const getSession = async () => {
+  return fetch("/api/session", {
+    method: "POST",
+    headers: { "Gram-Project": "my-project" },
+  })
+    .then((res) => res.json())
+    .then((data) => data.client_token);
+};
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  api: {
+    session: getSession,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
+exports[`getSessionComponentCode > renders for react with defaults 1`] = `
+"import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const getSession = async () => {
+  return fetch("http://localhost:3001/chat/session", {
+    method: "POST",
+    headers: { "Gram-Project": "my-project" },
+  })
+    .then((res) => res.json())
+    .then((data) => data.client_token);
+};
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  api: {
+    session: getSession,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
+exports[`getSessionComponentCode > renders with widget variant and modal options 1`] = `
+""use client";
+
+import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+
+const getSession = async () => {
+  return fetch("/api/session", {
+    method: "POST",
+    headers: { "Gram-Project": "my-project" },
+  })
+    .then((res) => res.json())
+    .then((data) => data.client_token);
+};
+
+const config: ElementsConfig = {
+  projectSlug: "my-project",
+  mcp: "https://app.getgram.ai/mcp/my-project",
+  variant: "widget",
+  modal: {
+    title: "Help",
+    position: "top-left",
+    defaultOpen: true,
+  },
+  api: {
+    session: getSession,
+  },
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}"
+`;
+
+exports[`getViteApiRoute > renders the Express session endpoint 1`] = `
+"// server.ts (Express)
+import express from "express";
+import { createElementsServerHandlers } from "@gram-ai/elements/server";
+
+const app = express();
+const handlers = createElementsServerHandlers();
+
+app.use(express.json());
+
+app.post("/chat/session", (req, res) =>
+  handlers.session(req, res, {
+    // Replace with your actual origin
+    embedOrigin: process.env.EMBED_ORIGIN || "http://localhost:3000",
+    userIdentifier: "user-123", // Replace with actual user ID
+    expiresAfter: 3600,
+  })
+);
+
+app.listen(3001, () => {
+  console.log("Server running on http://localhost:3001");
+});"
+`;

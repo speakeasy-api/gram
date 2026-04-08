@@ -2,6 +2,16 @@ import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
+import {
+  getDangerousApiKeyComponentCode,
+  getDangerousApiKeyEnvContent,
+  getEnvContent,
+  getElementsInstall,
+  getNextjsApiRoute,
+  getPeerDeps,
+  getSessionComponentCode,
+  getViteApiRoute,
+} from "./elementsCodeGen";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Dialog } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -52,7 +62,7 @@ type Radius = "round" | "soft" | "sharp";
 type Variant = "widget" | "sidecar" | "standalone";
 type ModalPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 
-interface ElementsFormConfig {
+export interface ElementsFormConfig {
   // Connection
   mcp: string;
   // Theme
@@ -908,6 +918,7 @@ function InstallationGuide({
   >(null);
   const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
   const [keyCreationAttempted, setKeyCreationAttempted] = useState(false);
+  const [authMode, setAuthMode] = useState<"lax" | "session">("lax");
   const telemetry = useTelemetry();
   const { theme } = useMoonshineConfig();
 
@@ -976,188 +987,12 @@ function InstallationGuide({
 
   const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;
 
-  const getPeerDeps = () => {
-    const pm = selectedFramework === "nextjs" ? "npm" : "pnpm";
-    return `${pm} add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki`;
-  };
-
-  const getElementsInstall = () => {
-    const pm = selectedFramework === "nextjs" ? "npm" : "pnpm";
-    return `${pm} add @gram-ai/elements`;
-  };
-
-  const getEnvContent = () => {
-    const apiKey = generatedApiKey || "your_api_key_here";
-    return `GRAM_API_KEY=${apiKey}
-EMBED_ORIGIN=http://localhost:3000 # Replace with your actual origin`;
-  };
-
-  const getNextjsApiRoute = () => {
-    return `// pages/api/session.ts
-import type { NextApiRequest, NextApiResponse } from "next";
-import { createElementsServerHandlers } from "@gram-ai/elements/server";
-
-// Disable Next.js body parsing so the handler can read the raw stream.
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-const handlers = createElementsServerHandlers();
-
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  await handlers.session(req, res, {
-    userIdentifier: "user-123", // Replace with actual user ID
-    embedOrigin: process.env.EMBED_ORIGIN || "http://localhost:3000",
-  });
-}`;
-  };
-
-  const getViteApiRoute = () => {
-    return `// server.ts (Express)
-import express from "express";
-import { createElementsServerHandlers } from "@gram-ai/elements/server";
-
-const app = express();
-const handlers = createElementsServerHandlers();
-
-app.use(express.json());
-
-app.post("/chat/session", (req, res) =>
-  handlers.session(req, res, {
-    // Replace with your actual origin
-    embedOrigin: process.env.EMBED_ORIGIN || "http://localhost:3000",
-    userIdentifier: "user-123", // Replace with actual user ID
-    expiresAfter: 3600,
-  })
-);
-
-app.listen(3001, () => {
-  console.log("Server running on http://localhost:3001");
-});`;
-  };
-
-  const getComponentCode = () => {
-    const isNextjs = selectedFramework === "nextjs";
-    const useClientDirective = isNextjs ? `"use client";\n\n` : "";
-    const sessionEndpoint = isNextjs
-      ? "/api/session"
-      : "http://localhost:3001/chat/session";
-
-    // Build config options - only include non-default values
-    const configLines: string[] = [];
-    configLines.push(`  projectSlug: "${projectSlug}",`);
-    configLines.push(`  mcp: "${mcpUrl}",`);
-
-    if (config.variant !== "standalone") {
-      configLines.push(`  variant: "${config.variant}",`);
-    }
-
-    if (config.colorScheme !== "system") {
-      configLines.push(`  colorScheme: "${config.colorScheme}",`);
-    }
-
-    if (config.density !== "normal") {
-      configLines.push(`  density: "${config.density}",`);
-    }
-
-    if (config.radius !== "soft") {
-      configLines.push(`  radius: "${config.radius}",`);
-    }
-
-    // Welcome config
-    const welcomeParts: string[] = [];
-    if (config.welcomeTitle && config.welcomeTitle !== "Welcome") {
-      welcomeParts.push(`    title: "${config.welcomeTitle}",`);
-    }
-    if (
-      config.welcomeSubtitle &&
-      config.welcomeSubtitle !== "How can I help you today?"
-    ) {
-      welcomeParts.push(`    subtitle: "${config.welcomeSubtitle}",`);
-    }
-    if (welcomeParts.length > 0) {
-      configLines.push(`  welcome: {\n${welcomeParts.join("\n")}\n  },`);
-    }
-
-    // Composer config
-    if (
-      config.composerPlaceholder &&
-      config.composerPlaceholder !== "Send a message..."
-    ) {
-      configLines.push(
-        `  composer: {\n    placeholder: "${config.composerPlaceholder}",\n  },`,
-      );
-    }
-
-    // Model config
-    if (config.showModelPicker) {
-      configLines.push(`  model: {\n    showModelPicker: true,\n  },`);
-    }
-
-    // System prompt
-    if (config.systemPrompt) {
-      const escapedPrompt = config.systemPrompt
-        .replace(/\\/g, "\\\\")
-        .replace(/"/g, '\\"')
-        .replace(/\n/g, "\\n");
-      configLines.push(`  systemPrompt: "${escapedPrompt}",`);
-    }
-
-    // Modal config (only for widget variant)
-    if (config.variant === "widget") {
-      const modalParts: string[] = [];
-      if (config.modalTitle && config.modalTitle !== "Chat") {
-        modalParts.push(`    title: "${config.modalTitle}",`);
-      }
-      if (config.modalPosition !== "bottom-right") {
-        modalParts.push(`    position: "${config.modalPosition}",`);
-      }
-      if (config.modalDefaultOpen) {
-        modalParts.push(`    defaultOpen: true,`);
-      }
-      if (modalParts.length > 0) {
-        configLines.push(`  modal: {\n${modalParts.join("\n")}\n  },`);
-      }
-    }
-
-    // Tools config
-    if (config.expandToolGroupsByDefault) {
-      configLines.push(
-        `  tools: {\n    expandToolGroupsByDefault: true,\n  },`,
-      );
-    }
-
-    // Add the api.session config
-    configLines.push(`  api: {\n    session: getSession,\n  },`);
-
-    return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
-
-// Custom session function for non-standard session endpoint
-const getSession = async () => {
-  return fetch("${sessionEndpoint}", {
-    method: "POST",
-    headers: { "Gram-Project": "${projectSlug}" },
-  })
-    .then((res) => res.json())
-    .then((data) => data.client_token);
-};
-
-const config: ElementsConfig = {
-${configLines.join("\n")}
-};
-
-export default function GramChat() {
-  return (
-    <GramElementsProvider config={config}>
-      <Chat />
-    </GramElementsProvider>
-  );
-}`;
+  const codeGenParams = {
+    apiKey: generatedApiKey,
+    framework: selectedFramework!,
+    projectSlug,
+    mcpUrl,
+    config,
   };
 
   const products = [
@@ -1344,109 +1179,209 @@ export default function GramChat() {
       >
         {currentStep >= 3 && selectedFramework && (
           <div className="mt-6 space-y-6">
-            {/* Step 3a: Install */}
-            <SetupStep
-              number="a"
-              title="Install packages"
-              description="Run these commands in your terminal"
+            <Tabs
+              value={authMode}
+              onValueChange={(v) => setAuthMode(v as "lax" | "session")}
             >
-              <div className="space-y-2">
-                <CodeBlock code={getPeerDeps()} language="bash">
-                  <CodeBlockCopyButton />
-                </CodeBlock>
-                <CodeBlock code={getElementsInstall()} language="bash">
-                  <CodeBlockCopyButton />
-                </CodeBlock>
-              </div>
-            </SetupStep>
+              <TabsList>
+                <TabsTrigger value="lax">Quick Start</TabsTrigger>
+                <TabsTrigger value="session">Production</TabsTrigger>
+              </TabsList>
 
-            {/* Step 3b: Environment */}
-            <SetupStep
-              number="b"
-              title="Add environment variables"
-              description={
-                <>
-                  Add to{" "}
-                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                    .env.local
-                  </code>
-                </>
-              }
-            >
-              <CodeBlock code={getEnvContent()} language="bash">
-                <CodeBlockCopyButton />
-              </CodeBlock>
-            </SetupStep>
+              <TabsContent value="lax">
+                <div className="mt-4 space-y-6">
+                  <SetupStep
+                    number="a"
+                    title="Install packages"
+                    description="Run these commands in your terminal"
+                  >
+                    <div className="space-y-2">
+                      <CodeBlock
+                        code={getPeerDeps({ framework: selectedFramework })}
+                        language="bash"
+                      >
+                        <CodeBlockCopyButton />
+                      </CodeBlock>
+                      <CodeBlock
+                        code={getElementsInstall({
+                          framework: selectedFramework,
+                        })}
+                        language="bash"
+                      >
+                        <CodeBlockCopyButton />
+                      </CodeBlock>
+                    </div>
+                  </SetupStep>
 
-            {/* Step 3c: API Route */}
-            <SetupStep
-              number="c"
-              title={
-                selectedFramework === "nextjs"
-                  ? "Create session API route"
-                  : "Create session endpoint"
-              }
-              description={
-                selectedFramework === "nextjs" ? (
-                  <>
-                    Create{" "}
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                      pages/api/session.ts
-                    </code>
-                  </>
-                ) : (
-                  <>
-                    Create{" "}
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                      server.ts
-                    </code>
-                  </>
-                )
-              }
-            >
-              <CodeBlock
-                code={
-                  selectedFramework === "nextjs"
-                    ? getNextjsApiRoute()
-                    : getViteApiRoute()
-                }
-                language="typescript"
-                className="max-h-[300px] overflow-y-auto"
-              >
-                <CodeBlockCopyButton />
-              </CodeBlock>
-            </SetupStep>
+                  <SetupStep
+                    number="b"
+                    title="Add environment variables"
+                    description={
+                      <>
+                        Add to{" "}
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                          .env.local
+                        </code>
+                      </>
+                    }
+                  >
+                    <CodeBlock
+                      code={getDangerousApiKeyEnvContent({
+                        apiKey: generatedApiKey,
+                      })}
+                      language="bash"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
 
-            {/* Step 3d: Component */}
-            <SetupStep
-              number="d"
-              title="Add the chat component"
-              description={
-                selectedFramework === "nextjs" ? (
-                  <>
-                    Update{" "}
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                      app/page.tsx
-                    </code>
-                  </>
-                ) : (
-                  <>
-                    Update{" "}
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                      src/App.tsx
-                    </code>
-                  </>
-                )
-              }
-            >
-              <CodeBlock
-                code={getComponentCode()}
-                language="typescript"
-                className="max-h-[300px] overflow-y-auto"
-              >
-                <CodeBlockCopyButton />
-              </CodeBlock>
-            </SetupStep>
+                  <SetupStep
+                    number="c"
+                    title="Add the chat component"
+                    description={
+                      selectedFramework === "nextjs" ? (
+                        <>
+                          Update{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            app/page.tsx
+                          </code>
+                        </>
+                      ) : (
+                        <>
+                          Update{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            src/App.tsx
+                          </code>
+                        </>
+                      )
+                    }
+                  >
+                    <CodeBlock
+                      code={getDangerousApiKeyComponentCode(codeGenParams)}
+                      language="typescript"
+                      className="max-h-[300px] overflow-y-auto"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="session">
+                <div className="mt-4 space-y-6">
+                  <SetupStep
+                    number="a"
+                    title="Install packages"
+                    description="Run these commands in your terminal"
+                  >
+                    <div className="space-y-2">
+                      <CodeBlock
+                        code={getPeerDeps({ framework: selectedFramework })}
+                        language="bash"
+                      >
+                        <CodeBlockCopyButton />
+                      </CodeBlock>
+                      <CodeBlock
+                        code={getElementsInstall({
+                          framework: selectedFramework,
+                        })}
+                        language="bash"
+                      >
+                        <CodeBlockCopyButton />
+                      </CodeBlock>
+                    </div>
+                  </SetupStep>
+
+                  <SetupStep
+                    number="b"
+                    title="Add environment variables"
+                    description={
+                      <>
+                        Add to{" "}
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                          .env.local
+                        </code>
+                      </>
+                    }
+                  >
+                    <CodeBlock
+                      code={getEnvContent({ apiKey: generatedApiKey })}
+                      language="bash"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
+
+                  <SetupStep
+                    number="c"
+                    title={
+                      selectedFramework === "nextjs"
+                        ? "Create session API route"
+                        : "Create session endpoint"
+                    }
+                    description={
+                      selectedFramework === "nextjs" ? (
+                        <>
+                          Create{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            pages/api/session.ts
+                          </code>
+                        </>
+                      ) : (
+                        <>
+                          Create{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            server.ts
+                          </code>
+                        </>
+                      )
+                    }
+                  >
+                    <CodeBlock
+                      code={
+                        selectedFramework === "nextjs"
+                          ? getNextjsApiRoute()
+                          : getViteApiRoute()
+                      }
+                      language="typescript"
+                      className="max-h-[300px] overflow-y-auto"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
+
+                  <SetupStep
+                    number="d"
+                    title="Add the chat component"
+                    description={
+                      selectedFramework === "nextjs" ? (
+                        <>
+                          Update{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            app/page.tsx
+                          </code>
+                        </>
+                      ) : (
+                        <>
+                          Update{" "}
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            src/App.tsx
+                          </code>
+                        </>
+                      )
+                    }
+                  >
+                    <CodeBlock
+                      code={getSessionComponentCode(codeGenParams)}
+                      language="typescript"
+                      className="max-h-[300px] overflow-y-auto"
+                    >
+                      <CodeBlockCopyButton />
+                    </CodeBlock>
+                  </SetupStep>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </WizardStep>
