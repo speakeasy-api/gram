@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
 	srv "github.com/speakeasy-api/gram/server/gen/http/domains/server"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -32,6 +33,7 @@ type Service struct {
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	auth           *auth.Auth
+	access         *access.Manager
 	temporalClient TemporalClient
 }
 
@@ -43,14 +45,15 @@ type TemporalClient interface {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("custom_domains"))
 
 	return &Service{
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/customdomains"),
 		logger:         logger,
 		db:             db,
-		auth:           auth.New(logger, db, sessions, accessLoader),
+		auth:           auth.New(logger, db, sessions, accessManager),
+		access:         accessManager,
 		temporalClient: temporal,
 	}
 }
@@ -71,8 +74,11 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) (res *gen.CustomDomain, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return nil, err
 	}
 
 	repo := repo.New(s.db)
@@ -101,8 +107,11 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 
 func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPayload) (err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return err
 	}
 
 	if !slices.Contains([]string{"pro", "enterprise"}, authCtx.AccountType) {
@@ -125,8 +134,11 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 
 func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) (err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return err
 	}
 
 	domain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
