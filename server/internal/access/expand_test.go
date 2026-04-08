@@ -14,8 +14,6 @@ func TestCheckExpand_orgRead(t *testing.T) {
 	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: WildcardResource})
 	require.Contains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"})
 	require.Contains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: WildcardResource})
-	require.Contains(t, checks, Check{Scope: ScopeOrgWrite, ResourceID: "org_123"})
-	require.Contains(t, checks, Check{Scope: ScopeOrgWrite, ResourceID: WildcardResource})
 	require.Contains(t, checks, Check{Scope: ScopeOrgRead, ResourceID: "org_123"})
 	require.Contains(t, checks, Check{Scope: ScopeOrgRead, ResourceID: WildcardResource})
 }
@@ -40,13 +38,6 @@ func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
 
 	g := &Grants{rows: []Grant{{Scope: ScopeOrgAdmin, Resource: "org_123"}}}
 	require.True(t, g.satisfies(Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand()))
-}
-
-func TestGrantsHasAccess_orgAdminSatisfiesOrgWrite(t *testing.T) {
-	t.Parallel()
-
-	g := &Grants{rows: []Grant{{Scope: ScopeOrgAdmin, Resource: "org_123"}}}
-	require.True(t, g.satisfies(Check{Scope: ScopeOrgWrite, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_orgReadDoesNotSatisfyOrgAdmin(t *testing.T) {

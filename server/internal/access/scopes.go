@@ -6,7 +6,6 @@ type Scope string
 const (
 	ScopeRoot       Scope = "root"
 	ScopeOrgRead    Scope = "org:read"
-	ScopeOrgWrite   Scope = "org:write"
 	ScopeOrgAdmin   Scope = "org:admin"
 	ScopeBuildRead  Scope = "build:read"
 	ScopeBuildWrite Scope = "build:write"
@@ -20,8 +19,7 @@ const (
 // mcp:connect is a distinct capability — it is not implied by mcp:write.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:       nil,
-	ScopeOrgRead:    {ScopeOrgWrite, ScopeOrgAdmin},
-	ScopeOrgWrite:   {ScopeOrgAdmin},
+	ScopeOrgRead:    {ScopeOrgAdmin},
 	ScopeOrgAdmin:   nil,
 	ScopeBuildRead:  {ScopeBuildWrite},
 	ScopeBuildWrite: nil,
