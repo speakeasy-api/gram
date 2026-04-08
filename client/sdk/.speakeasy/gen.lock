@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: c81d16660ec739a4d9a2317a9f3f065b
+  docChecksum: 4ee049c4cd0e4dfc9b34b1dc4f7f8556
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.28
-  configChecksum: 26dac02cab4667cf8e4c0d63d04e9961
+  releaseVersion: 0.32.30
+  configChecksum: 780f050639fed31c16c2ef74e298d3ed
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -358,7 +358,7 @@ trackedFiles:
   docs/models/components/listtoolsresult.md:
     last_write_checksum: sha1:962086dafa9244f0c8884e6e91da75181e498762
   docs/models/components/listusersresult.md:
-    last_write_checksum: sha1:484d5dca0d966130193ffed82988599b8a1e4d8c
+    last_write_checksum: sha1:603d7376c08faf8d8eec1166df151e0007bc8290
   docs/models/components/listvariationsresult.md:
     last_write_checksum: sha1:aee8e4ff0d8905002a493221986452d34b7c2c42
   docs/models/components/listversionsresult.md:
@@ -410,7 +410,7 @@ trackedFiles:
   docs/models/components/organizationinvitationstate.md:
     last_write_checksum: sha1:21bf402c8b8a8af0667f469cda7adcd506d81ec1
   docs/models/components/organizationuser.md:
-    last_write_checksum: sha1:1791e3601f7995d2441d54c15b0170a7740f3920
+    last_write_checksum: sha1:982e7f6d036e03381dc82ff336ab5c6bf6a3f20e
   docs/models/components/otelattribute.md:
     last_write_checksum: sha1:a893f2d5835427f5e9750589b9d8703c2a9d30c1
   docs/models/components/otelattributevalue.md:
@@ -1651,11 +1651,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:841365b5555735d8dd53ae07d6b800c5bf6a0624
+    last_write_checksum: sha1:8b1cbf51c7e62b13b38c13e9797f3a85e3ea0d42
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:c31029eb4c2ef5f256d84a916acb40fbda2c8ab1
+    last_write_checksum: sha1:d39d782add4d3359c1fcfd5788681f59578eee6b
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2167,7 +2167,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:a25bd497c27e18950fa26436ba016ecb20e93ba6
+    last_write_checksum: sha1:876a42fc14c9213bb8d9cfc7d6b4a71ec358111a
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2726,7 +2726,7 @@ trackedFiles:
   src/models/components/organizationinvitationaccept.ts:
     last_write_checksum: sha1:61da98eda71adefdd4f4f6f80eb9f623bb957116
   src/models/components/organizationuser.ts:
-    last_write_checksum: sha1:5efaa19c6bd1ec7c5937285593e3b0677d8c03c4
+    last_write_checksum: sha1:5fbeb489e54a940b59403d1576dcfe43266a72ea
   src/models/components/otelattribute.ts:
     last_write_checksum: sha1:73d5182c8e167121b1b0993f33c638df9d5a1f46
   src/models/components/otelattributevalue.ts:

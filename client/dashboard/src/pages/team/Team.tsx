@@ -8,15 +8,15 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { formatDistanceToNow } from "date-fns";
 import {
   invalidateAllListInvites,
-  invalidateAllMembers,
-  useMembersSuspense,
+  invalidateAllListOrganizationUsers,
+  useListOrganizationUsersSuspense,
   useListInvitesSuspense,
   useSendInviteMutation,
   useRevokeInviteMutation,
   useRemoveOrganizationUserMutation,
 } from "@gram/client/react-query";
 import {
-  AccessMember,
+  OrganizationUser,
   OrganizationInvitation,
 } from "@gram/client/models/components";
 import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
@@ -51,21 +51,21 @@ export default function Team() {
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [memberToRemove, setMemberToRemove] = useState<AccessMember | null>(
+  const [memberToRemove, setMemberToRemove] = useState<OrganizationUser | null>(
     null,
   );
   const [inviteToCancel, setInviteToCancel] =
     useState<OrganizationInvitation | null>(null);
 
-  const { data: membersData } = useMembersSuspense();
+  const { data: membersData } = useListOrganizationUsersSuspense();
   const { data: invitesData } = useListInvitesSuspense();
 
-  const members = membersData?.members ?? [];
+  const members = membersData?.users ?? [];
   const invites = invitesData?.invitations ?? [];
 
   const invalidateTeamData = async () => {
     await Promise.all([
-      invalidateAllMembers(queryClient),
+      invalidateAllListOrganizationUsers(queryClient),
       invalidateAllListInvites(queryClient),
     ]);
   };
@@ -79,7 +79,9 @@ export default function Team() {
   const removeMemberMutation = useRemoveOrganizationUserMutation({
     onSuccess: async () => {
       await invalidateTeamData();
-      toast.success(`${memberToRemove?.name} has been removed`);
+      toast.success(
+        `${memberToRemove?.name ?? memberToRemove?.email} has been removed`,
+      );
       setMemberToRemove(null);
     },
     onError: () => {
@@ -123,11 +125,11 @@ export default function Team() {
   };
 
   const handleRemoveMember = () => {
-    if (!memberToRemove || memberToRemove.id === user.id) return;
+    if (!memberToRemove || memberToRemove.email === user.email) return;
 
     removeMemberMutation.mutate({
       request: {
-        userId: memberToRemove.id,
+        userId: memberToRemove.userId,
       },
     });
   };
@@ -142,7 +144,7 @@ export default function Team() {
     });
   };
 
-  const memberColumns: Column<AccessMember>[] = [
+  const memberColumns: Column<OrganizationUser>[] = [
     {
       key: "member",
       header: "Member",
@@ -190,7 +192,7 @@ export default function Team() {
           variant="body"
           className="text-muted-foreground whitespace-nowrap"
         >
-          <HumanizeDateTime date={member.joinedAt} />
+          <HumanizeDateTime date={member.createdAt} />
         </Type>
       ),
     },
@@ -337,7 +339,7 @@ export default function Team() {
             <Table
               columns={memberColumns}
               data={members}
-              rowKey={(row) => row.id}
+              rowKey={(row) => row.userId}
               className="min-h-fit"
               noResultsMessage={
                 <Stack

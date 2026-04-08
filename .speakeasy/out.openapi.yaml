@@ -18979,12 +18979,21 @@ components:
         created_at:
           type: string
           format: date-time
+        email:
+          type: string
+          description: User email address.
         id:
           type: string
           description: Gram relationship row ID.
+        name:
+          type: string
+          description: User display name.
         organization_id:
           type: string
           description: Gram organization ID.
+        photo_url:
+          type: string
+          description: User photo URL.
         updated_at:
           type: string
           format: date-time
@@ -18998,6 +19007,8 @@ components:
         - id
         - organization_id
         - user_id
+        - name
+        - email
         - created_at
         - updated_at
     Package:

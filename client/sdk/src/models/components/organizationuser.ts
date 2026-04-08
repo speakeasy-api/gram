@@ -11,13 +11,25 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export type OrganizationUser = {
   createdAt: Date;
   /**
+   * User email address.
+   */
+  email: string;
+  /**
    * Gram relationship row ID.
    */
   id: string;
   /**
+   * User display name.
+   */
+  name: string;
+  /**
    * Gram organization ID.
    */
   organizationId: string;
+  /**
+   * User photo URL.
+   */
+  photoUrl?: string | undefined;
   updatedAt: Date;
   /**
    * Gram user ID.
@@ -39,8 +51,11 @@ export const OrganizationUser$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    email: z.string(),
     id: z.string(),
+    name: z.string(),
     organization_id: z.string(),
+    photo_url: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -52,6 +67,7 @@ export const OrganizationUser$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "created_at": "createdAt",
       "organization_id": "organizationId",
+      "photo_url": "photoUrl",
       "updated_at": "updatedAt",
       "user_id": "userId",
       "workos_membership_id": "workosMembershipId",
