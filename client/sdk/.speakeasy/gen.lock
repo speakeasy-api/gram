@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4b62dbf203e07ecaf2ec005672e11bae
+  docChecksum: d6816e89c11e033d2112e8806aa57e62
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.31
-  configChecksum: bb1f3c6f7f2285f2b786eabcfb05b3b7
+  releaseVersion: 0.32.32
+  configChecksum: 9c1ee2b973c781988baa4cb9e44a8ad2
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -1182,9 +1182,13 @@ trackedFiles:
   docs/models/operations/listmcpcatalogsecurityoption2.md:
     last_write_checksum: sha1:0af7def78c6fac90ce32315cde6e97512cc5fde4
   docs/models/operations/listmcpregistriesrequest.md:
-    last_write_checksum: sha1:bff0fe2dce50ec441612e23df98016bf1ca6e427
+    last_write_checksum: sha1:5dc1a19c1ac9db483cf36c8d270883be88418bb4
   docs/models/operations/listmcpregistriessecurity.md:
-    last_write_checksum: sha1:dd4fc05802b62eb8d67cb95641807bb995902d9a
+    last_write_checksum: sha1:4a9a404c2a636e87594416373d65274c352233ae
+  docs/models/operations/listmcpregistriessecurityoption1.md:
+    last_write_checksum: sha1:215432879ba261a6b7a637e464d6d522b9baa7e8
+  docs/models/operations/listmcpregistriessecurityoption2.md:
+    last_write_checksum: sha1:6d81f9d546229cd0137364535d6284057cc3e63c
   docs/models/operations/listmembersrequest.md:
     last_write_checksum: sha1:868be2bbd95372b4d1be4ccfbb244b0bf63d21c4
   docs/models/operations/listmemberssecurity.md:
@@ -1651,11 +1655,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:7de76785b0642ad03f4a49b9fe3d41cb62e20d75
+    last_write_checksum: sha1:3881e9eb68af0582294a35e2cde20f4eaa215a6a
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:057b72c268c2c32a48d803839a366f084edb4a12
+    last_write_checksum: sha1:716cb58190f26b81dc54fb9c300502220597f779
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1936,7 +1940,7 @@ trackedFiles:
     last_write_checksum: sha1:b47d466b710b059b05869118741a5a3bf4097b35
     pristine_git_object: 4b1c888c9c0c75bcdcc63d37d4a1be92c135c3e8
   src/funcs/mcpRegistriesListRegistries.ts:
-    last_write_checksum: sha1:0ac4b3c50f80285cc2ca77861d75b2855eee3368
+    last_write_checksum: sha1:bf5407c5bda22d4b0c2965e1e8e876276d2ef4ef
   src/funcs/organizationsGetInviteByToken.ts:
     last_write_checksum: sha1:3aa386ba87041f8c80dba9c044e6d3116296083a
   src/funcs/organizationsListInvites.ts:
@@ -2167,7 +2171,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:b7c56b6ce2f9937ae55651f8598f5a17cdc8528a
+    last_write_checksum: sha1:6fec6ca9c31c5cd8f787f4eb9c881ae75eb5d2bb
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3356,7 +3360,7 @@ trackedFiles:
     last_write_checksum: sha1:05c3d0176e6b370110860a1c7f7eb40c4d7a58f6
     pristine_git_object: 7e39567f47d1cfff8977630a4e04f1027d7add32
   src/models/operations/listmcpregistries.ts:
-    last_write_checksum: sha1:e05f82cc37e6a0d81947cac6ce67278ee1015a2f
+    last_write_checksum: sha1:6b175c98e3cc549235af1d2e56a63351d047cf93
   src/models/operations/listmembers.ts:
     last_write_checksum: sha1:007387e1747a7d3ae18fa14884d5564a840f68ec
   src/models/operations/listorganizationusers.ts:
@@ -3960,9 +3964,9 @@ trackedFiles:
     last_write_checksum: sha1:fc9b4c11c6cd077dd9378f61044244b1da99867c
     pristine_git_object: 705dacc43f057c1f54da8cef5c9d25259274ab52
   src/react-query/listMCPRegistries.core.ts:
-    last_write_checksum: sha1:a8227dac2c49d98c0efc2d182dcfe71974539919
+    last_write_checksum: sha1:5d4f21c40cd43e5590bd78340e51b52601fc57c2
   src/react-query/listMCPRegistries.ts:
-    last_write_checksum: sha1:71d847f65e258f58b8177a8a16ef06c2c1ddafb2
+    last_write_checksum: sha1:08832107160b4a8b5d64f6ec02090c71368fa484
   src/react-query/listOrganizationUsers.core.ts:
     last_write_checksum: sha1:93ad658e002d6b9e4ff01e4c8889915d521a4985
   src/react-query/listOrganizationUsers.ts:

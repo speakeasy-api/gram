@@ -111,8 +111,16 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 
 func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistriesPayload) (*gen.ListRegistriesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+	}
+	if userInfo == nil || !userInfo.Admin {
+		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	registries, err := s.repo.ListMCPRegistries(ctx)

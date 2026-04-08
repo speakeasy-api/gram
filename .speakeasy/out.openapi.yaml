@@ -7712,6 +7712,13 @@ paths:
           schema:
             description: API Key header
             type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
       responses:
         "200":
           content:
@@ -7774,8 +7781,10 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: listRegistries mcpRegistries
       tags:
