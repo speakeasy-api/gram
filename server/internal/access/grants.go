@@ -36,12 +36,12 @@ func (g *Grants) hasAccess(scope Scope, resourceID string) bool {
 		return false
 	}
 
+	candidates := (Check{Scope: scope, ResourceID: resourceID}).Expand()
 	for _, row := range g.rows {
-		if row.Scope != scope {
-			continue
-		}
-		if row.Resource == WildcardResource || row.Resource == resourceID {
-			return true
+		for _, candidate := range candidates {
+			if row.Scope == candidate.Scope && row.Resource == candidate.ResourceID {
+				return true
+			}
 		}
 	}
 
