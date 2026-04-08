@@ -2088,7 +2088,6 @@ function HooksAnalytics({
   const kpis = useMemo(() => {
     const servers = summaryData?.servers ?? [];
     const totalEvents = summaryData?.totalEvents ?? 0;
-    const totalSessions = summaryData?.totalSessions ?? 0;
 
     const avgSuccessRate =
       servers.length > 0
@@ -2096,40 +2095,24 @@ function HooksAnalytics({
           servers.length
         : null;
 
-    const uniqueUsers = new Set(
+    const activeUsers = new Set(
       groupedTraces.map((t) => t.userEmail).filter(Boolean),
     ).size;
 
-    const sortedBySuccess = [...servers].sort(
-      (a, b) => a.failureRate - b.failureRate,
-    );
-    const bestServer = sortedBySuccess[0];
-    const worstServer = sortedBySuccess[sortedBySuccess.length - 1];
+    const activeClients = new Set(
+      groupedTraces.map((t) => t.hookSource).filter(Boolean),
+    ).size;
 
-    const getDisplayName = (s: HooksServerSummary) =>
-      !s.serverName
-        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-        : (serverNameMappings.rawToDisplay.get(s.serverName) ?? s.serverName);
+    const uniqueTools = servers.reduce((s, r) => s + (r.uniqueTools ?? 0), 0);
 
     return {
       avgSuccessRate,
       totalEvents,
-      totalSessions,
-      uniqueUsers,
-      bestServer: bestServer
-        ? {
-            name: getDisplayName(bestServer),
-            rate: (1 - bestServer.failureRate) * 100,
-          }
-        : null,
-      worstServer: worstServer
-        ? {
-            name: getDisplayName(worstServer),
-            rate: (1 - worstServer.failureRate) * 100,
-          }
-        : null,
+      activeUsers,
+      activeClients,
+      uniqueTools,
     };
-  }, [summaryData, groupedTraces, serverNameMappings.rawToDisplay]);
+  }, [summaryData, groupedTraces]);
 
   const hasServers = (summaryData?.servers.length ?? 0) > 0;
 
@@ -2153,27 +2136,25 @@ function HooksAnalytics({
           subtext="this period"
         />
         <MetricCard
-          title="Sessions"
-          value={kpis.totalSessions}
+          title="Active Users"
+          value={kpis.activeUsers}
           icon="users"
           accentColor="yellow"
-          subtext="unique sessions"
+          subtext="from loaded traces"
         />
         <MetricCard
-          title="Best Server"
-          value={kpis.bestServer?.rate ?? 0}
-          format="percent"
-          icon="trending-up"
+          title="Active Clients"
+          value={kpis.activeClients}
+          icon="monitor"
           accentColor="blue"
-          subtext={kpis.bestServer?.name ?? "no data"}
+          subtext="distinct clients"
         />
         <MetricCard
-          title="Worst Server"
-          value={kpis.worstServer?.rate ?? 0}
-          format="percent"
-          icon="trending-down"
-          accentColor="red"
-          subtext={kpis.worstServer?.name ?? "no data"}
+          title="Unique Tools"
+          value={kpis.uniqueTools}
+          icon="wrench"
+          accentColor="orange"
+          subtext="across all servers"
         />
       </div>
 
