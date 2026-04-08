@@ -28,57 +28,28 @@ type OpenRouterKeyRefresher interface {
 	CancelOpenRouterKeyRefreshWorkflow(ctx context.Context, orgID string) error
 }
 
-type AccessContextPreparer interface {
-	PrepareContext(ctx context.Context) (context.Context, error)
-}
-
-// RequireOrgReadFn injects RBAC enforcement without importing access here,
-// which would create an import cycle because access depends on productfeatures.
-type RequireOrgReadFn func(ctx context.Context, organizationID string) error
-
-// RequireOrgAdminFn injects RBAC enforcement without importing access here,
-// which would create an import cycle because access depends on productfeatures.
-type RequireOrgAdminFn func(ctx context.Context, organizationID string) error
-
 // Service implements organization feature management operations.
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	auth   *auth.Auth
-	// access already depends on productfeatures for the RBAC feature gate, so
-	// inject the concrete checks here to avoid an import cycle.
-	requireOrgRead RequireOrgReadFn
-	// access already depends on productfeatures for the RBAC feature gate, so
-	// inject the concrete checks here to avoid an import cycle.
-	requireOrgAdmin RequireOrgAdminFn
-	featureCache    cache.TypedCacheObject[FeatureCache]
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	repo         *repo.Queries
+	auth         *auth.Auth
+	featureCache cache.TypedCacheObject[FeatureCache]
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(
-	logger *slog.Logger,
-	tracerProvider trace.TracerProvider,
-	db *pgxpool.Pool,
-	sessions *sessions.Manager,
-	redisClient *redis.Client,
-	accessLoader AccessContextPreparer,
-	requireOrgRead RequireOrgReadFn,
-	requireOrgAdmin RequireOrgAdminFn,
-) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, redisClient *redis.Client, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
-		logger:          logger,
-		db:              db,
-		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, accessLoader),
-		requireOrgRead:  requireOrgRead,
-		requireOrgAdmin: requireOrgAdmin,
-		featureCache:    cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
+		logger:       logger,
+		db:           db,
+		repo:         repo.New(db),
+		auth:         auth.New(logger, db, sessions, accessLoader),
+		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
 
@@ -96,9 +67,6 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.requireOrgAdmin(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return err
 	}
 
 	var err error
@@ -144,9 +112,6 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.requireOrgRead(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
 	}
 
 	orgID := authCtx.ActiveOrganizationID
