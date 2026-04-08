@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -59,6 +60,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
+	platformTools gateway.PlatformExecutor,
 	openRouter openrouter.Provisioner,
 	baseChatClient *chat.Client,
 	authService *auth.Auth,
@@ -76,6 +78,7 @@ func NewService(
 		cacheImpl,
 		guardianPolicy,
 		funcCaller,
+		platformTools,
 		openRouter,
 		baseChatClient,
 	)

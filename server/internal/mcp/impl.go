@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -140,6 +141,8 @@ func NewService(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 
+	platformSvc := platformtoolsruntime.NewService(logger, db, telemSvc)
+
 	return &Service{
 		logger:          logger,
 		tracer:          tracer,
@@ -164,6 +167,7 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 			funcCaller,
+			platformSvc,
 		),
 		oauthService:        oauthService,
 		oauthRepo:           oauth_repo.New(db),

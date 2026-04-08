@@ -15,7 +15,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Managed toolsets for gram AI consumers.
+// Toolsets for gram AI consumers.
 type Service interface {
 	// Create a new toolset with associated tools
 	CreateToolset(context.Context, *CreateToolsetPayload) (res *types.Toolset, err error)

@@ -5819,7 +5819,7 @@ func toolsListToolsUsage() {
 
 // toolsetsUsage displays the usage of the toolsets command and its subcommands.
 func toolsetsUsage() {
-	fmt.Fprintln(os.Stderr, `Managed toolsets for gram AI consumers.`)
+	fmt.Fprintln(os.Stderr, `Toolsets for gram AI consumers.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] toolsets COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-toolset: Create a new toolset with associated tools`)

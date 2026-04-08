@@ -19160,6 +19160,81 @@ components:
                 - credits
                 - included_credits
                 - has_active_subscription
+        PlatformToolDefinition:
+            type: object
+            properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
+                canonical_name:
+                    type: string
+                    description: The canonical name of the tool. Will be the same as the name if there is no variation.
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
+                created_at:
+                    type: string
+                    description: The creation date of the tool.
+                    format: date-time
+                description:
+                    type: string
+                    description: Description of the tool
+                id:
+                    type: string
+                    description: The ID of the tool
+                managed:
+                    type: boolean
+                    description: Whether this tool is managed by the platform and not user-created
+                name:
+                    type: string
+                    description: The name of the tool
+                owner_id:
+                    type: string
+                    description: Optional owning entity ID
+                owner_kind:
+                    type: string
+                    description: The entity kind that owns this tool's lifecycle
+                project_id:
+                    type: string
+                    description: The ID of the project
+                schema:
+                    type: string
+                    description: JSON schema for the request
+                schema_version:
+                    type: string
+                    description: Version of the schema
+                source_slug:
+                    type: string
+                    description: 'The backing platform tool source (for example: logs)'
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
+                tool_urn:
+                    type: string
+                    description: The URN of this tool
+                updated_at:
+                    type: string
+                    description: The last update date of the tool.
+                    format: date-time
+                variation:
+                    $ref: '#/components/schemas/ToolVariation'
+            description: A platform-owned tool served directly by the platform
+            required:
+                - source_slug
+                - managed
+                - id
+                - project_id
+                - name
+                - canonical_name
+                - description
+                - schema
+                - tool_urn
+                - created_at
+                - updated_at
         Project:
             type: object
             properties:
@@ -20656,6 +20731,8 @@ components:
                     $ref: '#/components/schemas/FunctionToolDefinition'
                 http_tool_definition:
                     $ref: '#/components/schemas/HTTPToolDefinition'
+                platform_tool_definition:
+                    $ref: '#/components/schemas/PlatformToolDefinition'
                 prompt_template:
                     $ref: '#/components/schemas/PromptTemplate'
             description: A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy
@@ -20732,6 +20809,7 @@ components:
                         - http
                         - prompt
                         - function
+                        - platform
                         - externalmcp
             required:
                 - type
@@ -22007,7 +22085,7 @@ tags:
     - name: tools
       description: Dashboard API for interacting with tools.
     - name: toolsets
-      description: Managed toolsets for gram AI consumers.
+      description: Toolsets for gram AI consumers.
     - name: usage
       description: Read usage for gram.
     - name: variations
