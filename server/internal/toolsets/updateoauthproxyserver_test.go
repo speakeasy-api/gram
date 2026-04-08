@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // createPublicToolsetWithCustomOAuthProxy creates a public toolset and attaches a custom
@@ -400,4 +402,143 @@ func TestToolsetsService_UpdateOAuthProxyServer_EnvironmentSlugNotFound(t *testi
 	afterCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
 	require.NoError(t, auditErr)
 	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
+}
+
+func TestToolsetsService_UpdateOAuthProxyServer_ClearScopes(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withProAccount(t, ctx)
+
+	// The helper creates a proxy with ScopesSupported: ["read", "write"].
+	attached := createPublicToolsetWithCustomOAuthProxy(
+		t, ctx, ti,
+		"Clear Scopes OAuth Proxy Toolset",
+		"clear-scopes-env",
+		"clear-scopes-proxy",
+	)
+
+	require.Len(t, attached.OauthProxyServer.OauthProxyProviders, 1)
+	require.Equal(t, []string{"read", "write"}, attached.OauthProxyServer.OauthProxyProviders[0].ScopesSupported)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, err)
+
+	// Pass an explicit empty (non-nil) slice — COALESCE should pick the empty array
+	// over the existing value, clearing the scopes column entirely.
+	updated, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		Slug:         attached.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
+			ScopesSupported: []string{},
+		},
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.NotNil(t, updated.OauthProxyServer)
+
+	// Scopes should be empty, not the original ["read", "write"].
+	require.Len(t, updated.OauthProxyServer.OauthProxyProviders, 1)
+	provider := updated.OauthProxyServer.OauthProxyProviders[0]
+	require.Empty(t, provider.ScopesSupported)
+
+	// One audit row should have been added.
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_UpdateOAuthProxyServer_SoftDeletedProxyRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withProAccount(t, ctx)
+
+	// Create a toolset with a custom OAuth proxy, then remove the proxy association.
+	// After removal the toolset no longer has an OauthProxyServer, so any subsequent
+	// UpdateOAuthProxyServer call should return 404 ("no OAuth proxy server attached").
+	attached := createPublicToolsetWithCustomOAuthProxy(
+		t, ctx, ti,
+		"Soft Deleted Proxy Toolset",
+		"soft-deleted-proxy-env",
+		"soft-deleted-proxy",
+	)
+
+	removed, err := ti.service.RemoveOAuthServer(ctx, &gen.RemoveOAuthServerPayload{
+		Slug:             attached.Slug,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, removed)
+	require.Nil(t, removed.OauthProxyServer)
+
+	_, err = ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		Slug:         attached.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
+			Audience: new("https://new-audience.example.com"),
+		},
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no OAuth proxy server attached")
+
+	var oopsErr *oops.ShareableError
+	require.True(t, errors.As(err, &oopsErr))
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestToolsetsService_UpdateOAuthProxyServer_WrongProjectIsolation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withProAccount(t, ctx)
+
+	// Create a toolset with OAuth proxy under the current (project A) auth context.
+	attached := createPublicToolsetWithCustomOAuthProxy(
+		t, ctx, ti,
+		"Wrong Project Isolation Toolset",
+		"wrong-proj-env",
+		"wrong-proj-proxy",
+	)
+
+	// Create a second project (project B) in the same organisation.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	projectBSlug := "wrong-proj-isolation-" + uuid.New().String()[:8]
+	projectB, err := projectsRepo.New(ti.conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           projectBSlug,
+		Slug:           projectBSlug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	// Switch the auth context to project B.
+	authCtxB := *authCtx
+	authCtxB.ProjectID = &projectB.ID
+	authCtxB.ProjectSlug = &projectB.Slug
+	ctxB := contextvalues.SetAuthContext(ctx, &authCtxB)
+
+	// The toolset slug belongs to project A; looking it up from project B should
+	// return not-found because mv.DescribeToolset filters by project ID.
+	_, err = ti.service.UpdateOAuthProxyServer(ctxB, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		Slug:         attached.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
+			Audience: new("https://new-audience.example.com"),
+		},
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.True(t, errors.As(err, &oopsErr))
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
