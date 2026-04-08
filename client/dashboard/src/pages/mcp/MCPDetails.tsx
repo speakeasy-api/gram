@@ -2174,15 +2174,13 @@ function OAuthTabModal({
     const provider = proxyServer.oauthProxyProviders?.[0];
     setProxySlug(proxyServer.slug ?? "");
     setProxyAudience(proxyServer.audience ?? "");
-    if (provider) {
-      setProxyAuthorizationEndpoint(provider.authorizationEndpoint ?? "");
-      setProxyTokenEndpoint(provider.tokenEndpoint ?? "");
-      setProxyScopes((provider.scopesSupported ?? []).join(", "));
-      setProxyTokenAuthMethod(
-        provider.tokenEndpointAuthMethodsSupported?.[0] ?? "client_secret_post",
-      );
-      setProxyEnvironmentSlug(provider.environmentSlug ?? "");
-    }
+    setProxyAuthorizationEndpoint(provider?.authorizationEndpoint ?? "");
+    setProxyTokenEndpoint(provider?.tokenEndpoint ?? "");
+    setProxyScopes((provider?.scopesSupported ?? []).join(", "));
+    setProxyTokenAuthMethod(
+      provider?.tokenEndpointAuthMethodsSupported?.[0] ?? "client_secret_post",
+    );
+    setProxyEnvironmentSlug(provider?.environmentSlug ?? "");
     // When editing, force the proxy tab to be active.
     setActiveTab("proxy");
   }, [editMode]);
@@ -2336,7 +2334,7 @@ function OAuthTabModal({
       return;
     }
 
-    if (!proxyEnvironmentSlug.trim()) {
+    if (!editMode && !proxyEnvironmentSlug.trim()) {
       setProxyError("Environment slug is required");
       return;
     }
