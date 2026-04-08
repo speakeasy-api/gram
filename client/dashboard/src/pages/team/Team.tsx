@@ -123,7 +123,7 @@ export default function Team() {
   };
 
   const handleRemoveMember = () => {
-    if (!memberToRemove) return;
+    if (!memberToRemove || memberToRemove.id === user.id) return;
 
     removeMemberMutation.mutate({
       request: {
@@ -199,7 +199,7 @@ export default function Team() {
       header: "",
       width: "80px",
       render: (member) =>
-        member.id !== user.id ? (
+        member.email !== user.email ? (
           <Button
             variant="tertiary"
             size="sm"
