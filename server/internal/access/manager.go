@@ -82,7 +82,7 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 	}
 
 	for _, check := range checks {
-		if err := validateCheck(check); err != nil {
+		if err := check.Validate(); err != nil {
 			return m.mapError(ctx, err)
 		}
 
@@ -112,7 +112,7 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	for _, check := range checks {
-		if err := validateCheck(check); err != nil {
+		if err := check.Validate(); err != nil {
 			return m.mapError(ctx, err)
 		}
 	}
@@ -142,7 +142,7 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 
 	allowed := make([]string, 0, len(resourceIDs))
 	for _, resourceID := range resourceIDs {
-		if err := validateCheck(Check{Scope: scope, ResourceID: resourceID}); err != nil {
+		if err := (Check{Scope: scope, ResourceID: resourceID}).Validate(); err != nil {
 			return nil, m.mapError(ctx, err)
 		}
 

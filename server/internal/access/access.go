@@ -23,12 +23,12 @@ func (c Check) Expand() []Check {
 	return checks
 }
 
-func validateCheck(check Check) error {
-	switch check.ResourceID {
+func (c Check) Validate() error {
+	switch c.ResourceID {
 	case "":
-		return InvalidCheck(check.Scope, check.ResourceID)
+		return InvalidCheck(c.Scope, c.ResourceID)
 	case WildcardResource:
-		return InvalidCheck(check.Scope, check.ResourceID)
+		return InvalidCheck(c.Scope, c.ResourceID)
 	default:
 		return nil
 	}
