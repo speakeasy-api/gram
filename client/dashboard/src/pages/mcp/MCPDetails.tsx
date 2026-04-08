@@ -929,6 +929,17 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
   const [isOAuthEditModalOpen, setIsOAuthEditModalOpen] = useState(false);
+  // Memoize the editMode object so its reference is stable across parent
+  // re-renders. Without this, the inline `{ proxyServer: ... }` literal in JSX
+  // would create a new reference on every render, causing OAuthTabModal's
+  // useEffect([editMode]) to fire repeatedly and wipe the user's form input.
+  const oauthEditMode = useMemo(
+    () =>
+      toolset.oauthProxyServer
+        ? { proxyServer: toolset.oauthProxyServer }
+        : undefined,
+    [toolset.oauthProxyServer],
+  );
 
   // Delete mcp server state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -1429,11 +1440,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         onClose={() => setIsOAuthEditModalOpen(false)}
         toolsetSlug={toolset.slug}
         toolset={toolset}
-        editMode={
-          toolset.oauthProxyServer
-            ? { proxyServer: toolset.oauthProxyServer }
-            : undefined
-        }
+        editMode={oauthEditMode}
       />
       <GramOAuthProxyModal
         isOpen={isGramOAuthModalOpen}
@@ -2355,7 +2362,11 @@ function OAuthTabModal({
           slug: toolsetSlug,
           updateOAuthProxyServerRequestBody: {
             oauthProxyServer: {
-              audience: proxyAudience || undefined,
+              // Pass proxyAudience as-is so the user can clear it by emptying
+              // the field. Coercing empty string to undefined would silently
+              // skip the update server-side and prevent the user from clearing
+              // a previously-set audience.
+              audience: proxyAudience,
               authorizationEndpoint: proxyAuthorizationEndpoint,
               tokenEndpoint: proxyTokenEndpoint,
               scopesSupported: scopesArray,
