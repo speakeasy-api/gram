@@ -69,7 +69,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.42.0
 	go.opentelemetry.io/otel/sdk/metric v1.42.0
 	go.opentelemetry.io/otel/trace v1.42.0
-	go.temporal.io/api v1.62.6
+	go.temporal.io/api v1.62.7
 	go.temporal.io/sdk v1.41.1
 	go.temporal.io/sdk/contrib/opentelemetry v0.7.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.4
