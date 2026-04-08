@@ -9,7 +9,6 @@ import { cn, getServerURL } from "@/lib/utils";
 import { Link } from "@/components/ui/link";
 import { useRoutes } from "@/routes";
 import { Switch } from "@/components/ui/switch";
-import { MOCK_REGISTRY_SKILLS } from "@/pages/context/mock-data";
 import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { useParams } from "react-router";
@@ -201,27 +200,6 @@ const DOCS_MCP_TOOLS: DocsMcpTool[] = [
       },
     ],
   },
-  {
-    name: "RemoteSkill",
-    description:
-      "Invoke a skill by ID. Returns the full skill document. The skillID parameter is a large enum of all available skills with their descriptions, always present in the agent context.",
-    configurable: true,
-    defaultEnabled: true,
-    parameters: [
-      {
-        name: "skillID",
-        type: "enum",
-        description:
-          "Skill identifier — dynamically populated from all active SKILL.md files",
-        enumValues: MOCK_REGISTRY_SKILLS.filter(
-          (s) => s.status === "active",
-        ).map((s) => ({
-          value: s.id,
-          label: `${s.name} — ${s.description}`,
-        })),
-      },
-    ],
-  },
 ];
 
 const TAB_TRIGGER_CLASS = cn(
@@ -373,13 +351,17 @@ function DocsMCPDetailPage() {
               <DocsMCPOverviewTab
                 mcpUrl={mcpUrl}
                 contextHref={routes.context.href()}
+                skillsHref={routes.skills.href()}
               />
             </TabsContent>
             <TabsContent value="tools" className="mt-0 w-full">
               <DocsMCPToolsSection />
             </TabsContent>
             <TabsContent value="content" className="mt-0 w-full">
-              <DocsMCPContentTab contextHref={routes.context.href()} />
+              <DocsMCPContentTab
+                contextHref={routes.context.href()}
+                skillsHref={routes.skills.href()}
+              />
             </TabsContent>
           </div>
         </Tabs>
@@ -391,9 +373,11 @@ function DocsMCPDetailPage() {
 function DocsMCPOverviewTab({
   mcpUrl,
   contextHref,
+  skillsHref,
 }: {
   mcpUrl: string;
   contextHref: string;
+  skillsHref: string;
 }) {
   return (
     <Stack className="mb-4">
@@ -508,20 +492,36 @@ function DocsMCPOverviewTab({
         heading="Manage Content"
         description="View and configure your documentation corpus, skills, and search settings."
       >
-        <Link to={contextHref} noIcon>
-          <Button variant="primary" className="px-4">
-            <Button.LeftIcon>
-              <Icon name="library" className="w-4 h-4" />
-            </Button.LeftIcon>
-            <Button.Text>Open Context Manager</Button.Text>
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          <Link to={contextHref} noIcon>
+            <Button variant="primary" className="px-4">
+              <Button.LeftIcon>
+                <Icon name="library" className="w-4 h-4" />
+              </Button.LeftIcon>
+              <Button.Text>Open Context Manager</Button.Text>
+            </Button>
+          </Link>
+          <Link to={skillsHref} noIcon>
+            <Button variant="secondary" className="px-4">
+              <Button.LeftIcon>
+                <Icon name="sparkles" className="w-4 h-4" />
+              </Button.LeftIcon>
+              <Button.Text>Manage Skills</Button.Text>
+            </Button>
+          </Link>
+        </div>
       </PageSection>
     </Stack>
   );
 }
 
-function DocsMCPContentTab({ contextHref }: { contextHref: string }) {
+function DocsMCPContentTab({
+  contextHref,
+  skillsHref,
+}: {
+  contextHref: string;
+  skillsHref: string;
+}) {
   return (
     <Stack gap={4}>
       <div className="flex items-center justify-between">
@@ -531,14 +531,24 @@ function DocsMCPContentTab({ contextHref }: { contextHref: string }) {
             Your documentation content is managed in the Context page.
           </Type>
         </Stack>
-        <Link to={contextHref} noIcon>
-          <Button variant="primary" className="px-4">
-            <Button.LeftIcon>
-              <Icon name="library" className="w-4 h-4" />
-            </Button.LeftIcon>
-            <Button.Text>Open Context Manager</Button.Text>
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          <Link to={contextHref} noIcon>
+            <Button variant="primary" className="px-4">
+              <Button.LeftIcon>
+                <Icon name="library" className="w-4 h-4" />
+              </Button.LeftIcon>
+              <Button.Text>Open Context Manager</Button.Text>
+            </Button>
+          </Link>
+          <Link to={skillsHref} noIcon>
+            <Button variant="secondary" className="px-4">
+              <Button.LeftIcon>
+                <Icon name="sparkles" className="w-4 h-4" />
+              </Button.LeftIcon>
+              <Button.Text>Manage Skills</Button.Text>
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

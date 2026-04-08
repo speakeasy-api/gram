@@ -11,6 +11,8 @@ import CatalogDetail, {
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
 import CLIs from "./pages/CLIs";
+import SkillDetail from "./pages/skills/SkillDetail";
+import SkillsPage, { SkillsRoot } from "./pages/skills/Skills";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import Elements from "./pages/elements/Elements";
@@ -262,10 +264,24 @@ const ROUTE_STRUCTURE = {
     },
   },
   clis: {
-    title: "Skills",
+    title: "CLIs",
     url: "clis",
     icon: "terminal",
     component: CLIs,
+  },
+  skills: {
+    title: "Skills",
+    url: "skills",
+    icon: "sparkles",
+    component: SkillsRoot,
+    indexComponent: SkillsPage,
+    subPages: {
+      detail: {
+        title: "Skill Details",
+        url: ":skillId",
+        component: SkillDetail,
+      },
+    },
   },
   mcp: {
     title: "MCP",

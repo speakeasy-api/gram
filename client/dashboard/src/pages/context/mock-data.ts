@@ -41,9 +41,17 @@ export type ContextFileKind = "markdown" | "skill" | "mcp-docs-config";
 export type FileVersion = {
   version: number;
   updatedAt: string;
+  /** User-editable attribution (who authored the change). */
   author: string;
+  /** System-set, immutable (who actually committed it). */
+  committer: string;
+  /** AI agent that produced the change, if any. */
+  agent?: "claude-code" | "codex" | "cursor" | "copilot";
   message: string;
   size: number;
+  content?: string;
+  /** Path at this version — changes indicate a move/rename. */
+  path?: string;
 };
 
 export type DraftLayer = {
@@ -106,12 +114,91 @@ export type ContextNode = ContextFile | ContextFolder;
 
 // ── Skills registry types ─────────────────────────────────────────────────
 
+export type SkillVisibility =
+  | { mode: "all" }
+  | { mode: "allow"; roles: string[] }
+  | { mode: "deny"; roles: string[] }
+  | { mode: "none" };
+
+export type SkillOriginChannel =
+  | "bundled"
+  | "managed"
+  | "user"
+  | "project"
+  | "plugin"
+  | "mcp";
+
+export type SkillDistributionMechanism =
+  | "skills_dir"
+  | "legacy_commands_dir"
+  | "plugin_package"
+  | "mcp_server"
+  | "bundled_binary";
+
+export type SkillTrustTier = "high" | "medium" | "low" | "untrusted";
+
+export type SkillProvenance = {
+  originChannel: SkillOriginChannel;
+  distributionMechanism: SkillDistributionMechanism;
+  trustTier: SkillTrustTier;
+  pluginName?: string;
+  mcpServerName?: string;
+};
+
+// ── Security audit types ──────────────────────────────────────────────────
+
+export type AuditRiskLevel = "safe" | "caution" | "warning" | "critical";
+
+export type AuditCheck = {
+  category: "malicious" | "security" | "obfuscation" | "suspicious";
+  label: string;
+  status: "pass" | "info" | "warn" | "fail";
+  detail: string;
+};
+
+export type SkillAudit = {
+  riskLevel: AuditRiskLevel;
+  analyzedAt: string;
+  contentHash: string;
+  checks: AuditCheck[];
+  /** Per-skill full analysis — a narrative judgement of the skill's behavior. */
+  analysis: string;
+};
+
+/** Immutable content snapshot — identified by content hash. */
+export type SkillDigest = {
+  contentHash: string;
+  pushedAt: string;
+  pushedBy: string;
+  bodyBytes: number;
+  provenance: SkillProvenance;
+  message?: string;
+  audit?: SkillAudit;
+};
+
+/** A mutable tag pointing at a digest. "latest" is always present. */
+export type SkillTag = {
+  tag: string;
+  contentHash: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+export type SkillInsights = {
+  installations: number;
+  activeInstallations: number;
+  /** Percentage of installations on the latest version (0-100). */
+  pctOnLatest: number;
+  avgTokens: number;
+  invocations7d: number;
+  successRate: number;
+};
+
 export type RegistrySkill = {
   id: string;
   name: string;
   description: string;
   body: string;
-  source: "corpus" | "captured" | "uploaded";
   /** For captured skills: which agent session captured it. */
   capturedFrom?: {
     sessionId: string;
@@ -122,8 +209,14 @@ export type RegistrySkill = {
   author: string;
   path?: string;
   updatedAt: string;
-  invocations: number;
   frontmatter: Record<string, string>;
+  /** Which roles can see / invoke this skill. Defaults to "all". */
+  visibility?: SkillVisibility;
+  /** Immutable content snapshots — newest first. */
+  digests: SkillDigest[];
+  /** Mutable tags pointing at digests. "latest" is always present. */
+  tags: SkillTag[];
+  insights: SkillInsights;
 };
 
 // ── Observability types ───────────────────────────────────────────────────
@@ -160,6 +253,9 @@ export type CaptureSettings = {
   ignoreWithFrontmatter: boolean; // x-gram-ignore
 };
 
+/** All known roles from the access control config. */
+export const MOCK_ALL_ROLES = ["engineering", "sales", "finance"] as const;
+
 export const MOCK_CAPTURE_SETTINGS: CaptureSettings = {
   enabled: true,
   captureProjectSkills: true,
@@ -169,12 +265,29 @@ export const MOCK_CAPTURE_SETTINGS: CaptureSettings = {
 
 // ── Version history helper ────────────────────────────────────────────────
 
+type MakeVersionsOpts = {
+  content?: string;
+  /** Current path of the file — used to simulate renames in older versions. */
+  currentPath?: string;
+};
+
 function makeVersions(
   count: number,
   latestDate: string,
   latestSize: number,
+  opts?: MakeVersionsOpts,
 ): FileVersion[] {
   const authors = ["alice", "bob", "carol", "dave"];
+  const committers = ["alice", "bob", "system", "deploy-bot"];
+  const agents: (FileVersion["agent"] | undefined)[] = [
+    undefined,
+    "claude-code",
+    undefined,
+    "codex",
+    "cursor",
+    undefined,
+    "copilot",
+  ];
   const messages = [
     "Initial draft",
     "Fix typos and formatting",
@@ -186,14 +299,40 @@ function makeVersions(
   ];
   const versions: FileVersion[] = [];
   const base = new Date(latestDate).getTime();
+  const contentParagraphs = opts?.content?.split("\n\n") ?? [];
+
   for (let i = count; i >= 1; i--) {
-    const daysBack = (count - i) * 3;
+    const idx = count - i;
+    const daysBack = idx * 3;
+    // Build progressively shorter content for older versions
+    const paraCount = contentParagraphs.length;
+    const parasForVersion =
+      paraCount > 0 ? Math.max(1, Math.round(paraCount * (i / count))) : 0;
+    const versionContent =
+      parasForVersion > 0
+        ? contentParagraphs.slice(0, parasForVersion).join("\n\n")
+        : undefined;
+
+    // Simulate a rename in oldest version if there are enough versions
+    let path = opts?.currentPath;
+    if (i === 1 && count > 2 && opts?.currentPath) {
+      const parts = opts.currentPath.split("/");
+      const filename = parts.pop()!;
+      parts.push(`draft-${filename}`);
+      path = parts.join("/");
+    }
+
+    const agent = agents[idx % agents.length];
     versions.push({
       version: i,
       updatedAt: new Date(base - daysBack * 86400000).toISOString(),
-      author: authors[(count - i) % authors.length],
-      message: messages[(count - i) % messages.length],
-      size: Math.max(100, latestSize - (count - i) * 30),
+      author: authors[idx % authors.length],
+      committer: committers[idx % committers.length],
+      ...(agent && { agent }),
+      message: messages[idx % messages.length],
+      size: Math.max(100, latestSize - idx * 30),
+      ...(versionContent && { content: versionContent }),
+      ...(path && path !== opts?.currentPath && { path }),
     });
   }
   return versions;
@@ -217,42 +356,57 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
           max_chunk_size: 12000,
           min_chunk_size: 200,
         },
-        metadata: { product: "gram", scope: "public-docs" },
+        metadata: { product: "acme-saas", scope: "company-docs" },
         taxonomy: {
-          language: {
+          department: {
             vector_collapse: true,
             properties: {
-              typescript: { mcp_resource: true },
-              python: { mcp_resource: true },
-              go: { mcp_resource: false },
+              engineering: { mcp_resource: true },
+              sales: { mcp_resource: true },
+              finance: { mcp_resource: false },
+            },
+          },
+          audience: {
+            vector_collapse: false,
+            properties: {
+              internal: { mcp_resource: true },
+              external: { mcp_resource: true },
+              partner: { mcp_resource: false },
             },
           },
         },
         mcpServerInstructions:
-          "This server provides Gram product documentation. Use the search tool to find relevant guides and API references.",
+          "This server provides Acme Corp internal documentation. Use the search tool to find relevant company docs, engineering guides, and department-specific resources.",
         overrides: [
           {
-            pattern: "guides/advanced/*.md",
+            pattern: "engineering/runbooks/*.md",
             strategy: { chunk_by: "h3" },
-            metadata: { scope: "advanced-guide" },
+            metadata: { scope: "incident-response" },
           },
         ],
         accessControl: [
           {
-            role: "developer",
+            role: "engineering",
             allowedTaxonomy: {
-              language: ["typescript", "python", "go"],
+              department: ["engineering"],
+              audience: ["internal", "external", "partner"],
             },
           },
           {
-            role: "support",
-            allowedTaxonomy: { language: ["typescript", "python"] },
-            deniedPaths: ["guides/advanced/*"],
+            role: "sales",
+            allowedTaxonomy: {
+              department: ["sales"],
+              audience: ["internal", "external", "partner"],
+            },
+            deniedPaths: ["engineering/*", "finance/*"],
           },
           {
-            role: "external-partner",
-            allowedTaxonomy: { language: ["typescript"] },
-            deniedPaths: ["api-reference/*", "guides/advanced/*"],
+            role: "finance",
+            allowedTaxonomy: {
+              department: ["finance"],
+              audience: ["internal"],
+            },
+            deniedPaths: ["engineering/*", "sales/*"],
           },
         ],
       },
@@ -263,21 +417,21 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
     },
     {
       type: "folder",
-      name: "getting-started",
+      name: "product",
       updatedAt: "2026-03-25T09:00:00Z",
       children: [
         {
           type: "file",
-          name: "introduction.md",
+          name: "overview.md",
           kind: "markdown",
           content:
-            "# Introduction\n\nWelcome to Gram! This guide walks you through the basics of setting up your first MCP server.\n\n## Prerequisites\n\n- Node.js 18+\n- A Gram account\n\n## Quick Start\n\n```bash\nnpx create-gram-app my-server\ncd my-server\nnpm run dev\n```\n\nYour MCP server is now running locally on port 3000.",
+            "# Product Overview\n\nAcme SaaS is a B2B platform that helps companies manage their data infrastructure at scale.\n\n## Core Features\n\n- Automated data pipelines\n- Real-time analytics dashboard\n- Role-based access control\n- API-first architecture\n\n## Target Market\n\nMid-market and enterprise companies processing 1M+ events per day.",
           updatedAt: "2026-03-20T12:00:00Z",
-          size: 312,
-          versions: makeVersions(4, "2026-03-20T12:00:00Z", 312),
+          size: 345,
+          versions: makeVersions(4, "2026-03-20T12:00:00Z", 345),
           draft: {
             content:
-              "# Introduction\n\nWelcome to Gram! This guide walks you through the basics of setting up your first MCP server.\n\n## Prerequisites\n\n- Node.js 20+\n- A Gram account\n- pnpm 9+\n\n## Quick Start\n\n```bash\nnpx create-gram-app my-server\ncd my-server\npnpm dev\n```\n\nYour MCP server is now running locally on port 3000.\n\n## Next Steps\n\nHead over to the [Configuration guide](./configuration.md) to customize your server.",
+              "# Product Overview\n\nAcme SaaS is a B2B platform that helps companies manage their data infrastructure at scale.\n\n## Core Features\n\n- Automated data pipelines\n- Real-time analytics dashboard\n- Role-based access control\n- API-first architecture\n- AI-powered anomaly detection (NEW)\n\n## Target Market\n\nMid-market and enterprise companies processing 1M+ events per day.\n\n## Recent Updates\n\nSee the [roadmap](./roadmap.md) for upcoming features and timelines.",
             updatedAt: "2026-04-01T09:30:00Z",
             author: "alice",
           },
@@ -285,7 +439,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
           feedback: {
             upvotes: 12,
             downvotes: 1,
-            labels: ["beginner-friendly", "needs-update"],
+            labels: ["product", "needs-update"],
             userVote: "up",
             comments: [
               {
@@ -293,7 +447,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 author: "bob",
                 authorType: "human",
                 content:
-                  "This page got me started in under 5 minutes. Great intro.",
+                  "This page is the first thing new hires read. Great overview.",
                 createdAt: "2026-03-22T10:00:00Z",
                 upvotes: 8,
                 downvotes: 0,
@@ -303,7 +457,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 author: "cursor-agent-12",
                 authorType: "agent",
                 content:
-                  "Users frequently reference this page when asking about first-time setup. Consider adding a video walkthrough link.",
+                  "Agents frequently reference this page when answering product questions. Consider adding a competitive positioning section.",
                 createdAt: "2026-03-25T14:00:00Z",
                 upvotes: 5,
                 downvotes: 1,
@@ -313,7 +467,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 author: "carol",
                 authorType: "human",
                 content:
-                  "The prerequisites section is outdated — we require Node 20 now.",
+                  "We should mention the new AI anomaly detection feature here.",
                 createdAt: "2026-03-28T09:00:00Z",
                 upvotes: 11,
                 downvotes: 0,
@@ -323,7 +477,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 author: "dave",
                 authorType: "human",
                 content:
-                  "Would be nice to mention Docker as an alternative setup method.",
+                  "Would be nice to link to the architecture doc for technical readers.",
                 createdAt: "2026-03-30T16:00:00Z",
                 upvotes: 3,
                 downvotes: 0,
@@ -333,7 +487,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 author: "claude-agent-7",
                 authorType: "agent",
                 content:
-                  "Based on 34 support sessions this week, the Quick Start command works reliably. The main confusion is around environment variables — consider linking to the config page.",
+                  "Based on 34 agent sessions this week, the product overview is the most-accessed page. The main gap is around pricing — consider linking to the pricing page.",
                 createdAt: "2026-04-01T08:00:00Z",
                 upvotes: 7,
                 downvotes: 0,
@@ -346,43 +500,43 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
               author: "claude-agent-7",
               authorType: "agent",
               content:
-                "Users frequently ask about Docker setup here — consider adding a Docker section.",
+                "Agents frequently pair this page with pricing.md — consider adding a direct link.",
               createdAt: "2026-03-30T14:00:00Z",
             },
           ],
         },
         {
           type: "file",
-          name: "configuration.md",
+          name: "pricing.md",
           kind: "markdown",
           content:
-            "# Configuration\n\nGram uses a layered configuration system.\n\n## Environment Variables\n\nSet `GRAM_API_KEY` in your environment or `.env` file.\n\n## gram.config.ts\n\nThe main configuration file supports:\n- `sources` — data source definitions\n- `tools` — tool registrations\n- `auth` — authentication providers",
+            "# Pricing\n\nAcme SaaS offers three tiers to fit your organization's needs.\n\n## Starter\n\n$499/month — up to 1M events/day, 5 seats, community support.\n\n## Growth\n\n$1,499/month — up to 10M events/day, 25 seats, priority support.\n\n## Enterprise\n\nCustom pricing — unlimited events, unlimited seats, dedicated CSM, SLA guarantees.",
           updatedAt: "2026-03-21T08:30:00Z",
-          size: 278,
-          versions: makeVersions(2, "2026-03-21T08:30:00Z", 278),
+          size: 320,
+          versions: makeVersions(2, "2026-03-21T08:30:00Z", 320),
           source: "github",
           feedback: {
             upvotes: 8,
             downvotes: 0,
-            labels: ["reference"],
+            labels: ["sales", "reference"],
             userVote: null,
             comments: [],
           },
         },
         {
           type: "file",
-          name: "SKILL.md",
-          kind: "skill",
+          name: "roadmap.md",
+          kind: "markdown",
           content:
-            "---\nname: getting-started\ndescription: Onboarding skill for new Gram users\n---\n\nWhen the user is new to Gram, walk them through creating their first project, connecting a data source, and testing in the playground.\n\nKey steps:\n1. Create a project via the dashboard\n2. Add an OpenAPI source or connect a catalog server\n3. Deploy and test in the playground",
-          updatedAt: "2026-03-22T14:00:00Z",
+            "# Product Roadmap\n\n## Q2 2026\n\n- AI-powered anomaly detection (beta)\n- Enhanced RBAC with attribute-based policies\n- SOC 2 Type II certification\n\n## Q3 2026\n\n- Multi-region deployment support\n- GraphQL API layer\n- Custom dashboards builder\n\n## Q4 2026\n\n- Data marketplace integrations\n- Advanced ML model hosting",
+          updatedAt: "2026-03-25T09:00:00Z",
           size: 340,
-          versions: makeVersions(3, "2026-03-22T14:00:00Z", 340),
+          versions: makeVersions(3, "2026-03-25T09:00:00Z", 340),
           source: "manual",
           feedback: {
             upvotes: 15,
             downvotes: 2,
-            labels: ["onboarding"],
+            labels: ["roadmap", "planning"],
             userVote: "up",
             comments: [],
           },
@@ -391,21 +545,45 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
     },
     {
       type: "folder",
-      name: "guides",
+      name: "engineering",
       updatedAt: "2026-03-27T11:00:00Z",
       children: [
         {
           type: "file",
-          name: "authentication.md",
+          name: ".docs-mcp.json",
+          kind: "mcp-docs-config",
+          config: {
+            version: "1",
+            strategy: { chunk_by: "h3", max_chunk_size: 8000 },
+            metadata: { scope: "engineering", audience: "internal" },
+            accessControl: [
+              {
+                role: "sales",
+                deniedPaths: ["engineering/runbooks/*"],
+              },
+              {
+                role: "finance",
+                deniedPaths: ["engineering/*"],
+              },
+            ],
+          },
+          updatedAt: "2026-03-24T10:00:00Z",
+          size: 210,
+          versions: makeVersions(2, "2026-03-24T10:00:00Z", 210),
+          source: "manual",
+        },
+        {
+          type: "file",
+          name: "architecture.md",
           kind: "markdown",
           content:
-            "# Authentication\n\nGram supports multiple authentication strategies.\n\n## OAuth 2.0\n\nConfigure OAuth providers in your MCP server settings.\n\n## API Keys\n\nGenerate API keys from the dashboard under Settings > API Keys.\n\n## Custom Auth\n\nImplement the `AuthProvider` interface for custom authentication flows.",
+            "# System Architecture\n\nAcme SaaS follows a microservices architecture deployed on Kubernetes.\n\n## Core Services\n\n- **Ingestion Service** — receives and validates incoming events via HTTP and Kafka\n- **Processing Pipeline** — transforms and enriches events using Apache Flink\n- **Query Engine** — serves analytics queries via a ClickHouse cluster\n- **API Gateway** — Kong-based gateway handling auth, rate limiting, and routing\n\n## Infrastructure\n\nAll services run on AWS EKS with Terraform-managed infrastructure. Data is stored in S3 (raw), ClickHouse (analytics), and PostgreSQL (metadata).",
           updatedAt: "2026-03-26T09:15:00Z",
-          size: 295,
-          versions: makeVersions(5, "2026-03-26T09:15:00Z", 295),
+          size: 520,
+          versions: makeVersions(5, "2026-03-26T09:15:00Z", 520),
           draft: {
             content:
-              "# Authentication\n\nGram supports multiple authentication strategies.\n\n## OAuth 2.0\n\nConfigure OAuth providers in your MCP server settings.\n\n## API Keys\n\nGenerate API keys from the dashboard under Settings > API Keys.\n\n## JWT / Bearer Tokens\n\nPass a bearer token in the `Authorization` header. Gram validates it against your configured JWKS endpoint.\n\n## Custom Auth\n\nImplement the `AuthProvider` interface for custom authentication flows.",
+              "# System Architecture\n\nAcme SaaS follows a microservices architecture deployed on Kubernetes.\n\n## Core Services\n\n- **Ingestion Service** — receives and validates incoming events via HTTP and Kafka\n- **Processing Pipeline** — transforms and enriches events using Apache Flink\n- **Query Engine** — serves analytics queries via a ClickHouse cluster\n- **API Gateway** — Kong-based gateway handling auth, rate limiting, and routing\n- **ML Service** — anomaly detection models served via TorchServe\n\n## Infrastructure\n\nAll services run on AWS EKS with Terraform-managed infrastructure. Data is stored in S3 (raw), ClickHouse (analytics), and PostgreSQL (metadata).\n\n## Observability\n\nWe use Datadog for metrics, logs, and traces. PagerDuty handles alerting.",
             updatedAt: "2026-04-01T14:20:00Z",
             author: "bob",
           },
@@ -413,7 +591,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
           feedback: {
             upvotes: 22,
             downvotes: 3,
-            labels: ["security", "reference"],
+            labels: ["architecture", "reference"],
             userVote: null,
             comments: [
               {
@@ -421,7 +599,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 author: "alice",
                 authorType: "human",
                 content:
-                  "The OAuth section needs more detail on refresh token flows.",
+                  "The infrastructure section needs updating for the new ML service.",
                 createdAt: "2026-03-27T11:00:00Z",
                 upvotes: 9,
                 downvotes: 0,
@@ -431,7 +609,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 author: "claude-agent-7",
                 authorType: "agent",
                 content:
-                  "This is the most-referenced doc in auth-related sessions. 67% of auth questions are answered by this page.",
+                  "This is the most-referenced doc in engineering sessions. 67% of architecture questions are answered by this page.",
                 createdAt: "2026-03-29T15:00:00Z",
                 upvotes: 14,
                 downvotes: 1,
@@ -440,7 +618,8 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
                 id: "fc8",
                 author: "dave",
                 authorType: "human",
-                content: "JWT section is critical — glad it's being added.",
+                content:
+                  "Observability section is critical — glad it's being added.",
                 createdAt: "2026-04-01T16:00:00Z",
                 upvotes: 6,
                 downvotes: 0,
@@ -452,7 +631,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
               id: "ann-2",
               author: "bob",
               authorType: "human",
-              content: "JWT section is pending review from security team.",
+              content: "ML service section is pending review from the ML team.",
               createdAt: "2026-04-01T14:25:00Z",
             },
             {
@@ -460,94 +639,105 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
               author: "cursor-agent-12",
               authorType: "agent",
               content:
-                "This page is the most-referenced in auth-related sessions. Consider splitting into sub-pages.",
+                "This page is the most-referenced in engineering sessions. Consider splitting into sub-pages per service.",
               createdAt: "2026-03-31T10:00:00Z",
             },
           ],
         },
         {
           type: "file",
-          name: "deployment.md",
+          name: "api-reference.md",
           kind: "markdown",
           content:
-            "# Deployment Guide\n\nDeploy your MCP servers to production.\n\n## Gram Cloud\n\nPush directly from the CLI:\n```bash\ngram deploy\n```\n\n## Self-Hosted\n\nUse the Docker image:\n```bash\ndocker pull gram/server:latest\n```\n\n## Custom Domains\n\nConfigure custom domains in the org settings.",
+            "# API Reference\n\n## Authentication\n\nAll API requests require a Bearer token in the Authorization header.\n\n## Endpoints\n\n### POST /api/v1/events\n\nIngest a batch of events. Max 1000 events per request.\n\n### GET /api/v1/queries\n\nRun an analytics query. Supports SQL-like syntax.\n\n### GET /api/v1/pipelines\n\nList all configured data pipelines.\n\n## Rate Limits\n\n- 1000 requests/minute per API key\n- 10,000 events/second ingestion rate",
           updatedAt: "2026-03-27T11:00:00Z",
-          size: 265,
-          versions: makeVersions(3, "2026-03-27T11:00:00Z", 265),
+          size: 410,
+          versions: makeVersions(3, "2026-03-27T11:00:00Z", 410),
           source: "cli",
           feedback: {
             upvotes: 6,
             downvotes: 0,
-            labels: ["devops"],
+            labels: ["api", "reference"],
             userVote: null,
             comments: [],
           },
         },
         {
           type: "folder",
-          name: "advanced",
-          updatedAt: "2026-03-26T16:00:00Z",
+          name: "onboarding",
+          updatedAt: "2026-03-25T13:00:00Z",
           children: [
             {
               type: "file",
-              name: ".docs-mcp.json",
-              kind: "mcp-docs-config",
-              config: {
-                version: "1",
-                strategy: { chunk_by: "h3", max_chunk_size: 8000 },
-                metadata: { scope: "advanced-guide", audience: "power-users" },
-              },
-              updatedAt: "2026-03-24T10:00:00Z",
-              size: 196,
-              versions: makeVersions(2, "2026-03-24T10:00:00Z", 196),
-              source: "manual",
-            },
-            {
-              type: "file",
-              name: "custom-tools.md",
-              kind: "markdown",
+              name: "SKILL.md",
+              kind: "skill",
               content:
-                "# Building Custom Tools\n\nExtend your MCP server with custom tool definitions.\n\n## Tool Schema\n\nDefine tools using JSON Schema for inputs and outputs.\n\n## Validation\n\nGram automatically validates tool inputs against the schema.\n\n## Testing\n\nUse the playground to test tools interactively before deploying.",
-              updatedAt: "2026-03-25T13:00:00Z",
-              size: 310,
-              versions: makeVersions(3, "2026-03-25T13:00:00Z", 310),
-              source: "github",
+                "---\nname: engineer-onboarding\ndescription: Onboarding skill for new engineering hires\n---\n\nWhen a new engineer joins the team, walk them through the complete setup process.\n\nKey steps:\n1. Clone the monorepo and run the bootstrap script\n2. Set up local development environment with Docker Compose\n3. Get access to AWS, Datadog, and PagerDuty\n4. Complete the first-week coding challenge\n5. Shadow an on-call rotation",
+              updatedAt: "2026-03-22T14:00:00Z",
+              size: 380,
+              versions: makeVersions(3, "2026-03-22T14:00:00Z", 380),
+              source: "manual",
               feedback: {
                 upvotes: 9,
                 downvotes: 1,
-                labels: ["tools"],
+                labels: ["onboarding", "engineering"],
                 userVote: "up",
                 comments: [],
               },
             },
             {
               type: "file",
-              name: "webhooks.md",
+              name: "setup-guide.md",
               kind: "markdown",
               content:
-                "# Webhooks\n\nReceive real-time notifications for MCP events.\n\n## Setup\n\nConfigure webhook endpoints in Settings > Hooks.\n\n## Events\n\n- `tool.called` — fired when a tool is invoked\n- `session.started` — fired when a chat session begins\n- `deployment.completed` — fired after a successful deployment\n\n## Retry Policy\n\nFailed deliveries are retried with exponential backoff up to 3 times.",
-              updatedAt: "2026-03-26T16:00:00Z",
-              size: 380,
-              versions: makeVersions(4, "2026-03-26T16:00:00Z", 380),
+                "# Engineering Setup Guide\n\n## Prerequisites\n\n- macOS 14+ or Ubuntu 22.04+\n- Docker Desktop 4.x\n- Go 1.22+, Node 20+, Python 3.12+\n\n## Repository Setup\n\n```bash\ngit clone git@github.com:acme/platform.git\ncd platform\n./scripts/bootstrap.sh\n```\n\n## Local Development\n\n```bash\ndocker compose up -d\nmise run dev\n```\n\n## Verification\n\nRun the test suite to confirm your setup:\n```bash\nmise run test:all\n```",
+              updatedAt: "2026-03-25T13:00:00Z",
+              size: 390,
+              versions: makeVersions(3, "2026-03-25T13:00:00Z", 390),
               source: "github",
+              feedback: {
+                upvotes: 14,
+                downvotes: 0,
+                labels: ["onboarding", "setup"],
+                userVote: "up",
+                comments: [],
+              },
             },
+          ],
+        },
+        {
+          type: "folder",
+          name: "runbooks",
+          updatedAt: "2026-03-26T16:00:00Z",
+          children: [
             {
               type: "file",
               name: "SKILL.md",
               kind: "skill",
               content:
-                "---\nname: advanced-configuration\ndescription: Skill for advanced Gram configuration patterns\n---\n\nHelp experienced users with:\n- Multi-environment deployments\n- Custom authentication flows\n- Webhook integrations\n- Performance tuning for high-throughput MCP servers",
+                "---\nname: incident-response\ndescription: Skill for guiding engineers through incident response procedures\n---\n\nWhen an incident is declared, guide the on-call engineer through the response process.\n\nKey procedures:\n1. Acknowledge the alert in PagerDuty within 5 minutes\n2. Open an incident channel in Slack (#inc-YYYYMMDD-brief)\n3. Assess severity using the SEV1-SEV4 framework\n4. Execute the relevant runbook for the affected service\n5. Post status updates every 15 minutes\n6. Conduct a blameless post-mortem within 48 hours",
               updatedAt: "2026-03-26T09:00:00Z",
-              size: 260,
-              versions: makeVersions(2, "2026-03-26T09:00:00Z", 260),
+              size: 420,
+              versions: makeVersions(2, "2026-03-26T09:00:00Z", 420),
               source: "manual",
               feedback: {
                 upvotes: 5,
                 downvotes: 0,
-                labels: ["advanced"],
+                labels: ["incident-response", "critical"],
                 userVote: null,
                 comments: [],
               },
+            },
+            {
+              type: "file",
+              name: "incident-playbook.md",
+              kind: "markdown",
+              content:
+                "# Incident Response Playbook\n\n## Severity Levels\n\n- **SEV1** — Complete service outage, all customers affected\n- **SEV2** — Partial outage, >10% of customers affected\n- **SEV3** — Degraded performance, no data loss\n- **SEV4** — Minor issue, workaround available\n\n## Escalation Matrix\n\n| Severity | Response Time | Escalation |\n|----------|--------------|------------|\n| SEV1 | 5 min | VP Engineering + CTO |\n| SEV2 | 15 min | Engineering Manager |\n| SEV3 | 1 hour | Team Lead |\n| SEV4 | Next business day | On-call engineer |\n\n## Communication Template\n\nUse the #incidents Slack channel for all updates.",
+              updatedAt: "2026-03-26T16:00:00Z",
+              size: 580,
+              versions: makeVersions(4, "2026-03-26T16:00:00Z", 580),
+              source: "github",
             },
           ],
         },
@@ -555,21 +745,44 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
     },
     {
       type: "folder",
-      name: "api-reference",
+      name: "sales",
       updatedAt: "2026-03-28T10:00:00Z",
       children: [
         {
           type: "file",
-          name: "tools.md",
+          name: ".docs-mcp.json",
+          kind: "mcp-docs-config",
+          config: {
+            version: "1",
+            metadata: { scope: "sales", audience: "internal" },
+            accessControl: [
+              {
+                role: "engineering",
+                deniedPaths: ["sales/competitive-intel/*"],
+              },
+              {
+                role: "finance",
+                deniedPaths: ["sales/*"],
+              },
+            ],
+          },
+          updatedAt: "2026-03-23T10:00:00Z",
+          size: 195,
+          versions: makeVersions(1, "2026-03-23T10:00:00Z", 195),
+          source: "manual",
+        },
+        {
+          type: "file",
+          name: "pitch-deck.md",
           kind: "markdown",
           content:
-            "# Tools API\n\n## List Tools\n\n`GET /api/v1/tools`\n\nReturns all tools registered for the current project.\n\n## Get Tool\n\n`GET /api/v1/tools/:slug`\n\nReturns a single tool by slug.\n\n## Create Tool\n\n`POST /api/v1/tools`\n\nRegisters a new tool definition.",
+            "# Sales Pitch Deck Guide\n\n## Opening (Slides 1-3)\n\nLead with the customer's pain point. Use industry-specific examples.\n\n## Product Demo (Slides 4-8)\n\nShow the real-time analytics dashboard first — it's our strongest differentiator.\n\n## ROI Slide (Slide 9)\n\nCustomers report:\n- 40% reduction in data pipeline maintenance\n- 3x faster time-to-insight\n- 60% fewer data quality incidents\n\n## Closing (Slides 10-12)\n\nEnd with customer testimonials and next steps for a trial.",
           updatedAt: "2026-03-28T10:00:00Z",
-          size: 242,
-          versions: makeVersions(6, "2026-03-28T10:00:00Z", 242),
+          size: 450,
+          versions: makeVersions(6, "2026-03-28T10:00:00Z", 450),
           draft: {
             content:
-              "# Tools API\n\n## List Tools\n\n`GET /api/v1/tools`\n\nReturns all tools registered for the current project.\n\n### Query Parameters\n\n| Param | Type | Description |\n|-------|------|-------------|\n| `limit` | int | Max results (default 50) |\n| `offset` | int | Pagination offset |\n\n## Get Tool\n\n`GET /api/v1/tools/:slug`\n\nReturns a single tool by slug.\n\n## Create Tool\n\n`POST /api/v1/tools`\n\nRegisters a new tool definition.\n\n## Delete Tool\n\n`DELETE /api/v1/tools/:slug`\n\nRemoves a tool registration.",
+              "# Sales Pitch Deck Guide\n\n## Opening (Slides 1-3)\n\nLead with the customer's pain point. Use industry-specific examples.\n\n## Product Demo (Slides 4-8)\n\nShow the real-time analytics dashboard first — it's our strongest differentiator.\n\n## AI Anomaly Detection Demo (NEW - Slide 5b)\n\nDemonstrate the new AI-powered anomaly detection. Use the retail dataset for maximum impact.\n\n## ROI Slide (Slide 9)\n\nCustomers report:\n- 40% reduction in data pipeline maintenance\n- 3x faster time-to-insight\n- 60% fewer data quality incidents\n\n## Closing (Slides 10-12)\n\nEnd with customer testimonials and next steps for a trial.",
             updatedAt: "2026-04-02T08:00:00Z",
             author: "carol",
           },
@@ -577,58 +790,65 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
           feedback: {
             upvotes: 18,
             downvotes: 2,
-            labels: ["api", "reference"],
+            labels: ["sales", "pitch"],
             userVote: "up",
             comments: [],
           },
         },
         {
           type: "file",
-          name: "sources.md",
+          name: "objection-handling.md",
           kind: "markdown",
           content:
-            "# Sources API\n\n## List Sources\n\n`GET /api/v1/sources`\n\nReturns all configured data sources.\n\n## Create Source\n\n`POST /api/v1/sources`\n\nAdds a new data source to the project.\n\n## Delete Source\n\n`DELETE /api/v1/sources/:id`\n\nRemoves a data source.",
+            '# Objection Handling Guide\n\n## "It\'s too expensive"\n\nReframe around TCO. Our platform replaces 3-4 separate tools. Show the ROI calculator.\n\n## "We already have a solution"\n\nAsk about their current pain points. Focus on real-time capabilities and scale.\n\n## "We need on-prem"\n\nOur Enterprise tier supports hybrid deployment. Reference the Megacorp case study.\n\n## "Security concerns"\n\nWe\'re SOC 2 Type II certified. Offer the security whitepaper and a call with our CISO.',
           updatedAt: "2026-03-27T18:00:00Z",
-          size: 230,
-          versions: makeVersions(3, "2026-03-27T18:00:00Z", 230),
+          size: 440,
+          versions: makeVersions(3, "2026-03-27T18:00:00Z", 440),
           source: "cli",
         },
         {
-          type: "file",
-          name: "sessions.md",
-          kind: "markdown",
-          content:
-            "# Sessions API\n\n## List Sessions\n\n`GET /api/v1/sessions`\n\nReturns all chat sessions.\n\n## Get Session\n\n`GET /api/v1/sessions/:id`\n\nReturns a single session with its message history.\n\n## Create Session\n\n`POST /api/v1/sessions`\n\nStarts a new chat session.",
+          type: "folder",
+          name: "competitive-intel",
           updatedAt: "2026-03-26T14:00:00Z",
-          size: 238,
-          versions: makeVersions(2, "2026-03-26T14:00:00Z", 238),
-          source: "cli",
-        },
-        {
-          type: "file",
-          name: "agent-notes.md",
-          kind: "markdown",
-          content:
-            "# Common API Patterns\n\nThis document was generated by an agent based on recurring support patterns.\n\n## Pagination\n\nAll list endpoints support `limit` and `offset` query parameters.\n\n## Error Handling\n\nAll endpoints return standard error objects with `code` and `message` fields.",
-          updatedAt: "2026-04-01T16:00:00Z",
-          size: 220,
-          versions: makeVersions(1, "2026-04-01T16:00:00Z", 220),
-          source: "agent",
-          feedback: {
-            upvotes: 3,
-            downvotes: 0,
-            labels: ["agent-generated"],
-            userVote: null,
-            comments: [],
-          },
-          annotations: [
+          children: [
             {
-              id: "ann-4",
-              author: "claude-agent-7",
-              authorType: "agent",
+              type: "file",
+              name: "SKILL.md",
+              kind: "skill",
               content:
-                "Created from patterns observed across 47 support sessions.",
-              createdAt: "2026-04-01T16:00:00Z",
+                "---\nname: competitive-analysis\ndescription: Skill for answering competitive positioning questions\n---\n\nWhen a sales rep asks about competitors, provide accurate and up-to-date competitive intelligence.\n\nKey areas:\n- Feature comparison matrices\n- Pricing intelligence (updated quarterly)\n- Win/loss analysis patterns\n- Competitor weakness talking points\n\nAlways recommend checking the latest landscape doc for current data.",
+              updatedAt: "2026-03-26T14:00:00Z",
+              size: 370,
+              versions: makeVersions(2, "2026-03-26T14:00:00Z", 370),
+              source: "manual",
+            },
+            {
+              type: "file",
+              name: "landscape.md",
+              kind: "markdown",
+              content:
+                "# Competitive Landscape Q1 2026\n\n## Primary Competitors\n\n### DataStream Pro\n- Strengths: Enterprise brand recognition, on-prem offering\n- Weaknesses: No real-time processing, legacy architecture\n- Win rate against: 68%\n\n### FlowMetrics\n- Strengths: Developer-friendly, open-source core\n- Weaknesses: Limited scale (caps at 100K events/s), no SOC 2\n- Win rate against: 72%\n\n### PipelineHub\n- Strengths: Lowest price point, simple setup\n- Weaknesses: No analytics layer, limited integrations\n- Win rate against: 81%\n\n## Key Differentiators\n\nOur unique combination of real-time processing, built-in analytics, and enterprise security.",
+              updatedAt: "2026-04-01T16:00:00Z",
+              size: 620,
+              versions: makeVersions(1, "2026-04-01T16:00:00Z", 620),
+              source: "agent",
+              feedback: {
+                upvotes: 3,
+                downvotes: 0,
+                labels: ["competitive", "quarterly-update"],
+                userVote: null,
+                comments: [],
+              },
+              annotations: [
+                {
+                  id: "ann-4",
+                  author: "claude-agent-7",
+                  authorType: "agent",
+                  content:
+                    "Win rates compiled from CRM data across 142 closed opportunities in Q1.",
+                  createdAt: "2026-04-01T16:00:00Z",
+                },
+              ],
             },
           ],
         },
@@ -636,7 +856,7 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
     },
     {
       type: "folder",
-      name: "sdk",
+      name: "finance",
       updatedAt: "2026-03-24T17:00:00Z",
       children: [
         {
@@ -645,158 +865,541 @@ export const MOCK_CONTEXT_TREE: ContextFolder = {
           kind: "mcp-docs-config",
           config: {
             version: "1",
-            metadata: { scope: "sdk-specific" },
-            taxonomy: {
-              language: {
-                vector_collapse: true,
-                properties: {
-                  typescript: { mcp_resource: true },
-                  python: { mcp_resource: true },
-                },
+            metadata: { scope: "finance", audience: "internal" },
+            accessControl: [
+              {
+                role: "engineering",
+                deniedPaths: ["finance/reporting/*"],
               },
-            },
+              {
+                role: "sales",
+                deniedPaths: ["finance/*"],
+              },
+            ],
           },
           updatedAt: "2026-03-23T10:00:00Z",
-          size: 320,
-          versions: makeVersions(1, "2026-03-23T10:00:00Z", 320),
+          size: 190,
+          versions: makeVersions(1, "2026-03-23T10:00:00Z", 190),
           source: "manual",
         },
         {
-          type: "folder",
-          name: "typescript",
+          type: "file",
+          name: "billing-guide.md",
+          kind: "markdown",
+          content:
+            "# Billing Guide\n\n## Subscription Management\n\nAll subscriptions are managed through Stripe. Access the Stripe dashboard for billing operations.\n\n## Invoice Process\n\n1. Invoices are auto-generated on the 1st of each month\n2. Payment terms: Net 30 for Enterprise, immediate for Starter/Growth\n3. Failed payments trigger a 3-day grace period with automated reminders\n\n## Refund Policy\n\n- Full refund within 30 days of initial purchase\n- Pro-rated refunds for annual plan cancellations\n- No refunds for usage-based overages",
           updatedAt: "2026-03-24T17:00:00Z",
+          size: 480,
+          versions: makeVersions(3, "2026-03-24T17:00:00Z", 480),
+          source: "github",
+          feedback: {
+            upvotes: 14,
+            downvotes: 0,
+            labels: ["billing", "finance"],
+            userVote: "up",
+            comments: [],
+          },
+        },
+        {
+          type: "file",
+          name: "compliance.md",
+          kind: "markdown",
+          content:
+            "# Compliance & Regulatory\n\n## SOC 2 Type II\n\nAudit completed March 2026. Report available in the compliance vault.\n\n## GDPR\n\nData processing agreements (DPAs) are required for all EU customers. Template in the legal shared drive.\n\n## Data Retention\n\n- Customer event data: 90 days default, configurable up to 365 days\n- Audit logs: 7 years (regulatory requirement)\n- PII: Automatically redacted after account deletion, 30-day purge window",
+          updatedAt: "2026-03-24T15:00:00Z",
+          size: 430,
+          versions: makeVersions(4, "2026-03-24T15:00:00Z", 430),
+          source: "github",
+        },
+        {
+          type: "folder",
+          name: "reporting",
+          updatedAt: "2026-03-23T16:00:00Z",
           children: [
-            {
-              type: "file",
-              name: "quickstart.md",
-              kind: "markdown",
-              content:
-                "# TypeScript SDK Quickstart\n\n```bash\nnpm install @gram/sdk\n```\n\n## Initialize\n\n```typescript\nimport { Gram } from '@gram/sdk';\n\nconst gram = new Gram({ apiKey: process.env.GRAM_API_KEY });\n```\n\n## Call a Tool\n\n```typescript\nconst result = await gram.tools.call('my-tool', { input: 'hello' });\n```",
-              updatedAt: "2026-03-24T17:00:00Z",
-              size: 290,
-              versions: makeVersions(3, "2026-03-24T17:00:00Z", 290),
-              source: "github",
-              feedback: {
-                upvotes: 14,
-                downvotes: 0,
-                labels: ["typescript", "quickstart"],
-                userVote: "up",
-                comments: [],
-              },
-            },
             {
               type: "file",
               name: "SKILL.md",
               kind: "skill",
               content:
-                "---\nname: typescript-sdk\ndescription: Skill for TypeScript SDK usage patterns\n---\n\nGuide users through TypeScript SDK patterns:\n- Client initialization and configuration\n- Tool invocation and error handling\n- Streaming responses\n- Type-safe tool definitions with Zod schemas",
+                "---\nname: financial-reporting\ndescription: Skill for generating and interpreting financial reports\n---\n\nHelp finance team members with quarterly and annual financial reporting.\n\nKey capabilities:\n- Revenue recognition calculations (ASC 606)\n- ARR/MRR breakdown by customer segment\n- Churn and expansion metrics\n- Board deck financial slide preparation\n- Variance analysis against forecast",
               updatedAt: "2026-03-23T16:00:00Z",
-              size: 250,
-              versions: makeVersions(2, "2026-03-23T16:00:00Z", 250),
+              size: 350,
+              versions: makeVersions(2, "2026-03-23T16:00:00Z", 350),
+              source: "manual",
+            },
+            {
+              type: "file",
+              name: "quarterly-template.md",
+              kind: "markdown",
+              content:
+                "# Quarterly Financial Report Template\n\n## Revenue Summary\n\n| Metric | Q1 Actual | Q1 Forecast | Variance |\n|--------|-----------|-------------|----------|\n| ARR | $X.XM | $X.XM | +/-X% |\n| New ARR | $X.XM | $X.XM | +/-X% |\n| Churn | $X.XM | $X.XM | +/-X% |\n| Net Expansion | X% | X% | +/-X pp |\n\n## Key Metrics\n\n- Gross margin: XX%\n- CAC payback: XX months\n- LTV:CAC ratio: X.Xx\n- Rule of 40 score: XX\n\n## Commentary\n\n[Insert quarterly narrative here]",
+              updatedAt: "2026-03-23T16:00:00Z",
+              size: 460,
+              versions: makeVersions(2, "2026-03-23T16:00:00Z", 460),
               source: "manual",
             },
           ],
         },
+      ],
+    },
+    {
+      type: "folder",
+      name: "company",
+      updatedAt: "2026-03-26T12:00:00Z",
+      children: [
         {
-          type: "folder",
-          name: "python",
+          type: "file",
+          name: "values.md",
+          kind: "markdown",
+          content:
+            "# Company Values\n\n## Customer Obsession\n\nEvery decision starts with the customer. We measure success by customer outcomes, not feature velocity.\n\n## Radical Transparency\n\nDefault to open. Share context widely. Disagree openly, then commit.\n\n## Ownership Mentality\n\nAct like an owner. If you see a problem, fix it. Don't wait for permission.\n\n## Continuous Learning\n\nInvest in growth. We fund conferences, courses, and books for every team member.",
+          updatedAt: "2026-03-26T12:00:00Z",
+          size: 410,
+          versions: makeVersions(3, "2026-03-26T12:00:00Z", 410),
+          source: "manual",
+          feedback: {
+            upvotes: 20,
+            downvotes: 0,
+            labels: ["culture", "all-hands"],
+            userVote: "up",
+            comments: [],
+          },
+        },
+        {
+          type: "file",
+          name: "benefits.md",
+          kind: "markdown",
+          content:
+            "# Employee Benefits\n\n## Health & Wellness\n\n- Medical, dental, and vision for employees and dependents\n- $500/year wellness stipend\n- Mental health support via Spring Health\n\n## Financial\n\n- 401(k) with 4% company match\n- Equity refresh grants annually\n- $5,000 annual learning budget\n\n## Time Off\n\n- Unlimited PTO (minimum 15 days/year encouraged)\n- 12 company holidays\n- 16 weeks parental leave",
+          updatedAt: "2026-03-25T10:00:00Z",
+          size: 380,
+          versions: makeVersions(2, "2026-03-25T10:00:00Z", 380),
+          source: "manual",
+        },
+        {
+          type: "file",
+          name: "policies.md",
+          kind: "markdown",
+          content:
+            "# Company Policies\n\n## Remote Work\n\nWe are remote-first. In-person collaboration weeks happen quarterly at HQ.\n\n## Expense Policy\n\n- Meals while traveling: $75/day\n- Flights: Economy for <6h, business for >6h\n- All expenses require receipts in Brex within 30 days\n\n## Security\n\n- All company devices must have full-disk encryption\n- Use 1Password for all credentials\n- Report security incidents to security@acme.com immediately",
           updatedAt: "2026-03-24T15:00:00Z",
-          children: [
-            {
-              type: "file",
-              name: "quickstart.md",
-              kind: "markdown",
-              content:
-                "# Python SDK Quickstart\n\n```bash\npip install gram-sdk\n```\n\n## Initialize\n\n```python\nfrom gram import Gram\n\ngram = Gram(api_key=os.environ['GRAM_API_KEY'])\n```\n\n## Call a Tool\n\n```python\nresult = gram.tools.call('my-tool', input='hello')\n```",
-              updatedAt: "2026-03-24T15:00:00Z",
-              size: 245,
-              versions: makeVersions(4, "2026-03-24T15:00:00Z", 245),
-              source: "github",
-            },
-          ],
+          size: 420,
+          versions: makeVersions(3, "2026-03-24T15:00:00Z", 420),
+          source: "github",
         },
       ],
     },
   ],
 };
 
+// Populate version content from file content for the whole tree.
+function populateVersionContent(node: ContextNode, parentPath = "docs"): void {
+  if (node.type === "folder") {
+    for (const child of node.children) {
+      populateVersionContent(child, `${parentPath}/${child.name}`);
+    }
+    return;
+  }
+  const file = node;
+  if (!file.content && !file.config) return;
+  const paragraphs = file.content?.split("\n\n") ?? [];
+  const total = file.versions.length;
+  for (let idx = 0; idx < file.versions.length; idx++) {
+    const v = file.versions[idx];
+    // Latest version gets full content
+    const ratio = v.version / total;
+    const paraCount =
+      paragraphs.length > 0
+        ? Math.max(1, Math.round(paragraphs.length * ratio))
+        : 0;
+    if (paraCount > 0) {
+      v.content = paragraphs.slice(0, paraCount).join("\n\n");
+    }
+    // Oldest version simulates a rename
+    if (v.version === 1 && total > 2) {
+      const parts = parentPath.split("/");
+      const filename = parts.pop()!;
+      parts.push(`draft-${filename}`);
+      v.path = parts.join("/");
+    } else {
+      v.path = parentPath;
+    }
+  }
+}
+
+for (const child of MOCK_CONTEXT_TREE.children) {
+  populateVersionContent(child);
+}
+
+// ── Provenance presets ─────────────────────────────────────────────────────
+
+const P_MANAGED: SkillProvenance = {
+  originChannel: "managed",
+  distributionMechanism: "skills_dir",
+  trustTier: "high",
+};
+const P_PROJECT: SkillProvenance = {
+  originChannel: "project",
+  distributionMechanism: "skills_dir",
+  trustTier: "medium",
+};
+const P_USER: SkillProvenance = {
+  originChannel: "user",
+  distributionMechanism: "skills_dir",
+  trustTier: "medium",
+};
+const P_MCP: SkillProvenance = {
+  originChannel: "mcp",
+  distributionMechanism: "mcp_server",
+  trustTier: "untrusted",
+};
+const P_PLUGIN: SkillProvenance = {
+  originChannel: "plugin",
+  distributionMechanism: "plugin_package",
+  trustTier: "medium",
+  pluginName: "acme-compliance-tools",
+};
+
 // ── Mock skills registry ──────────────────────────────────────────────────
 
 export const MOCK_REGISTRY_SKILLS: RegistrySkill[] = [
   {
-    id: "skill-getting-started",
-    name: "getting-started",
-    description: "Onboarding skill for new Gram users",
-    body: "When the user is new to Gram, walk them through creating their first project, connecting a data source, and testing in the playground.\n\nKey steps:\n1. Create a project via the dashboard\n2. Add an OpenAPI source or connect a catalog server\n3. Deploy and test in the playground",
-    source: "corpus",
+    id: "skill-engineer-onboarding",
+    name: "engineer-onboarding",
+    description: "Onboarding skill for new engineering hires",
+    body: "When a new engineer joins the team, walk them through the complete setup process.\n\nKey steps:\n1. Clone the monorepo and run the bootstrap script\n2. Set up local development environment with Docker Compose\n3. Get access to AWS, Datadog, and PagerDuty\n4. Complete the first-week coding challenge\n5. Shadow an on-call rotation",
     status: "active",
     author: "alice",
-    path: "getting-started/SKILL.md",
+    path: "engineering/onboarding/SKILL.md",
     updatedAt: "2026-03-22T14:00:00Z",
-    invocations: 847,
+    visibility: { mode: "all" },
     frontmatter: {
-      name: "getting-started",
-      description: "Onboarding skill for new Gram users",
+      name: "engineer-onboarding",
+      description: "Onboarding skill for new engineering hires",
+    },
+    digests: [
+      {
+        contentHash: "sha256:a1b2c3",
+        pushedAt: "2026-03-22T14:00:00Z",
+        pushedBy: "alice",
+        bodyBytes: 380,
+        provenance: P_MANAGED,
+        message: "Add on-call shadowing step",
+        audit: {
+          riskLevel: "safe",
+          analyzedAt: "2026-03-22T14:05:00Z",
+          contentHash: "sha256:a1b2c3",
+          checks: [
+            {
+              category: "malicious",
+              label: "Injection / exfiltration",
+              status: "pass",
+              detail:
+                "No injection patterns or data exfiltration vectors detected.",
+            },
+            {
+              category: "security",
+              label: "Credential exposure",
+              status: "pass",
+              detail:
+                "No credentials, API keys, or secrets found in skill body.",
+            },
+            {
+              category: "obfuscation",
+              label: "Code obfuscation",
+              status: "pass",
+              detail: "No obfuscated or encoded content detected.",
+            },
+            {
+              category: "suspicious",
+              label: "Suspicious patterns",
+              status: "pass",
+              detail:
+                "No reconnaissance, excessive autonomy, or unusual resource access.",
+            },
+          ],
+          analysis:
+            "This skill provides straightforward onboarding instructions for new engineering hires. It walks engineers through repo setup, local dev environment, access provisioning, and team integration. All instructions reference standard internal tooling with no external data access or privilege escalation. The skill is safe for all roles.",
+        },
+      },
+      {
+        contentHash: "sha256:d4e5f6",
+        pushedAt: "2026-03-10T10:00:00Z",
+        pushedBy: "alice",
+        bodyBytes: 320,
+        provenance: P_MANAGED,
+        message: "Add Docker Compose setup step",
+      },
+      {
+        contentHash: "sha256:g7h8i9",
+        pushedAt: "2026-02-15T09:00:00Z",
+        pushedBy: "alice",
+        bodyBytes: 210,
+        provenance: P_USER,
+        message: "Initial draft",
+      },
+    ],
+    tags: [
+      {
+        tag: "latest",
+        contentHash: "sha256:a1b2c3",
+        updatedAt: "2026-03-22T14:00:00Z",
+        updatedBy: "alice",
+      },
+      {
+        tag: "v1.2",
+        contentHash: "sha256:a1b2c3",
+        updatedAt: "2026-03-22T14:00:00Z",
+        updatedBy: "alice",
+      },
+      {
+        tag: "v1.1",
+        contentHash: "sha256:d4e5f6",
+        updatedAt: "2026-03-10T10:00:00Z",
+        updatedBy: "alice",
+      },
+      {
+        tag: "v1.0",
+        contentHash: "sha256:g7h8i9",
+        updatedAt: "2026-02-15T09:00:00Z",
+        updatedBy: "alice",
+      },
+      {
+        tag: "stable",
+        contentHash: "sha256:d4e5f6",
+        updatedAt: "2026-03-15T08:00:00Z",
+        updatedBy: "bob",
+      },
+    ],
+    insights: {
+      installations: 142,
+      activeInstallations: 138,
+      pctOnLatest: 92,
+      avgTokens: 340,
+      invocations7d: 847,
+      successRate: 99.2,
     },
   },
   {
-    id: "skill-advanced-config",
-    name: "advanced-configuration",
-    description: "Skill for advanced Gram configuration patterns",
-    body: "Help experienced users with:\n- Multi-environment deployments\n- Custom authentication flows\n- Webhook integrations\n- Performance tuning for high-throughput MCP servers",
-    source: "corpus",
+    id: "skill-incident-response",
+    name: "incident-response",
+    description:
+      "Skill for guiding engineers through incident response procedures",
+    body: "When an incident is declared, guide the on-call engineer through the response process.\n\nKey procedures:\n1. Acknowledge the alert in PagerDuty within 5 minutes\n2. Open an incident channel in Slack (#inc-YYYYMMDD-brief)\n3. Assess severity using the SEV1-SEV4 framework\n4. Execute the relevant runbook for the affected service\n5. Post status updates every 15 minutes\n6. Conduct a blameless post-mortem within 48 hours",
     status: "active",
     author: "carol",
-    path: "guides/advanced/SKILL.md",
+    path: "engineering/runbooks/SKILL.md",
     updatedAt: "2026-03-26T09:00:00Z",
-    invocations: 234,
+    visibility: { mode: "deny", roles: ["finance"] },
     frontmatter: {
-      name: "advanced-configuration",
-      description: "Skill for advanced Gram configuration patterns",
+      name: "incident-response",
+      description:
+        "Skill for guiding engineers through incident response procedures",
+    },
+    digests: [
+      {
+        contentHash: "sha256:j1k2l3",
+        pushedAt: "2026-03-26T09:00:00Z",
+        pushedBy: "carol",
+        bodyBytes: 420,
+        provenance: P_MANAGED,
+        message: "Add post-mortem requirement",
+        audit: {
+          riskLevel: "caution",
+          analyzedAt: "2026-03-26T09:10:00Z",
+          contentHash: "sha256:j1k2l3",
+          checks: [
+            {
+              category: "malicious",
+              label: "Injection / exfiltration",
+              status: "pass",
+              detail: "No injection or exfiltration patterns detected.",
+            },
+            {
+              category: "security",
+              label: "Credential exposure",
+              status: "info",
+              detail:
+                "Skill references PagerDuty and Slack integrations. No actual credentials embedded.",
+            },
+            {
+              category: "obfuscation",
+              label: "Code obfuscation",
+              status: "pass",
+              detail: "No obfuscated content.",
+            },
+            {
+              category: "suspicious",
+              label: "Infrastructure access",
+              status: "warn",
+              detail:
+                "Skill guides engineers through runbook execution which may involve infrastructure access. Ensure visibility is restricted from non-engineering roles.",
+            },
+          ],
+          analysis:
+            "This skill guides on-call engineers through incident response procedures including PagerDuty acknowledgment, Slack communication, severity assessment, and runbook execution. While the skill itself contains no credentials or dangerous commands, it references infrastructure tooling and runbook execution that could expose sensitive operational details. Recommend denying access to finance role.",
+        },
+      },
+      {
+        contentHash: "sha256:m4n5o6",
+        pushedAt: "2026-03-01T12:00:00Z",
+        pushedBy: "carol",
+        bodyBytes: 350,
+        provenance: P_USER,
+        message: "Initial version",
+      },
+    ],
+    tags: [
+      {
+        tag: "latest",
+        contentHash: "sha256:j1k2l3",
+        updatedAt: "2026-03-26T09:00:00Z",
+        updatedBy: "carol",
+      },
+      {
+        tag: "v2.0",
+        contentHash: "sha256:j1k2l3",
+        updatedAt: "2026-03-26T09:00:00Z",
+        updatedBy: "carol",
+      },
+      {
+        tag: "v1.0",
+        contentHash: "sha256:m4n5o6",
+        updatedAt: "2026-03-01T12:00:00Z",
+        updatedBy: "carol",
+      },
+    ],
+    insights: {
+      installations: 87,
+      activeInstallations: 64,
+      pctOnLatest: 73,
+      avgTokens: 210,
+      invocations7d: 234,
+      successRate: 97.8,
     },
   },
   {
-    id: "skill-ts-sdk",
-    name: "typescript-sdk",
-    description: "Skill for TypeScript SDK usage patterns",
-    body: "Guide users through TypeScript SDK patterns:\n- Client initialization and configuration\n- Tool invocation and error handling\n- Streaming responses\n- Type-safe tool definitions with Zod schemas",
-    source: "corpus",
+    id: "skill-competitive-analysis",
+    name: "competitive-analysis",
+    description: "Skill for answering competitive positioning questions",
+    body: "When a sales rep asks about competitors, provide accurate and up-to-date competitive intelligence.\n\nKey areas:\n- Feature comparison matrices\n- Pricing intelligence (updated quarterly)\n- Win/loss analysis patterns\n- Competitor weakness talking points\n\nAlways recommend checking the latest landscape doc for current data.",
     status: "active",
     author: "alice",
-    path: "sdk/typescript/SKILL.md",
-    updatedAt: "2026-03-23T16:00:00Z",
-    invocations: 562,
+    path: "sales/competitive-intel/SKILL.md",
+    updatedAt: "2026-03-26T14:00:00Z",
+    visibility: { mode: "allow", roles: ["sales"] },
     frontmatter: {
-      name: "typescript-sdk",
-      description: "Skill for TypeScript SDK usage patterns",
+      name: "competitive-analysis",
+      description: "Skill for answering competitive positioning questions",
+    },
+    digests: [
+      {
+        contentHash: "sha256:p7q8r9",
+        pushedAt: "2026-03-26T14:00:00Z",
+        pushedBy: "alice",
+        bodyBytes: 370,
+        provenance: P_PROJECT,
+        message: "Add win/loss analysis section",
+      },
+      {
+        contentHash: "sha256:s1t2u3",
+        pushedAt: "2026-03-15T11:00:00Z",
+        pushedBy: "alice",
+        bodyBytes: 300,
+        provenance: P_PROJECT,
+        message: "Add pricing intelligence",
+      },
+      {
+        contentHash: "sha256:v4w5x6",
+        pushedAt: "2026-02-20T08:00:00Z",
+        pushedBy: "bob",
+        bodyBytes: 220,
+        provenance: P_PROJECT,
+        message: "Initial competitive skill",
+      },
+    ],
+    tags: [
+      {
+        tag: "latest",
+        contentHash: "sha256:p7q8r9",
+        updatedAt: "2026-03-26T14:00:00Z",
+        updatedBy: "alice",
+      },
+      {
+        tag: "v3.1",
+        contentHash: "sha256:p7q8r9",
+        updatedAt: "2026-03-26T14:00:00Z",
+        updatedBy: "alice",
+      },
+      {
+        tag: "v3.0",
+        contentHash: "sha256:s1t2u3",
+        updatedAt: "2026-03-15T11:00:00Z",
+        updatedBy: "alice",
+      },
+      {
+        tag: "v2.0",
+        contentHash: "sha256:v4w5x6",
+        updatedAt: "2026-02-20T08:00:00Z",
+        updatedBy: "bob",
+      },
+    ],
+    insights: {
+      installations: 210,
+      activeInstallations: 195,
+      pctOnLatest: 85,
+      avgTokens: 280,
+      invocations7d: 562,
+      successRate: 99.5,
     },
   },
   {
-    id: "skill-debug-mcp",
-    name: "debug-mcp-connections",
-    description: "Troubleshoot MCP server connectivity issues",
-    body: "When an agent cannot connect to an MCP server:\n1. Verify the server URL in environment settings\n2. Check authentication credentials\n3. Inspect the MCP logs for handshake errors\n4. Test with the playground using verbose mode\n5. Verify network/firewall rules",
-    source: "captured",
-    capturedFrom: {
-      sessionId: "sess-abc123",
-      agentName: "claude-agent-7",
-      capturedAt: "2026-03-29T11:00:00Z",
-    },
+    id: "skill-financial-reporting",
+    name: "financial-reporting",
+    description: "Skill for generating and interpreting financial reports",
+    body: "Help finance team members with quarterly and annual financial reporting.\n\nKey capabilities:\n- Revenue recognition calculations (ASC 606)\n- ARR/MRR breakdown by customer segment\n- Churn and expansion metrics\n- Board deck financial slide preparation\n- Variance analysis against forecast",
     status: "active",
-    author: "claude-agent-7",
-    updatedAt: "2026-03-29T11:00:00Z",
-    invocations: 89,
+    author: "dave",
+    path: "finance/reporting/SKILL.md",
+    updatedAt: "2026-03-23T16:00:00Z",
+    visibility: { mode: "allow", roles: ["finance"] },
     frontmatter: {
-      name: "debug-mcp-connections",
-      description: "Troubleshoot MCP server connectivity issues",
+      name: "financial-reporting",
+      description: "Skill for generating and interpreting financial reports",
+    },
+    digests: [
+      {
+        contentHash: "sha256:y7z8a1",
+        pushedAt: "2026-03-23T16:00:00Z",
+        pushedBy: "dave",
+        bodyBytes: 350,
+        provenance: P_PROJECT,
+        message: "Add variance analysis capability",
+      },
+    ],
+    tags: [
+      {
+        tag: "latest",
+        contentHash: "sha256:y7z8a1",
+        updatedAt: "2026-03-23T16:00:00Z",
+        updatedBy: "dave",
+      },
+    ],
+    insights: {
+      installations: 34,
+      activeInstallations: 34,
+      pctOnLatest: 100,
+      avgTokens: 320,
+      invocations7d: 89,
+      successRate: 94.4,
     },
   },
   {
-    id: "skill-migrate-v2",
-    name: "migrate-to-v2",
-    description: "Guide migration from Gram v1 to v2 API",
-    body: "Walk users through the v1 to v2 migration:\n- Updated authentication flow\n- New tool registration format\n- Deprecated endpoints and replacements\n- Data migration scripts",
-    source: "captured",
+    id: "skill-objection-handling",
+    name: "objection-handling",
+    description:
+      "Skill for handling common sales objections with proven responses",
+    body: "When a prospect raises an objection during a sales call, provide the recommended response framework.\n\nCommon objections:\n- Price concerns: reframe around TCO and ROI calculator\n- Existing solution: focus on real-time capabilities and scale\n- On-prem requirements: highlight hybrid deployment option\n- Security concerns: reference SOC 2 certification and CISO call",
     capturedFrom: {
       sessionId: "sess-def456",
       agentName: "cursor-agent-12",
@@ -805,25 +1408,99 @@ export const MOCK_REGISTRY_SKILLS: RegistrySkill[] = [
     status: "pending-review",
     author: "cursor-agent-12",
     updatedAt: "2026-03-31T09:00:00Z",
-    invocations: 12,
+    visibility: { mode: "none" },
     frontmatter: {
-      name: "migrate-to-v2",
-      description: "Guide migration from Gram v1 to v2 API",
+      name: "objection-handling",
+      description:
+        "Skill for handling common sales objections with proven responses",
+    },
+    digests: [
+      {
+        contentHash: "sha256:b2c3d4",
+        pushedAt: "2026-03-31T09:00:00Z",
+        pushedBy: "cursor-agent-12",
+        bodyBytes: 340,
+        provenance: P_USER,
+        message: "Captured from sales enablement session",
+      },
+    ],
+    tags: [
+      {
+        tag: "latest",
+        contentHash: "sha256:b2c3d4",
+        updatedAt: "2026-03-31T09:00:00Z",
+        updatedBy: "cursor-agent-12",
+      },
+    ],
+    insights: {
+      installations: 3,
+      activeInstallations: 2,
+      pctOnLatest: 100,
+      avgTokens: 240,
+      invocations7d: 12,
+      successRate: 83.3,
     },
   },
   {
-    id: "skill-custom-uploaded",
-    name: "internal-deployment-checklist",
-    description: "Internal pre-deployment verification checklist",
-    body: "Before deploying to production:\n- [ ] Run full test suite\n- [ ] Verify environment variables\n- [ ] Check rate limit configuration\n- [ ] Validate OAuth redirect URIs\n- [ ] Review access control rules\n- [ ] Confirm monitoring alerts are configured",
-    source: "uploaded",
+    id: "skill-compliance-checker",
+    name: "compliance-checker",
+    description:
+      "Automated compliance verification for SOC 2, GDPR, and data retention policies",
+    body: "Verify compliance posture across the organization.\n\nCapabilities:\n- Check SOC 2 Type II control status\n- Validate GDPR data processing agreements for EU customers\n- Audit data retention policy adherence\n- Generate compliance summary for board reporting\n- Flag overdue DPA renewals\n- Cross-reference audit log retention with regulatory requirements",
     status: "active",
     author: "dave",
     updatedAt: "2026-04-01T10:00:00Z",
-    invocations: 156,
+    visibility: { mode: "all" },
     frontmatter: {
-      name: "internal-deployment-checklist",
-      description: "Internal pre-deployment verification checklist",
+      name: "compliance-checker",
+      description:
+        "Automated compliance verification for SOC 2, GDPR, and data retention policies",
+    },
+    digests: [
+      {
+        contentHash: "sha256:e5f6g7",
+        pushedAt: "2026-04-01T10:00:00Z",
+        pushedBy: "dave",
+        bodyBytes: 380,
+        provenance: P_PLUGIN,
+        message: "Add GDPR DPA renewal checks",
+      },
+      {
+        contentHash: "sha256:h8i9j0",
+        pushedAt: "2026-03-20T14:00:00Z",
+        pushedBy: "dave",
+        bodyBytes: 350,
+        provenance: P_PLUGIN,
+        message: "Add data retention audit",
+      },
+    ],
+    tags: [
+      {
+        tag: "latest",
+        contentHash: "sha256:e5f6g7",
+        updatedAt: "2026-04-01T10:00:00Z",
+        updatedBy: "dave",
+      },
+      {
+        tag: "v1.3",
+        contentHash: "sha256:e5f6g7",
+        updatedAt: "2026-04-01T10:00:00Z",
+        updatedBy: "dave",
+      },
+      {
+        tag: "v1.2",
+        contentHash: "sha256:h8i9j0",
+        updatedAt: "2026-03-20T14:00:00Z",
+        updatedBy: "dave",
+      },
+    ],
+    insights: {
+      installations: 56,
+      activeInstallations: 48,
+      pctOnLatest: 62,
+      avgTokens: 410,
+      invocations7d: 156,
+      successRate: 100,
     },
   },
 ];
@@ -833,10 +1510,10 @@ export const MOCK_REGISTRY_SKILLS: RegistrySkill[] = [
 export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
   {
     id: "s1",
-    query: "how to authenticate with OAuth",
-    filters: { language: "typescript" },
+    query: "system architecture overview",
+    filters: { department: "engineering" },
     resultsCount: 5,
-    topChunkPath: "guides/authentication.md#oauth-2-0",
+    topChunkPath: "engineering/architecture.md#core-services",
     latencyMs: 42,
     sessionId: "sess-001",
     agentName: "claude-agent-7",
@@ -844,9 +1521,9 @@ export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
   },
   {
     id: "s2",
-    query: "deploy MCP server",
+    query: "competitor comparison DataStream",
     resultsCount: 3,
-    topChunkPath: "guides/deployment.md#gram-cloud",
+    topChunkPath: "sales/competitive-intel/landscape.md#datastream-pro",
     latencyMs: 38,
     sessionId: "sess-002",
     agentName: "cursor-agent-12",
@@ -854,10 +1531,10 @@ export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
   },
   {
     id: "s3",
-    query: "create custom tool schema",
-    filters: { scope: "advanced-guide" },
+    query: "incident response SEV1 procedure",
+    filters: { scope: "incident-response" },
     resultsCount: 2,
-    topChunkPath: "guides/advanced/custom-tools.md#tool-schema",
+    topChunkPath: "engineering/runbooks/incident-playbook.md#severity-levels",
     latencyMs: 55,
     sessionId: "sess-003",
     agentName: "claude-agent-7",
@@ -865,10 +1542,10 @@ export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
   },
   {
     id: "s4",
-    query: "TypeScript SDK initialization",
-    filters: { language: "typescript" },
+    query: "quarterly financial report template",
+    filters: { department: "finance" },
     resultsCount: 4,
-    topChunkPath: "sdk/typescript/quickstart.md#initialize",
+    topChunkPath: "finance/reporting/quarterly-template.md#revenue-summary",
     latencyMs: 31,
     sessionId: "sess-004",
     agentName: "windsurf-agent-3",
@@ -876,9 +1553,9 @@ export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
   },
   {
     id: "s5",
-    query: "webhook retry policy",
+    query: "employee benefits 401k",
     resultsCount: 1,
-    topChunkPath: "guides/advanced/webhooks.md#retry-policy",
+    topChunkPath: "company/benefits.md#financial",
     latencyMs: 28,
     sessionId: "sess-001",
     agentName: "claude-agent-7",
@@ -886,10 +1563,10 @@ export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
   },
   {
     id: "s6",
-    query: "list all tools API",
-    filters: { scope: "public-docs" },
+    query: "API rate limits",
+    filters: { scope: "company-docs" },
     resultsCount: 2,
-    topChunkPath: "api-reference/tools.md#list-tools",
+    topChunkPath: "engineering/api-reference.md#rate-limits",
     latencyMs: 35,
     sessionId: "sess-005",
     agentName: "claude-agent-7",
@@ -897,10 +1574,10 @@ export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
   },
   {
     id: "s7",
-    query: "Python SDK quickstart",
-    filters: { language: "python" },
+    query: "pricing tiers enterprise",
+    filters: { department: "sales" },
     resultsCount: 3,
-    topChunkPath: "sdk/python/quickstart.md#initialize",
+    topChunkPath: "product/pricing.md#enterprise",
     latencyMs: 44,
     sessionId: "sess-006",
     agentName: "cursor-agent-12",
@@ -908,9 +1585,9 @@ export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
   },
   {
     id: "s8",
-    query: "gram configuration file",
+    query: "new engineer setup guide",
     resultsCount: 4,
-    topChunkPath: "getting-started/configuration.md#gram-config-ts",
+    topChunkPath: "engineering/onboarding/setup-guide.md#repository-setup",
     latencyMs: 39,
     sessionId: "sess-007",
     agentName: "claude-agent-7",
@@ -921,8 +1598,8 @@ export const MOCK_SEARCH_LOGS: SearchLogEntry[] = [
 export const MOCK_SKILL_INVOCATIONS: SkillInvocationEntry[] = [
   {
     id: "i1",
-    skillId: "skill-getting-started",
-    skillName: "getting-started",
+    skillId: "skill-engineer-onboarding",
+    skillName: "engineer-onboarding",
     sessionId: "sess-001",
     agentName: "claude-agent-7",
     latencyMs: 12,
@@ -931,8 +1608,8 @@ export const MOCK_SKILL_INVOCATIONS: SkillInvocationEntry[] = [
   },
   {
     id: "i2",
-    skillId: "skill-ts-sdk",
-    skillName: "typescript-sdk",
+    skillId: "skill-financial-reporting",
+    skillName: "financial-reporting",
     sessionId: "sess-004",
     agentName: "windsurf-agent-3",
     latencyMs: 8,
@@ -941,8 +1618,8 @@ export const MOCK_SKILL_INVOCATIONS: SkillInvocationEntry[] = [
   },
   {
     id: "i3",
-    skillId: "skill-debug-mcp",
-    skillName: "debug-mcp-connections",
+    skillId: "skill-incident-response",
+    skillName: "incident-response",
     sessionId: "sess-003",
     agentName: "claude-agent-7",
     latencyMs: 15,
@@ -951,8 +1628,8 @@ export const MOCK_SKILL_INVOCATIONS: SkillInvocationEntry[] = [
   },
   {
     id: "i4",
-    skillId: "skill-advanced-config",
-    skillName: "advanced-configuration",
+    skillId: "skill-competitive-analysis",
+    skillName: "competitive-analysis",
     sessionId: "sess-002",
     agentName: "cursor-agent-12",
     latencyMs: 10,
@@ -961,8 +1638,8 @@ export const MOCK_SKILL_INVOCATIONS: SkillInvocationEntry[] = [
   },
   {
     id: "i5",
-    skillId: "skill-custom-uploaded",
-    skillName: "internal-deployment-checklist",
+    skillId: "skill-compliance-checker",
+    skillName: "compliance-checker",
     sessionId: "sess-005",
     agentName: "claude-agent-7",
     latencyMs: 9,
@@ -971,8 +1648,8 @@ export const MOCK_SKILL_INVOCATIONS: SkillInvocationEntry[] = [
   },
   {
     id: "i6",
-    skillId: "skill-migrate-v2",
-    skillName: "migrate-to-v2",
+    skillId: "skill-objection-handling",
+    skillName: "objection-handling",
     sessionId: "sess-006",
     agentName: "cursor-agent-12",
     latencyMs: 250,
@@ -1006,6 +1683,30 @@ export function findFile(
     (c) => c.type === "file" && c.name === name,
   );
   return node?.type === "file" ? node : null;
+}
+
+/**
+ * Resolve a slash-separated path (e.g. "getting-started") to a folder in the
+ * tree.  Segments are matched against folder names starting from `root`.
+ */
+export function findFolderByPath(
+  root: ContextFolder,
+  path: string,
+): ContextFolder | null {
+  // Strip trailing filename (e.g. "getting-started/SKILL.md" → "getting-started")
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length > 0 && parts[parts.length - 1].includes(".")) {
+    parts.pop();
+  }
+  let current: ContextFolder = root;
+  for (const segment of parts) {
+    const child = current.children.find(
+      (c) => c.type === "folder" && c.name === segment,
+    );
+    if (!child || child.type !== "folder") return null;
+    current = child;
+  }
+  return current === root && parts.length > 0 ? null : current;
 }
 
 export function countItems(folder: ContextFolder): {
@@ -1194,27 +1895,28 @@ export type DraftDocument = {
 export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
   {
     id: "draft-1",
-    title: "Update prerequisites to Node 20+ and pnpm",
+    title: "Add AI anomaly detection to product overview",
     author: "alice",
     authorType: "human",
     createdAt: "2026-04-01T09:30:00Z",
     updatedAt: "2026-04-01T15:00:00Z",
-    filePath: "getting-started/introduction.md",
+    filePath: "product/overview.md",
     originalContent:
-      "# Introduction\n\nWelcome to Gram! This guide walks you through the basics of setting up your first MCP server.\n\n## Prerequisites\n\n- Node.js 18+\n- A Gram account\n\n## Quick Start\n\n```bash\nnpx create-gram-app my-server\ncd my-server\nnpm run dev\n```\n\nYour MCP server is now running locally on port 3000.",
+      "# Product Overview\n\nAcme SaaS is a B2B platform that helps companies manage their data infrastructure at scale.\n\n## Core Features\n\n- Automated data pipelines\n- Real-time analytics dashboard\n- Role-based access control\n- API-first architecture\n\n## Target Market\n\nMid-market and enterprise companies processing 1M+ events per day.",
     content:
-      "# Introduction\n\nWelcome to Gram! This guide walks you through the basics of setting up your first MCP server.\n\n## Prerequisites\n\n- Node.js 20+\n- A Gram account\n- pnpm 9+\n\n## Quick Start\n\n```bash\nnpx create-gram-app my-server\ncd my-server\npnpm dev\n```\n\nYour MCP server is now running locally on port 3000.\n\n## Next Steps\n\nHead over to the [Configuration guide](./configuration.md) to customize your server.",
+      "# Product Overview\n\nAcme SaaS is a B2B platform that helps companies manage their data infrastructure at scale.\n\n## Core Features\n\n- Automated data pipelines\n- Real-time analytics dashboard\n- Role-based access control\n- API-first architecture\n- AI-powered anomaly detection (NEW)\n\n## Target Market\n\nMid-market and enterprise companies processing 1M+ events per day.\n\n## Recent Updates\n\nSee the [roadmap](./roadmap.md) for upcoming features and timelines.",
     upvotes: 7,
     downvotes: 1,
     userVote: "up",
     status: "open",
-    labels: ["documentation", "breaking-change"],
+    labels: ["product", "feature-launch"],
     comments: [
       {
         id: "c1",
         author: "bob",
         authorType: "human",
-        content: "Good call on pnpm — we should update the CI templates too.",
+        content:
+          "Good call — sales has been asking for this update to share with prospects.",
         createdAt: "2026-04-01T10:15:00Z",
         upvotes: 3,
       },
@@ -1223,7 +1925,7 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
         author: "claude-agent-7",
         authorType: "agent",
         content:
-          "I've seen 12 support sessions this week where users had issues with npm. pnpm resolves the peer dependency conflicts.",
+          "I've seen 12 agent sessions this week where the product overview was referenced but lacked AI feature details. This update will reduce follow-up queries.",
         createdAt: "2026-04-01T11:00:00Z",
         upvotes: 5,
       },
@@ -1231,27 +1933,27 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
   },
   {
     id: "draft-2",
-    title: "Add JWT / Bearer Token authentication section",
+    title: "Add ML service and observability to architecture doc",
     author: "bob",
     authorType: "human",
     createdAt: "2026-04-01T14:20:00Z",
     updatedAt: "2026-04-01T14:20:00Z",
-    filePath: "guides/authentication.md",
+    filePath: "engineering/architecture.md",
     originalContent:
-      "# Authentication\n\nGram supports multiple authentication strategies.\n\n## OAuth 2.0\n\nConfigure OAuth providers in your MCP server settings.\n\n## API Keys\n\nGenerate API keys from the dashboard under Settings > API Keys.\n\n## Custom Auth\n\nImplement the `AuthProvider` interface for custom authentication flows.",
+      "# System Architecture\n\nAcme SaaS follows a microservices architecture deployed on Kubernetes.\n\n## Core Services\n\n- **Ingestion Service** — receives and validates incoming events via HTTP and Kafka\n- **Processing Pipeline** — transforms and enriches events using Apache Flink\n- **Query Engine** — serves analytics queries via a ClickHouse cluster\n- **API Gateway** — Kong-based gateway handling auth, rate limiting, and routing\n\n## Infrastructure\n\nAll services run on AWS EKS with Terraform-managed infrastructure. Data is stored in S3 (raw), ClickHouse (analytics), and PostgreSQL (metadata).",
     content:
-      "# Authentication\n\nGram supports multiple authentication strategies.\n\n## OAuth 2.0\n\nConfigure OAuth providers in your MCP server settings.\n\n## API Keys\n\nGenerate API keys from the dashboard under Settings > API Keys.\n\n## JWT / Bearer Tokens\n\nPass a bearer token in the `Authorization` header. Gram validates it against your configured JWKS endpoint.\n\n## Custom Auth\n\nImplement the `AuthProvider` interface for custom authentication flows.",
+      "# System Architecture\n\nAcme SaaS follows a microservices architecture deployed on Kubernetes.\n\n## Core Services\n\n- **Ingestion Service** — receives and validates incoming events via HTTP and Kafka\n- **Processing Pipeline** — transforms and enriches events using Apache Flink\n- **Query Engine** — serves analytics queries via a ClickHouse cluster\n- **API Gateway** — Kong-based gateway handling auth, rate limiting, and routing\n- **ML Service** — anomaly detection models served via TorchServe\n\n## Infrastructure\n\nAll services run on AWS EKS with Terraform-managed infrastructure. Data is stored in S3 (raw), ClickHouse (analytics), and PostgreSQL (metadata).\n\n## Observability\n\nWe use Datadog for metrics, logs, and traces. PagerDuty handles alerting.",
     upvotes: 14,
     downvotes: 0,
     userVote: null,
     status: "open",
-    labels: ["security", "enhancement"],
+    labels: ["engineering", "architecture"],
     comments: [
       {
         id: "c3",
         author: "carol",
         authorType: "human",
-        content: "Security team approved this. Ship it!",
+        content: "ML team approved this. The TorchServe detail is accurate.",
         createdAt: "2026-04-01T16:00:00Z",
         upvotes: 8,
       },
@@ -1259,27 +1961,28 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
   },
   {
     id: "draft-3",
-    title: "Add query parameters and Delete endpoint to Tools API",
+    title: "Add AI demo slide to sales pitch deck",
     author: "carol",
     authorType: "human",
     createdAt: "2026-04-02T08:00:00Z",
     updatedAt: "2026-04-02T08:00:00Z",
-    filePath: "api-reference/tools.md",
+    filePath: "sales/pitch-deck.md",
     originalContent:
-      "# Tools API\n\n## List Tools\n\n`GET /api/v1/tools`\n\nReturns all tools registered for the current project.\n\n## Get Tool\n\n`GET /api/v1/tools/:slug`\n\nReturns a single tool by slug.\n\n## Create Tool\n\n`POST /api/v1/tools`\n\nRegisters a new tool definition.",
+      "# Sales Pitch Deck Guide\n\n## Opening (Slides 1-3)\n\nLead with the customer's pain point. Use industry-specific examples.\n\n## Product Demo (Slides 4-8)\n\nShow the real-time analytics dashboard first — it's our strongest differentiator.\n\n## ROI Slide (Slide 9)\n\nCustomers report:\n- 40% reduction in data pipeline maintenance\n- 3x faster time-to-insight\n- 60% fewer data quality incidents\n\n## Closing (Slides 10-12)\n\nEnd with customer testimonials and next steps for a trial.",
     content:
-      "# Tools API\n\n## List Tools\n\n`GET /api/v1/tools`\n\nReturns all tools registered for the current project.\n\n### Query Parameters\n\n| Param | Type | Description |\n|-------|------|-------------|\n| `limit` | int | Max results (default 50) |\n| `offset` | int | Pagination offset |\n\n## Get Tool\n\n`GET /api/v1/tools/:slug`\n\nReturns a single tool by slug.\n\n## Create Tool\n\n`POST /api/v1/tools`\n\nRegisters a new tool definition.\n\n## Delete Tool\n\n`DELETE /api/v1/tools/:slug`\n\nRemoves a tool registration.",
+      "# Sales Pitch Deck Guide\n\n## Opening (Slides 1-3)\n\nLead with the customer's pain point. Use industry-specific examples.\n\n## Product Demo (Slides 4-8)\n\nShow the real-time analytics dashboard first — it's our strongest differentiator.\n\n## AI Anomaly Detection Demo (NEW - Slide 5b)\n\nDemonstrate the new AI-powered anomaly detection. Use the retail dataset for maximum impact.\n\n## ROI Slide (Slide 9)\n\nCustomers report:\n- 40% reduction in data pipeline maintenance\n- 3x faster time-to-insight\n- 60% fewer data quality incidents\n\n## Closing (Slides 10-12)\n\nEnd with customer testimonials and next steps for a trial.",
     upvotes: 4,
     downvotes: 2,
     userVote: "up",
     status: "open",
-    labels: ["api"],
+    labels: ["sales", "pitch"],
     comments: [
       {
         id: "c4",
         author: "dave",
         authorType: "human",
-        content: "Should we add a soft-delete option instead?",
+        content:
+          "Should we use the healthcare dataset instead? More impressive numbers.",
         createdAt: "2026-04-02T09:00:00Z",
         upvotes: 2,
       },
@@ -1288,7 +1991,7 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
         author: "claude-agent-7",
         authorType: "agent",
         content:
-          "Based on user feedback, hard delete is the expected behavior. Soft delete can be a follow-up.",
+          "Based on recent demos, the retail dataset has a 23% higher conversion rate. Recommend keeping retail as the default.",
         createdAt: "2026-04-02T09:30:00Z",
         upvotes: 1,
       },
@@ -1296,7 +1999,7 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
         id: "c6",
         author: "carol",
         authorType: "human",
-        content: "Agreed with the agent. Let's keep it simple for v1.",
+        content: "Agreed with the agent. Retail it is.",
         createdAt: "2026-04-02T10:00:00Z",
         upvotes: 3,
       },
@@ -1304,27 +2007,27 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
   },
   {
     id: "draft-4",
-    title: "New doc: Rate Limiting Best Practices",
+    title: "New doc: Data Retention Policy FAQ",
     author: "cursor-agent-12",
     authorType: "agent",
     createdAt: "2026-04-02T11:00:00Z",
     updatedAt: "2026-04-02T11:00:00Z",
     filePath: null,
-    proposedPath: "guides/advanced/rate-limiting.md",
+    proposedPath: "finance/data-retention-faq.md",
     content:
-      "# Rate Limiting Best Practices\n\nThis guide covers rate limiting strategies for MCP servers on Gram.\n\n## Default Limits\n\n- 100 requests/minute per API key\n- 1000 tool calls/hour per session\n\n## Custom Limits\n\nConfigure per-toolset limits in the environment settings.\n\n## Handling 429 Responses\n\nWhen rate limited, clients receive a `429` status with a `Retry-After` header.\n\n## Monitoring\n\nTrack rate limit usage in the Observability dashboard.",
+      "# Data Retention Policy FAQ\n\nCompiled from recurring questions across finance and compliance reviews.\n\n## How long is customer data retained?\n\n90 days by default, configurable up to 365 days per customer contract.\n\n## What about audit logs?\n\n7 years, per regulatory requirements. Not configurable.\n\n## When is PII deleted?\n\nAutomatically redacted within 30 days of account deletion.\n\n## Can we extend retention for specific customers?\n\nYes, via a custom DPA addendum. Contact legal@acme.com.",
     upvotes: 11,
     downvotes: 1,
     userVote: null,
     status: "open",
-    labels: ["agent-generated", "new-doc", "best-practices"],
+    labels: ["agent-generated", "new-doc", "compliance"],
     comments: [
       {
         id: "c7",
         author: "alice",
         authorType: "human",
         content:
-          "Great initiative from the agent. The numbers look right. Should we add a section on burst limits?",
+          "Great initiative from the agent. The retention numbers match our policy. Should we add a section on GDPR-specific retention?",
         createdAt: "2026-04-02T12:00:00Z",
         upvotes: 4,
       },
@@ -1332,27 +2035,27 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
   },
   {
     id: "draft-5",
-    title: "New doc: Troubleshooting Common MCP Connection Issues",
+    title: "New doc: On-Call Rotation Handbook",
     author: "claude-agent-7",
     authorType: "agent",
     createdAt: "2026-04-02T13:00:00Z",
     updatedAt: "2026-04-02T13:00:00Z",
     filePath: null,
-    proposedPath: "guides/troubleshooting.md",
+    proposedPath: "engineering/runbooks/on-call-handbook.md",
     content:
-      "# Troubleshooting Common MCP Connection Issues\n\nBased on patterns observed across 89 support sessions.\n\n## Connection Refused\n\nCheck that the server URL is correct and the server is running.\n\n## Authentication Failures\n\nVerify API keys haven't expired. Check OAuth token refresh.\n\n## Timeout Errors\n\nIncrease the client timeout setting. Default is 30s.\n\n## SSL Certificate Errors\n\nEnsure your custom domain has a valid certificate.",
+      "# On-Call Rotation Handbook\n\nBased on patterns observed across 89 incident response sessions.\n\n## Schedule\n\nRotations are weekly, Monday 9am to Monday 9am. Check PagerDuty for your next shift.\n\n## During Your Shift\n\nKeep your phone charged and PagerDuty alerts enabled. Response SLA is 5 minutes for SEV1.\n\n## Handoff Checklist\n\n- Review open incidents in #incidents channel\n- Check the on-call log for any ongoing issues\n- Confirm PagerDuty escalation chain is correct\n\n## Compensation\n\nOn-call engineers receive $500/week additional compensation.",
     upvotes: 19,
     downvotes: 0,
     userVote: "up",
     status: "open",
-    labels: ["agent-generated", "new-doc", "troubleshooting"],
+    labels: ["agent-generated", "new-doc", "engineering"],
     comments: [
       {
         id: "c8",
         author: "bob",
         authorType: "human",
         content:
-          "This would've saved us so many support tickets. Publish ASAP.",
+          "This would've saved so much confusion during handoffs. Publish ASAP.",
         createdAt: "2026-04-02T13:30:00Z",
         upvotes: 12,
       },
@@ -1360,7 +2063,7 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
         id: "c9",
         author: "dave",
         authorType: "human",
-        content: "Can we add a section on firewall/proxy issues too?",
+        content: "Can we add a section on international timezone coverage too?",
         createdAt: "2026-04-02T14:00:00Z",
         upvotes: 6,
       },
@@ -1368,7 +2071,7 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
   },
   {
     id: "draft-6",
-    title: "Add external-partner role to access control config",
+    title: "Restrict finance from engineering runbooks in access control",
     author: "dave",
     authorType: "human",
     createdAt: "2026-04-02T14:30:00Z",
@@ -1384,13 +2087,15 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
         },
         accessControl: [
           {
-            role: "developer",
-            allowedTaxonomy: { language: ["typescript", "python", "go"] },
+            role: "engineering",
+            allowedTaxonomy: {
+              department: ["engineering", "sales", "finance"],
+            },
           },
           {
-            role: "support",
-            allowedTaxonomy: { language: ["typescript", "python"] },
-            deniedPaths: ["guides/advanced/*"],
+            role: "sales",
+            allowedTaxonomy: { department: ["sales"] },
+            deniedPaths: ["engineering/runbooks/*"],
           },
         ],
       },
@@ -1407,18 +2112,23 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
         },
         accessControl: [
           {
-            role: "developer",
-            allowedTaxonomy: { language: ["typescript", "python", "go"] },
+            role: "engineering",
+            allowedTaxonomy: {
+              department: ["engineering", "sales", "finance"],
+            },
           },
           {
-            role: "support",
-            allowedTaxonomy: { language: ["typescript", "python"] },
-            deniedPaths: ["guides/advanced/*"],
+            role: "sales",
+            allowedTaxonomy: { department: ["sales"] },
+            deniedPaths: ["engineering/runbooks/*"],
           },
           {
-            role: "external-partner",
-            allowedTaxonomy: { language: ["typescript"] },
-            deniedPaths: ["api-reference/*", "guides/advanced/*"],
+            role: "finance",
+            allowedTaxonomy: { department: ["finance"] },
+            deniedPaths: [
+              "engineering/runbooks/*",
+              "sales/competitive-intel/*",
+            ],
           },
         ],
       },
@@ -1436,7 +2146,7 @@ export const MOCK_DRAFT_DOCUMENTS: DraftDocument[] = [
         author: "alice",
         authorType: "human",
         content:
-          "Makes sense — partners shouldn't see our internal API docs or advanced guides.",
+          "Makes sense — finance shouldn't see incident runbooks or competitive intel.",
         createdAt: "2026-04-02T15:00:00Z",
         upvotes: 4,
       },
