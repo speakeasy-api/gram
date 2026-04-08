@@ -360,7 +360,7 @@ WITH deployment AS (
     SELECT d.id
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
-    WHERE d.project_id = $1
+    WHERE d.project_id = $2
     AND ds.status = 'completed'
     ORDER BY d.seq DESC
     LIMIT 1
@@ -396,15 +396,15 @@ SELECT
   e.registry_server_specifier
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
-WHERE t.tool_urn = $2
+WHERE t.tool_urn = $1
   AND e.deployment_id = (SELECT id FROM deployment)
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE
 `
 
 type GetExternalMCPToolDefinitionByURNParams struct {
-	ProjectID uuid.UUID
 	ToolUrn   string
+	ProjectID uuid.UUID
 }
 
 type GetExternalMCPToolDefinitionByURNRow struct {
@@ -439,7 +439,7 @@ type GetExternalMCPToolDefinitionByURNRow struct {
 }
 
 func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, arg GetExternalMCPToolDefinitionByURNParams) (GetExternalMCPToolDefinitionByURNRow, error) {
-	row := q.db.QueryRow(ctx, getExternalMCPToolDefinitionByURN, arg.ProjectID, arg.ToolUrn)
+	row := q.db.QueryRow(ctx, getExternalMCPToolDefinitionByURN, arg.ToolUrn, arg.ProjectID)
 	var i GetExternalMCPToolDefinitionByURNRow
 	err := row.Scan(
 		&i.ID,
@@ -993,11 +993,7 @@ type PublishToolsetToCollectionParams struct {
 }
 
 func (q *Queries) PublishToolsetToCollection(ctx context.Context, arg PublishToolsetToCollectionParams) (McpRegistryToolset, error) {
-	row := q.db.QueryRow(ctx, publishToolsetToCollection,
-		arg.CollectionID,
-		arg.ToolsetID,
-		arg.PublishedBy,
-	)
+	row := q.db.QueryRow(ctx, publishToolsetToCollection, arg.CollectionID, arg.ToolsetID, arg.PublishedBy)
 	var i McpRegistryToolset
 	err := row.Scan(
 		&i.PublishedAt,

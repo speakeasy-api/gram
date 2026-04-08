@@ -514,21 +514,6 @@ type McpRegistry struct {
 	Deleted   bool
 }
 
-type OrganizationMcpCollection struct {
-	ID                   uuid.UUID
-	RegistryID           uuid.UUID
-	OrganizationID       string
-	Name                 string
-	Description          pgtype.Text
-	Slug                 string
-	McpRegistryNamespace string
-	Visibility           string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
-}
-
 type McpRegistryToolset struct {
 	PublishedAt  pgtype.Timestamptz
 	CreatedAt    pgtype.Timestamptz
@@ -610,6 +595,21 @@ type OrganizationFeature struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type OrganizationMcpCollection struct {
+	ID                   uuid.UUID
+	RegistryID           uuid.UUID
+	OrganizationID       string
+	Name                 string
+	Description          pgtype.Text
+	Slug                 string
+	McpRegistryNamespace string
+	Visibility           string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type OrganizationMetadatum struct {
