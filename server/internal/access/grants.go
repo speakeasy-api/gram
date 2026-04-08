@@ -31,14 +31,14 @@ type Grants struct {
 	rows []Grant
 }
 
-func (g *Grants) hasAccess(check Check) bool {
+func (g *Grants) satisfies(checks []Check) bool {
 	if g == nil {
 		return false
 	}
 
 	for _, row := range g.rows {
-		for _, candidate := range check.Expand() {
-			if row.Scope == candidate.Scope && row.Resource == candidate.ResourceID {
+		for _, check := range checks {
+			if row.Scope == check.Scope && row.Resource == check.ResourceID {
 				return true
 			}
 		}

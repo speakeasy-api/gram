@@ -39,70 +39,70 @@ func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeOrgAdmin, Resource: "org_123"}}}
-	require.True(t, g.hasAccess(Check{Scope: ScopeOrgRead, ResourceID: "org_123"}))
+	require.True(t, g.satisfies(Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.Expand()))
 }
 
 func TestGrantsHasAccess_orgAdminSatisfiesOrgWrite(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeOrgAdmin, Resource: "org_123"}}}
-	require.True(t, g.hasAccess(Check{Scope: ScopeOrgWrite, ResourceID: "org_123"}))
+	require.True(t, g.satisfies(Check{Scope: ScopeOrgWrite, ResourceID: "org_123"}.Expand()))
 }
 
 func TestGrantsHasAccess_orgReadDoesNotSatisfyOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeOrgRead, Resource: "org_123"}}}
-	require.False(t, g.hasAccess(Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"}))
+	require.False(t, g.satisfies(Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"}.Expand()))
 }
 
 func TestGrantsHasAccess_buildWriteSatisfiesBuildRead(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeBuildWrite, Resource: "proj_123"}}}
-	require.True(t, g.hasAccess(Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}))
+	require.True(t, g.satisfies(Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}.Expand()))
 }
 
 func TestGrantsHasAccess_buildReadDoesNotSatisfyBuildWrite(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}}}
-	require.False(t, g.hasAccess(Check{Scope: ScopeBuildWrite, ResourceID: "proj_123"}))
+	require.False(t, g.satisfies(Check{Scope: ScopeBuildWrite, ResourceID: "proj_123"}.Expand()))
 }
 
 func TestGrantsHasAccess_orgAdminDoesNotSatisfyBuildRead(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeOrgAdmin, Resource: "org_123"}}}
-	require.False(t, g.hasAccess(Check{Scope: ScopeBuildRead, ResourceID: "org_123"}))
+	require.False(t, g.satisfies(Check{Scope: ScopeBuildRead, ResourceID: "org_123"}.Expand()))
 }
 
 func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}}}
-	require.False(t, g.hasAccess(Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}))
+	require.False(t, g.satisfies(Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.Expand()))
 }
 
 func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeMCPWrite, Resource: "tool_a"}}}
-	require.True(t, g.hasAccess(Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}))
+	require.True(t, g.satisfies(Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.Expand()))
 }
 
 func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeRoot, Resource: WildcardResource}}}
-	require.True(t, g.hasAccess(Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}))
-	require.True(t, g.hasAccess(Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}))
-	require.True(t, g.hasAccess(Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}))
+	require.True(t, g.satisfies(Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}.Expand()))
+	require.True(t, g.satisfies(Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.Expand()))
+	require.True(t, g.satisfies(Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.Expand()))
 }
 
 func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 	t.Parallel()
 
 	g := &Grants{rows: []Grant{{Scope: ScopeOrgAdmin, Resource: "org_123"}}}
-	require.False(t, g.hasAccess(Check{Scope: ScopeOrgRead, ResourceID: "org_999"}))
+	require.False(t, g.satisfies(Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.Expand()))
 }

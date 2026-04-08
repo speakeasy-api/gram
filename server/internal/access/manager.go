@@ -87,7 +87,7 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 			return m.mapError(ctx, err)
 		}
 
-		if !grants.hasAccess(check) {
+		if !grants.satisfies(check.Expand()) {
 			return m.mapError(ctx, Denied(check.Scope, check.ResourceID))
 		}
 	}
@@ -118,7 +118,7 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
-	if slices.ContainsFunc(checks, grants.hasAccess) {
+	if slices.ContainsFunc(checks, func(c Check) bool { return grants.satisfies(c.Expand()) }) {
 		return nil
 	}
 
@@ -145,7 +145,7 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 			return nil, m.mapError(ctx, err)
 		}
 
-		if grants.hasAccess(Check{Scope: scope, ResourceID: resourceID}) {
+		if grants.satisfies(Check{Scope: scope, ResourceID: resourceID}.Expand()) {
 			allowed = append(allowed, resourceID)
 		}
 	}
