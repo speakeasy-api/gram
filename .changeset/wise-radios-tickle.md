@@ -4,4 +4,4 @@
 "server": minor
 ---
 
-Support platform-hosted MCP tools in tool discovery and the MCP UI.
+Add static platform tools to tool discovery and the built-in MCP logs server.

@@ -3,3 +3,51 @@
 //   sqlc v1.29.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type OrganizationMcpCollectionRegistry struct {
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	Namespace    string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
+type OrganizationMcpCollectionServerAttachment struct {
+	PublishedAt  pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	PublishedBy  pgtype.Text
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	ToolsetID    uuid.UUID
+	Deleted      bool
+}
+
+type Toolset struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	Name                   string
+	Slug                   string
+	Description            pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
+	McpIsPublic            bool
+	McpEnabled             bool
+	ToolSelectionMode      string
+	CustomDomainID         uuid.NullUUID
+	ExternalOauthServerID  uuid.NullUUID
+	OauthProxyServerID     uuid.NullUUID
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
