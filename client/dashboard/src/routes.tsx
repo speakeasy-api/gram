@@ -11,6 +11,8 @@ import CatalogDetail, {
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
 import CLIs from "./pages/CLIs";
+import SkillDetail from "./pages/skills/SkillDetail";
+import SkillsPage, { SkillsRoot } from "./pages/skills/Skills";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import Elements from "./pages/elements/Elements";
@@ -47,6 +49,7 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SourceDetails from "./pages/sources/SourceDetails";
+import ContextPage, { ContextRoot } from "./pages/context/Context";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
@@ -224,6 +227,13 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  context: {
+    title: "Context",
+    url: "context",
+    icon: "library",
+    component: ContextRoot,
+    indexComponent: ContextPage,
+  },
   catalog: {
     title: "Catalog",
     url: "catalog",
@@ -254,10 +264,24 @@ const ROUTE_STRUCTURE = {
     },
   },
   clis: {
-    title: "Skills",
+    title: "CLIs",
     url: "clis",
     icon: "terminal",
     component: CLIs,
+  },
+  skills: {
+    title: "Skills",
+    url: "skills",
+    icon: "sparkles",
+    component: SkillsRoot,
+    indexComponent: SkillsPage,
+    subPages: {
+      detail: {
+        title: "Skill Details",
+        url: ":skillId",
+        component: SkillDetail,
+      },
+    },
   },
   mcp: {
     title: "MCP",
