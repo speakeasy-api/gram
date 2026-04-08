@@ -1669,6 +1669,12 @@ function successRateColor(rate: number): string {
   return "#ef4444";
 }
 
+function successRateClass(rate: number): string {
+  if (rate >= 90) return "text-emerald-600";
+  if (rate >= 70) return "text-amber-500";
+  return "text-red-500";
+}
+
 function ServerVolumeChart({
   servers,
   serverNameMappings,
@@ -1850,86 +1856,96 @@ function SourceSuccessRateChart({ traces }: { traces: HookTrace[] }) {
   );
 }
 
-function UserSuccessRateChart({ users }: { users: HooksUserSummary[] }) {
-  const items = useMemo(() => {
-    return users
-      .map((u) => ({
-        label: u.userEmail,
-        successRate: (1 - u.failureRate) * 100,
-        total: u.successCount + u.failureCount,
-      }))
-      .sort((a, b) => a.successRate - b.successRate);
-  }, [users]);
-
-  const height = Math.max(120, items.length * 28 + 40);
-
-  const chartData = {
-    labels: items.map((i) => i.label),
-    datasets: [
-      {
-        data: items.map((i) => i.successRate),
-        backgroundColor: items.map((i) => successRateColor(i.successRate)),
-        borderWidth: 0,
-        borderRadius: 3,
-        barThickness: 16,
-      },
-    ],
-  };
-
-  const options = {
-    indexAxis: "y" as const,
-    animation: false as const,
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: "rgba(0,0,0,0.85)",
-        titleColor: "#fff",
-        bodyColor: "#e5e7eb",
-        borderColor: "rgba(255,255,255,0.1)",
-        borderWidth: 1,
-        padding: 10,
-        callbacks: {
-          label: (ctx: TooltipItem<"bar">) => {
-            const item = items[ctx.dataIndex];
-            return [
-              ` Success rate: ${(ctx.parsed.x ?? 0).toFixed(1)}%`,
-              ` Total calls: ${item?.total.toLocaleString()}`,
-            ];
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        min: 0,
-        max: 100,
-        grid: { color: "rgba(128,128,128,0.15)" },
-        ticks: {
-          color: "#64748b",
-          callback: (v: number | string) => `${v}%`,
-        },
-      },
-      y: {
-        grid: { display: false },
-        ticks: { color: "#94a3b8", font: { size: 12 } },
-      },
-    },
-  };
+// Shared ranked bar list used by volume/error breakdown charts
+function BarList<T extends { key: string; value: number }>({
+  items,
+  maxVisible = 5,
+  barClassName = "bg-primary",
+  renderLabel,
+  renderRight,
+}: {
+  items: T[];
+  maxVisible?: number;
+  barClassName?: string;
+  renderLabel: (item: T) => React.ReactNode;
+  renderRight?: (item: T) => React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const maxValue = items[0]?.value ?? 1;
+  const visible = expanded ? items : items.slice(0, maxVisible);
 
   if (items.length === 0) {
     return (
-      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
+      <div className="flex items-center justify-center h-16 text-sm text-muted-foreground">
         No data
       </div>
     );
   }
 
   return (
-    <div style={{ position: "relative", height }}>
-      <Bar data={chartData} options={options} />
+    <div className="space-y-2.5">
+      {visible.map((item) => (
+        <div key={item.key} className="flex items-center gap-3 min-w-0">
+          <div className="w-28 shrink-0 flex items-center justify-end gap-1.5 text-xs text-muted-foreground min-w-0">
+            {renderLabel(item)}
+          </div>
+          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn("h-full rounded-full", barClassName)}
+              style={{
+                width: `${Math.max(2, (item.value / maxValue) * 100)}%`,
+              }}
+            />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
+              {item.value.toLocaleString()}
+            </span>
+            {renderRight?.(item)}
+          </div>
+        </div>
+      ))}
+      {items.length > maxVisible && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {expanded ? "Show less" : `+${items.length - maxVisible} more`}
+        </button>
+      )}
     </div>
+  );
+}
+
+function UserVolumeList({ users }: { users: HooksUserSummary[] }) {
+  const items = useMemo(
+    () =>
+      users
+        .map((u) => ({
+          key: u.userEmail,
+          value: u.successCount + u.failureCount,
+          successRate: (1 - u.failureRate) * 100,
+        }))
+        .sort((a, b) => b.value - a.value),
+    [users],
+  );
+
+  return (
+    <BarList
+      items={items}
+      barClassName="bg-[hsl(214,69%,50%)]"
+      renderLabel={(item) => <span className="truncate">{item.key}</span>}
+      renderRight={(item) => (
+        <span
+          className={cn(
+            "w-10 text-right text-xs font-medium tabular-nums",
+            successRateClass(item.successRate),
+          )}
+        >
+          {item.successRate.toFixed(0)}%
+        </span>
+      )}
+    />
   );
 }
 
@@ -2170,10 +2186,8 @@ function HooksAnalytics({
             <SourceSuccessRateChart traces={groupedTraces} />
           </div>
           <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">
-              Users by Success Rate
-            </h3>
-            <UserSuccessRateChart users={summaryData!.users ?? []} />
+            <h3 className="text-sm font-semibold mb-4">Volume by User</h3>
+            <UserVolumeList users={summaryData!.users ?? []} />
           </div>
         </div>
       )}
