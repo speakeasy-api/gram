@@ -2042,6 +2042,124 @@ function HooksTotalTimeSeries({
   );
 }
 
+function ServerErrorRateChart({
+  servers,
+  serverNameMappings,
+}: {
+  servers: HooksServerSummary[];
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
+}) {
+  const items = useMemo(
+    () =>
+      servers
+        .filter((s) => s.failureCount > 0)
+        .map((s) => ({
+          label: !s.serverName
+            ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+            : (serverNameMappings.rawToDisplay.get(s.serverName) ??
+              s.serverName),
+          errorRate: s.failureRate * 100,
+          errorCount: s.failureCount,
+          total: s.successCount + s.failureCount,
+        }))
+        .sort((a, b) => b.errorRate - a.errorRate),
+    [servers, serverNameMappings.rawToDisplay],
+  );
+
+  const height = Math.max(120, items.length * 28 + 40);
+
+  const chartData = {
+    labels: items.map((i) => i.label),
+    datasets: [
+      {
+        data: items.map((i) => i.errorRate),
+        backgroundColor: items.map((i) => successRateColor(100 - i.errorRate)),
+        borderWidth: 0,
+        borderRadius: 3,
+        barThickness: 16,
+      },
+    ],
+  };
+
+  const options = {
+    indexAxis: "y" as const,
+    animation: false as const,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "rgba(0,0,0,0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255,255,255,0.1)",
+        borderWidth: 1,
+        padding: 10,
+        callbacks: {
+          label: (ctx: TooltipItem<"bar">) => {
+            const item = items[ctx.dataIndex];
+            return [
+              ` Error rate: ${(ctx.parsed.x ?? 0).toFixed(1)}%`,
+              ` Errors: ${item?.errorCount.toLocaleString()} of ${item?.total.toLocaleString()}`,
+            ];
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        min: 0,
+        max: 100,
+        grid: { color: "rgba(128,128,128,0.15)" },
+        ticks: {
+          color: "#64748b",
+          callback: (v: number | string) => `${v}%`,
+        },
+      },
+      y: {
+        grid: { display: false },
+        ticks: { color: "#94a3b8", font: { size: 12 } },
+      },
+    },
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-16 text-sm text-muted-foreground">
+        No errors in this period
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative", height }}>
+      <Bar data={chartData} options={options} />
+    </div>
+  );
+}
+
+function ToolErrorList({ traces }: { traces: HookTrace[] }) {
+  const items = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of traces) {
+      if (t.hookStatus !== "failure") continue;
+      const tool = t.toolName ?? "unknown";
+      map.set(tool, (map.get(tool) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([key, value]) => ({ key, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [traces]);
+
+  return (
+    <BarList
+      items={items}
+      barClassName="bg-red-500"
+      renderLabel={(item) => <span className="truncate">{item.key}</span>}
+    />
+  );
+}
+
 function UniqueUsersTimeSeries({
   traces,
   from,
@@ -2284,6 +2402,28 @@ function HooksAnalytics({
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="text-sm font-semibold mb-4">Active Users Over Time</h3>
           <UniqueUsersTimeSeries traces={groupedTraces} from={from} to={to} />
+        </div>
+      )}
+
+      {/* Error Analysis */}
+      {hasServers && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold mb-4">
+              Servers by Error Rate
+            </h3>
+            <ServerErrorRateChart
+              servers={summaryData!.servers}
+              serverNameMappings={serverNameMappings}
+            />
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold mb-4">Tools by Error Count</h3>
+            <p className="text-[10px] text-muted-foreground -mt-2 mb-3">
+              based on loaded traces
+            </p>
+            <ToolErrorList traces={groupedTraces} />
+          </div>
         </div>
       )}
     </div>
