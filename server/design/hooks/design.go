@@ -55,7 +55,7 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 var CursorHookPayload = Type("CursorHookPayload", func() {
 	Description("Payload for Cursor hook events")
 	Required("hook_event_name")
-	Attribute("hook_event_name", String, "The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)")
+	Attribute("hook_event_name", String, "The type of hook event (e.g. userPromptSubmit, stop, preToolUse, postToolUse, postToolUseFailure)")
 	Attribute("conversation_id", String, "The Cursor conversation ID")
 	Attribute("generation_id", String, "The Cursor generation ID")
 	Attribute("model", String, "The model being used")
@@ -69,6 +69,10 @@ var CursorHookPayload = Type("CursorHookPayload", func() {
 	Attribute("error", Any, "The error from the tool (postToolUseFailure only)")
 	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption")
 	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+	// Conversation capture fields (userPromptSubmit, stop)
+	Attribute("prompt", String, "The user's prompt text (userPromptSubmit only)")
+	Attribute("last_assistant_message", String, "The assistant's final response text (stop only)")
+	Attribute("stop_hook_active", Boolean, "Whether a stop hook continuation is active (stop only)")
 })
 
 // Cursor hook result
@@ -104,7 +108,7 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("cursor", func() {
-		Description("Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.")
+		Description("Endpoint for Cursor hook events. Handles userPromptSubmit, stop, preToolUse, postToolUse, and postToolUseFailure.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")

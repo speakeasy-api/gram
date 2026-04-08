@@ -5906,7 +5906,7 @@ paths:
       tags:
         - hooks
       summary: cursor hooks
-      description: Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.
+      description: Endpoint for Cursor hook events. Handles userPromptSubmit, stop, preToolUse, postToolUse, and postToolUseFailure.
       operationId: hooks#cursor
       parameters:
         - name: Gram-Key
@@ -16056,16 +16056,25 @@ components:
           description: The Cursor generation ID
         hook_event_name:
           type: string
-          description: The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+          description: The type of hook event (e.g. userPromptSubmit, stop, preToolUse, postToolUse, postToolUseFailure)
         is_interrupt:
           type: boolean
           description: Whether the failure was caused by user interruption
+        last_assistant_message:
+          type: string
+          description: The assistant's final response text (stop only)
         model:
           type: string
           description: The model being used
+        prompt:
+          type: string
+          description: The user's prompt text (userPromptSubmit only)
         session_id:
           type: string
           description: The session ID from Cursor
+        stop_hook_active:
+          type: boolean
+          description: Whether a stop hook continuation is active (stop only)
         tool_input:
           description: The input to the tool
         tool_name:

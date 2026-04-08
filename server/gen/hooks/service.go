@@ -19,8 +19,8 @@ type Service interface {
 	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
 	Claude(context.Context, *ClaudeHookPayload) (res *ClaudeHookResult, err error)
-	// Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and
-	// postToolUseFailure.
+	// Endpoint for Cursor hook events. Handles userPromptSubmit, stop, preToolUse,
+	// postToolUse, and postToolUseFailure.
 	Cursor(context.Context, *CursorPayload) (res *CursorHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
@@ -120,7 +120,8 @@ type CursorHookResult struct {
 type CursorPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+	// The type of hook event (e.g. userPromptSubmit, stop, preToolUse,
+	// postToolUse, postToolUseFailure)
 	HookEventName string
 	// The Cursor conversation ID
 	ConversationID *string
@@ -148,6 +149,12 @@ type CursorPayload struct {
 	IsInterrupt *bool
 	// Additional hook-specific data
 	AdditionalData map[string]any
+	// The user's prompt text (userPromptSubmit only)
+	Prompt *string
+	// The assistant's final response text (stop only)
+	LastAssistantMessage *string
+	// Whether a stop hook continuation is active (stop only)
+	StopHookActive *bool
 }
 
 // LogsPayload is the payload type of the hooks service logs method.

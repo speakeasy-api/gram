@@ -100,6 +100,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 	chatID uuid.UUID,
 	projectID uuid.UUID,
 	msgParams chatRepo.CreateChatMessageParams,
+	defaultTitle string,
 ) error {
 	if s.productFeatures == nil {
 		return nil
@@ -128,7 +129,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 				OrganizationID: metadata.GramOrgID,
 				UserID:         conv.ToPGTextEmpty(""),
 				ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-				Title:          conv.ToPGText(activities.DefaultClaudeChatTitle),
+				Title:          conv.ToPGText(defaultTitle),
 			})
 			if upsertErr != nil {
 				return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
@@ -200,7 +201,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		IpAddress:        conv.ToPGTextEmpty(""),
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle); err != nil {
 		return err
 	}
 
@@ -267,7 +268,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		IpAddress:        conv.ToPGTextEmpty(""),
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
@@ -319,7 +320,102 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	// If this was an error, we could optionally set tool_outcome based on isError
 	_ = isError
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
+}
+
+// isCursorConversationEvent returns true if the Cursor event is a conversation capture event (not a tool call).
+func isCursorConversationEvent(eventName string) bool {
+	switch eventName {
+	case "userPromptSubmit", "stop":
+		return true
+	default:
+		return false
+	}
+}
+
+// persistCursorConversationEvent writes a Cursor conversation event (user prompt or assistant response) to PostgreSQL.
+func (s *Service) persistCursorConversationEvent(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) error {
+	if payload.ConversationID == nil || *payload.ConversationID == "" {
+		s.logger.WarnContext(ctx, "Cursor conversation event missing conversation_id")
+		return nil
+	}
+
+	parsedProjectID, err := uuid.Parse(projectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID for Cursor conversation event: %w", err)
+	}
+
+	chatID := sessionIDToUUID(*payload.ConversationID)
+
+	var role, content string
+	var model pgtype.Text
+
+	switch payload.HookEventName {
+	case "userPromptSubmit":
+		role = "user"
+		content = conv.PtrValOr(payload.Prompt, "")
+	case "stop":
+		role = "assistant"
+		content = conv.PtrValOr(payload.LastAssistantMessage, "")
+		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
+	default:
+		return nil
+	}
+
+	if content == "" {
+		return nil
+	}
+
+	metadata := &SessionMetadata{
+		SessionID:   *payload.ConversationID,
+		ServiceName: "Cursor",
+		UserEmail:   conv.PtrValOr(payload.UserEmail, ""),
+		ClaudeOrgID: "",
+		GramOrgID:   orgID,
+		ProjectID:   projectID,
+	}
+
+	msgParams := chatRepo.CreateChatMessageParams{
+		ChatID:           chatID,
+		ProjectID:        parsedProjectID,
+		Role:             role,
+		Content:          content,
+		Model:            model,
+		UserID:           conv.ToPGTextEmpty(""),
+		Source:           conv.ToPGText("Cursor"),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(conv.PtrValOr(payload.UserEmail, "")),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+	}
+
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, activities.DefaultCursorChatTitle); err != nil {
+		return err
+	}
+
+	// Schedule chat title generation for assistant messages
+	if role == "assistant" && s.chatTitleGenerator != nil {
+		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+			context.WithoutCancel(ctx),
+			chatID.String(),
+			orgID,
+			projectID,
+		); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule chat title generation for Cursor", attr.SlogError(err))
+		}
+	}
+
+	return nil
 }
 
 // marshalToJSON converts any value to a JSON string.

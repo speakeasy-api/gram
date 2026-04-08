@@ -61,7 +61,8 @@ type ClaudeRequestBody struct {
 // CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
 // request body.
 type CursorRequestBody struct {
-	// The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+	// The type of hook event (e.g. userPromptSubmit, stop, preToolUse,
+	// postToolUse, postToolUseFailure)
 	HookEventName string `form:"hook_event_name" json:"hook_event_name" xml:"hook_event_name"`
 	// The Cursor conversation ID
 	ConversationID *string `form:"conversation_id,omitempty" json:"conversation_id,omitempty" xml:"conversation_id,omitempty"`
@@ -89,6 +90,12 @@ type CursorRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// Additional hook-specific data
 	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
+	// The user's prompt text (userPromptSubmit only)
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// The assistant's final response text (stop only)
+	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
+	// Whether a stop hook continuation is active (stop only)
+	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -778,19 +785,22 @@ func NewClaudeRequestBody(p *hooks.ClaudeHookPayload) *ClaudeRequestBody {
 // "cursor" endpoint of the "hooks" service.
 func NewCursorRequestBody(p *hooks.CursorPayload) *CursorRequestBody {
 	body := &CursorRequestBody{
-		HookEventName:  p.HookEventName,
-		ConversationID: p.ConversationID,
-		GenerationID:   p.GenerationID,
-		Model:          p.Model,
-		CursorVersion:  p.CursorVersion,
-		UserEmail:      p.UserEmail,
-		SessionID:      p.SessionID,
-		ToolName:       p.ToolName,
-		ToolUseID:      p.ToolUseID,
-		ToolInput:      p.ToolInput,
-		ToolResponse:   p.ToolResponse,
-		Error:          p.Error,
-		IsInterrupt:    p.IsInterrupt,
+		HookEventName:        p.HookEventName,
+		ConversationID:       p.ConversationID,
+		GenerationID:         p.GenerationID,
+		Model:                p.Model,
+		CursorVersion:        p.CursorVersion,
+		UserEmail:            p.UserEmail,
+		SessionID:            p.SessionID,
+		ToolName:             p.ToolName,
+		ToolUseID:            p.ToolUseID,
+		ToolInput:            p.ToolInput,
+		ToolResponse:         p.ToolResponse,
+		Error:                p.Error,
+		IsInterrupt:          p.IsInterrupt,
+		Prompt:               p.Prompt,
+		LastAssistantMessage: p.LastAssistantMessage,
+		StopHookActive:       p.StopHookActive,
 	}
 	if p.AdditionalData != nil {
 		body.AdditionalData = make(map[string]any, len(p.AdditionalData))

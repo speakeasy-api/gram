@@ -159,6 +159,88 @@ func TestBuildCursorTelemetryAttributes_NilUserEmail(t *testing.T) {
 	assert.Empty(t, attrs[attr.UserEmailKey])
 }
 
+func TestCursor_UserPromptSubmit_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	prompt := "How do I fix this bug?"
+	conversationID := "conv-prompt-123"
+	userEmail := "dev@example.com"
+
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "userPromptSubmit",
+		Prompt:         &prompt,
+		ConversationID: &conversationID,
+		UserEmail:      &userEmail,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Permission)
+}
+
+func TestCursor_Stop_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	lastMessage := "Here's the fix for your bug..."
+	conversationID := "conv-stop-123"
+	userEmail := "dev@example.com"
+	model := "claude-sonnet-4-6"
+
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:        "stop",
+		LastAssistantMessage: &lastMessage,
+		ConversationID:       &conversationID,
+		UserEmail:            &userEmail,
+		Model:                &model,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Permission)
+}
+
+func TestBuildCursorTelemetryAttributes_UserPromptSubmitNormalization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	prompt := "Fix the bug"
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "userPromptSubmit",
+		Prompt:        &prompt,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "UserPromptSubmit", attrs[attr.HookEventKey])
+}
+
+func TestBuildCursorTelemetryAttributes_StopNormalization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	lastMessage := "Here is the result"
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName:        "stop",
+		LastAssistantMessage: &lastMessage,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "Stop", attrs[attr.HookEventKey])
+}
+
+func TestIsCursorConversationEvent(t *testing.T) {
+	t.Parallel()
+	require.True(t, isCursorConversationEvent("userPromptSubmit"))
+	require.True(t, isCursorConversationEvent("stop"))
+	require.False(t, isCursorConversationEvent("preToolUse"))
+	require.False(t, isCursorConversationEvent("postToolUse"))
+	require.False(t, isCursorConversationEvent("postToolUseFailure"))
+	require.False(t, isCursorConversationEvent("someNewEvent"))
+}
+
 func TestBuildCursorTelemetryAttributes_ToolInputStringified(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

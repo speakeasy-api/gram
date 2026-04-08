@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "userPromptSubmit": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ],
+    "stop": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ],
     "preToolUse": [
       {
         "command": "./hooks/send_hook.sh",

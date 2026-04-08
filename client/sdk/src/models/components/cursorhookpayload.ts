@@ -30,7 +30,7 @@ export type CursorHookPayload = {
    */
   generationId?: string | undefined;
   /**
-   * The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+   * The type of hook event (e.g. userPromptSubmit, stop, preToolUse, postToolUse, postToolUseFailure)
    */
   hookEventName: string;
   /**
@@ -38,13 +38,25 @@ export type CursorHookPayload = {
    */
   isInterrupt?: boolean | undefined;
   /**
+   * The assistant's final response text (stop only)
+   */
+  lastAssistantMessage?: string | undefined;
+  /**
    * The model being used
    */
   model?: string | undefined;
   /**
+   * The user's prompt text (userPromptSubmit only)
+   */
+  prompt?: string | undefined;
+  /**
    * The session ID from Cursor
    */
   sessionId?: string | undefined;
+  /**
+   * Whether a stop hook continuation is active (stop only)
+   */
+  stopHookActive?: boolean | undefined;
   /**
    * The input to the tool
    */
@@ -76,8 +88,11 @@ export type CursorHookPayload$Outbound = {
   generation_id?: string | undefined;
   hook_event_name: string;
   is_interrupt?: boolean | undefined;
+  last_assistant_message?: string | undefined;
   model?: string | undefined;
+  prompt?: string | undefined;
   session_id?: string | undefined;
+  stop_hook_active?: boolean | undefined;
   tool_input?: any | undefined;
   tool_name?: string | undefined;
   tool_response?: any | undefined;
@@ -98,8 +113,11 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
     generationId: z.optional(z.string()),
     hookEventName: z.string(),
     isInterrupt: z.optional(z.boolean()),
+    lastAssistantMessage: z.optional(z.string()),
     model: z.optional(z.string()),
+    prompt: z.optional(z.string()),
     sessionId: z.optional(z.string()),
+    stopHookActive: z.optional(z.boolean()),
     toolInput: z.optional(z.any()),
     toolName: z.optional(z.string()),
     toolResponse: z.optional(z.any()),
@@ -114,7 +132,9 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
       generationId: "generation_id",
       hookEventName: "hook_event_name",
       isInterrupt: "is_interrupt",
+      lastAssistantMessage: "last_assistant_message",
       sessionId: "session_id",
+      stopHookActive: "stop_hook_active",
       toolInput: "tool_input",
       toolName: "tool_name",
       toolResponse: "tool_response",

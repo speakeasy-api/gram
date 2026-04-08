@@ -215,6 +215,10 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		hookEvent = "PostToolUse"
 	case "postToolUseFailure":
 		hookEvent = "PostToolUseFailure"
+	case "userPromptSubmit":
+		hookEvent = "UserPromptSubmit"
+	case "stop":
+		hookEvent = "Stop"
 	}
 
 	attrs := map[attr.Key]any{

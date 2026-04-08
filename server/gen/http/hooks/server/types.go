@@ -61,7 +61,8 @@ type ClaudeRequestBody struct {
 // CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
 // request body.
 type CursorRequestBody struct {
-	// The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+	// The type of hook event (e.g. userPromptSubmit, stop, preToolUse,
+	// postToolUse, postToolUseFailure)
 	HookEventName *string `form:"hook_event_name,omitempty" json:"hook_event_name,omitempty" xml:"hook_event_name,omitempty"`
 	// The Cursor conversation ID
 	ConversationID *string `form:"conversation_id,omitempty" json:"conversation_id,omitempty" xml:"conversation_id,omitempty"`
@@ -89,6 +90,12 @@ type CursorRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// Additional hook-specific data
 	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
+	// The user's prompt text (userPromptSubmit only)
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// The assistant's final response text (stop only)
+	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
+	// Whether a stop hook continuation is active (stop only)
+	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -1220,19 +1227,22 @@ func NewClaudeHookPayload(body *ClaudeRequestBody) *hooks.ClaudeHookPayload {
 // NewCursorPayload builds a hooks service cursor endpoint payload.
 func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.CursorPayload {
 	v := &hooks.CursorPayload{
-		HookEventName:  *body.HookEventName,
-		ConversationID: body.ConversationID,
-		GenerationID:   body.GenerationID,
-		Model:          body.Model,
-		CursorVersion:  body.CursorVersion,
-		UserEmail:      body.UserEmail,
-		SessionID:      body.SessionID,
-		ToolName:       body.ToolName,
-		ToolUseID:      body.ToolUseID,
-		ToolInput:      body.ToolInput,
-		ToolResponse:   body.ToolResponse,
-		Error:          body.Error,
-		IsInterrupt:    body.IsInterrupt,
+		HookEventName:        *body.HookEventName,
+		ConversationID:       body.ConversationID,
+		GenerationID:         body.GenerationID,
+		Model:                body.Model,
+		CursorVersion:        body.CursorVersion,
+		UserEmail:            body.UserEmail,
+		SessionID:            body.SessionID,
+		ToolName:             body.ToolName,
+		ToolUseID:            body.ToolUseID,
+		ToolInput:            body.ToolInput,
+		ToolResponse:         body.ToolResponse,
+		Error:                body.Error,
+		IsInterrupt:          body.IsInterrupt,
+		Prompt:               body.Prompt,
+		LastAssistantMessage: body.LastAssistantMessage,
+		StopHookActive:       body.StopHookActive,
 	}
 	if body.AdditionalData != nil {
 		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
