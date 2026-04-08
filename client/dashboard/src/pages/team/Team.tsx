@@ -7,27 +7,23 @@ import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { formatDistanceToNow } from "date-fns";
 import {
-  invalidateAllListTeamInvites,
-  invalidateAllListTeamMembers,
-  useCancelTeamInviteMutation,
-  useInviteTeamMemberMutation,
-  useListTeamInvitesSuspense,
-  useListTeamMembersSuspense,
-  useRemoveTeamMemberMutation,
-  useResendTeamInviteMutation,
+  invalidateAllListInvites,
+  invalidateAllMembers,
+  useMembersSuspense,
+  useListInvitesSuspense,
+  useSendInviteMutation,
+  useRevokeInviteMutation,
+  useRemoveOrganizationUserMutation,
 } from "@gram/client/react-query";
-import { TeamInvite, TeamMember } from "@gram/client/models/components";
+import {
+  AccessMember,
+  OrganizationInvitation,
+} from "@gram/client/models/components";
 import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Send, Trash2, UserPlus, Users, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Trash2, UserPlus, Users, X } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 function getMemberColors(id: string) {
   let hash = 2166136261;
@@ -55,40 +51,35 @@ export default function Team() {
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
-  const [inviteToCancel, setInviteToCancel] = useState<TeamInvite | null>(null);
-  const [recentResends, setRecentResends] = useState<Record<string, number>>(
-    {},
+  const [memberToRemove, setMemberToRemove] = useState<AccessMember | null>(
+    null,
   );
-  const [, setTick] = useState(0);
+  const [inviteToCancel, setInviteToCancel] =
+    useState<OrganizationInvitation | null>(null);
 
-  const { data: membersData } = useListTeamMembersSuspense({
-    organizationId: organization.id,
-  });
-  const { data: invitesData } = useListTeamInvitesSuspense({
-    organizationId: organization.id,
-  });
+  const { data: membersData } = useMembersSuspense();
+  const { data: invitesData } = useListInvitesSuspense();
 
   const members = membersData?.members ?? [];
-  const invites = invitesData?.invites ?? [];
+  const invites = invitesData?.invitations ?? [];
 
   const invalidateTeamData = async () => {
     await Promise.all([
-      invalidateAllListTeamMembers(queryClient),
-      invalidateAllListTeamInvites(queryClient),
+      invalidateAllMembers(queryClient),
+      invalidateAllListInvites(queryClient),
     ]);
   };
 
-  const inviteMutation = useInviteTeamMemberMutation({
+  const inviteMutation = useSendInviteMutation({
     onError: () => {
       toast.error("Failed to send invite");
     },
   });
 
-  const removeMemberMutation = useRemoveTeamMemberMutation({
+  const removeMemberMutation = useRemoveOrganizationUserMutation({
     onSuccess: async () => {
       await invalidateTeamData();
-      toast.success(`${memberToRemove?.displayName} has been removed`);
+      toast.success(`${memberToRemove?.name} has been removed`);
       setMemberToRemove(null);
     },
     onError: () => {
@@ -96,7 +87,7 @@ export default function Team() {
     },
   });
 
-  const cancelInviteMutation = useCancelTeamInviteMutation({
+  const revokeInviteMutation = useRevokeInviteMutation({
     onSuccess: async () => {
       await invalidateTeamData();
       toast.success(`Invite to ${inviteToCancel?.email} has been cancelled`);
@@ -107,30 +98,6 @@ export default function Team() {
     },
   });
 
-  const resendInviteMutation = useResendTeamInviteMutation({
-    onSuccess: async () => {
-      await invalidateTeamData();
-      toast.success("Invite resent");
-    },
-    onError: () => {
-      toast.error("Failed to resend invite");
-    },
-  });
-
-  // Re-render periodically to update resend cooldown timers
-  useEffect(() => {
-    if (Object.keys(recentResends).length === 0) return;
-    const interval = setInterval(() => setTick((t) => t + 1), 30_000);
-    return () => clearInterval(interval);
-  }, [recentResends]);
-
-  const getResendCooldown = (inviteId: string): number => {
-    const resentAt = recentResends[inviteId];
-    if (!resentAt) return 0;
-    const remaining = 5 * 60 * 1000 - (Date.now() - resentAt);
-    return Math.max(0, remaining);
-  };
-
   const handleInvite = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const submittedEmail = inviteEmail.trim();
@@ -139,8 +106,7 @@ export default function Team() {
     inviteMutation.mutate(
       {
         request: {
-          inviteMemberForm: {
-            organizationId: organization.id,
+          sendInviteRequestBody: {
             email: submittedEmail,
           },
         },
@@ -161,43 +127,22 @@ export default function Team() {
 
     removeMemberMutation.mutate({
       request: {
-        organizationId: organization.id,
         userId: memberToRemove.id,
       },
     });
   };
 
-  const handleCancelInvite = () => {
+  const handleRevokeInvite = () => {
     if (!inviteToCancel) return;
 
-    cancelInviteMutation.mutate({
+    revokeInviteMutation.mutate({
       request: {
-        inviteId: inviteToCancel.id,
+        invitationId: inviteToCancel.id,
       },
     });
   };
 
-  const handleResendInvite = (invite: TeamInvite) => {
-    resendInviteMutation.mutate(
-      {
-        request: {
-          resendInviteRequestBody: {
-            inviteId: invite.id,
-          },
-        },
-      },
-      {
-        onSuccess: () => {
-          setRecentResends((prev) => ({
-            ...prev,
-            [invite.id]: Date.now(),
-          }));
-        },
-      },
-    );
-  };
-
-  const memberColumns: Column<TeamMember>[] = [
+  const memberColumns: Column<AccessMember>[] = [
     {
       key: "member",
       header: "Member",
@@ -207,7 +152,7 @@ export default function Team() {
           {member.photoUrl ? (
             <img
               src={member.photoUrl}
-              alt={member.displayName}
+              alt={member.name}
               className="w-8 h-8 rounded-full"
             />
           ) : (
@@ -217,7 +162,7 @@ export default function Team() {
                 backgroundImage: `linear-gradient(${getMemberColors(member.id).angle}deg, ${getMemberColors(member.id).from}, ${getMemberColors(member.id).to})`,
               }}
             >
-              {member.displayName
+              {member.name
                 .split(" ")
                 .map((n) => n[0])
                 .join("")
@@ -227,7 +172,7 @@ export default function Team() {
           )}
           <Stack direction="vertical" gap={0}>
             <Type variant="body" className="font-medium">
-              {member.displayName}
+              {member.name}
             </Type>
             <Type variant="body" className="text-muted-foreground text-sm">
               {member.email}
@@ -274,13 +219,13 @@ export default function Team() {
     },
   ];
 
-  const inviteColumns: Column<TeamInvite>[] = [
+  const inviteColumns: Column<OrganizationInvitation>[] = [
     {
       key: "email",
       header: "Email",
       width: "1fr",
       render: (invite) => {
-        const isExpired = invite.expiresAt < new Date();
+        const isExpired = invite.state === "expired";
         return (
           <Stack
             direction="horizontal"
@@ -306,26 +251,13 @@ export default function Team() {
       },
     },
     {
-      key: "invitedBy",
-      header: "Invited by",
-      width: "200px",
-      render: (invite) => (
-        <Type
-          variant="body"
-          className={invite.expiresAt < new Date() ? "opacity-50" : ""}
-        >
-          {invite.invitedBy}
-        </Type>
-      ),
-    },
-    {
       key: "createdAt",
       header: "Sent",
       width: "200px",
       render: (invite) => (
         <Type
           variant="body"
-          className={`text-muted-foreground whitespace-nowrap ${invite.expiresAt < new Date() ? "opacity-50" : ""}`}
+          className={`text-muted-foreground whitespace-nowrap ${invite.state === "expired" ? "opacity-50" : ""}`}
         >
           <HumanizeDateTime date={invite.createdAt} />
         </Type>
@@ -336,8 +268,9 @@ export default function Team() {
       header: "Expires",
       width: "150px",
       render: (invite) => {
-        const now = new Date();
-        const isExpired = invite.expiresAt < now;
+        const isExpired =
+          invite.state === "expired" ||
+          (invite.expiresAt && invite.expiresAt < new Date());
         return (
           <Type
             variant="body"
@@ -345,7 +278,9 @@ export default function Team() {
           >
             {isExpired
               ? "Expired"
-              : formatDistanceToNow(invite.expiresAt, { addSuffix: true })}
+              : invite.expiresAt
+                ? formatDistanceToNow(invite.expiresAt, { addSuffix: true })
+                : "—"}
           </Type>
         );
       },
@@ -353,48 +288,19 @@ export default function Team() {
     {
       key: "actions",
       header: "",
-      width: "120px",
+      width: "80px",
       render: (invite) => (
-        <TooltipProvider delayDuration={0}>
-          <Stack direction="horizontal" gap={1}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="inline-flex">
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={() => handleResendInvite(invite)}
-                    disabled={getResendCooldown(invite.id) > 0}
-                  >
-                    <Button.LeftIcon>
-                      <Send className="h-4 w-4" />
-                    </Button.LeftIcon>
-                  </Button>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                {getResendCooldown(invite.id) > 0
-                  ? `Wait ${Math.ceil(getResendCooldown(invite.id) / 60_000)} min to resend`
-                  : "Resend invite"}
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setInviteToCancel(invite)}
-                  className="hover:text-destructive"
-                >
-                  <Button.LeftIcon>
-                    <X className="h-4 w-4" />
-                  </Button.LeftIcon>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Cancel invite</TooltipContent>
-            </Tooltip>
-          </Stack>
-        </TooltipProvider>
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => setInviteToCancel(invite)}
+          className="hover:text-destructive"
+        >
+          <Button.LeftIcon>
+            <X className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text className="sr-only">Revoke invite</Button.Text>
+        </Button>
       ),
     },
   ];
@@ -527,9 +433,9 @@ export default function Team() {
             <div className="space-y-4 py-4">
               <Type variant="body">
                 Are you sure you want to remove{" "}
-                <span className="font-bold">{memberToRemove?.displayName}</span>{" "}
-                from {organization.name}? They will lose access to all projects
-                and resources.
+                <span className="font-bold">{memberToRemove?.name}</span> from{" "}
+                {organization.name}? They will lose access to all projects and
+                resources.
               </Type>
               <div className="flex justify-end space-x-2">
                 <Button
@@ -575,12 +481,12 @@ export default function Team() {
                 </Button>
                 <Button
                   variant="destructive-primary"
-                  onClick={handleCancelInvite}
-                  disabled={cancelInviteMutation.isPending}
+                  onClick={handleRevokeInvite}
+                  disabled={revokeInviteMutation.isPending}
                 >
-                  {cancelInviteMutation.isPending
-                    ? "Cancelling..."
-                    : "Cancel Invite"}
+                  {revokeInviteMutation.isPending
+                    ? "Revoking..."
+                    : "Revoke Invite"}
                 </Button>
               </div>
             </div>

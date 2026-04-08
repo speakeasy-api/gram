@@ -1,5 +1,5 @@
 import { GramLogo } from "@/components/gram-logo/index";
-import { useGetTeamInviteInfo } from "@gram/client/react-query";
+import { useGetInviteByToken } from "@gram/client/react-query";
 import { useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
@@ -58,7 +58,7 @@ function InviteDetails({ token }: { token: string }) {
     data: inviteInfo,
     error: infoError,
     isLoading: infoLoading,
-  } = useGetTeamInviteInfo({ token });
+  } = useGetInviteByToken({ token });
 
   if (infoLoading) {
     return (
@@ -84,13 +84,13 @@ function InviteDetails({ token }: { token: string }) {
     );
   }
 
-  if (inviteInfo.status !== "pending") {
+  if (inviteInfo.state !== "pending") {
     const message =
-      inviteInfo.status === "expired"
+      inviteInfo.state === "expired"
         ? "This invite has expired. Please ask the team admin to send a new invitation."
-        : inviteInfo.status === "accepted"
+        : inviteInfo.state === "accepted"
           ? "This invite has already been accepted."
-          : "This invite has been cancelled.";
+          : "This invite has been revoked.";
     return (
       <InvitePage>
         <p className="text-sm text-muted-foreground">{message}</p>
@@ -105,19 +105,20 @@ function InviteDetails({ token }: { token: string }) {
   }
 
   const handleAccept = () => {
-    // Redirect to the OAuth login endpoint with the invite token.
-    // The server encodes the token into the OAuth state parameter and processes
-    // the invite acceptance during the callback after authentication.
-    window.location.href = `/rpc/auth.login?invite_token=${encodeURIComponent(token)}`;
+    // Redirect to the WorkOS accept invitation URL provided by the server.
+    window.location.href = inviteInfo.acceptInvitationUrl;
   };
 
   return (
     <InvitePage>
       <p className="text-body-lg text-center text-foreground">
-        Join <span className="font-semibold">{inviteInfo.inviterName}</span>
-        &apos;s project{" "}
-        <span className="font-semibold">{inviteInfo.organizationName}</span> to
-        get started with Gram
+        You&apos;ve been invited to join{" "}
+        {inviteInfo.organizationName ? (
+          <span className="font-semibold">{inviteInfo.organizationName}</span>
+        ) : (
+          "an organization"
+        )}{" "}
+        on Gram
       </p>
 
       <Button variant="brand" onClick={handleAccept}>
