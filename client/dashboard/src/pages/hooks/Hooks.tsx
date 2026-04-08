@@ -718,7 +718,6 @@ function HooksInnerContent({
           </div>
 
           <HooksAnalytics
-            summaryData={summaryData}
             groupedTraces={groupedTraces}
             serverNameMappings={serverNameMappings}
             from={from}
@@ -2095,27 +2094,77 @@ function UniqueUsersTimeSeries({
 }
 
 function HooksAnalytics({
-  summaryData,
   groupedTraces,
   serverNameMappings,
   from,
   to,
 }: {
-  summaryData?: GetHooksSummaryResult;
   groupedTraces: HookTrace[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
 }) {
-  const kpis = useMemo(() => {
-    const servers = summaryData?.servers ?? [];
-    const totalEvents = summaryData?.totalEvents ?? 0;
+  const derivedServers = useMemo(() => {
+    const map = new Map<
+      string,
+      { success: number; failure: number; tools: Set<string> }
+    >();
+    for (const t of groupedTraces) {
+      const key = t.toolSource ?? "";
+      const entry = map.get(key) ?? {
+        success: 0,
+        failure: 0,
+        tools: new Set<string>(),
+      };
+      if (t.hookStatus === "success") entry.success += 1;
+      else entry.failure += 1;
+      if (t.toolName) entry.tools.add(t.toolName);
+      map.set(key, entry);
+    }
+    return Array.from(map.entries()).map(
+      ([serverName, { success, failure, tools }]) => ({
+        serverName,
+        eventCount: success + failure,
+        successCount: success,
+        failureCount: failure,
+        failureRate: success + failure > 0 ? failure / (success + failure) : 0,
+        uniqueTools: tools.size,
+      }),
+    );
+  }, [groupedTraces]);
 
+  const derivedUsers = useMemo(() => {
+    const map = new Map<string, { success: number; failure: number }>();
+    for (const t of groupedTraces) {
+      const key = t.userEmail ?? "";
+      if (!key) continue;
+      const entry = map.get(key) ?? { success: 0, failure: 0 };
+      if (t.hookStatus === "success") entry.success += 1;
+      else entry.failure += 1;
+      map.set(key, entry);
+    }
+    return Array.from(map.entries()).map(
+      ([userEmail, { success, failure }]) => ({
+        userEmail,
+        eventCount: success + failure,
+        successCount: success,
+        failureCount: failure,
+        failureRate: success + failure > 0 ? failure / (success + failure) : 0,
+        uniqueTools: 0,
+      }),
+    );
+  }, [groupedTraces]);
+
+  const kpis = useMemo(() => {
     const avgSuccessRate =
-      servers.length > 0
-        ? servers.reduce((sum, s) => sum + (1 - s.failureRate) * 100, 0) /
-          servers.length
+      derivedServers.length > 0
+        ? derivedServers.reduce(
+            (sum, s) => sum + (1 - s.failureRate) * 100,
+            0,
+          ) / derivedServers.length
         : null;
+
+    const totalEvents = derivedServers.reduce((s, r) => s + r.eventCount, 0);
 
     const activeUsers = new Set(
       groupedTraces.map((t) => t.userEmail).filter(Boolean),
@@ -2125,7 +2174,7 @@ function HooksAnalytics({
       groupedTraces.map((t) => t.hookSource).filter(Boolean),
     ).size;
 
-    const uniqueTools = servers.reduce((s, r) => s + (r.uniqueTools ?? 0), 0);
+    const uniqueTools = derivedServers.reduce((s, r) => s + r.uniqueTools, 0);
 
     return {
       avgSuccessRate,
@@ -2134,9 +2183,9 @@ function HooksAnalytics({
       activeSources,
       uniqueTools,
     };
-  }, [summaryData, groupedTraces]);
+  }, [derivedServers, groupedTraces]);
 
-  const hasServers = (summaryData?.servers.length ?? 0) > 0;
+  const hasServers = derivedServers.length > 0;
 
   return (
     <div className="mb-4 space-y-4">
@@ -2186,7 +2235,7 @@ function HooksAnalytics({
           <div className="rounded-lg border border-border bg-card p-4 space-y-4">
             <h3 className="text font-semibold">Activity by Server</h3>
             <ServerActivityChart
-              servers={summaryData!.servers}
+              servers={derivedServers}
               serverNameMappings={serverNameMappings}
             />
           </div>
@@ -2198,7 +2247,7 @@ function HooksAnalytics({
           </div>
           <div className="rounded-lg border border-border bg-card p-4 space-y-4">
             <h3 className="text font-semibold">Volume by User</h3>
-            <UserVolumeList users={summaryData!.users ?? []} />
+            <UserVolumeList users={derivedUsers} />
           </div>
         </div>
       )}
@@ -2217,7 +2266,7 @@ function HooksAnalytics({
           <div className="rounded-lg border border-border bg-card p-4 space-y-4">
             <h3 className="text font-semibold">Servers by Error Rate</h3>
             <ServerErrorRateChart
-              servers={summaryData!.servers}
+              servers={derivedServers}
               serverNameMappings={serverNameMappings}
             />
           </div>
