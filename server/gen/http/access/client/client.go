@@ -45,6 +45,10 @@ type Client struct {
 	// endpoint.
 	ListMembersDoer goahttp.Doer
 
+	// ListGrants Doer is the HTTP client used to make requests to the listGrants
+	// endpoint.
+	ListGrantsDoer goahttp.Doer
+
 	// UpdateMemberRole Doer is the HTTP client used to make requests to the
 	// updateMemberRole endpoint.
 	UpdateMemberRoleDoer goahttp.Doer
@@ -76,6 +80,7 @@ func NewClient(
 		DeleteRoleDoer:       doer,
 		ListScopesDoer:       doer,
 		ListMembersDoer:      doer,
+		ListGrantsDoer:       doer,
 		UpdateMemberRoleDoer: doer,
 		RestoreResponseBody:  restoreBody,
 		scheme:               scheme,
@@ -248,6 +253,30 @@ func (c *Client) ListMembers() goa.Endpoint {
 		resp, err := c.ListMembersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listMembers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListGrants returns an endpoint that makes HTTP requests to the access
+// service listGrants server.
+func (c *Client) ListGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListGrantsRequest(c.encoder)
+		decodeResponse = DecodeListGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listGrants", err)
 		}
 		return decodeResponse(resp)
 	}

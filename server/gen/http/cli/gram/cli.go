@@ -54,7 +54,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|update-member-role)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role)",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
@@ -144,6 +144,10 @@ func ParseEndpoint(
 		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
 		accessListMembersApikeyTokenFlag  = accessListMembersFlags.String("apikey-token", "", "")
 		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
+
+		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
+		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
+		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
 
 		accessUpdateMemberRoleFlags            = flag.NewFlagSet("update-member-role", flag.ExitOnError)
 		accessUpdateMemberRoleBodyFlag         = accessUpdateMemberRoleFlags.String("body", "REQUIRED", "")
@@ -970,6 +974,7 @@ func ParseEndpoint(
 	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
 	accessListScopesFlags.Usage = accessListScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
+	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
 
 	agentworkflowsFlags.Usage = agentworkflowsUsage
@@ -1290,6 +1295,9 @@ func ParseEndpoint(
 
 			case "list-members":
 				epf = accessListMembersFlags
+
+			case "list-grants":
+				epf = accessListGrantsFlags
 
 			case "update-member-role":
 				epf = accessUpdateMemberRoleFlags
@@ -1879,6 +1887,9 @@ func ParseEndpoint(
 			case "list-members":
 				endpoint = c.ListMembers()
 				data, err = accessc.BuildListMembersPayload(*accessListMembersApikeyTokenFlag, *accessListMembersSessionTokenFlag)
+			case "list-grants":
+				endpoint = c.ListGrants()
+				data, err = accessc.BuildListGrantsPayload(*accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
 			case "update-member-role":
 				endpoint = c.UpdateMemberRole()
 				data, err = accessc.BuildUpdateMemberRolePayload(*accessUpdateMemberRoleBodyFlag, *accessUpdateMemberRoleApikeyTokenFlag, *accessUpdateMemberRoleSessionTokenFlag)
@@ -2474,6 +2485,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
+	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -2625,6 +2637,26 @@ func accessListMembersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-members --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the current user's effective grants, including inherited role grants.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessUpdateMemberRoleUsage() {

@@ -696,7 +696,11 @@ func newStartCommand() *cli.Command {
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, accessManager))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, hooksCache, chatClient, temporalEnv, accessManager, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authorizer, temporalEnv))
-			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, accessManager))
+			// access depends on audit for log writers, so inject the org-read check
+			// here instead of importing access from the audit package.
+			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, accessManager, func(ctx context.Context, organizationID string) error {
+				return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: organizationID})
+			}))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,
@@ -712,7 +716,13 @@ func newStartCommand() *cli.Command {
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, accessManager))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, accessManager))
-			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, accessManager))
+			// access depends on productfeatures for the RBAC feature gate, so inject
+			// the concrete checks here instead of importing access in that package.
+			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {
+				return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: organizationID})
+			}, func(ctx context.Context, organizationID string) error {
+				return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: organizationID})
+			}))
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, accessManager))

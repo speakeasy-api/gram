@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -115,16 +116,30 @@ func grantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, logger)
 	}
 
-	type scopeAgg struct {
-		unrestricted bool
-		resources    []string
+	grantRows := make([]Grant, 0, len(rows))
+	for _, row := range rows {
+		grantRows = append(grantRows, Grant{
+			Scope:    Scope(row.Scope),
+			Resource: row.Resource,
+		})
 	}
+
+	return grantsFromRows(grantRows), nil
+}
+
+type scopeAgg struct {
+	unrestricted bool
+	resources    []string
+}
+
+func grantsFromRows(rows []Grant) []*gen.RoleGrant {
 	byScope := make(map[string]*scopeAgg)
 	for _, row := range rows {
-		agg, ok := byScope[row.Scope]
+		scope := string(row.Scope)
+		agg, ok := byScope[scope]
 		if !ok {
 			agg = &scopeAgg{unrestricted: false, resources: nil}
-			byScope[row.Scope] = agg
+			byScope[scope] = agg
 		}
 		if row.Resource == WildcardResource {
 			agg.unrestricted = true
@@ -136,8 +151,19 @@ func grantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 		}
 	}
 
+	scopes := make([]string, 0, len(byScope))
+	for scope := range byScope {
+		scopes = append(scopes, scope)
+	}
+	slices.Sort(scopes)
+
 	grants := make([]*gen.RoleGrant, 0, len(byScope))
-	for scope, agg := range byScope {
+	for _, scope := range scopes {
+		agg := byScope[scope]
+		if !agg.unrestricted {
+			slices.Sort(agg.resources)
+		}
+
 		grant := &gen.RoleGrant{Scope: scope, Resources: nil}
 		if agg.unrestricted {
 			grant.Resources = nil
@@ -147,5 +173,5 @@ func grantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 		grants = append(grants, grant)
 	}
 
-	return grants, nil
+	return grants
 }

@@ -132,6 +132,7 @@ export * from "./listscopesresult.js";
 export * from "./listslackappsresult.js";
 export * from "./listtoolsetsresult.js";
 export * from "./listtoolsresult.js";
+export * from "./listusergrantsresult.js";
 export * from "./listusersresult.js";
 export * from "./listvariationsresult.js";
 export * from "./listversionsresult.js";
