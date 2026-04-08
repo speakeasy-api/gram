@@ -2,7 +2,6 @@ package toolsets_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -209,7 +208,7 @@ func TestToolsetsService_UpdateOAuthProxyServer_NoProxyAttached(t *testing.T) {
 	require.Contains(t, err.Error(), "no OAuth proxy server attached to this toolset")
 
 	var oopsErr *oops.ShareableError
-	require.True(t, errors.As(err, &oopsErr))
+	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
@@ -489,7 +488,7 @@ func TestToolsetsService_UpdateOAuthProxyServer_SoftDeletedProxyRejected(t *test
 	require.Contains(t, err.Error(), "no OAuth proxy server attached")
 
 	var oopsErr *oops.ShareableError
-	require.True(t, errors.As(err, &oopsErr))
+	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
@@ -539,6 +538,6 @@ func TestToolsetsService_UpdateOAuthProxyServer_WrongProjectIsolation(t *testing
 	require.Error(t, err)
 
 	var oopsErr *oops.ShareableError
-	require.True(t, errors.As(err, &oopsErr))
+	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
