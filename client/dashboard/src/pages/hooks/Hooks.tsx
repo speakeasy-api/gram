@@ -698,8 +698,8 @@ function HooksInnerContent({
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
         {/* Header section */}
-        <div className="shrink-0 px-8 pt-8 pb-4">
-          <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="flex shrink-0 flex-col gap-6 px-8 pt-8 pb-4">
+          <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Hooks</h1>
               <p className="text-muted-foreground text-sm">
@@ -717,54 +717,8 @@ function HooksInnerContent({
             </div>
           </div>
 
-          <HooksAnalytics
-            groupedTraces={groupedTraces}
-            serverNameMappings={serverNameMappings}
-            from={from}
-            to={to}
-          />
-
-          {/* Summary Tables */}
-          {summaryData &&
-            (summaryData.servers.length > 0 ||
-              (summaryData.users && summaryData.users.length > 0) ||
-              (summaryData.skills && summaryData.skills.length > 0)) && (
-              <div className="mb-4 overflow-hidden rounded-lg border">
-                {summaryData.servers.length > 0 && (
-                  <div className={summaryView !== "servers" ? "hidden" : ""}>
-                    <HooksServerTable
-                      servers={summaryData.servers}
-                      onFilterSelect={addFilter}
-                      summaryView={summaryView}
-                      onSummaryViewChange={onSummaryViewChange}
-                      serverNameMappings={serverNameMappings}
-                    />
-                  </div>
-                )}
-                {summaryData.users && summaryData.users.length > 0 && (
-                  <div className={summaryView !== "users" ? "hidden" : ""}>
-                    <HooksUserTable
-                      users={summaryData.users}
-                      onFilterSelect={addFilter}
-                      summaryView={summaryView}
-                      onSummaryViewChange={onSummaryViewChange}
-                    />
-                  </div>
-                )}
-                {summaryData.skills && summaryData.skills.length > 0 && (
-                  <div className={summaryView !== "skills" ? "hidden" : ""}>
-                    <HooksSkillTable
-                      skills={summaryData.skills}
-                      summaryView={summaryView}
-                      onSummaryViewChange={onSummaryViewChange}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
           {/* Filter and Search Row */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <MultiSearch
               value={serverInput}
               onChange={setServerInput}
@@ -803,6 +757,52 @@ function HooksInnerContent({
               />
             </div>
           </div>
+
+          <HooksAnalytics
+            groupedTraces={groupedTraces}
+            serverNameMappings={serverNameMappings}
+            from={from}
+            to={to}
+          />
+
+          {/* Summary Tables */}
+          {summaryData &&
+            (summaryData.servers.length > 0 ||
+              (summaryData.users && summaryData.users.length > 0) ||
+              (summaryData.skills && summaryData.skills.length > 0)) && (
+              <div className="overflow-hidden rounded-lg border">
+                {summaryData.servers.length > 0 && (
+                  <div className={summaryView !== "servers" ? "hidden" : ""}>
+                    <HooksServerTable
+                      servers={summaryData.servers}
+                      onFilterSelect={addFilter}
+                      summaryView={summaryView}
+                      onSummaryViewChange={onSummaryViewChange}
+                      serverNameMappings={serverNameMappings}
+                    />
+                  </div>
+                )}
+                {summaryData.users && summaryData.users.length > 0 && (
+                  <div className={summaryView !== "users" ? "hidden" : ""}>
+                    <HooksUserTable
+                      users={summaryData.users}
+                      onFilterSelect={addFilter}
+                      summaryView={summaryView}
+                      onSummaryViewChange={onSummaryViewChange}
+                    />
+                  </div>
+                )}
+                {summaryData.skills && summaryData.skills.length > 0 && (
+                  <div className={summaryView !== "skills" ? "hidden" : ""}>
+                    <HooksSkillTable
+                      skills={summaryData.skills}
+                      summaryView={summaryView}
+                      onSummaryViewChange={onSummaryViewChange}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
         </div>
 
         {/* Content section */}
@@ -1747,7 +1747,7 @@ function SourceVolumeChart({ traces }: { traces: HookTrace[] }) {
           <span className="truncate">{item.key}</span>
           <HookSourceIcon
             source={item.key}
-            className="size-3.5 shrink-0 text-muted-foreground"
+            className="text-muted-foreground size-3.5 shrink-0"
           />
         </>
       )}
@@ -1785,7 +1785,7 @@ function BarList<T extends { key: string; value: number }>({
 
   if (items.length === 0) {
     return (
-      <div className="flex items-center justify-center h-16 text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
         No data
       </div>
     );
@@ -1794,11 +1794,11 @@ function BarList<T extends { key: string; value: number }>({
   return (
     <div className="space-y-2.5">
       {visible.map((item) => (
-        <div key={item.key} className="flex items-center gap-3 min-w-0">
-          <div className="w-28 shrink-0 flex items-center justify-end gap-1.5 text-xs text-muted-foreground min-w-0">
+        <div key={item.key} className="flex min-w-0 items-center gap-3">
+          <div className="text-muted-foreground flex w-28 min-w-0 shrink-0 items-center justify-end gap-1.5 text-xs">
             {renderLabel(item)}
           </div>
-          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+          <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
             <div
               className={cn("h-full rounded-full", barClassName)}
               style={{
@@ -1806,8 +1806,8 @@ function BarList<T extends { key: string; value: number }>({
               }}
             />
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-muted-foreground w-8 text-right text-xs tabular-nums">
               {item.value.toLocaleString()}
             </span>
             {renderRight?.(item)}
@@ -1817,7 +1817,7 @@ function BarList<T extends { key: string; value: number }>({
       {items.length > maxVisible && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="text-muted-foreground hover:text-foreground mt-1 text-xs transition-colors"
         >
           {expanded ? "Show less" : `+${items.length - maxVisible} more`}
         </button>
@@ -1941,7 +1941,7 @@ function ServerErrorRateChart({
 
   if (items.length === 0) {
     return (
-      <div className="flex items-center justify-center h-16 text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
         No errors in this period
       </div>
     );
@@ -2080,7 +2080,7 @@ function UniqueUsersTimeSeries({
 
   if (labels.length === 0) {
     return (
-      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-24 items-center justify-center text-sm">
         No data
       </div>
     );
@@ -2188,9 +2188,9 @@ function HooksAnalytics({
   const hasServers = derivedServers.length > 0;
 
   return (
-    <div className="mb-4 space-y-4">
+    <div className="space-y-4">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         <MetricCard
           title="Avg Success Rate"
           value={kpis.avgSuccessRate ?? 0}
@@ -2231,21 +2231,21 @@ function HooksAnalytics({
 
       {/* Bar Charts */}
       {hasServers && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">Activity by Server</h3>
             <ServerActivityChart
               servers={derivedServers}
               serverNameMappings={serverNameMappings}
             />
           </div>
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-            <h3 className="text font-semibold align-baseline space-x-2">
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+            <h3 className="text space-x-2 align-baseline font-semibold">
               Activity by Source
             </h3>
             <SourceVolumeChart traces={groupedTraces} />
           </div>
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">Volume by User</h3>
             <UserVolumeList users={derivedUsers} />
           </div>
@@ -2254,7 +2254,7 @@ function HooksAnalytics({
 
       {/* Unique Users Over Time */}
       {groupedTraces.length > 0 && (
-        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="border-border bg-card space-y-4 rounded-lg border p-4">
           <h3 className="text font-semibold">Active Users Over Time</h3>
           <UniqueUsersTimeSeries traces={groupedTraces} from={from} to={to} />
         </div>
@@ -2262,15 +2262,15 @@ function HooksAnalytics({
 
       {/* Error Analysis */}
       {hasServers && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">Servers by Error Rate</h3>
             <ServerErrorRateChart
               servers={derivedServers}
               serverNameMappings={serverNameMappings}
             />
           </div>
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">Tools by Error Count</h3>
             <ToolErrorList traces={groupedTraces} />
           </div>
