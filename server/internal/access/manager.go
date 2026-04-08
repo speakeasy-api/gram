@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -86,7 +87,7 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 			return m.mapError(ctx, err)
 		}
 
-		if !grants.hasAccess(check.Scope, check.ResourceID) {
+		if !grants.hasAccess(check) {
 			return m.mapError(ctx, Denied(check.Scope, check.ResourceID))
 		}
 	}
@@ -117,10 +118,8 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
-	for _, check := range checks {
-		if grants.hasAccess(check.Scope, check.ResourceID) {
-			return nil
-		}
+	if slices.ContainsFunc(checks, grants.hasAccess) {
+		return nil
 	}
 
 	return m.mapError(ctx, Denied(checks[0].Scope, checks[0].ResourceID))
@@ -146,7 +145,7 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 			return nil, m.mapError(ctx, err)
 		}
 
-		if grants.hasAccess(scope, resourceID) {
+		if grants.hasAccess(Check{Scope: scope, ResourceID: resourceID}) {
 			allowed = append(allowed, resourceID)
 		}
 	}
