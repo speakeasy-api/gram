@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * updateOAuthProxyServer toolsets
  *
  * @remarks
- * Update an existing OAuth proxy server associated with a toolset (admin only)
+ * Update an existing OAuth proxy server associated with a toolset
  */
 export function toolsetsUpdateOAuthProxyServer(
   client: GramCore,

@@ -13865,7 +13865,7 @@ paths:
         name: UpdateToolset
   /rpc/toolsets.updateOAuthProxyServer:
     post:
-      description: Update an existing OAuth proxy server associated with a toolset (admin only)
+      description: Update an existing OAuth proxy server associated with a toolset
       operationId: updateOAuthProxyServer
       parameters:
         - allowEmptyValue: true

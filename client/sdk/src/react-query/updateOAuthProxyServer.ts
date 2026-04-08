@@ -51,7 +51,7 @@ export type UpdateOAuthProxyServerMutationError =
  * updateOAuthProxyServer toolsets
  *
  * @remarks
- * Update an existing OAuth proxy server associated with a toolset (admin only)
+ * Update an existing OAuth proxy server associated with a toolset
  */
 export function useUpdateOAuthProxyServerMutation(
   options?: MutationHookOptions<

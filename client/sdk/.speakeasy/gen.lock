@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4cfd407a23d34632278ad874399086fb
+  docChecksum: 91a9b33893bfaa8ba589fa613c863b52
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.29
-  configChecksum: f4ba86a2b46b70b4a4b2c39063da6c26
+  releaseVersion: 0.32.30
+  configChecksum: 780f050639fed31c16c2ef74e298d3ed
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -1650,7 +1650,7 @@ trackedFiles:
   docs/sdks/tools/README.md:
     last_write_checksum: sha1:73c0e5a99b2d5a2bfa29e1937f9255e5228d1a86
   docs/sdks/toolsets/README.md:
-    last_write_checksum: sha1:9d67f059222cdd8d465d7809207e0dd8968adf4c
+    last_write_checksum: sha1:69df583c8be1803ce81f237f75d37b6134ecb839
   docs/sdks/usage/README.md:
     last_write_checksum: sha1:49dd4432d8fc21406bbcee1c80f1aa1dd3459080
   docs/sdks/variations/README.md:
@@ -1675,11 +1675,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:69e6f235182db6dcde9a039aec0d1359437da876
+    last_write_checksum: sha1:8b1cbf51c7e62b13b38c13e9797f3a85e3ea0d42
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:7726fcd80991ee243b57da35e9e7bd0f3984eb8d
+    last_write_checksum: sha1:d39d782add4d3359c1fcfd5788681f59578eee6b
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2146,7 +2146,7 @@ trackedFiles:
     last_write_checksum: sha1:f5744e9ac43cdea5f946443aca2443e441a45437
     pristine_git_object: 28bab5415ea1190e7b53e6af9cc767ae0e398cc3
   src/funcs/toolsetsUpdateOAuthProxyServer.ts:
-    last_write_checksum: sha1:8b9bac3ce4ca805e63f78d04ef7c4ec9334fc7ea
+    last_write_checksum: sha1:ab60a3336cf7955be8b8b252b2eb9f2112af98eb
   src/funcs/usageCreateCheckout.ts:
     id: c1c1286d55a5
     last_write_checksum: sha1:3b00c13f8620dc9089ba80c0113746a2a499c95b
@@ -2197,7 +2197,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:81b7565eb624fd0268ec6ca668683d7b00d06a74
+    last_write_checksum: sha1:876a42fc14c9213bb8d9cfc7d6b4a71ec358111a
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -4280,7 +4280,7 @@ trackedFiles:
   src/react-query/updateMemberRole.ts:
     last_write_checksum: sha1:77757f9e2c0f7a2ba89cbf34eb08435146bfd663
   src/react-query/updateOAuthProxyServer.ts:
-    last_write_checksum: sha1:c38508d79fd4cb060a7dbd19acc3686ef17fc69e
+    last_write_checksum: sha1:1bbcc7d5b8dedbb70cc54fe0140696b9209e8459
   src/react-query/updatePackage.ts:
     id: 50a0d18b0a84
     last_write_checksum: sha1:1a95152d4fea7d9b8ad74ad5905ed748d327b4f6
@@ -4431,7 +4431,7 @@ trackedFiles:
     pristine_git_object: 4c7e184e2d9dee5ccd82b2ef46f3236d7ec30efb
   src/sdk/toolsets.ts:
     id: 0715c1588060
-    last_write_checksum: sha1:0b2de4247308e5908ea36686674b2ae2b959f355
+    last_write_checksum: sha1:c4b7d3b4ca520cabbf7af41aee1cd4236b07c83d
     pristine_git_object: 499da61dc8ecf32ab1637b84167ecef2052c32b2
   src/sdk/usage.ts:
     id: e4cbe77b260e
