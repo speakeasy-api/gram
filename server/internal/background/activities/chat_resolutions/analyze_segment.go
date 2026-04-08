@@ -43,6 +43,7 @@ type AnalyzeSegmentArgs struct {
 	ProjectID    uuid.UUID
 	OrgID        string
 	APIKeyID     string
+	UserEmail    string
 	StartIndex   int
 	EndIndex     int
 	UserFeedback []UserFeedback
@@ -184,6 +185,9 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attr.ProjectIDKey:                  args.ProjectID.String(),
 		attr.OrganizationIDKey:             args.OrgID,
 		attr.APIKeyIDKey:                   args.APIKeyID,
+	}
+	if args.UserEmail != "" {
+		attrs[attr.UserEmailKey] = args.UserEmail
 	}
 
 	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)

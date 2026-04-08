@@ -51,7 +51,7 @@ var _ gen.Auther = (*Service)(nil)
 
 // ChatResolutionAnalyzer schedules async chat resolution analysis.
 type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID, userEmail string) error
 }
 
 type Service struct {
@@ -626,6 +626,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		ChatID:         chatID,
 		UserID:         userID,
 		ExternalUserID: authCtx.ExternalUserID,
+		UserEmail:      conv.PtrValOr(authCtx.Email, ""),
 		HTTPMetadata: &openrouter.HTTPMetadata{
 			Origin:    metadata.Origin,
 			UserAgent: metadata.UserAgent,

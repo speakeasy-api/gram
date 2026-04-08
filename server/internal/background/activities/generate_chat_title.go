@@ -141,6 +141,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		UsageSource:    billing.ModelUsageSourceGram,
 		UserID:         "",
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 		APIKeyID:       "",
 		JSONSchema:     nil,

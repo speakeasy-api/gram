@@ -436,6 +436,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			if authCtx.APIKeyID != "" {
 				attrRecorder[attr.APIKeyIDKey] = authCtx.APIKeyID
 			}
+			if authCtx.Email != nil && *authCtx.Email != "" {
+				attrRecorder[attr.UserEmailKey] = *authCtx.Email
+			}
 		}
 
 		attrRecorder.RecordToolsetSlug(toolsetSlug)
