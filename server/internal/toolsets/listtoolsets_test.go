@@ -120,24 +120,20 @@ func TestToolsetsService_ListToolsets_NoProjectID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	beforeCount, err := audittest.AuditLogCount(ctx, ti.conn)
-	require.NoError(t, err)
 
-	// Create auth context without project ID
+	// Create auth context without project ID — should fall back to org-wide listing
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.ProjectID = nil
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err = ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
-	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
-	require.Equal(t, beforeCount, afterCount)
+	require.NotNil(t, result)
+	require.Empty(t, result.Toolsets, "no toolsets created yet, so org-wide list should be empty")
 }
 
 func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
