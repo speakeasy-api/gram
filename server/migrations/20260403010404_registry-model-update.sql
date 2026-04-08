@@ -16,7 +16,7 @@ CREATE TABLE "organization_mcp_collections" (
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "organization_mcp_collections_registry_id_fkey" FOREIGN KEY ("registry_id") REFERENCES "mcp_registries" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "organization_mcp_collections_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
+  CONSTRAINT "organization_mcp_collections_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create "mcp_registry_toolsets" table
 CREATE TABLE "mcp_registry_toolsets" (

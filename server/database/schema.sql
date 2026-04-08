@@ -1295,7 +1295,7 @@ CREATE TABLE IF NOT EXISTS organization_mcp_collections (
 
   CONSTRAINT organization_mcp_collections_pkey PRIMARY KEY (id),
   CONSTRAINT organization_mcp_collections_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries (id) ON DELETE CASCADE,
-  CONSTRAINT organization_mcp_collections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
+  CONSTRAINT organization_mcp_collections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 -- Unique namespace per organization
