@@ -87,7 +87,7 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 			return m.mapError(ctx, err)
 		}
 
-		if !grants.satisfies(check.Expand()) {
+		if !grants.satisfies(check.expand()) {
 			return m.mapError(ctx, Denied(check.Scope, check.ResourceID))
 		}
 	}
@@ -118,7 +118,7 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
-	if slices.ContainsFunc(checks, func(c Check) bool { return grants.satisfies(c.Expand()) }) {
+	if slices.ContainsFunc(checks, func(c Check) bool { return grants.satisfies(c.expand()) }) {
 		return nil
 	}
 
@@ -145,7 +145,7 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 			return nil, m.mapError(ctx, err)
 		}
 
-		if grants.satisfies(Check{Scope: scope, ResourceID: resourceID}.Expand()) {
+		if grants.satisfies(Check{Scope: scope, ResourceID: resourceID}.expand()) {
 			allowed = append(allowed, resourceID)
 		}
 	}
@@ -169,6 +169,17 @@ func (m *Manager) shouldEnforce(ctx context.Context) (bool, error) {
 	}
 
 	return enabled, nil
+}
+
+func validateInput(c Check) error {
+	switch c.ResourceID {
+	case "":
+		return InvalidCheck(c.Scope, c.ResourceID)
+	case WildcardResource:
+		return InvalidCheck(c.Scope, c.ResourceID)
+	default:
+		return nil
+	}
 }
 
 func (m *Manager) mapError(ctx context.Context, err error) error {

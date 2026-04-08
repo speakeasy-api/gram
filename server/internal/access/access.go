@@ -9,7 +9,7 @@ type Check struct {
 // Expand returns all grants that would satisfy this check: the check itself
 // (exact resource and wildcard), any higher-privilege scopes that imply it
 // (exact and wildcard), and always a ScopeRoot wildcard grant.
-func (c Check) Expand() []Check {
+func (c Check) expand() []Check {
 	checks := []Check{
 		{Scope: ScopeRoot, ResourceID: WildcardResource},
 	}
@@ -21,15 +21,4 @@ func (c Check) Expand() []Check {
 		)
 	}
 	return checks
-}
-
-func validateInput(c Check) error {
-	switch c.ResourceID {
-	case "":
-		return InvalidCheck(c.Scope, c.ResourceID)
-	case WildcardResource:
-		return InvalidCheck(c.Scope, c.ResourceID)
-	default:
-		return nil
-	}
 }
