@@ -137,6 +137,7 @@ run();
 * [createRole](docs/sdks/access/README.md#createrole) - createRole access
 * [deleteRole](docs/sdks/access/README.md#deleterole) - deleteRole access
 * [getRole](docs/sdks/access/README.md#getrole) - getRole access
+* [listGrants](docs/sdks/access/README.md#listgrants) - listGrants access
 * [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
@@ -386,6 +387,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
 - [`accessDeleteRole`](docs/sdks/access/README.md#deleterole) - deleteRole access
 - [`accessGetRole`](docs/sdks/access/README.md#getrole) - getRole access
+- [`accessListGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
@@ -613,6 +615,7 @@ To learn about this feature and how to get started, check
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+- [`useGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 - [`useHooksHooksNumberCursorMutation`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 - [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
