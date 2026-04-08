@@ -40,7 +40,7 @@ import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { MetricCard } from "@/components/chart/MetricCard";
-import { smoothData, formatChartLabel } from "@/components/chart/chartUtils";
+import { formatChartLabel } from "@/components/chart/chartUtils";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   BarElement,
@@ -2183,22 +2183,21 @@ function HooksAnalytics({
       {/* Bar Charts */}
       {hasServers && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">Activity by Server</h3>
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            <h3 className="text font-semibold">Activity by Server</h3>
             <ServerActivityChart
               servers={summaryData!.servers}
               serverNameMappings={serverNameMappings}
             />
           </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">Activity by Source</h3>
-            <p className="text-[10px] text-muted-foreground -mt-2 mb-3">
-              based on loaded traces
-            </p>
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            <h3 className="text font-semibold align-baseline space-x-2">
+              Activity by Source
+            </h3>
             <SourceVolumeChart traces={groupedTraces} />
           </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">Volume by User</h3>
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            <h3 className="text font-semibold">Volume by User</h3>
             <UserVolumeList users={summaryData!.users ?? []} />
           </div>
         </div>
@@ -2206,8 +2205,8 @@ function HooksAnalytics({
 
       {/* Unique Users Over Time */}
       {groupedTraces.length > 0 && (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold mb-4">Active Users Over Time</h3>
+        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <h3 className="text font-semibold">Active Users Over Time</h3>
           <UniqueUsersTimeSeries traces={groupedTraces} from={from} to={to} />
         </div>
       )}
@@ -2215,20 +2214,15 @@ function HooksAnalytics({
       {/* Error Analysis */}
       {hasServers && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">
-              Servers by Error Rate
-            </h3>
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            <h3 className="text font-semibold">Servers by Error Rate</h3>
             <ServerErrorRateChart
               servers={summaryData!.servers}
               serverNameMappings={serverNameMappings}
             />
           </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">Tools by Error Count</h3>
-            <p className="text-[10px] text-muted-foreground -mt-2 mb-3">
-              based on loaded traces
-            </p>
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            <h3 className="text font-semibold">Tools by Error Count</h3>
             <ToolErrorList traces={groupedTraces} />
           </div>
         </div>
