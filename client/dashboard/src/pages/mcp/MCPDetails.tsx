@@ -52,6 +52,7 @@ import {
   invalidateTemplate,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
+  useUpdateOAuthProxyServerMutation,
   useExportMcpMetadataMutation,
   useGetMcpMetadata,
   useLatestDeployment,
@@ -2042,11 +2043,13 @@ function ConnectOAuthModal({
   onClose,
   toolsetSlug,
   toolset,
+  editMode,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
+  editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
 }) {
   const productTier = useProductTier();
   const queryClient = useQueryClient();
@@ -2075,9 +2078,14 @@ function ConnectOAuthModal({
       onClose={onClose}
       toolsetSlug={toolsetSlug}
       toolset={toolset}
+      editMode={editMode}
       onSuccess={() => {
         invalidateAllToolset(queryClient);
-        toast.success("External OAuth server configured successfully");
+        toast.success(
+          editMode
+            ? "OAuth proxy server updated successfully"
+            : "External OAuth server configured successfully",
+        );
         onClose();
       }}
     />
@@ -2090,12 +2098,14 @@ function OAuthTabModal({
   toolsetSlug,
   toolset,
   onSuccess,
+  editMode,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
   onSuccess: () => void;
+  editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
 }) {
   // Extract discovered OAuth metadata from external MCP tools.
   // Uses rawTools because proxy-type tools are filtered out of toolset.tools.
@@ -2156,6 +2166,26 @@ function OAuthTabModal({
   );
   const [proxyAudience, setProxyAudience] = useState("");
   const [proxyError, setProxyError] = useState<string | null>(null);
+
+  // Pre-fill from editMode whenever it changes (e.g., modal re-opened with a different proxy).
+  useEffect(() => {
+    if (!editMode) return;
+    const { proxyServer } = editMode;
+    const provider = proxyServer.oauthProxyProviders?.[0];
+    setProxySlug(proxyServer.slug ?? "");
+    setProxyAudience(proxyServer.audience ?? "");
+    if (provider) {
+      setProxyAuthorizationEndpoint(provider.authorizationEndpoint ?? "");
+      setProxyTokenEndpoint(provider.tokenEndpoint ?? "");
+      setProxyScopes((provider.scopesSupported ?? []).join(", "));
+      setProxyTokenAuthMethod(
+        provider.tokenEndpointAuthMethodsSupported?.[0] ?? "client_secret_post",
+      );
+      setProxyEnvironmentSlug(provider.environmentSlug ?? "");
+    }
+    // When editing, force the proxy tab to be active.
+    setActiveTab("proxy");
+  }, [editMode]);
 
   const applyDiscoveredOAuth = useCallback(
     (tab: "external" | "proxy") => {
@@ -2219,6 +2249,25 @@ function OAuthTabModal({
         error instanceof Error
           ? error.message
           : "Failed to configure OAuth proxy",
+      );
+    },
+  });
+
+  const updateOAuthProxyMutation = useUpdateOAuthProxyServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+
+      telemetry.capture("mcp_event", {
+        action: "oauth_proxy_updated",
+        slug: toolsetSlug,
+      });
+
+      onSuccess();
+    },
+    onError: (error) => {
+      console.error("Failed to update OAuth proxy:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update OAuth proxy",
       );
     },
   });
@@ -2302,6 +2351,25 @@ function OAuthTabModal({
       return;
     }
 
+    if (editMode) {
+      updateOAuthProxyMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+          updateOAuthProxyServerRequestBody: {
+            oauthProxyServer: {
+              audience: proxyAudience || undefined,
+              authorizationEndpoint: proxyAuthorizationEndpoint,
+              tokenEndpoint: proxyTokenEndpoint,
+              scopesSupported: scopesArray,
+              tokenEndpointAuthMethodsSupported: [proxyTokenAuthMethod],
+              environmentSlug: proxyEnvironmentSlug || undefined,
+            },
+          },
+        },
+      });
+      return;
+    }
+
     addOAuthProxyMutation.mutate({
       request: {
         slug: toolsetSlug,
@@ -2326,7 +2394,9 @@ function OAuthTabModal({
       <Dialog open={isOpen} onOpenChange={onClose}>
         <Dialog.Content className="max-w-6xl max-h-[90vh] overflow-hidden">
           <Dialog.Header>
-            <Dialog.Title>Connect OAuth</Dialog.Title>
+            <Dialog.Title>
+              {editMode ? "Edit OAuth Proxy" : "Connect OAuth"}
+            </Dialog.Title>
           </Dialog.Header>
 
           <Tabs
@@ -2498,6 +2568,7 @@ function OAuthTabModal({
                       value={proxySlug}
                       onChange={setProxySlug}
                       maxLength={40}
+                      disabled={!!editMode}
                     />
                   </div>
 
@@ -2606,15 +2677,19 @@ function OAuthTabModal({
                 onClick={handleProxySubmit}
                 disabled={
                   addOAuthProxyMutation.isPending ||
+                  updateOAuthProxyMutation.isPending ||
                   !proxySlug.trim() ||
                   !proxyAuthorizationEndpoint.trim() ||
                   !proxyTokenEndpoint.trim() ||
-                  !proxyEnvironmentSlug.trim()
+                  (!editMode && !proxyEnvironmentSlug.trim())
                 }
               >
-                {addOAuthProxyMutation.isPending
-                  ? "Configuring..."
-                  : "Configure OAuth Proxy"}
+                {addOAuthProxyMutation.isPending ||
+                updateOAuthProxyMutation.isPending
+                  ? "Saving..."
+                  : editMode
+                    ? "Save changes"
+                    : "Configure OAuth Proxy"}
               </Button>
             )}
           </Dialog.Footer>
