@@ -26,6 +26,7 @@ const BUILT_IN_SERVERS = [
     slug: "logs",
   },
 ];
+
 export function MCPRoot() {
   return <Outlet />;
 }

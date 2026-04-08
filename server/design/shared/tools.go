@@ -163,11 +163,10 @@ var PlatformToolDefinition = Type("PlatformToolDefinition", func() {
 	Extend(BaseToolAttributes)
 
 	Attribute("source_slug", String, "The backing platform tool source (for example: logs)")
-	Attribute("managed", Boolean, "Whether this tool is managed by the platform and not user-created")
 	Attribute("owner_kind", String, "The entity kind that owns this tool's lifecycle")
 	Attribute("owner_id", String, "Optional owning entity ID")
 
-	Required("source_slug", "managed")
+	Required("source_slug")
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.

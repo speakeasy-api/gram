@@ -11,8 +11,6 @@ package types
 type PlatformToolDefinition struct {
 	// The backing platform tool source (for example: logs)
 	SourceSlug string
-	// Whether this tool is managed by the platform and not user-created
-	Managed bool
 	// The entity kind that owns this tool's lifecycle
 	OwnerKind *string
 	// Optional owning entity ID

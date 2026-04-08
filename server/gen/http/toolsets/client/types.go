@@ -2883,8 +2883,6 @@ type PromptTemplateResponseBody struct {
 type PlatformToolDefinitionResponseBody struct {
 	// The backing platform tool source (for example: logs)
 	SourceSlug *string `form:"source_slug,omitempty" json:"source_slug,omitempty" xml:"source_slug,omitempty"`
-	// Whether this tool is managed by the platform and not user-created
-	Managed *bool `form:"managed,omitempty" json:"managed,omitempty" xml:"managed,omitempty"`
 	// The entity kind that owns this tool's lifecycle
 	OwnerKind *string `form:"owner_kind,omitempty" json:"owner_kind,omitempty" xml:"owner_kind,omitempty"`
 	// Optional owning entity ID
@@ -9832,9 +9830,6 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 func ValidatePlatformToolDefinitionResponseBody(body *PlatformToolDefinitionResponseBody) (err error) {
 	if body.SourceSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source_slug", "body"))
-	}
-	if body.Managed == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("managed", "body"))
 	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))

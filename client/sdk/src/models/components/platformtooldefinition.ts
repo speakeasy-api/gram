@@ -54,10 +54,6 @@ export type PlatformToolDefinition = {
    */
   id: string;
   /**
-   * Whether this tool is managed by the platform and not user-created
-   */
-  managed: boolean;
-  /**
    * The name of the tool
    */
   name: string;
@@ -117,7 +113,6 @@ export const PlatformToolDefinition$inboundSchema: z.ZodMiniType<
     ),
     description: z.string(),
     id: z.string(),
-    managed: z.boolean(),
     name: z.string(),
     owner_id: z.optional(z.string()),
     owner_kind: z.optional(z.string()),

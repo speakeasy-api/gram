@@ -4,4 +4,4 @@
 "server": minor
 ---
 
-Support managed Gram-hosted MCP tools in tool discovery and the MCP UI.
+Support platform-hosted MCP tools in tool discovery and the MCP UI.

@@ -31,6 +31,7 @@ export function BuiltInMCPCard({
         )
       }
     >
+      {/* Header row with name and badge */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <Type
           variant="subheading"
@@ -45,6 +46,7 @@ export function BuiltInMCPCard({
         </Badge>
       </div>
 
+      {/* Description */}
       <Type variant="small" muted className="line-clamp-2">
         {description}
       </Type>

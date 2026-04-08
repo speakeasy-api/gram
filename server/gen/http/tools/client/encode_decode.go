@@ -535,7 +535,6 @@ func unmarshalPlatformToolDefinitionResponseBodyToTypesPlatformToolDefinition(v 
 	}
 	res := &types.PlatformToolDefinition{
 		SourceSlug:    *v.SourceSlug,
-		Managed:       *v.Managed,
 		OwnerKind:     v.OwnerKind,
 		OwnerID:       v.OwnerID,
 		ID:            *v.ID,

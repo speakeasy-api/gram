@@ -463,8 +463,6 @@ type PromptTemplateResponseBody struct {
 type PlatformToolDefinitionResponseBody struct {
 	// The backing platform tool source (for example: logs)
 	SourceSlug string `form:"source_slug" json:"source_slug" xml:"source_slug"`
-	// Whether this tool is managed by the platform and not user-created
-	Managed bool `form:"managed" json:"managed" xml:"managed"`
 	// The entity kind that owns this tool's lifecycle
 	OwnerKind *string `form:"owner_kind,omitempty" json:"owner_kind,omitempty" xml:"owner_kind,omitempty"`
 	// Optional owning entity ID

@@ -59,7 +59,6 @@ func (d ToolDescriptor) ToTool(projectID uuid.UUID) *types.Tool {
 			Variation:     nil,
 			Annotations:   d.Annotations,
 			SourceSlug:    d.SourceSlug,
-			Managed:       d.Managed,
 			OwnerKind:     d.OwnerKind,
 			OwnerID:       d.OwnerID,
 		},

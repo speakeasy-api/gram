@@ -7,7 +7,7 @@ import (
 )
 
 var _ = Service("toolsets", func() {
-	Description("Toolsets for gram AI consumers.")
+	Description("Managed toolsets for gram AI consumers.")
 
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {

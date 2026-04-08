@@ -2959,7 +2959,6 @@ func marshalTypesPlatformToolDefinitionToPlatformToolDefinitionResponseBody(v *t
 	}
 	res := &PlatformToolDefinitionResponseBody{
 		SourceSlug:    v.SourceSlug,
-		Managed:       v.Managed,
 		OwnerKind:     v.OwnerKind,
 		OwnerID:       v.OwnerID,
 		ID:            v.ID,

@@ -19186,9 +19186,6 @@ components:
                 id:
                     type: string
                     description: The ID of the tool
-                managed:
-                    type: boolean
-                    description: Whether this tool is managed by the platform and not user-created
                 name:
                     type: string
                     description: The name of the tool
@@ -19225,7 +19222,6 @@ components:
             description: A platform-owned tool served directly by the platform
             required:
                 - source_slug
-                - managed
                 - id
                 - project_id
                 - name
@@ -22085,7 +22081,7 @@ tags:
     - name: tools
       description: Dashboard API for interacting with tools.
     - name: toolsets
-      description: Toolsets for gram AI consumers.
+      description: Managed toolsets for gram AI consumers.
     - name: usage
       description: Read usage for gram.
     - name: variations
