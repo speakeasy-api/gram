@@ -185,7 +185,6 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attr.OrganizationIDKey:             args.OrgID,
 		attr.APIKeyIDKey:                   args.APIKeyID,
 	}
-
 	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)
 	if err == nil && chatInfo.CreatedAt.Valid {
 		resolutionTimeSecs := time.Since(chatInfo.CreatedAt.Time).Seconds()

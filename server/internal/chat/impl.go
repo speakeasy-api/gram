@@ -626,6 +626,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		ChatID:         chatID,
 		UserID:         userID,
 		ExternalUserID: authCtx.ExternalUserID,
+		UserEmail:      conv.PtrValOr(authCtx.Email, ""),
 		HTTPMetadata: &openrouter.HTTPMetadata{
 			Origin:    metadata.Origin,
 			UserAgent: metadata.UserAgent,
