@@ -935,17 +935,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
   const [isOAuthEditModalOpen, setIsOAuthEditModalOpen] = useState(false);
-  // Memoize the editMode object so its reference is stable across parent
-  // re-renders. Without this, the inline `{ proxyServer: ... }` literal in JSX
-  // would create a new reference on every render, causing OAuthTabModal's
-  // useEffect([editMode]) to fire repeatedly and wipe the user's form input.
-  const oauthEditMode = useMemo(
-    () =>
-      toolset.oauthProxyServer
-        ? { proxyServer: toolset.oauthProxyServer }
-        : undefined,
-    [toolset.oauthProxyServer],
-  );
 
   // Delete mcp server state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -1446,7 +1435,11 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         onClose={() => setIsOAuthEditModalOpen(false)}
         toolsetSlug={toolset.slug}
         toolset={toolset}
-        editMode={oauthEditMode}
+        editMode={
+          toolset.oauthProxyServer
+            ? { proxyServer: toolset.oauthProxyServer }
+            : undefined
+        }
       />
       <GramOAuthProxyModal
         isOpen={isGramOAuthModalOpen}
@@ -2187,13 +2180,18 @@ function OAuthTabModal({
   // authorization URL handling.
   const proxyAudiencePrefilledRef = useRef<string>("");
 
-  // Pre-fill from editMode whenever it changes (e.g., modal re-opened with a different proxy).
+  // Pre-fill from editMode whenever the underlying proxy server data changes.
+  // Dep array depends on editMode?.proxyServer (the stable inner ref preserved
+  // by react-query's structural sharing) rather than editMode (the inline
+  // wrapper object that gets recreated on every parent re-render). This way
+  // the effect only fires when the actual proxy server data changes — not on
+  // every parent re-render (which would wipe user-typed form input).
+  const editProxyServer = editMode?.proxyServer;
   useEffect(() => {
-    if (!editMode) return;
-    const { proxyServer } = editMode;
-    const provider = proxyServer.oauthProxyProviders?.[0];
-    setProxySlug(proxyServer.slug ?? "");
-    const initialAudience = proxyServer.audience ?? "";
+    if (!editProxyServer) return;
+    const provider = editProxyServer.oauthProxyProviders?.[0];
+    setProxySlug(editProxyServer.slug ?? "");
+    const initialAudience = editProxyServer.audience ?? "";
     setProxyAudience(initialAudience);
     proxyAudiencePrefilledRef.current = initialAudience;
     setProxyAuthorizationEndpoint(provider?.authorizationEndpoint ?? "");
@@ -2205,7 +2203,7 @@ function OAuthTabModal({
     setProxyEnvironmentSlug(provider?.environmentSlug ?? "");
     // When editing, force the proxy tab to be active.
     setActiveTab("proxy");
-  }, [editMode]);
+  }, [editProxyServer]);
 
   const applyDiscoveredOAuth = useCallback(
     (tab: "external" | "proxy") => {
