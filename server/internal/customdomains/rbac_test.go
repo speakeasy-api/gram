@@ -87,6 +87,42 @@ func TestCustomDomainsService_DeleteDomain_AllowsOrgAdminGrant(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCustomDomainsService_GetDomain_UnauthorizedWithEmptyOrgID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	authCtx.ActiveOrganizationID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	_, err := ti.service.GetDomain(ctx, &gen.GetDomainPayload{})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestCustomDomainsService_CreateDomain_UnauthorizedWithEmptyOrgID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	authCtx.ActiveOrganizationID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestCustomDomainsService_DeleteDomain_UnauthorizedWithEmptyOrgID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	authCtx.ActiveOrganizationID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	err := ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 
