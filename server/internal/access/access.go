@@ -23,7 +23,7 @@ func (c Check) Expand() []Check {
 	return checks
 }
 
-func (c Check) Validate() error {
+func validateInput(c Check) error {
 	switch c.ResourceID {
 	case "":
 		return InvalidCheck(c.Scope, c.ResourceID)
