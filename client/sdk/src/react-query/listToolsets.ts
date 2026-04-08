@@ -56,7 +56,7 @@ export type ListToolsetsQueryError =
  * listToolsets toolsets
  *
  * @remarks
- * List all toolsets for a project
+ * List all toolsets for a project, or all toolsets in the organization if no project is specified
  */
 export function useListToolsets(
   request?: operations.ListToolsetsRequest | undefined,
@@ -79,7 +79,7 @@ export function useListToolsets(
  * listToolsets toolsets
  *
  * @remarks
- * List all toolsets for a project
+ * List all toolsets for a project, or all toolsets in the organization if no project is specified
  */
 export function useListToolsetsSuspense(
   request?: operations.ListToolsetsRequest | undefined,

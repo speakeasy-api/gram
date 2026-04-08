@@ -278,10 +278,6 @@ func EncodeListRegistriesRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		return nil
 	}
 }

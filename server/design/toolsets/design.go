@@ -41,7 +41,12 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("listToolsets", func() {
-		Description("List all toolsets for a project")
+		Description("List all toolsets for a project, or all toolsets in the organization if no project is specified")
+
+		Security(security.Session, security.ProjectSlug)
+		Security(security.Session)
+		Security(security.ByKey, security.ProjectSlug)
+		Security(security.ByKey)
 
 		Payload(func() {
 			security.SessionPayload()

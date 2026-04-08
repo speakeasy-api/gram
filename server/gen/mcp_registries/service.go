@@ -97,9 +97,8 @@ type ListCatalogResult struct {
 // ListRegistriesPayload is the payload type of the mcpRegistries service
 // listRegistries method.
 type ListRegistriesPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // ListRegistriesResult is the result type of the mcpRegistries service

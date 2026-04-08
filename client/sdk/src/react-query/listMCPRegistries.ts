@@ -113,7 +113,6 @@ export function setListMCPRegistriesData(
     parameters: {
       gramSession?: string | undefined;
       gramKey?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: ListMCPRegistriesQueryData,
@@ -129,7 +128,6 @@ export function invalidateListMCPRegistries(
     [parameters: {
       gramSession?: string | undefined;
       gramKey?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

@@ -155,7 +155,7 @@ export class Toolsets extends ClientSDK {
    * listToolsets toolsets
    *
    * @remarks
-   * List all toolsets for a project
+   * List all toolsets for a project, or all toolsets in the organization if no project is specified
    */
   async list(
     request?: operations.ListToolsetsRequest | undefined,

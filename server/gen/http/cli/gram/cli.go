@@ -464,10 +464,9 @@ func ParseEndpoint(
 		mcpRegistriesClearCacheApikeyTokenFlag      = mcpRegistriesClearCacheFlags.String("apikey-token", "", "")
 		mcpRegistriesClearCacheProjectSlugInputFlag = mcpRegistriesClearCacheFlags.String("project-slug-input", "", "")
 
-		mcpRegistriesListRegistriesFlags                = flag.NewFlagSet("list-registries", flag.ExitOnError)
-		mcpRegistriesListRegistriesSessionTokenFlag     = mcpRegistriesListRegistriesFlags.String("session-token", "", "")
-		mcpRegistriesListRegistriesApikeyTokenFlag      = mcpRegistriesListRegistriesFlags.String("apikey-token", "", "")
-		mcpRegistriesListRegistriesProjectSlugInputFlag = mcpRegistriesListRegistriesFlags.String("project-slug-input", "", "")
+		mcpRegistriesListRegistriesFlags            = flag.NewFlagSet("list-registries", flag.ExitOnError)
+		mcpRegistriesListRegistriesSessionTokenFlag = mcpRegistriesListRegistriesFlags.String("session-token", "", "")
+		mcpRegistriesListRegistriesApikeyTokenFlag  = mcpRegistriesListRegistriesFlags.String("apikey-token", "", "")
 
 		mcpRegistriesListCatalogFlags                = flag.NewFlagSet("list-catalog", flag.ExitOnError)
 		mcpRegistriesListCatalogRegistryIDFlag       = mcpRegistriesListCatalogFlags.String("registry-id", "", "")
@@ -2087,7 +2086,7 @@ func ParseEndpoint(
 				data, err = mcpregistriesc.BuildClearCachePayload(*mcpRegistriesClearCacheRegistryIDFlag, *mcpRegistriesClearCacheSessionTokenFlag, *mcpRegistriesClearCacheApikeyTokenFlag, *mcpRegistriesClearCacheProjectSlugInputFlag)
 			case "list-registries":
 				endpoint = c.ListRegistries()
-				data, err = mcpregistriesc.BuildListRegistriesPayload(*mcpRegistriesListRegistriesSessionTokenFlag, *mcpRegistriesListRegistriesApikeyTokenFlag, *mcpRegistriesListRegistriesProjectSlugInputFlag)
+				data, err = mcpregistriesc.BuildListRegistriesPayload(*mcpRegistriesListRegistriesSessionTokenFlag, *mcpRegistriesListRegistriesApikeyTokenFlag)
 			case "list-catalog":
 				endpoint = c.ListCatalog()
 				data, err = mcpregistriesc.BuildListCatalogPayload(*mcpRegistriesListCatalogRegistryIDFlag, *mcpRegistriesListCatalogSearchFlag, *mcpRegistriesListCatalogCursorFlag, *mcpRegistriesListCatalogSessionTokenFlag, *mcpRegistriesListCatalogApikeyTokenFlag, *mcpRegistriesListCatalogProjectSlugInputFlag)
@@ -4019,7 +4018,6 @@ func mcpRegistriesListRegistriesUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries list-registries", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -4029,11 +4027,10 @@ func mcpRegistriesListRegistriesUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries list-registries --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries list-registries --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func mcpRegistriesListCatalogUsage() {
@@ -5780,7 +5777,7 @@ func toolsetsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] toolsets COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-toolset: Create a new toolset with associated tools`)
-	fmt.Fprintln(os.Stderr, `    list-toolsets: List all toolsets for a project`)
+	fmt.Fprintln(os.Stderr, `    list-toolsets: List all toolsets for a project, or all toolsets in the organization if no project is specified`)
 	fmt.Fprintln(os.Stderr, `    update-toolset: Update a toolset's properties including name, description, and HTTP tools`)
 	fmt.Fprintln(os.Stderr, `    delete-toolset: Delete a toolset by its ID`)
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
@@ -5827,7 +5824,7 @@ func toolsetsListToolsetsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all toolsets for a project`)
+	fmt.Fprintln(os.Stderr, `List all toolsets for a project, or all toolsets in the organization if no project is specified`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

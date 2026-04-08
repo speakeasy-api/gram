@@ -48,7 +48,6 @@ export function buildListMCPRegistriesQuery(
     queryKey: queryKeyListMCPRegistries({
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function listMCPRegistriesQueryFn(
       ctx,
@@ -78,7 +77,6 @@ export function queryKeyListMCPRegistries(
   parameters: {
     gramSession?: string | undefined;
     gramKey?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "mcpRegistries", "listRegistries", parameters];

@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * listToolsets toolsets
  *
  * @remarks
- * List all toolsets for a project
+ * List all toolsets for a project, or all toolsets in the organization if no project is specified
  */
 export function toolsetsList(
   client: GramCore,
@@ -127,14 +127,28 @@ async function $do(
     ],
     [
       {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.option2?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
         fieldName: "Gram-Key",
         type: "apiKey:header",
-        value: security?.option2?.apikeyHeaderGramKey,
+        value: security?.option3?.apikeyHeaderGramKey,
       },
       {
         fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
+        value: security?.option3?.projectSlugHeaderGramProject,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option4?.apikeyHeaderGramKey,
       },
     ],
   );

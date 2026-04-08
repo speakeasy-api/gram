@@ -19,7 +19,8 @@ import (
 type Service interface {
 	// Create a new toolset with associated tools
 	CreateToolset(context.Context, *CreateToolsetPayload) (res *types.Toolset, err error)
-	// List all toolsets for a project
+	// List all toolsets for a project, or all toolsets in the organization if no
+	// project is specified
 	ListToolsets(context.Context, *ListToolsetsPayload) (res *ListToolsetsResult, err error)
 	// Update a toolset's properties including name, description, and HTTP tools
 	UpdateToolset(context.Context, *UpdateToolsetPayload) (res *types.Toolset, err error)

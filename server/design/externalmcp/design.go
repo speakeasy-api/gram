@@ -45,10 +45,12 @@ var _ = Service("mcpRegistries", func() {
 	Method("listRegistries", func() {
 		Description("List all MCP registries (admin only)")
 
+		Security(security.Session)
+		Security(security.ByKey)
+
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 		})
 
 		Result(func() {
@@ -60,7 +62,6 @@ var _ = Service("mcpRegistries", func() {
 			GET("/rpc/mcpRegistries.listRegistries")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 

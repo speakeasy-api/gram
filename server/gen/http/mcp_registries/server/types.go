@@ -1510,11 +1510,10 @@ func NewClearCachePayload(registryID string, sessionToken *string, apikeyToken *
 
 // NewListRegistriesPayload builds a mcpRegistries service listRegistries
 // endpoint payload.
-func NewListRegistriesPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ListRegistriesPayload {
+func NewListRegistriesPayload(sessionToken *string, apikeyToken *string) *mcpregistries.ListRegistriesPayload {
 	v := &mcpregistries.ListRegistriesPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

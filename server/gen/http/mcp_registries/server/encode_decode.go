@@ -261,9 +261,8 @@ func DecodeListRegistriesRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*mcpregistries.ListRegistriesPayload, error) {
 		var payload *mcpregistries.ListRegistriesPayload
 		var (
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
+			sessionToken *string
+			apikeyToken  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -273,23 +272,12 @@ func DecodeListRegistriesRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewListRegistriesPayload(sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListRegistriesPayload(sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {

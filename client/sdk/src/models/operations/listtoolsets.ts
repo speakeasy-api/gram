@@ -11,13 +11,23 @@ export type ListToolsetsSecurityOption1 = {
 };
 
 export type ListToolsetsSecurityOption2 = {
+  sessionHeaderGramSession: string;
+};
+
+export type ListToolsetsSecurityOption3 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
+};
+
+export type ListToolsetsSecurityOption4 = {
+  apikeyHeaderGramKey: string;
 };
 
 export type ListToolsetsSecurity = {
   option1?: ListToolsetsSecurityOption1 | undefined;
   option2?: ListToolsetsSecurityOption2 | undefined;
+  option3?: ListToolsetsSecurityOption3 | undefined;
+  option4?: ListToolsetsSecurityOption4 | undefined;
 };
 
 export type ListToolsetsRequest = {
@@ -70,8 +80,7 @@ export function listToolsetsSecurityOption1ToJSON(
 
 /** @internal */
 export type ListToolsetsSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -80,13 +89,11 @@ export const ListToolsetsSecurityOption2$outboundSchema: z.ZodMiniType<
   ListToolsetsSecurityOption2
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
+    sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
 );
@@ -102,9 +109,74 @@ export function listToolsetsSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type ListToolsetsSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const ListToolsetsSecurityOption3$outboundSchema: z.ZodMiniType<
+  ListToolsetsSecurityOption3$Outbound,
+  ListToolsetsSecurityOption3
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function listToolsetsSecurityOption3ToJSON(
+  listToolsetsSecurityOption3: ListToolsetsSecurityOption3,
+): string {
+  return JSON.stringify(
+    ListToolsetsSecurityOption3$outboundSchema.parse(
+      listToolsetsSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
+export type ListToolsetsSecurityOption4$Outbound = {
+  "apikey_header_Gram-Key": string;
+};
+
+/** @internal */
+export const ListToolsetsSecurityOption4$outboundSchema: z.ZodMiniType<
+  ListToolsetsSecurityOption4$Outbound,
+  ListToolsetsSecurityOption4
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    });
+  }),
+);
+
+export function listToolsetsSecurityOption4ToJSON(
+  listToolsetsSecurityOption4: ListToolsetsSecurityOption4,
+): string {
+  return JSON.stringify(
+    ListToolsetsSecurityOption4$outboundSchema.parse(
+      listToolsetsSecurityOption4,
+    ),
+  );
+}
+
+/** @internal */
 export type ListToolsetsSecurity$Outbound = {
   Option1?: ListToolsetsSecurityOption1$Outbound | undefined;
   Option2?: ListToolsetsSecurityOption2$Outbound | undefined;
+  Option3?: ListToolsetsSecurityOption3$Outbound | undefined;
+  Option4?: ListToolsetsSecurityOption4$Outbound | undefined;
 };
 
 /** @internal */
@@ -119,11 +191,19 @@ export const ListToolsetsSecurity$outboundSchema: z.ZodMiniType<
     option2: z.optional(
       z.lazy(() => ListToolsetsSecurityOption2$outboundSchema),
     ),
+    option3: z.optional(
+      z.lazy(() => ListToolsetsSecurityOption3$outboundSchema),
+    ),
+    option4: z.optional(
+      z.lazy(() => ListToolsetsSecurityOption4$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       option1: "Option1",
       option2: "Option2",
+      option3: "Option3",
+      option4: "Option4",
     });
   }),
 );

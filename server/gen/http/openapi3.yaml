@@ -7620,13 +7620,6 @@ paths:
                   schema:
                     description: API Key header
                     type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
             responses:
                 "200":
                     content:
@@ -7689,10 +7682,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: listRegistries mcpRegistries
             tags:
                 - mcpRegistries
@@ -13215,7 +13206,7 @@ paths:
                 name: Toolset
     /rpc/toolsets.list:
         get:
-            description: List all toolsets for a project
+            description: List all toolsets for a project, or all toolsets in the organization if no project is specified
             operationId: listToolsets
             parameters:
                 - allowEmptyValue: true
@@ -13303,8 +13294,10 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
             summary: listToolsets toolsets
             tags:
                 - toolsets

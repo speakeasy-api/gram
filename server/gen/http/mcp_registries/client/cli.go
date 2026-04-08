@@ -53,7 +53,7 @@ func BuildClearCachePayload(mcpRegistriesClearCacheRegistryID string, mcpRegistr
 
 // BuildListRegistriesPayload builds the payload for the mcpRegistries
 // listRegistries endpoint from CLI flags.
-func BuildListRegistriesPayload(mcpRegistriesListRegistriesSessionToken string, mcpRegistriesListRegistriesApikeyToken string, mcpRegistriesListRegistriesProjectSlugInput string) (*mcpregistries.ListRegistriesPayload, error) {
+func BuildListRegistriesPayload(mcpRegistriesListRegistriesSessionToken string, mcpRegistriesListRegistriesApikeyToken string) (*mcpregistries.ListRegistriesPayload, error) {
 	var sessionToken *string
 	{
 		if mcpRegistriesListRegistriesSessionToken != "" {
@@ -66,16 +66,9 @@ func BuildListRegistriesPayload(mcpRegistriesListRegistriesSessionToken string, 
 			apikeyToken = &mcpRegistriesListRegistriesApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if mcpRegistriesListRegistriesProjectSlugInput != "" {
-			projectSlugInput = &mcpRegistriesListRegistriesProjectSlugInput
-		}
-	}
 	v := &mcpregistries.ListRegistriesPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

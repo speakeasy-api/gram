@@ -149,9 +149,21 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		}
 		if err != nil {
 			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
 				Name:           "apikey",
 				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-				RequiredScopes: []string{"producer"},
+				RequiredScopes: []string{},
 			}
 			var key string
 			if p.ApikeyToken != nil {
@@ -162,7 +174,7 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 				sc := security.APIKeyScheme{
 					Name:           "project_slug",
 					Scopes:         []string{},
-					RequiredScopes: []string{"producer"},
+					RequiredScopes: []string{},
 				}
 				var key string
 				if p.ProjectSlugInput != nil {
@@ -170,6 +182,18 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 				}
 				ctx, err = authAPIKeyFn(ctx, key, &sc)
 			}
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
 		if err != nil {
 			return nil, err
