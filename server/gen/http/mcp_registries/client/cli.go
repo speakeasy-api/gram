@@ -8,6 +8,10 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+	"unicode/utf8"
+
 	mcpregistries "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -172,6 +176,348 @@ func BuildGetServerDetailsPayload(mcpRegistriesGetServerDetailsRegistryID string
 	v := &mcpregistries.GetServerDetailsPayload{}
 	v.RegistryID = registryID
 	v.ServerSpecifier = serverSpecifier
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildServePayload builds the payload for the mcpRegistries serve endpoint
+// from CLI flags.
+func BuildServePayload(mcpRegistriesServeCollectionSlug string, mcpRegistriesServeSessionToken string, mcpRegistriesServeApikeyToken string, mcpRegistriesServeProjectSlugInput string) (*mcpregistries.ServePayload, error) {
+	var collectionSlug string
+	{
+		collectionSlug = mcpRegistriesServeCollectionSlug
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesServeSessionToken != "" {
+			sessionToken = &mcpRegistriesServeSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesServeApikeyToken != "" {
+			apikeyToken = &mcpRegistriesServeApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesServeProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesServeProjectSlugInput
+		}
+	}
+	v := &mcpregistries.ServePayload{}
+	v.CollectionSlug = collectionSlug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateCollectionPayload builds the payload for the mcpRegistries
+// createCollection endpoint from CLI flags.
+func BuildCreateCollectionPayload(mcpRegistriesCreateCollectionBody string, mcpRegistriesCreateCollectionSessionToken string, mcpRegistriesCreateCollectionApikeyToken string, mcpRegistriesCreateCollectionProjectSlugInput string) (*mcpregistries.CreateCollectionPayload, error) {
+	var err error
+	var body CreateCollectionRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpRegistriesCreateCollectionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
+		}
+		if utf8.RuneCountInString(body.Slug) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 1, true))
+		}
+		if utf8.RuneCountInString(body.Slug) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 60, false))
+		}
+		if body.Description != nil {
+			if utf8.RuneCountInString(*body.Description) > 500 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.description", *body.Description, utf8.RuneCountInString(*body.Description), 500, false))
+			}
+		}
+		if utf8.RuneCountInString(body.McpRegistryNamespace) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_registry_namespace", body.McpRegistryNamespace, utf8.RuneCountInString(body.McpRegistryNamespace), 1, true))
+		}
+		if utf8.RuneCountInString(body.McpRegistryNamespace) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_registry_namespace", body.McpRegistryNamespace, utf8.RuneCountInString(body.McpRegistryNamespace), 200, false))
+		}
+		if !(body.Visibility == "public" || body.Visibility == "private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesCreateCollectionSessionToken != "" {
+			sessionToken = &mcpRegistriesCreateCollectionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesCreateCollectionApikeyToken != "" {
+			apikeyToken = &mcpRegistriesCreateCollectionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesCreateCollectionProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesCreateCollectionProjectSlugInput
+		}
+	}
+	v := &mcpregistries.CreateCollectionPayload{
+		Name:                 body.Name,
+		Slug:                 body.Slug,
+		Description:          body.Description,
+		McpRegistryNamespace: body.McpRegistryNamespace,
+		Visibility:           body.Visibility,
+	}
+	{
+		var zero string
+		if v.Visibility == zero {
+			v.Visibility = "private"
+		}
+	}
+	if body.ToolsetIds != nil {
+		v.ToolsetIds = make([]string, len(body.ToolsetIds))
+		for i, val := range body.ToolsetIds {
+			v.ToolsetIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListCollectionsPayload builds the payload for the mcpRegistries
+// listCollections endpoint from CLI flags.
+func BuildListCollectionsPayload(mcpRegistriesListCollectionsSessionToken string, mcpRegistriesListCollectionsApikeyToken string, mcpRegistriesListCollectionsProjectSlugInput string) (*mcpregistries.ListCollectionsPayload, error) {
+	var sessionToken *string
+	{
+		if mcpRegistriesListCollectionsSessionToken != "" {
+			sessionToken = &mcpRegistriesListCollectionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesListCollectionsApikeyToken != "" {
+			apikeyToken = &mcpRegistriesListCollectionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesListCollectionsProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesListCollectionsProjectSlugInput
+		}
+	}
+	v := &mcpregistries.ListCollectionsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateCollectionPayload builds the payload for the mcpRegistries
+// updateCollection endpoint from CLI flags.
+func BuildUpdateCollectionPayload(mcpRegistriesUpdateCollectionBody string, mcpRegistriesUpdateCollectionSessionToken string, mcpRegistriesUpdateCollectionApikeyToken string, mcpRegistriesUpdateCollectionProjectSlugInput string) (*mcpregistries.UpdateCollectionPayload, error) {
+	var err error
+	var body UpdateCollectionRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpRegistriesUpdateCollectionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"description\": \"aaa\",\n      \"name\": \"aa\",\n      \"visibility\": \"private\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.collection_id", body.CollectionID, goa.FormatUUID))
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+			}
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+			}
+		}
+		if body.Description != nil {
+			if utf8.RuneCountInString(*body.Description) > 500 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.description", *body.Description, utf8.RuneCountInString(*body.Description), 500, false))
+			}
+		}
+		if body.Visibility != nil {
+			if !(*body.Visibility == "public" || *body.Visibility == "private") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"public", "private"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesUpdateCollectionSessionToken != "" {
+			sessionToken = &mcpRegistriesUpdateCollectionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesUpdateCollectionApikeyToken != "" {
+			apikeyToken = &mcpRegistriesUpdateCollectionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesUpdateCollectionProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesUpdateCollectionProjectSlugInput
+		}
+	}
+	v := &mcpregistries.UpdateCollectionPayload{
+		CollectionID: body.CollectionID,
+		Name:         body.Name,
+		Description:  body.Description,
+		Visibility:   body.Visibility,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteCollectionPayload builds the payload for the mcpRegistries
+// deleteCollection endpoint from CLI flags.
+func BuildDeleteCollectionPayload(mcpRegistriesDeleteCollectionCollectionID string, mcpRegistriesDeleteCollectionSessionToken string, mcpRegistriesDeleteCollectionApikeyToken string, mcpRegistriesDeleteCollectionProjectSlugInput string) (*mcpregistries.DeleteCollectionPayload, error) {
+	var err error
+	var collectionID string
+	{
+		collectionID = mcpRegistriesDeleteCollectionCollectionID
+		err = goa.MergeErrors(err, goa.ValidateFormat("collection_id", collectionID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesDeleteCollectionSessionToken != "" {
+			sessionToken = &mcpRegistriesDeleteCollectionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesDeleteCollectionApikeyToken != "" {
+			apikeyToken = &mcpRegistriesDeleteCollectionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesDeleteCollectionProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesDeleteCollectionProjectSlugInput
+		}
+	}
+	v := &mcpregistries.DeleteCollectionPayload{}
+	v.CollectionID = collectionID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildAttachServerPayload builds the payload for the mcpRegistries
+// attachServer endpoint from CLI flags.
+func BuildAttachServerPayload(mcpRegistriesAttachServerBody string, mcpRegistriesAttachServerSessionToken string, mcpRegistriesAttachServerApikeyToken string, mcpRegistriesAttachServerProjectSlugInput string) (*mcpregistries.AttachServerPayload, error) {
+	var err error
+	var body AttachServerRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpRegistriesAttachServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.collection_id", body.CollectionID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesAttachServerSessionToken != "" {
+			sessionToken = &mcpRegistriesAttachServerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesAttachServerApikeyToken != "" {
+			apikeyToken = &mcpRegistriesAttachServerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesAttachServerProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesAttachServerProjectSlugInput
+		}
+	}
+	v := &mcpregistries.AttachServerPayload{
+		CollectionID: body.CollectionID,
+		ToolsetID:    body.ToolsetID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDetachServerPayload builds the payload for the mcpRegistries
+// detachServer endpoint from CLI flags.
+func BuildDetachServerPayload(mcpRegistriesDetachServerBody string, mcpRegistriesDetachServerSessionToken string, mcpRegistriesDetachServerApikeyToken string, mcpRegistriesDetachServerProjectSlugInput string) (*mcpregistries.DetachServerPayload, error) {
+	var err error
+	var body DetachServerRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpRegistriesDetachServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.collection_id", body.CollectionID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesDetachServerSessionToken != "" {
+			sessionToken = &mcpRegistriesDetachServerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesDetachServerApikeyToken != "" {
+			apikeyToken = &mcpRegistriesDetachServerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesDetachServerProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesDetachServerProjectSlugInput
+		}
+	}
+	v := &mcpregistries.DetachServerPayload{
+		CollectionID: body.CollectionID,
+		ToolsetID:    body.ToolsetID,
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

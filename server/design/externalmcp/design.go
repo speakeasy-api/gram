@@ -137,6 +137,233 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:operationId", "getMCPServerDetails")
 		Meta("openapi:extension:x-speakeasy-name-override", "getServerDetails")
 	})
+
+	Method("serve", func() {
+		Description("List published MCP servers from a collection")
+
+		Payload(func() {
+			Attribute("collection_slug", String, "Slug of the collection to serve")
+			Required("collection_slug")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("servers", ArrayOf(ExternalMCPServer), "List of available MCP servers")
+			Required("servers")
+		})
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.serve")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("collection_slug")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "serveMCPCollection")
+		Meta("openapi:extension:x-speakeasy-name-override", "serve")
+	})
+
+	Method("createCollection", func() {
+		Description("Create an MCP collection within the organization")
+
+		Payload(func() {
+			Attribute("name", String, "Display name for the collection", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("slug", String, "URL-friendly identifier for the collection", func() {
+				MinLength(1)
+				MaxLength(60)
+			})
+			Attribute("description", String, "Description of the collection", func() {
+				MaxLength(500)
+			})
+			Attribute("mcp_registry_namespace", String, "Registry namespace (e.g., 'com.speakeasy.acme.my-tools')", func() {
+				MinLength(1)
+				MaxLength(200)
+			})
+			Attribute("visibility", String, "Visibility of the collection", func() {
+				Enum("public", "private")
+				Default("private")
+			})
+			Attribute("toolset_ids", ArrayOf(String), "Toolset IDs to attach to the collection")
+			Required("name", "slug", "mcp_registry_namespace")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(MCPCollection)
+
+		HTTP(func() {
+			POST("/rpc/mcpRegistries.createCollection")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusCreated)
+		})
+
+		Meta("openapi:operationId", "createMCPCollection")
+		Meta("openapi:extension:x-speakeasy-name-override", "createCollection")
+	})
+
+	Method("listCollections", func() {
+		Description("List MCP collections in the organization")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("collections", ArrayOf(MCPCollection), "List of collections")
+			Required("collections")
+		})
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.listCollections")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMCPCollections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listCollections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPCollections"}`)
+	})
+
+	Method("updateCollection", func() {
+		Description("Update an MCP collection")
+
+		Payload(func() {
+			Attribute("collection_id", String, "ID of the collection to update", func() {
+				Format(FormatUUID)
+			})
+			Attribute("name", String, "Display name for the collection", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("description", String, "Description of the collection", func() {
+				MaxLength(500)
+			})
+			Attribute("visibility", String, "Visibility of the collection", func() {
+				Enum("public", "private")
+			})
+			Required("collection_id")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(MCPCollection)
+
+		HTTP(func() {
+			PATCH("/rpc/mcpRegistries.updateCollection")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateMCPCollection")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateCollection")
+	})
+
+	Method("deleteCollection", func() {
+		Description("Delete an MCP collection")
+
+		Payload(func() {
+			Attribute("collection_id", String, "ID of the collection to delete", func() {
+				Format(FormatUUID)
+			})
+			Required("collection_id")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/mcpRegistries.deleteCollection")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("collection_id")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteMCPCollection")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteCollection")
+	})
+
+	Method("attachServer", func() {
+		Description("Attach a server (toolset) to a collection")
+
+		Payload(func() {
+			Attribute("collection_id", String, "ID of the collection", func() {
+				Format(FormatUUID)
+			})
+			Attribute("toolset_id", String, "ID of the toolset to attach", func() {
+				Format(FormatUUID)
+			})
+			Required("collection_id", "toolset_id")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(MCPCollection)
+
+		HTTP(func() {
+			POST("/rpc/mcpRegistries.attachServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "attachServerToCollection")
+		Meta("openapi:extension:x-speakeasy-name-override", "attachServer")
+	})
+
+	Method("detachServer", func() {
+		Description("Detach a server (toolset) from a collection")
+
+		Payload(func() {
+			Attribute("collection_id", String, "ID of the collection", func() {
+				Format(FormatUUID)
+			})
+			Attribute("toolset_id", String, "ID of the toolset to detach", func() {
+				Format(FormatUUID)
+			})
+			Required("collection_id", "toolset_id")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/mcpRegistries.detachServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "detachServerFromCollection")
+		Meta("openapi:extension:x-speakeasy-name-override", "detachServer")
+	})
 })
 
 var ExternalMCPServer = Type("ExternalMCPServer", func() {
@@ -186,6 +413,25 @@ var ExternalMCPTool = Type("ExternalMCPTool", func() {
 	Attribute("description", String, "Description of the tool")
 	Attribute("input_schema", Any, "Input schema for the tool")
 	Attribute("annotations", Any, "Annotations for the tool")
+})
+
+var MCPCollection = Type("MCPCollection", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An MCP collection within an organization")
+
+	Attribute("id", String, "Collection ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name for the collection")
+	Attribute("description", String, "Description of the collection")
+	Attribute("slug", String, "URL-friendly identifier")
+	Attribute("mcp_registry_namespace", String, "Registry namespace")
+	Attribute("visibility", String, "Visibility of the collection", func() {
+		Enum("public", "private")
+	})
+
+	Required("id", "name", "slug", "visibility")
 })
 
 var ExternalMCPRemote = Type("ExternalMCPRemote", func() {

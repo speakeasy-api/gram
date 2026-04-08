@@ -23,6 +23,13 @@ type Server struct {
 	ListRegistries   http.Handler
 	ListCatalog      http.Handler
 	GetServerDetails http.Handler
+	Serve            http.Handler
+	CreateCollection http.Handler
+	ListCollections  http.Handler
+	UpdateCollection http.Handler
+	DeleteCollection http.Handler
+	AttachServer     http.Handler
+	DetachServer     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,11 +63,25 @@ func New(
 			{"ListRegistries", "GET", "/rpc/mcpRegistries.listRegistries"},
 			{"ListCatalog", "GET", "/rpc/mcpRegistries.listCatalog"},
 			{"GetServerDetails", "GET", "/rpc/mcpRegistries.getServerDetails"},
+			{"Serve", "GET", "/rpc/mcpRegistries.serve"},
+			{"CreateCollection", "POST", "/rpc/mcpRegistries.createCollection"},
+			{"ListCollections", "GET", "/rpc/mcpRegistries.listCollections"},
+			{"UpdateCollection", "PATCH", "/rpc/mcpRegistries.updateCollection"},
+			{"DeleteCollection", "DELETE", "/rpc/mcpRegistries.deleteCollection"},
+			{"AttachServer", "POST", "/rpc/mcpRegistries.attachServer"},
+			{"DetachServer", "POST", "/rpc/mcpRegistries.detachServer"},
 		},
 		ClearCache:       NewClearCacheHandler(e.ClearCache, mux, decoder, encoder, errhandler, formatter),
 		ListRegistries:   NewListRegistriesHandler(e.ListRegistries, mux, decoder, encoder, errhandler, formatter),
 		ListCatalog:      NewListCatalogHandler(e.ListCatalog, mux, decoder, encoder, errhandler, formatter),
 		GetServerDetails: NewGetServerDetailsHandler(e.GetServerDetails, mux, decoder, encoder, errhandler, formatter),
+		Serve:            NewServeHandler(e.Serve, mux, decoder, encoder, errhandler, formatter),
+		CreateCollection: NewCreateCollectionHandler(e.CreateCollection, mux, decoder, encoder, errhandler, formatter),
+		ListCollections:  NewListCollectionsHandler(e.ListCollections, mux, decoder, encoder, errhandler, formatter),
+		UpdateCollection: NewUpdateCollectionHandler(e.UpdateCollection, mux, decoder, encoder, errhandler, formatter),
+		DeleteCollection: NewDeleteCollectionHandler(e.DeleteCollection, mux, decoder, encoder, errhandler, formatter),
+		AttachServer:     NewAttachServerHandler(e.AttachServer, mux, decoder, encoder, errhandler, formatter),
+		DetachServer:     NewDetachServerHandler(e.DetachServer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -73,6 +94,13 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListRegistries = m(s.ListRegistries)
 	s.ListCatalog = m(s.ListCatalog)
 	s.GetServerDetails = m(s.GetServerDetails)
+	s.Serve = m(s.Serve)
+	s.CreateCollection = m(s.CreateCollection)
+	s.ListCollections = m(s.ListCollections)
+	s.UpdateCollection = m(s.UpdateCollection)
+	s.DeleteCollection = m(s.DeleteCollection)
+	s.AttachServer = m(s.AttachServer)
+	s.DetachServer = m(s.DetachServer)
 }
 
 // MethodNames returns the methods served.
@@ -84,6 +112,13 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListRegistriesHandler(mux, h.ListRegistries)
 	MountListCatalogHandler(mux, h.ListCatalog)
 	MountGetServerDetailsHandler(mux, h.GetServerDetails)
+	MountServeHandler(mux, h.Serve)
+	MountCreateCollectionHandler(mux, h.CreateCollection)
+	MountListCollectionsHandler(mux, h.ListCollections)
+	MountUpdateCollectionHandler(mux, h.UpdateCollection)
+	MountDeleteCollectionHandler(mux, h.DeleteCollection)
+	MountAttachServerHandler(mux, h.AttachServer)
+	MountDetachServerHandler(mux, h.DetachServer)
 }
 
 // Mount configures the mux to serve the mcpRegistries endpoints.
@@ -280,6 +315,377 @@ func NewGetServerDetailsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getServerDetails")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountServeHandler configures the mux to serve the "mcpRegistries" service
+// "serve" endpoint.
+func MountServeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/mcpRegistries.serve", f)
+}
+
+// NewServeHandler creates a HTTP handler which loads the HTTP request and
+// calls the "mcpRegistries" service "serve" endpoint.
+func NewServeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeServeRequest(mux, decoder)
+		encodeResponse = EncodeServeResponse(encoder)
+		encodeError    = EncodeServeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "serve")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateCollectionHandler configures the mux to serve the "mcpRegistries"
+// service "createCollection" endpoint.
+func MountCreateCollectionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpRegistries.createCollection", f)
+}
+
+// NewCreateCollectionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpRegistries" service "createCollection" endpoint.
+func NewCreateCollectionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateCollectionRequest(mux, decoder)
+		encodeResponse = EncodeCreateCollectionResponse(encoder)
+		encodeError    = EncodeCreateCollectionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createCollection")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListCollectionsHandler configures the mux to serve the "mcpRegistries"
+// service "listCollections" endpoint.
+func MountListCollectionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/mcpRegistries.listCollections", f)
+}
+
+// NewListCollectionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpRegistries" service "listCollections" endpoint.
+func NewListCollectionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListCollectionsRequest(mux, decoder)
+		encodeResponse = EncodeListCollectionsResponse(encoder)
+		encodeError    = EncodeListCollectionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listCollections")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateCollectionHandler configures the mux to serve the "mcpRegistries"
+// service "updateCollection" endpoint.
+func MountUpdateCollectionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PATCH", "/rpc/mcpRegistries.updateCollection", f)
+}
+
+// NewUpdateCollectionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpRegistries" service "updateCollection" endpoint.
+func NewUpdateCollectionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateCollectionRequest(mux, decoder)
+		encodeResponse = EncodeUpdateCollectionResponse(encoder)
+		encodeError    = EncodeUpdateCollectionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateCollection")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteCollectionHandler configures the mux to serve the "mcpRegistries"
+// service "deleteCollection" endpoint.
+func MountDeleteCollectionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/mcpRegistries.deleteCollection", f)
+}
+
+// NewDeleteCollectionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpRegistries" service "deleteCollection" endpoint.
+func NewDeleteCollectionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteCollectionRequest(mux, decoder)
+		encodeResponse = EncodeDeleteCollectionResponse(encoder)
+		encodeError    = EncodeDeleteCollectionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteCollection")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAttachServerHandler configures the mux to serve the "mcpRegistries"
+// service "attachServer" endpoint.
+func MountAttachServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpRegistries.attachServer", f)
+}
+
+// NewAttachServerHandler creates a HTTP handler which loads the HTTP request
+// and calls the "mcpRegistries" service "attachServer" endpoint.
+func NewAttachServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeAttachServerRequest(mux, decoder)
+		encodeResponse = EncodeAttachServerResponse(encoder)
+		encodeError    = EncodeAttachServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "attachServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDetachServerHandler configures the mux to serve the "mcpRegistries"
+// service "detachServer" endpoint.
+func MountDetachServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpRegistries.detachServer", f)
+}
+
+// NewDetachServerHandler creates a HTTP handler which loads the HTTP request
+// and calls the "mcpRegistries" service "detachServer" endpoint.
+func NewDetachServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDetachServerRequest(mux, decoder)
+		encodeResponse = EncodeDetachServerResponse(encoder)
+		encodeError    = EncodeDetachServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "detachServer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpRegistries")
 		payload, err := decodeRequest(r)
 		if err != nil {

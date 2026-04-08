@@ -25,6 +25,20 @@ type Service interface {
 	ListCatalog(context.Context, *ListCatalogPayload) (res *ListCatalogResult, err error)
 	// Get detailed information about an MCP server including remotes
 	GetServerDetails(context.Context, *GetServerDetailsPayload) (res *types.ExternalMCPServer, err error)
+	// List published MCP servers from a collection
+	Serve(context.Context, *ServePayload) (res *ServeResult, err error)
+	// Create an MCP collection within the organization
+	CreateCollection(context.Context, *CreateCollectionPayload) (res *types.MCPCollection, err error)
+	// List MCP collections in the organization
+	ListCollections(context.Context, *ListCollectionsPayload) (res *ListCollectionsResult, err error)
+	// Update an MCP collection
+	UpdateCollection(context.Context, *UpdateCollectionPayload) (res *types.MCPCollection, err error)
+	// Delete an MCP collection
+	DeleteCollection(context.Context, *DeleteCollectionPayload) (err error)
+	// Attach a server (toolset) to a collection
+	AttachServer(context.Context, *AttachServerPayload) (res *types.MCPCollection, err error)
+	// Detach a server (toolset) from a collection
+	DetachServer(context.Context, *DetachServerPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -47,13 +61,67 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"clearCache", "listRegistries", "listCatalog", "getServerDetails"}
+var MethodNames = [11]string{"clearCache", "listRegistries", "listCatalog", "getServerDetails", "serve", "createCollection", "listCollections", "updateCollection", "deleteCollection", "attachServer", "detachServer"}
+
+// AttachServerPayload is the payload type of the mcpRegistries service
+// attachServer method.
+type AttachServerPayload struct {
+	// ID of the collection
+	CollectionID string
+	// ID of the toolset to attach
+	ToolsetID        string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
 
 // ClearCachePayload is the payload type of the mcpRegistries service
 // clearCache method.
 type ClearCachePayload struct {
 	// The registry to clear cache for
 	RegistryID       string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// CreateCollectionPayload is the payload type of the mcpRegistries service
+// createCollection method.
+type CreateCollectionPayload struct {
+	// Display name for the collection
+	Name string
+	// URL-friendly identifier for the collection
+	Slug string
+	// Description of the collection
+	Description *string
+	// Registry namespace (e.g., 'com.speakeasy.acme.my-tools')
+	McpRegistryNamespace string
+	// Visibility of the collection
+	Visibility string
+	// Toolset IDs to attach to the collection
+	ToolsetIds       []string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// DeleteCollectionPayload is the payload type of the mcpRegistries service
+// deleteCollection method.
+type DeleteCollectionPayload struct {
+	// ID of the collection to delete
+	CollectionID     string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// DetachServerPayload is the payload type of the mcpRegistries service
+// detachServer method.
+type DetachServerPayload struct {
+	// ID of the collection
+	CollectionID string
+	// ID of the toolset to detach
+	ToolsetID        string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -94,6 +162,21 @@ type ListCatalogResult struct {
 	NextCursor *string
 }
 
+// ListCollectionsPayload is the payload type of the mcpRegistries service
+// listCollections method.
+type ListCollectionsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListCollectionsResult is the result type of the mcpRegistries service
+// listCollections method.
+type ListCollectionsResult struct {
+	// List of collections
+	Collections []*types.MCPCollection
+}
+
 // ListRegistriesPayload is the payload type of the mcpRegistries service
 // listRegistries method.
 type ListRegistriesPayload struct {
@@ -107,6 +190,37 @@ type ListRegistriesPayload struct {
 type ListRegistriesResult struct {
 	// List of MCP registries
 	Registries []*types.MCPRegistry
+}
+
+// ServePayload is the payload type of the mcpRegistries service serve method.
+type ServePayload struct {
+	// Slug of the collection to serve
+	CollectionSlug   string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ServeResult is the result type of the mcpRegistries service serve method.
+type ServeResult struct {
+	// List of available MCP servers
+	Servers []*types.ExternalMCPServer
+}
+
+// UpdateCollectionPayload is the payload type of the mcpRegistries service
+// updateCollection method.
+type UpdateCollectionPayload struct {
+	// ID of the collection to update
+	CollectionID string
+	// Display name for the collection
+	Name *string
+	// Description of the collection
+	Description *string
+	// Visibility of the collection
+	Visibility       *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
