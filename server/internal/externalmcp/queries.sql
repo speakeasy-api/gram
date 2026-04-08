@@ -9,28 +9,28 @@ SELECT id, name, url, created_at, updated_at
 FROM mcp_registries
 WHERE id = @id AND deleted IS FALSE;
 
--- name: CreateCollection :one
+-- name: CreateOrganizationMcpCollection :one
 INSERT INTO organization_mcp_collections (organization_id, name, description, slug, visibility)
 VALUES (@organization_id, @name, @description, @slug, @visibility)
 RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at;
 
--- name: GetCollectionByID :one
+-- name: GetOrganizationMcpCollectionByID :one
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
 WHERE id = @id AND deleted IS FALSE;
 
--- name: GetCollectionBySlugAndOrg :one
+-- name: GetOrganizationMcpCollectionBySlugAndOrg :one
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
 WHERE slug = @slug AND organization_id = @organization_id AND deleted IS FALSE;
 
--- name: ListCollectionsForOrganization :many
+-- name: ListOrganizationMcpCollections :many
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
 WHERE organization_id = @organization_id AND deleted IS FALSE
 ORDER BY name ASC;
 
--- name: UpdateCollection :one
+-- name: UpdateOrganizationMcpCollection :one
 UPDATE organization_mcp_collections
 SET name = COALESCE(sqlc.narg('name'), name),
     description = COALESCE(sqlc.narg('description'), description),
@@ -39,55 +39,55 @@ SET name = COALESCE(sqlc.narg('name'), name),
 WHERE id = @id AND deleted IS FALSE
 RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at;
 
--- name: DeleteCollection :exec
+-- name: DeleteOrganizationMcpCollection :exec
 UPDATE organization_mcp_collections SET deleted_at = clock_timestamp()
 WHERE id = @id AND deleted IS FALSE;
 
--- name: DeleteCollectionRegistriesByCollectionID :exec
+-- name: DeleteOrganizationMcpCollectionRegistriesByID :exec
 UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
 WHERE collection_id = @collection_id AND deleted IS FALSE;
 
--- name: DeleteCollectionServerAttachmentsByCollectionID :exec
+-- name: DeleteOrganizationMcpCollectionServerAttachmentsByID :exec
 UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
 WHERE collection_id = @collection_id AND deleted IS FALSE;
 
--- name: CreateCollectionRegistry :one
+-- name: CreateOrganizationMcpCollectionRegistry :one
 INSERT INTO organization_mcp_collection_registries (collection_id, namespace)
 VALUES (@collection_id, @namespace)
 RETURNING *;
 
--- name: GetCollectionRegistryByCollectionID :one
+-- name: GetOrganizationMcpCollectionRegistryByID :one
 SELECT * FROM organization_mcp_collection_registries
 WHERE collection_id = @collection_id AND deleted IS FALSE;
 
--- name: GetCollectionRegistryByNamespace :one
+-- name: GetOrganizationMcpCollectionRegistryByNamespace :one
 SELECT * FROM organization_mcp_collection_registries
 WHERE namespace = @namespace AND deleted IS FALSE;
 
--- name: PublishToolsetToCollection :one
+-- name: AttachServerToOrganizationMcpCollection :one
 INSERT INTO organization_mcp_collection_server_attachments (collection_id, toolset_id, published_by)
 VALUES (@collection_id, @toolset_id, @published_by)
 ON CONFLICT (collection_id, toolset_id) WHERE deleted IS FALSE DO UPDATE
 SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
 RETURNING *;
 
--- name: UnpublishToolsetFromCollection :exec
+-- name: DetachServerFromOrganizationMcpCollection :exec
 UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
 WHERE collection_id = @collection_id AND toolset_id = @toolset_id AND deleted IS FALSE;
 
--- name: ListPublishedToolsets :many
+-- name: ListOrganizationMcpCollectionServerAttachments :many
 SELECT t.* FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 WHERE rt.collection_id = @collection_id AND rt.deleted IS FALSE AND t.mcp_enabled IS TRUE AND t.deleted IS FALSE
 ORDER BY rt.published_at DESC;
 
--- name: IsToolsetPublished :one
+-- name: IsServerAttachedToOrganizationMcpCollection :one
 SELECT EXISTS (
   SELECT 1 FROM organization_mcp_collection_server_attachments
   WHERE collection_id = @collection_id AND toolset_id = @toolset_id AND deleted IS FALSE
 );
 
--- name: IsToolsetOwnedByProject :one
+-- name: IsAttachedServerOwnedByProject :one
 SELECT EXISTS (
   SELECT 1 FROM organization_mcp_collection_server_attachments rt
   JOIN toolsets t ON rt.toolset_id = t.id
