@@ -7,7 +7,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Dialog } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import {
   PageTabsTrigger,
   Tabs,
@@ -18,21 +17,24 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Icon, ResizablePanel } from "@speakeasy-api/moonshine";
 import {
+  BotIcon,
   ChevronDownIcon,
+  GitCommitHorizontalIcon,
   LoaderCircleIcon,
   MessageSquareIcon,
+  MoveRightIcon,
   PlusIcon,
   SparklesIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
   Undo2Icon,
+  UserIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 import { AddRepoDialog } from "./AddRepoDialog";
 import {
   type Annotation,
-  type CaptureSettings,
   type ContextFile,
   type ContextFolder,
   type ContextNode,
@@ -40,9 +42,8 @@ import {
   type DocFeedback,
   type DocsMcpConfig,
   type DraftDocument,
-  type RegistrySkill,
+  type FileVersion,
   collectDrafts,
-  collectSkills,
   computeLineDiff,
   countDrafts,
   countItems,
@@ -52,10 +53,9 @@ import {
   formatRelativeTime,
   formatTime,
   getEffectiveConfig,
-  MOCK_CAPTURE_SETTINGS,
+  MOCK_ALL_ROLES,
   MOCK_CONTEXT_TREE,
   MOCK_DRAFT_DOCUMENTS,
-  MOCK_REGISTRY_SKILLS,
   MOCK_SEARCH_LOGS,
   MOCK_SKILL_INVOCATIONS,
   parseSkillFrontmatter,
@@ -93,7 +93,6 @@ export default function ContextPage() {
                     </span>
                   )}
                 </PageTabsTrigger>
-                <PageTabsTrigger value="skills">Skills</PageTabsTrigger>
                 <PageTabsTrigger value="observability">
                   Observability
                 </PageTabsTrigger>
@@ -108,12 +107,6 @@ export default function ContextPage() {
             className="flex-1 min-h-0 p-8 overflow-y-auto"
           >
             <PendingChangesTab />
-          </TabsContent>
-          <TabsContent
-            value="skills"
-            className="flex-1 min-h-0 p-8 overflow-y-auto"
-          >
-            <SkillsTab />
           </TabsContent>
           <TabsContent
             value="observability"
@@ -133,6 +126,7 @@ function ContentTab() {
   const [selectedFile, setSelectedFile] = useState<ContextFile | null>(null);
   const [selectedPath, setSelectedPath] = useState<string[]>([]);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
+  const [viewAsRole, setViewAsRole] = useState<string | null>(null);
 
   const effectiveConfig = getEffectiveConfig(MOCK_CONTEXT_TREE, selectedPath);
   const selectedFolder = resolvePath(MOCK_CONTEXT_TREE, selectedPath);
@@ -156,21 +150,57 @@ function ContentTab() {
         {/* Left: tree explorer */}
         <ResizablePanel.Pane minSize={12} defaultSize={18} maxSize={30}>
           <div className="h-full flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-              <Type
-                small
-                muted
-                className="font-medium uppercase tracking-wider text-xs"
-              >
-                Files
-              </Type>
-              <button
-                onClick={() => setAddRepoOpen(true)}
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                title="Add content"
-              >
-                <Icon name="plus" className="h-3.5 w-3.5" />
-              </button>
+            <div className="px-3 py-2 border-b border-border space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Type
+                  small
+                  muted
+                  className="font-medium uppercase tracking-wider text-xs"
+                >
+                  Files
+                </Type>
+                <button
+                  onClick={() => setAddRepoOpen(true)}
+                  className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                  title="Add content"
+                >
+                  <Icon name="plus" className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {/* View-as-role selector */}
+              <div className="flex items-center gap-1 flex-wrap">
+                <button
+                  onClick={() => setViewAsRole(null)}
+                  className={cn(
+                    "px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors",
+                    viewAsRole === null
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  )}
+                >
+                  All
+                </button>
+                {MOCK_ALL_ROLES.map((role) => (
+                  <button
+                    key={role}
+                    onClick={() => setViewAsRole(role)}
+                    className={cn(
+                      "px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors",
+                      viewAsRole === role
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
+              {viewAsRole && (
+                <div className="flex items-center gap-1 text-[10px] text-amber-600">
+                  <Icon name="eye" className="h-3 w-3" />
+                  <span>Viewing as {viewAsRole}</span>
+                </div>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto py-1">
               <TreeNode
@@ -180,6 +210,7 @@ function ContentTab() {
                 onFileSelect={handleFileSelect}
                 onFolderSelect={handleFolderSelect}
                 parentPath={[]}
+                viewAsRole={viewAsRole}
               />
             </div>
           </div>
@@ -224,6 +255,39 @@ function ContentTab() {
 
 // ── Tree View ─────────────────────────────────────────────────────────────
 
+/** Collect all .docs-mcp.json configs from root and nested folders. */
+function collectConfigs(folder: ContextFolder): DocsMcpConfig[] {
+  const configs: DocsMcpConfig[] = [];
+  for (const child of folder.children) {
+    if (
+      child.type === "file" &&
+      child.kind === "mcp-docs-config" &&
+      child.config
+    ) {
+      configs.push(child.config);
+    }
+    if (child.type === "folder") {
+      configs.push(...collectConfigs(child));
+    }
+  }
+  return configs;
+}
+
+const ALL_CONFIGS = collectConfigs(MOCK_CONTEXT_TREE);
+
+/** Check if a path is denied for a role across all .docs-mcp.json configs. */
+function isPathDeniedForRole(role: string, nodePath: string): boolean {
+  return ALL_CONFIGS.some((config) => {
+    if (!config.accessControl) return false;
+    const rule = config.accessControl.find((r) => r.role === role);
+    if (!rule) return false;
+    return (rule.deniedPaths ?? []).some((pattern) => {
+      const prefix = pattern.replace(/\*$/, "");
+      return nodePath.startsWith(prefix) || nodePath === pattern;
+    });
+  });
+}
+
 function TreeNode({
   node,
   depth,
@@ -231,6 +295,7 @@ function TreeNode({
   onFileSelect,
   onFolderSelect,
   parentPath,
+  viewAsRole,
 }: {
   node: ContextNode;
   depth: number;
@@ -238,25 +303,49 @@ function TreeNode({
   onFileSelect: (file: ContextFile, path: string[]) => void;
   onFolderSelect: (path: string[]) => void;
   parentPath: string[];
+  viewAsRole?: string | null;
 }) {
   const [expanded, setExpanded] = useState(depth < 1);
+
+  // Build the path string for access control checks
+  const nodePath =
+    depth === 0
+      ? ""
+      : [...parentPath, node.name].join("/") +
+        (node.type === "folder" ? "/" : "");
+  const isDenied =
+    viewAsRole != null && nodePath && isPathDeniedForRole(viewAsRole, nodePath);
+
+  // Files indent past the chevron column so they align with the folder name,
+  // not the chevron. Folders: base + chevron(w-3) + gap(1.5) + folder-icon.
+  // Files: base + spacer matching chevron+gap + file-icon.
+  const INDENT_PX = 14;
+  const CHEVRON_SPACER = 18; // 12px chevron + 6px gap
 
   if (node.type === "file") {
     const isSelected = selectedFile?.name === node.name;
     return (
       <button
-        onClick={() => onFileSelect(node, parentPath)}
+        onClick={() => !isDenied && onFileSelect(node, parentPath)}
         className={cn(
           "flex items-center gap-1.5 w-full py-1 pr-2 text-xs transition-colors rounded-sm",
-          isSelected
+          isDenied && "opacity-30 cursor-not-allowed",
+          !isDenied && isSelected
             ? "bg-primary/10 text-foreground"
-            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            : !isDenied &&
+                "text-muted-foreground hover:text-foreground hover:bg-muted/50",
         )}
-        style={{ paddingLeft: depth * 12 + 8 }}
+        style={{ paddingLeft: depth * INDENT_PX + 8 + CHEVRON_SPACER }}
       >
         <Icon name={getFileIcon(node)} className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{node.name}</span>
-        {node.draft && (
+        {isDenied && (
+          <Icon
+            name="lock"
+            className="ml-auto h-3 w-3 shrink-0 text-destructive/50"
+          />
+        )}
+        {!isDenied && node.draft && (
           <span className="ml-auto h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
         )}
       </button>
@@ -281,13 +370,15 @@ function TreeNode({
       <button
         onClick={() => {
           setExpanded((v) => !v);
-          onFolderSelect(folderPath);
+          if (!isDenied) onFolderSelect(folderPath);
         }}
         className={cn(
           "flex items-center gap-1.5 w-full py-1 pr-2 text-xs transition-colors rounded-sm",
-          "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          isDenied && "opacity-30",
+          !isDenied &&
+            "text-muted-foreground hover:text-foreground hover:bg-muted/50",
         )}
-        style={{ paddingLeft: depth * 12 + 8 }}
+        style={{ paddingLeft: depth * INDENT_PX + 8 }}
       >
         <Icon
           name={expanded ? "chevron-down" : "chevron-right"}
@@ -297,7 +388,13 @@ function TreeNode({
         <span className="truncate font-medium">
           {depth === 0 ? "docs" : node.name}
         </span>
-        {draftCount > 0 && (
+        {isDenied && (
+          <Icon
+            name="lock"
+            className="ml-auto h-3 w-3 shrink-0 text-destructive/50"
+          />
+        )}
+        {!isDenied && draftCount > 0 && (
           <span className="ml-auto h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
         )}
       </button>
@@ -312,6 +409,7 @@ function TreeNode({
               onFileSelect={onFileSelect}
               onFolderSelect={onFolderSelect}
               parentPath={folderPath}
+              viewAsRole={viewAsRole}
             />
           ))}
         </div>
@@ -810,533 +908,6 @@ function DraftCommentItem({
   );
 }
 
-// ── Skills Tab (Registry) ─────────────────────────────────────────────────
-
-type SkillFilter =
-  | "all"
-  | "corpus"
-  | "captured"
-  | "uploaded"
-  | "pending-review";
-
-function SkillsTab() {
-  const [filter, setFilter] = useState<SkillFilter>("all");
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [captureSettings, setCaptureSettings] = useState<CaptureSettings>(
-    MOCK_CAPTURE_SETTINGS,
-  );
-  const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
-
-  const skills = MOCK_REGISTRY_SKILLS;
-
-  const filtered = useMemo(() => {
-    if (filter === "all") return skills;
-    if (filter === "pending-review")
-      return skills.filter((s) => s.status === "pending-review");
-    return skills.filter((s) => s.source === filter);
-  }, [skills, filter]);
-
-  const activeSkills = useMemo(
-    () => skills.filter((s) => s.status === "active"),
-    [skills],
-  );
-
-  const pendingCount = useMemo(
-    () => skills.filter((s) => s.status === "pending-review").length,
-    [skills],
-  );
-
-  const filterCounts: Record<SkillFilter, number> = useMemo(
-    () => ({
-      all: skills.length,
-      corpus: skills.filter((s) => s.source === "corpus").length,
-      captured: skills.filter((s) => s.source === "captured").length,
-      uploaded: skills.filter((s) => s.source === "uploaded").length,
-      "pending-review": pendingCount,
-    }),
-    [skills, pendingCount],
-  );
-
-  const filters: { value: SkillFilter; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "corpus", label: "Corpus" },
-    { value: "captured", label: "Captured" },
-    { value: "uploaded", label: "Uploaded" },
-    { value: "pending-review", label: "Pending Review" },
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* RemoteSkill tool preview */}
-      <RemoteSkillToolPreview activeSkills={activeSkills} />
-
-      {/* Filter bar + upload */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
-          {filters.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setFilter(value)}
-              className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5",
-                filter === value
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-              )}
-            >
-              {label}
-              <span
-                className={cn(
-                  "inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-medium leading-none",
-                  filter === value
-                    ? "bg-background/20 text-background"
-                    : "bg-muted text-muted-foreground",
-                  value === "pending-review" &&
-                    filterCounts[value] > 0 &&
-                    filter !== value &&
-                    "bg-amber-500/20 text-amber-600",
-                )}
-              >
-                {filterCounts[value]}
-              </span>
-            </button>
-          ))}
-        </div>
-        <Button size="sm" onClick={() => setUploadDialogOpen(true)}>
-          <Icon name="upload" className="h-3.5 w-3.5 mr-1.5" />
-          Upload Skill
-        </Button>
-      </div>
-
-      {/* Skill cards */}
-      {filtered.length === 0 ? (
-        <div className="flex items-center justify-center rounded-lg border border-dashed border-border bg-card h-[200px]">
-          <div className="text-center space-y-2">
-            <Icon
-              name="sparkles"
-              className="h-10 w-10 text-muted-foreground/50 mx-auto"
-            />
-            <Type variant="subheading" className="text-muted-foreground">
-              No skills match this filter
-            </Type>
-            <Type small muted>
-              Try a different filter or upload a new skill.
-            </Type>
-          </div>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {filtered.map((skill) => (
-            <RegistrySkillCard
-              key={skill.id}
-              skill={skill}
-              isExpanded={expandedSkill === skill.id}
-              onToggleExpand={() =>
-                setExpandedSkill(expandedSkill === skill.id ? null : skill.id)
-              }
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Capture settings */}
-      <CaptureSettingsSection
-        settings={captureSettings}
-        onChange={setCaptureSettings}
-      />
-
-      {/* Upload dialog */}
-      <UploadSkillDialog
-        open={uploadDialogOpen}
-        onOpenChange={setUploadDialogOpen}
-      />
-    </div>
-  );
-}
-
-// ── RemoteSkill Tool Preview ──────────────────────────────────────────────
-
-function RemoteSkillToolPreview({
-  activeSkills,
-}: {
-  activeSkills: RegistrySkill[];
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  const schemaExample = useMemo(
-    () =>
-      JSON.stringify(
-        {
-          name: "RemoteSkill",
-          description:
-            "Retrieve a skill from the Gram skills registry by ID. Returns the skill body as context for the agent.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              skillID: {
-                type: "string",
-                enum: activeSkills.map((s) => s.id),
-                description: "The ID of the skill to retrieve.",
-              },
-            },
-            required: ["skillID"],
-          },
-        },
-        null,
-        2,
-      ),
-    [activeSkills],
-  );
-
-  return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-muted/50 transition-colors"
-      >
-        <Icon
-          name={expanded ? "chevron-down" : "chevron-right"}
-          className="h-3.5 w-3.5 text-muted-foreground"
-        />
-        <Icon name="settings" className="h-4 w-4 text-primary" />
-        <Type variant="subheading" className="flex-1 text-left">
-          RemoteSkill Tool
-        </Type>
-        <Badge variant="default">
-          {activeSkills.length} active skill
-          {activeSkills.length !== 1 && "s"}
-        </Badge>
-      </button>
-
-      {expanded && (
-        <div className="border-t border-border">
-          <div className="px-4 py-3 border-b border-border">
-            <Type small muted className="block mb-2">
-              This is how agents see the skills registry as a tool. Active
-              skills appear as enum values in the skillID parameter.
-            </Type>
-            <div className="space-y-1.5">
-              {activeSkills.map((skill) => (
-                <div key={skill.id} className="flex items-center gap-2 text-xs">
-                  <code className="font-mono text-foreground bg-muted/50 px-1.5 py-0.5 rounded">
-                    {skill.id}
-                  </code>
-                  <span className="text-muted-foreground">
-                    {skill.description}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="p-4">
-            <Type small muted className="font-medium mb-2 block">
-              JSON Schema
-            </Type>
-            <pre className="text-xs font-mono whitespace-pre-wrap text-foreground bg-muted/30 rounded-md p-3 max-h-[300px] overflow-auto">
-              {schemaExample}
-            </pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Registry Skill Card ───────────────────────────────────────────────────
-
-function RegistrySkillCard({
-  skill,
-  isExpanded,
-  onToggleExpand,
-}: {
-  skill: RegistrySkill;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Icon name="sparkles" className="h-4 w-4 text-primary" />
-            <Type variant="subheading">{skill.name}</Type>
-            <SkillStatusBadge status={skill.status} />
-            <SkillSourceBadge source={skill.source} />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {skill.invocations.toLocaleString()} invocations
-            </span>
-            {skill.status === "pending-review" && (
-              <Button size="sm" className="h-7 text-xs">
-                Promote
-              </Button>
-            )}
-            {skill.status === "active" ? (
-              <Button size="sm" variant="outline" className="h-7 text-xs">
-                Disable
-              </Button>
-            ) : skill.status === "disabled" ? (
-              <Button size="sm" variant="outline" className="h-7 text-xs">
-                Enable
-              </Button>
-            ) : null}
-            <Button size="sm" variant="ghost" className="h-7 text-xs">
-              <Icon name="download" className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-        <Type small muted className="mt-1 block">
-          {skill.description}
-        </Type>
-        {skill.source === "captured" && skill.capturedFrom && (
-          <Type small muted className="mt-1 block text-xs">
-            Captured from{" "}
-            <span className="font-medium text-foreground">
-              {skill.capturedFrom.agentName}
-            </span>{" "}
-            in session{" "}
-            <code className="font-mono bg-muted/50 px-1 py-0.5 rounded text-foreground">
-              {skill.capturedFrom.sessionId}
-            </code>
-          </Type>
-        )}
-      </div>
-
-      {/* Frontmatter badges */}
-      {Object.keys(skill.frontmatter).length > 0 && (
-        <div className="px-4 py-2.5 border-b border-border flex flex-wrap gap-1.5">
-          {Object.entries(skill.frontmatter).map(([key, value]) => (
-            <Badge key={key} variant="secondary">
-              {key}: {value}
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      {/* Expandable body with SkillPreview */}
-      <button
-        onClick={onToggleExpand}
-        className="flex items-center gap-2 w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
-      >
-        <Icon
-          name={isExpanded ? "chevron-down" : "chevron-right"}
-          className="h-3 w-3"
-        />
-        {isExpanded ? "Hide" : "Show"} skill body
-      </button>
-      {isExpanded && (
-        <div className="px-4 pb-4">
-          <pre className="text-xs font-mono whitespace-pre-wrap text-foreground bg-muted/30 rounded-md p-3 max-h-[200px] overflow-auto">
-            {skill.body}
-          </pre>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="px-4 py-2.5 border-t border-border flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {skill.path && (
-            <Type small muted className="font-mono text-xs">
-              {skill.path}
-            </Type>
-          )}
-          <span className="text-xs text-muted-foreground">
-            by {skill.author}
-          </span>
-        </div>
-        <span className="text-xs text-muted-foreground">
-          Updated {formatDate(skill.updatedAt)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function SkillStatusBadge({ status }: { status: RegistrySkill["status"] }) {
-  switch (status) {
-    case "active":
-      return (
-        <Badge
-          variant="outline"
-          className="border-emerald-500/50 text-emerald-600 bg-emerald-500/10"
-        >
-          Active
-        </Badge>
-      );
-    case "pending-review":
-      return (
-        <Badge
-          variant="outline"
-          className="border-amber-500/50 text-amber-600 bg-amber-500/10"
-        >
-          Pending Review
-        </Badge>
-      );
-    case "disabled":
-      return (
-        <Badge
-          variant="outline"
-          className="border-muted-foreground/50 text-muted-foreground bg-muted/30"
-        >
-          Disabled
-        </Badge>
-      );
-  }
-}
-
-function SkillSourceBadge({ source }: { source: RegistrySkill["source"] }) {
-  switch (source) {
-    case "corpus":
-      return <Badge variant="secondary">Corpus</Badge>;
-    case "captured":
-      return <Badge variant="secondary">Captured</Badge>;
-    case "uploaded":
-      return <Badge variant="secondary">Uploaded</Badge>;
-  }
-}
-
-// ── Capture Settings ──────────────────────────────────────────────────────
-
-function CaptureSettingsSection({
-  settings,
-  onChange,
-}: {
-  settings: CaptureSettings;
-  onChange: (settings: CaptureSettings) => void;
-}) {
-  const toggle = (key: keyof CaptureSettings) => {
-    onChange({ ...settings, [key]: !settings[key] });
-  };
-
-  return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <div className="px-4 py-3 border-b border-border">
-        <Type variant="subheading">Capture Settings</Type>
-        <Type small muted className="mt-1 block">
-          Configure how skills are automatically captured from agent sessions.
-        </Type>
-      </div>
-      <div className="divide-y divide-border">
-        <CaptureToggle
-          label="Enable skill capture"
-          description="Automatically extract skills from agent conversations"
-          checked={settings.enabled}
-          onChange={() => toggle("enabled")}
-        />
-        <CaptureToggle
-          label="Capture project-level skills"
-          description="Capture skills scoped to this project"
-          checked={settings.captureProjectSkills}
-          onChange={() => toggle("captureProjectSkills")}
-          disabled={!settings.enabled}
-        />
-        <CaptureToggle
-          label="Capture user-level skills"
-          description="Capture skills scoped to individual users"
-          checked={settings.captureUserSkills}
-          onChange={() => toggle("captureUserSkills")}
-          disabled={!settings.enabled}
-        />
-        <CaptureToggle
-          label="Honor x-gram-ignore frontmatter"
-          description="Skip files with x-gram-ignore: true in their frontmatter"
-          checked={settings.ignoreWithFrontmatter}
-          onChange={() => toggle("ignoreWithFrontmatter")}
-          disabled={!settings.enabled}
-        />
-      </div>
-    </div>
-  );
-}
-
-function CaptureToggle({
-  label,
-  description,
-  checked,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-between px-4 py-3",
-        disabled && "opacity-50",
-      )}
-    >
-      <div>
-        <Type small className="font-medium block">
-          {label}
-        </Type>
-        <Type small muted className="block">
-          {description}
-        </Type>
-      </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={onChange}
-        disabled={disabled}
-      />
-    </div>
-  );
-}
-
-// ── Upload Skill Dialog ───────────────────────────────────────────────────
-
-function UploadSkillDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [content, setContent] = useState("");
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="max-w-lg">
-        <Dialog.Header>
-          <Dialog.Title>Upload Skill</Dialog.Title>
-          <Dialog.Description>
-            Paste or write a SKILL.md file to add it to the registry. Include
-            YAML frontmatter with name and description fields.
-          </Dialog.Description>
-        </Dialog.Header>
-        <div className="py-4">
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={`---\nname: my-skill\ndescription: Description of the skill\n---\n\nSkill instructions here...`}
-            className="w-full h-48 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-        <Dialog.Footer>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              // Mock: would upload the skill
-              onOpenChange(false);
-              setContent("");
-            }}
-            disabled={!content.trim()}
-          >
-            Upload
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
 // ── Observability Tab ─────────────────────────────────────────────────────
 
 function ObservabilityTab() {
@@ -1641,10 +1212,9 @@ function FileKindBadge({ kind }: { kind: ContextFile["kind"] }) {
 }
 
 function FileDetail({ file }: { file: ContextFile }) {
-  const [showHistory, setShowHistory] = useState(false);
-  const [viewMode, setViewMode] = useState<"published" | "draft" | "diff">(
-    file.draft ? "diff" : "published",
-  );
+  const [viewMode, setViewMode] = useState<
+    "published" | "draft" | "diff" | "history"
+  >(file.draft ? "diff" : "published");
 
   const displayContent =
     viewMode === "draft" && file.draft?.content
@@ -1667,13 +1237,6 @@ function FileDetail({ file }: { file: ContextFile }) {
         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
           <span>{formatFileSize(file.size)}</span>
           <span>Updated {formatDate(file.updatedAt)}</span>
-          <button
-            onClick={() => setShowHistory((v) => !v)}
-            className="flex items-center gap-1 hover:text-foreground transition-colors"
-          >
-            <Icon name="history" className="h-3 w-3" />
-            {file.versions.length} version{file.versions.length !== 1 && "s"}
-          </button>
           {file.source === "github" && (
             <button className="flex items-center gap-1 hover:text-foreground transition-colors ml-auto">
               <Icon name="github" className="h-3 w-3" />
@@ -1681,48 +1244,54 @@ function FileDetail({ file }: { file: ContextFile }) {
             </button>
           )}
         </div>
-        {file.draft && (
-          <div className="flex items-center gap-1 mt-2">
-            <LayerToggle
-              active={viewMode === "published"}
-              onClick={() => setViewMode("published")}
-            >
-              Published
-            </LayerToggle>
-            <LayerToggle
-              active={viewMode === "draft"}
-              onClick={() => setViewMode("draft")}
-            >
-              Draft
-            </LayerToggle>
-            <LayerToggle
-              active={viewMode === "diff"}
-              onClick={() => setViewMode("diff")}
-            >
-              Diff
-            </LayerToggle>
-          </div>
-        )}
+        <div className="flex items-center gap-1 mt-2">
+          <LayerToggle
+            active={viewMode === "published"}
+            onClick={() => setViewMode("published")}
+          >
+            Published
+          </LayerToggle>
+          {file.draft && (
+            <>
+              <LayerToggle
+                active={viewMode === "draft"}
+                onClick={() => setViewMode("draft")}
+              >
+                Draft
+              </LayerToggle>
+              <LayerToggle
+                active={viewMode === "diff"}
+                onClick={() => setViewMode("diff")}
+              >
+                Diff
+              </LayerToggle>
+            </>
+          )}
+          <LayerToggle
+            active={viewMode === "history"}
+            onClick={() => setViewMode("history")}
+          >
+            {file.versions.length} Version
+            {file.versions.length !== 1 && "s"}
+          </LayerToggle>
+        </div>
       </div>
 
-      {showHistory && <VersionHistory file={file} />}
+      {viewMode === "history" && <VersionHistory file={file} />}
 
-      {!showHistory &&
-        viewMode === "diff" &&
-        file.draft?.content &&
-        file.content && (
-          <div className="p-4">
-            <DiffView oldText={file.content} newText={file.draft.content} />
-          </div>
-        )}
+      {viewMode === "diff" && file.draft?.content && file.content && (
+        <div className="p-4">
+          <DiffView oldText={file.content} newText={file.draft.content} />
+        </div>
+      )}
 
-      {!showHistory &&
-        viewMode !== "diff" &&
+      {viewMode !== "diff" &&
+        viewMode !== "history" &&
         file.kind === "mcp-docs-config" &&
         file.config && <ConfigDetail config={file.config} />}
 
-      {!showHistory &&
-        viewMode !== "diff" &&
+      {viewMode !== "diff" &&
+        viewMode !== "history" &&
         file.kind === "skill" &&
         displayContent && (
           <div className="p-4">
@@ -1730,8 +1299,8 @@ function FileDetail({ file }: { file: ContextFile }) {
           </div>
         )}
 
-      {!showHistory &&
-        viewMode !== "diff" &&
+      {viewMode !== "diff" &&
+        viewMode !== "history" &&
         file.kind === "markdown" &&
         displayContent && (
           <div className="p-4">
@@ -2153,28 +1722,163 @@ function DiffLineRow({ line }: { line: DiffLine }) {
 }
 
 function VersionHistory({ file }: { file: ContextFile }) {
+  const [selectedVersion, setSelectedVersion] = useState<FileVersion | null>(
+    null,
+  );
+  const [viewMode, setViewMode] = useState<"content" | "diff">("content");
+
+  const previousVersion = useMemo(() => {
+    if (!selectedVersion) return null;
+    return (
+      file.versions.find((v) => v.version === selectedVersion.version - 1) ??
+      null
+    );
+  }, [selectedVersion, file.versions]);
+
+  const latestVersion = file.versions[0];
+
   return (
-    <div className="max-h-[300px] overflow-y-auto">
-      {file.versions.map((v) => (
-        <div
-          key={v.version}
-          className="flex items-center gap-3 px-4 py-2.5 text-xs border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors"
-        >
-          <span className="font-mono text-muted-foreground w-6 shrink-0">
-            v{v.version}
-          </span>
-          <div className="flex-1 min-w-0">
-            <span className="text-foreground truncate block">{v.message}</span>
-            <span className="text-muted-foreground">
-              {v.author} &middot; {formatDate(v.updatedAt)} &middot;{" "}
-              {formatFileSize(v.size)}
+    <div className="border-t border-border">
+      {/* Version list */}
+      <div className="max-h-[240px] overflow-y-auto">
+        {file.versions.map((v) => {
+          const isSelected = selectedVersion?.version === v.version;
+          const prevV = file.versions.find(
+            (pv) => pv.version === v.version - 1,
+          );
+          const wasRenamed = prevV?.path && v.path && prevV.path !== v.path;
+
+          return (
+            <button
+              type="button"
+              key={v.version}
+              onClick={() => setSelectedVersion(isSelected ? null : v)}
+              className={cn(
+                "w-full flex items-start gap-3 px-4 py-2.5 text-xs border-b border-border last:border-b-0 transition-colors text-left",
+                isSelected
+                  ? "bg-primary/5 border-l-2 border-l-primary"
+                  : "hover:bg-muted/30",
+              )}
+            >
+              {/* Version indicator */}
+              <div className="flex flex-col items-center pt-0.5 shrink-0">
+                <GitCommitHorizontalIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-muted-foreground">
+                    v{v.version}
+                  </span>
+                  {v.version === latestVersion?.version && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1 py-0 h-4"
+                    >
+                      latest
+                    </Badge>
+                  )}
+                  {v.agent && (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted/50 rounded px-1 py-0"
+                      title={`Generated by ${v.agent}`}
+                    >
+                      <BotIcon className="h-2.5 w-2.5" />
+                      {v.agent}
+                    </span>
+                  )}
+                </div>
+
+                <span className="text-foreground truncate block mt-0.5">
+                  {v.message}
+                </span>
+
+                {/* Author / Committer */}
+                <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+                  <span
+                    className="inline-flex items-center gap-0.5"
+                    title="Author"
+                  >
+                    <UserIcon className="h-2.5 w-2.5" />
+                    {v.author}
+                  </span>
+                  {v.committer && v.committer !== v.author && (
+                    <span
+                      className="inline-flex items-center gap-0.5"
+                      title="Committer"
+                    >
+                      <GitCommitHorizontalIcon className="h-2.5 w-2.5" />
+                      {v.committer}
+                    </span>
+                  )}
+                  <span>&middot;</span>
+                  <span>{formatDate(v.updatedAt)}</span>
+                  <span>&middot;</span>
+                  <span>{formatFileSize(v.size)}</span>
+                </div>
+
+                {/* Rename indicator */}
+                {wasRenamed && (
+                  <div className="flex items-center gap-1 mt-1 text-amber-600 dark:text-amber-400">
+                    <MoveRightIcon className="h-2.5 w-2.5" />
+                    <span className="font-mono truncate">{prevV.path}</span>
+                    <MoveRightIcon className="h-2.5 w-2.5" />
+                    <span className="font-mono truncate">{v.path}</span>
+                  </div>
+                )}
+              </div>
+
+              {v.version !== latestVersion?.version && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Restore
+                </Button>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected version detail */}
+      {selectedVersion && selectedVersion.content && (
+        <div className="border-t border-border">
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-border bg-muted/20">
+            <span className="text-xs font-medium text-muted-foreground mr-2">
+              v{selectedVersion.version}
             </span>
+            <LayerToggle
+              active={viewMode === "content"}
+              onClick={() => setViewMode("content")}
+            >
+              Content
+            </LayerToggle>
+            {previousVersion?.content && (
+              <LayerToggle
+                active={viewMode === "diff"}
+                onClick={() => setViewMode("diff")}
+              >
+                Diff from v{previousVersion.version}
+              </LayerToggle>
+            )}
           </div>
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs">
-            Restore
-          </Button>
+          <div className="p-4">
+            {viewMode === "diff" && previousVersion?.content ? (
+              <DiffView
+                oldText={previousVersion.content}
+                newText={selectedVersion.content}
+              />
+            ) : (
+              <pre className="text-xs font-mono whitespace-pre-wrap text-foreground bg-muted/30 rounded-md p-3 overflow-auto max-h-[400px]">
+                {selectedVersion.content}
+              </pre>
+            )}
+          </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -2291,19 +1995,24 @@ function ConfigDetail({ config }: { config: DocsMcpConfig }) {
 
 // All known taxonomy values and folder paths for the dropdown options.
 const ALL_TAXONOMY_VALUES: Record<string, string[]> = {
-  language: ["typescript", "python", "go", "java", "rust"],
+  department: ["engineering", "sales", "finance"],
+  audience: ["internal", "external", "partner"],
 };
 const ALL_FOLDER_PATHS = [
-  "getting-started/*",
-  "guides/*",
-  "guides/advanced/*",
-  "api-reference/*",
-  "sdk/*",
-  "sdk/typescript/*",
-  "sdk/python/*",
+  "product/*",
+  "engineering/*",
+  "engineering/onboarding/*",
+  "engineering/runbooks/*",
+  "sales/*",
+  "sales/competitive-intel/*",
+  "finance/*",
+  "finance/reporting/*",
+  "company/*",
 ];
 
 type AccessRule = NonNullable<DocsMcpConfig["accessControl"]>[number];
+type AccessDefault = "allow-all" | "deny-all";
+type RoleAccessOverride = "default" | "custom" | "deny";
 
 function AccessControlSection({
   initialRules,
@@ -2312,12 +2021,22 @@ function AccessControlSection({
   initialRules: AccessRule[];
   taxonomy?: DocsMcpConfig["taxonomy"];
 }) {
+  const [defaultPolicy, setDefaultPolicy] =
+    useState<AccessDefault>("allow-all");
   const [rules, setRules] = useState<AccessRule[]>(initialRules);
-  const [editingRole, setEditingRole] = useState<string | null>(null);
-  const [addingRole, setAddingRole] = useState(false);
-  const [newRoleName, setNewRoleName] = useState("");
+  const [roleOverrides, setRoleOverrides] = useState<
+    Record<string, RoleAccessOverride>
+  >(() => {
+    const result: Record<string, RoleAccessOverride> = {};
+    for (const role of MOCK_ALL_ROLES) {
+      const rule = initialRules.find((r) => r.role === role);
+      if (rule) result[role] = "custom";
+      else result[role] = "default";
+    }
+    return result;
+  });
+  const [expandedRole, setExpandedRole] = useState<string | null>(null);
 
-  // Derive available taxonomy fields from the config or fallback
   const taxonomyFields = taxonomy
     ? Object.keys(taxonomy)
     : Object.keys(ALL_TAXONOMY_VALUES);
@@ -2327,26 +2046,20 @@ function AccessControlSection({
       ? Object.keys(taxonomy[field].properties!)
       : (ALL_TAXONOMY_VALUES[field] ?? []);
 
-  const updateRule = (role: string, updated: Partial<AccessRule>) => {
-    setRules((prev) =>
-      prev.map((r) => (r.role === role ? { ...r, ...updated } : r)),
-    );
-  };
-
-  const removeRule = (role: string) => {
-    setRules((prev) => prev.filter((r) => r.role !== role));
-    if (editingRole === role) setEditingRole(null);
-  };
-
-  const addRole = () => {
-    if (!newRoleName.trim()) return;
-    setRules((prev) => [
-      ...prev,
-      { role: newRoleName.trim(), allowedTaxonomy: {}, deniedPaths: [] },
-    ]);
-    setEditingRole(newRoleName.trim());
-    setNewRoleName("");
-    setAddingRole(false);
+  const cycleOverride = (role: string) => {
+    const order: RoleAccessOverride[] = ["default", "custom", "deny"];
+    const current = roleOverrides[role] ?? "default";
+    const next = order[(order.indexOf(current) + 1) % order.length];
+    setRoleOverrides((prev) => ({ ...prev, [role]: next }));
+    // When switching to custom, ensure a rule exists
+    if (next === "custom" && !rules.find((r) => r.role === role)) {
+      setRules((prev) => [
+        ...prev,
+        { role, allowedTaxonomy: {}, deniedPaths: [] },
+      ]);
+      setExpandedRole(role);
+    }
+    if (next !== "custom") setExpandedRole(null);
   };
 
   const toggleTaxonomyValue = (role: string, field: string, value: string) => {
@@ -2378,44 +2091,120 @@ function AccessControlSection({
     );
   };
 
+  const getEffectiveAccess = (role: string) => {
+    const ov = roleOverrides[role] ?? "default";
+    if (ov === "deny") return "denied";
+    if (ov === "default")
+      return defaultPolicy === "allow-all" ? "full-access" : "denied";
+    return "custom";
+  };
+
   return (
     <ConfigSection title="Access Control">
-      {rules.map((rule) => {
-        const isEditing = editingRole === rule.role;
-        return (
-          <div
-            key={rule.role}
-            className="text-xs bg-muted/30 rounded-md p-2.5 mb-2 last:mb-0"
+      {/* Default policy toggle */}
+      <div className="flex items-center justify-between mb-3">
+        <Type small muted>
+          Default:
+        </Type>
+        <div className="inline-flex items-center gap-0.5 rounded-md border border-border p-0.5">
+          <button
+            onClick={() => setDefaultPolicy("allow-all")}
+            className={cn(
+              "px-2 py-0.5 text-[10px] font-medium rounded transition-colors",
+              defaultPolicy === "allow-all"
+                ? "bg-emerald-500/15 text-emerald-600"
+                : "text-muted-foreground hover:text-foreground",
+            )}
           >
-            {/* Role header */}
-            <div className="flex items-center justify-between mb-1.5">
-              <Type small className="font-bold">
-                {rule.role}
-              </Type>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setEditingRole(isEditing ? null : rule.role)}
+            Allow all
+          </button>
+          <button
+            onClick={() => setDefaultPolicy("deny-all")}
+            className={cn(
+              "px-2 py-0.5 text-[10px] font-medium rounded transition-colors",
+              defaultPolicy === "deny-all"
+                ? "bg-destructive/15 text-destructive"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Deny all
+          </button>
+        </div>
+      </div>
+
+      {/* Per-role rows */}
+      {MOCK_ALL_ROLES.map((role) => {
+        const ov = roleOverrides[role] ?? "default";
+        const effective = getEffectiveAccess(role);
+        const isExpanded = expandedRole === role && ov === "custom";
+        const rule = rules.find((r) => r.role === role);
+
+        return (
+          <div key={role} className="mb-1.5 last:mb-0">
+            <div className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/30 transition-colors">
+              <div className="flex items-center gap-2">
+                <div
                   className={cn(
-                    "px-1.5 py-0.5 rounded text-[10px] transition-colors",
-                    isEditing
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                    "h-1.5 w-1.5 rounded-full shrink-0",
+                    effective === "full-access" && "bg-emerald-500",
+                    effective === "custom" && "bg-amber-500",
+                    effective === "denied" && "bg-muted-foreground/30",
+                  )}
+                />
+                <Type small className="font-medium text-[11px]">
+                  {role}
+                </Type>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[9px] py-0",
+                    effective === "full-access" &&
+                      "border-emerald-500/50 text-emerald-600 bg-emerald-500/10",
+                    effective === "custom" &&
+                      "border-amber-500/50 text-amber-600 bg-amber-500/10 border-dashed",
+                    effective === "denied" &&
+                      "border-muted-foreground/30 text-muted-foreground bg-muted/30",
                   )}
                 >
-                  {isEditing ? "Done" : "Edit"}
-                </button>
+                  {effective === "full-access" && "Full access"}
+                  {effective === "custom" && "Custom"}
+                  {effective === "denied" && "Denied"}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-1">
+                {ov === "custom" && (
+                  <button
+                    onClick={() => setExpandedRole(isExpanded ? null : role)}
+                    className="px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                  >
+                    {isExpanded ? "Collapse" : "Edit"}
+                  </button>
+                )}
                 <button
-                  onClick={() => removeRule(rule.role)}
-                  className="px-1.5 py-0.5 rounded text-[10px] text-destructive hover:bg-destructive/10 transition-colors"
+                  onClick={() => cycleOverride(role)}
+                  className={cn(
+                    "px-2 py-0.5 rounded-md border text-[10px] font-medium transition-colors",
+                    ov === "default" &&
+                      "border-border text-muted-foreground hover:border-foreground/30",
+                    ov === "custom" &&
+                      "border-amber-500/50 text-amber-600 bg-amber-500/10",
+                    ov === "deny" &&
+                      "border-destructive/50 text-destructive bg-destructive/10",
+                  )}
                 >
-                  Remove
+                  {ov === "default"
+                    ? "Default"
+                    : ov === "custom"
+                      ? "Custom"
+                      : "Deny"}
                 </button>
               </div>
             </div>
 
-            {/* Allowed taxonomy */}
-            {isEditing ? (
-              <div className="space-y-2 mb-2">
+            {/* Expanded custom config */}
+            {isExpanded && rule && (
+              <div className="ml-5 mt-1 mb-2 pl-3 border-l-2 border-border space-y-2">
+                {/* Allowed taxonomy */}
                 {taxonomyFields.map((field) => {
                   const allValues = getTaxonomyValues(field);
                   const selected = rule.allowedTaxonomy?.[field] ?? [];
@@ -2435,7 +2224,7 @@ function AccessControlSection({
                             <button
                               key={value}
                               onClick={() =>
-                                toggleTaxonomyValue(rule.role, field, value)
+                                toggleTaxonomyValue(role, field, value)
                               }
                               className={cn(
                                 "px-1.5 py-0.5 rounded-md text-[10px] border transition-colors",
@@ -2468,7 +2257,7 @@ function AccessControlSection({
                       return (
                         <button
                           key={path}
-                          onClick={() => toggleDeniedPath(rule.role, path)}
+                          onClick={() => toggleDeniedPath(role, path)}
                           className={cn(
                             "px-1.5 py-0.5 rounded-md text-[10px] border transition-colors font-mono",
                             isDenied
@@ -2483,85 +2272,38 @@ function AccessControlSection({
                   </div>
                 </div>
               </div>
-            ) : (
-              <>
+            )}
+
+            {/* Collapsed summary for custom roles */}
+            {!isExpanded && ov === "custom" && rule && (
+              <div className="ml-5 pl-3 mt-0.5 flex flex-wrap gap-1">
                 {rule.allowedTaxonomy &&
-                  Object.keys(rule.allowedTaxonomy).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-1.5">
-                      {Object.entries(rule.allowedTaxonomy).flatMap(
-                        ([field, values]) =>
-                          values.map((value) => (
-                            <Badge
-                              key={`${field}-${value}`}
-                              variant="secondary"
-                              className="border-emerald-500/50 text-emerald-600 bg-emerald-500/10"
-                            >
-                              {field}: {value}
-                            </Badge>
-                          )),
-                      )}
-                    </div>
+                  Object.entries(rule.allowedTaxonomy).flatMap(
+                    ([field, values]) =>
+                      values.map((value) => (
+                        <Badge
+                          key={`${field}-${value}`}
+                          variant="secondary"
+                          className="text-[9px] py-0 border-emerald-500/50 text-emerald-600 bg-emerald-500/10"
+                        >
+                          {field}: {value}
+                        </Badge>
+                      )),
                   )}
-                {rule.deniedPaths && rule.deniedPaths.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {rule.deniedPaths.map((deniedPath) => (
-                      <Badge
-                        key={deniedPath}
-                        variant="secondary"
-                        className="border-destructive/50 text-destructive bg-destructive/10"
-                      >
-                        denied: {deniedPath}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </>
+                {rule.deniedPaths?.map((p) => (
+                  <Badge
+                    key={p}
+                    variant="secondary"
+                    className="text-[9px] py-0 border-destructive/50 text-destructive bg-destructive/10 font-mono"
+                  >
+                    ✕ {p}
+                  </Badge>
+                ))}
+              </div>
             )}
           </div>
         );
       })}
-
-      {/* Add role */}
-      {addingRole ? (
-        <div className="flex items-center gap-2 mt-2">
-          <input
-            type="text"
-            value={newRoleName}
-            onChange={(e) => setNewRoleName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addRole()}
-            placeholder="Role name..."
-            className="flex-1 h-7 px-2 text-xs rounded-md border border-border bg-transparent focus:outline-none focus:border-ring"
-            autoFocus
-          />
-          <Button
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={addRole}
-            disabled={!newRoleName.trim()}
-          >
-            Add
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-xs"
-            onClick={() => {
-              setAddingRole(false);
-              setNewRoleName("");
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setAddingRole(true)}
-          className="flex items-center gap-1 mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Icon name="plus" className="h-3 w-3" />
-          Add role
-        </button>
-      )}
     </ConfigSection>
   );
 }
