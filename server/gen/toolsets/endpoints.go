@@ -163,7 +163,7 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
 				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if p.ApikeyToken != nil {
@@ -174,7 +174,7 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 				sc := security.APIKeyScheme{
 					Name:           "project_slug",
 					Scopes:         []string{},
-					RequiredScopes: []string{},
+					RequiredScopes: []string{"producer"},
 				}
 				var key string
 				if p.ProjectSlugInput != nil {
@@ -187,7 +187,7 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
 				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if p.ApikeyToken != nil {

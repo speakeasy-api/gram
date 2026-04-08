@@ -20,6 +20,7 @@ interface ScopePickerPopoverProps {
 }
 
 interface ServerGroup {
+  projectId: string;
   projectName: string;
   servers: { id: string; name: string }[];
 }
@@ -37,7 +38,7 @@ function useMCPServers(enabled: boolean) {
       const projectName = projectNames.get(t.projectId) ?? "Unknown";
       let group = groups.get(t.projectId);
       if (!group) {
-        group = { projectName, servers: [] };
+        group = { projectId: t.projectId, projectName, servers: [] };
         groups.set(t.projectId, group);
       }
       group.servers.push({ id: t.slug, name: t.name });
@@ -125,7 +126,7 @@ export function ScopePickerPopover({
                   />
                 ))
               : mcpServers.map((group) => (
-                  <div key={group.projectName}>
+                  <div key={group.projectId}>
                     <div className="px-2 py-1 text-xs text-muted-foreground font-medium">
                       {group.projectName}
                     </div>

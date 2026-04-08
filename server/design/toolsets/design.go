@@ -45,8 +45,12 @@ var _ = Service("toolsets", func() {
 
 		Security(security.Session, security.ProjectSlug)
 		Security(security.Session)
-		Security(security.ByKey, security.ProjectSlug)
-		Security(security.ByKey)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
