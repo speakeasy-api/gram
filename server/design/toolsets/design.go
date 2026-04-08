@@ -41,16 +41,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("listToolsets", func() {
-		Description("List all toolsets for a project, or all toolsets in the organization if no project is specified")
-
-		Security(security.Session, security.ProjectSlug)
-		Security(security.Session)
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("producer")
-		})
-		Security(security.ByKey, func() {
-			Scope("producer")
-		})
+		Description("List all toolsets for a project")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -71,6 +62,33 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:operationId", "listToolsets")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsets"}`)
+	})
+
+	Method("listToolsetsForOrg", func() {
+		Description("List all toolsets across the organization")
+
+		Security(security.Session)
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListToolsetsResult)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.listForOrg")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listToolsetsForOrg")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForOrg")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsetsForOrg"}`)
 	})
 
 	Method("updateToolset", func() {

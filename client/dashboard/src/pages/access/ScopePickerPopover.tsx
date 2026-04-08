@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/popover";
 import { useOrganization } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
-import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Check, ChevronDown } from "lucide-react";
 import { useMemo } from "react";
 import type { ResourceType } from "./types";
@@ -27,7 +27,7 @@ interface ServerGroup {
 
 function useMCPServers(enabled: boolean) {
   const organization = useOrganization();
-  const { data } = useListToolsets(undefined, undefined, { enabled });
+  const { data } = useListToolsetsForOrg(undefined, undefined, { enabled });
 
   return useMemo((): ServerGroup[] => {
     const projectNames = new Map(

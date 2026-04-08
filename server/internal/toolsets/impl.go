@@ -202,19 +202,38 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsets, err := s.repo.ListToolsetsByProject(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").Log(ctx, s.logger)
+	}
+
+	result := make([]*types.ToolsetEntry, len(toolsets))
+	for i, toolset := range toolsets {
+		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
+		if err != nil {
+			return nil, err
+		}
+		result[i] = toolsetDetails
+	}
+
+	return &gen.ListToolsetsResult{
+		Toolsets: result,
+	}, nil
+}
+
+func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListToolsetsForOrgPayload) (*gen.ListToolsetsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	var toolsets []repo.Toolset
-	var err error
-	if authCtx.ProjectID != nil {
-		toolsets, err = s.repo.ListToolsetsByProject(ctx, *authCtx.ProjectID)
-	} else {
-		toolsets, err = s.repo.ListToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
-	}
+	toolsets, err := s.repo.ListToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets for organization").Log(ctx, s.logger)
 	}
 
 	result := make([]*types.ToolsetEntry, len(toolsets))

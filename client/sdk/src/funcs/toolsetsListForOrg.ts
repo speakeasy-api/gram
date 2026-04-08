@@ -28,15 +28,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listToolsets toolsets
+ * listToolsetsForOrg toolsets
  *
  * @remarks
- * List all toolsets for a project
+ * List all toolsets across the organization
  */
-export function toolsetsList(
+export function toolsetsListForOrg(
   client: GramCore,
-  request?: operations.ListToolsetsRequest | undefined,
-  security?: operations.ListToolsetsSecurity | undefined,
+  request?: operations.ListToolsetsForOrgRequest | undefined,
+  security?: operations.ListToolsetsForOrgSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -62,8 +62,8 @@ export function toolsetsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListToolsetsRequest | undefined,
-  security?: operations.ListToolsetsSecurity | undefined,
+  request?: operations.ListToolsetsForOrgRequest | undefined,
+  security?: operations.ListToolsetsForOrgSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -85,7 +85,10 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(z.optional(operations.ListToolsetsRequest$outboundSchema), value),
+      z.parse(
+        z.optional(operations.ListToolsetsForOrgRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -94,15 +97,11 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/toolsets.list")();
+  const path = pathToFunc("/rpc/toolsets.listForOrg")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -115,26 +114,16 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
-      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option1?.sessionHeaderGramSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
     [
       {
         fieldName: "Gram-Key",
         type: "apiKey:header",
-        value: security?.option2?.apikeyHeaderGramKey,
-      },
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
+        value: security?.apikeyHeaderGramKey,
       },
     ],
   );
@@ -142,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listToolsets",
+    operationID: "listToolsetsForOrg",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
