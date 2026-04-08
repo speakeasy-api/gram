@@ -2233,11 +2233,8 @@ function HooksAnalytics({
       {hasServers && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Activity by MCP Server</h3>
-            <ServerActivityChart
-              servers={derivedServers}
-              serverNameMappings={serverNameMappings}
-            />
+            <h3 className="text font-semibold">Activity by User</h3>
+            <UserVolumeList users={derivedUsers} />
           </div>
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text space-x-2 align-baseline font-semibold">
@@ -2246,8 +2243,11 @@ function HooksAnalytics({
             <SourceVolumeChart traces={groupedTraces} />
           </div>
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Volume by User</h3>
-            <UserVolumeList users={derivedUsers} />
+            <h3 className="text font-semibold">Activity by MCP Server</h3>
+            <ServerActivityChart
+              servers={derivedServers}
+              serverNameMappings={serverNameMappings}
+            />
           </div>
         </div>
       )}
