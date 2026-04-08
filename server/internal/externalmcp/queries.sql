@@ -79,9 +79,13 @@ SELECT EXISTS (
 
 -- name: IsToolsetInstalledFromCatalog :one
 SELECT EXISTS (
-  SELECT 1 FROM toolset_versions, unnest(tool_urns) AS urn
-  WHERE toolset_id = @toolset_id AND deleted IS FALSE
+  SELECT 1 FROM toolset_versions tv, unnest(tv.tool_urns) AS urn
+  WHERE tv.toolset_id = @toolset_id AND tv.deleted IS FALSE
   AND urn LIKE 'tools:externalmcp:%'
+  AND tv.version = (
+    SELECT MAX(tv2.version) FROM toolset_versions tv2
+    WHERE tv2.toolset_id = @toolset_id AND tv2.deleted IS FALSE
+  )
 );
 
 -- name: CreateExternalMCPAttachment :one

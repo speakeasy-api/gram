@@ -618,9 +618,13 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 
 const isToolsetInstalledFromCatalog = `-- name: IsToolsetInstalledFromCatalog :one
 SELECT EXISTS (
-  SELECT 1 FROM toolset_versions, unnest(tool_urns) AS urn
-  WHERE toolset_id = $1 AND deleted IS FALSE
+  SELECT 1 FROM toolset_versions tv, unnest(tv.tool_urns) AS urn
+  WHERE tv.toolset_id = $1 AND tv.deleted IS FALSE
   AND urn LIKE 'tools:externalmcp:%'
+  AND tv.version = (
+    SELECT MAX(tv2.version) FROM toolset_versions tv2
+    WHERE tv2.toolset_id = $1 AND tv2.deleted IS FALSE
+  )
 )
 `
 
