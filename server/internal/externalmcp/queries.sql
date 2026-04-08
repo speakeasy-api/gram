@@ -44,8 +44,8 @@ UPDATE organization_mcp_collections SET deleted_at = clock_timestamp()
 WHERE id = @id AND deleted IS FALSE;
 
 -- name: CreateCollectionRegistry :one
-INSERT INTO organization_mcp_collection_registries (collection_id, registry_id, namespace)
-VALUES (@collection_id, @registry_id, @namespace)
+INSERT INTO organization_mcp_collection_registries (collection_id, namespace)
+VALUES (@collection_id, @namespace)
 RETURNING *;
 
 -- name: GetCollectionRegistryByCollectionID :one

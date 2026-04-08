@@ -1259,7 +1259,8 @@ CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
 ON agent_executions (project_id, started_at)
 WHERE deleted IS FALSE;
 
--- MCP registries: system-level registries (PulseMCP, Gram) seeded into the DB
+-- Public/external MCP registries (e.g. PulseMCP) — seeded into the DB.
+-- These are distinct from org-level collection registries in organization_mcp_collection_registries.
 CREATE TABLE IF NOT EXISTS mcp_registries (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
@@ -1303,7 +1304,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collections_slug_organization
 CREATE TABLE IF NOT EXISTS organization_mcp_collection_registries (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   collection_id uuid NOT NULL,
-  registry_id uuid NOT NULL,
   namespace TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1312,8 +1312,7 @@ CREATE TABLE IF NOT EXISTS organization_mcp_collection_registries (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT organization_mcp_collection_registries_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_mcp_collection_registries_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
-  CONSTRAINT organization_mcp_collection_registries_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries (id) ON DELETE CASCADE
+  CONSTRAINT organization_mcp_collection_registries_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_namespace_key

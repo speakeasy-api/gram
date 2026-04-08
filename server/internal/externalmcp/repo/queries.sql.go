@@ -61,24 +61,22 @@ func (q *Queries) CreateCollection(ctx context.Context, arg CreateCollectionPara
 }
 
 const createCollectionRegistry = `-- name: CreateCollectionRegistry :one
-INSERT INTO organization_mcp_collection_registries (collection_id, registry_id, namespace)
-VALUES ($1, $2, $3)
-RETURNING id, collection_id, registry_id, namespace, created_at, updated_at, deleted_at, deleted
+INSERT INTO organization_mcp_collection_registries (collection_id, namespace)
+VALUES ($1, $2)
+RETURNING id, collection_id, namespace, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateCollectionRegistryParams struct {
 	CollectionID uuid.UUID
-	RegistryID   uuid.UUID
 	Namespace    string
 }
 
 func (q *Queries) CreateCollectionRegistry(ctx context.Context, arg CreateCollectionRegistryParams) (OrganizationMcpCollectionRegistry, error) {
-	row := q.db.QueryRow(ctx, createCollectionRegistry, arg.CollectionID, arg.RegistryID, arg.Namespace)
+	row := q.db.QueryRow(ctx, createCollectionRegistry, arg.CollectionID, arg.Namespace)
 	var i OrganizationMcpCollectionRegistry
 	err := row.Scan(
 		&i.ID,
 		&i.CollectionID,
-		&i.RegistryID,
 		&i.Namespace,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -368,7 +366,7 @@ func (q *Queries) GetCollectionBySlugAndOrg(ctx context.Context, arg GetCollecti
 }
 
 const getCollectionRegistryByCollectionID = `-- name: GetCollectionRegistryByCollectionID :one
-SELECT id, collection_id, registry_id, namespace, created_at, updated_at, deleted_at, deleted FROM organization_mcp_collection_registries
+SELECT id, collection_id, namespace, created_at, updated_at, deleted_at, deleted FROM organization_mcp_collection_registries
 WHERE collection_id = $1 AND deleted IS FALSE
 `
 
@@ -378,7 +376,6 @@ func (q *Queries) GetCollectionRegistryByCollectionID(ctx context.Context, colle
 	err := row.Scan(
 		&i.ID,
 		&i.CollectionID,
-		&i.RegistryID,
 		&i.Namespace,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -389,7 +386,7 @@ func (q *Queries) GetCollectionRegistryByCollectionID(ctx context.Context, colle
 }
 
 const getCollectionRegistryByNamespace = `-- name: GetCollectionRegistryByNamespace :one
-SELECT id, collection_id, registry_id, namespace, created_at, updated_at, deleted_at, deleted FROM organization_mcp_collection_registries
+SELECT id, collection_id, namespace, created_at, updated_at, deleted_at, deleted FROM organization_mcp_collection_registries
 WHERE namespace = $1 AND deleted IS FALSE
 `
 
@@ -399,7 +396,6 @@ func (q *Queries) GetCollectionRegistryByNamespace(ctx context.Context, namespac
 	err := row.Scan(
 		&i.ID,
 		&i.CollectionID,
-		&i.RegistryID,
 		&i.Namespace,
 		&i.CreatedAt,
 		&i.UpdatedAt,

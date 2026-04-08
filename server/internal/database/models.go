@@ -601,7 +601,6 @@ type OrganizationMcpCollection struct {
 type OrganizationMcpCollectionRegistry struct {
 	ID           uuid.UUID
 	CollectionID uuid.UUID
-	RegistryID   uuid.UUID
 	Namespace    string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
