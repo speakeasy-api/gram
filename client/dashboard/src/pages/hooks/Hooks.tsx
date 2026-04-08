@@ -1675,7 +1675,7 @@ function successRateClass(rate: number): string {
   return "text-red-500";
 }
 
-function ServerVolumeChart({
+function ServerActivityChart({
   servers,
   serverNameMappings,
 }: {
@@ -1686,82 +1686,33 @@ function ServerVolumeChart({
     () =>
       servers
         .map((s) => ({
-          label: !s.serverName
+          key: !s.serverName
             ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
             : (serverNameMappings.rawToDisplay.get(s.serverName) ??
               s.serverName),
-          count: s.successCount + s.failureCount,
+          value: s.successCount + s.failureCount,
           successRate: (1 - s.failureRate) * 100,
         }))
-        .sort((a, b) => b.count - a.count),
+        .sort((a, b) => b.value - a.value),
     [servers, serverNameMappings.rawToDisplay],
   );
 
-  const height = Math.max(120, items.length * 28 + 40);
-
-  const chartData = {
-    labels: items.map((i) => i.label),
-    datasets: [
-      {
-        data: items.map((i) => i.count),
-        backgroundColor: "#3b82f6",
-        borderWidth: 0,
-        borderRadius: 3,
-        barThickness: 16,
-      },
-    ],
-  };
-
-  const options = {
-    indexAxis: "y" as const,
-    animation: false as const,
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: "rgba(0,0,0,0.85)",
-        titleColor: "#fff",
-        bodyColor: "#e5e7eb",
-        borderColor: "rgba(255,255,255,0.1)",
-        borderWidth: 1,
-        padding: 10,
-        callbacks: {
-          label: (ctx: TooltipItem<"bar">) => {
-            const item = items[ctx.dataIndex];
-            return [
-              ` Total calls: ${(ctx.parsed.x ?? 0).toLocaleString()}`,
-              ` Success rate: ${item?.successRate.toFixed(1)}%`,
-            ];
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        beginAtZero: true,
-        grid: { color: "rgba(128,128,128,0.15)" },
-        ticks: { color: "#64748b" },
-      },
-      y: {
-        grid: { display: false },
-        ticks: { color: "#94a3b8", font: { size: 12 } },
-      },
-    },
-  };
-
-  if (items.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
-        No data
-      </div>
-    );
-  }
-
   return (
-    <div style={{ position: "relative", height }}>
-      <Bar data={chartData} options={options} />
-    </div>
+    <BarList
+      items={items}
+      barClassName="bg-blue-500"
+      renderLabel={(item) => <span className="truncate">{item.key}</span>}
+      renderRight={(item) => (
+        <span
+          className={cn(
+            "w-10 text-right text-xs font-medium tabular-nums",
+            successRateClass(item.successRate),
+          )}
+        >
+          {item.successRate.toFixed(0)}%
+        </span>
+      )}
+    />
   );
 }
 
@@ -2233,8 +2184,8 @@ function HooksAnalytics({
       {hasServers && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">Volume by Server</h3>
-            <ServerVolumeChart
+            <h3 className="text-sm font-semibold mb-4">Activity by Server</h3>
+            <ServerActivityChart
               servers={summaryData!.servers}
               serverNameMappings={serverNameMappings}
             />
