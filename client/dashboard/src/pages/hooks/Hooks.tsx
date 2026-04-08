@@ -2233,7 +2233,7 @@ function HooksAnalytics({
       {hasServers && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Activity by Server</h3>
+            <h3 className="text font-semibold">Activity by MCP Server</h3>
             <ServerActivityChart
               servers={derivedServers}
               serverNameMappings={serverNameMappings}
