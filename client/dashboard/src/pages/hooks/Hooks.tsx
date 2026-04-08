@@ -1669,28 +1669,27 @@ function successRateColor(rate: number): string {
   return "#ef4444";
 }
 
-function ServerSuccessRateChart({
+function ServerVolumeChart({
   servers,
   serverNameMappings,
 }: {
   servers: HooksServerSummary[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
-  const items = useMemo(() => {
-    return servers
-      .map((s) => {
-        const displayName = !s.serverName
-          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-          : (serverNameMappings.rawToDisplay.get(s.serverName) ?? s.serverName);
-        const successRate = (1 - s.failureRate) * 100;
-        return {
-          label: displayName,
-          successRate,
-          total: s.successCount + s.failureCount,
-        };
-      })
-      .sort((a, b) => a.successRate - b.successRate);
-  }, [servers, serverNameMappings.rawToDisplay]);
+  const items = useMemo(
+    () =>
+      servers
+        .map((s) => ({
+          label: !s.serverName
+            ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+            : (serverNameMappings.rawToDisplay.get(s.serverName) ??
+              s.serverName),
+          count: s.successCount + s.failureCount,
+          successRate: (1 - s.failureRate) * 100,
+        }))
+        .sort((a, b) => b.count - a.count),
+    [servers, serverNameMappings.rawToDisplay],
+  );
 
   const height = Math.max(120, items.length * 28 + 40);
 
@@ -1698,8 +1697,8 @@ function ServerSuccessRateChart({
     labels: items.map((i) => i.label),
     datasets: [
       {
-        data: items.map((i) => i.successRate),
-        backgroundColor: items.map((i) => successRateColor(i.successRate)),
+        data: items.map((i) => i.count),
+        backgroundColor: "#3b82f6",
         borderWidth: 0,
         borderRadius: 3,
         barThickness: 16,
@@ -1725,8 +1724,8 @@ function ServerSuccessRateChart({
           label: (ctx: TooltipItem<"bar">) => {
             const item = items[ctx.dataIndex];
             return [
-              ` Success rate: ${ctx.parsed.x.toFixed(1)}%`,
-              ` Total calls: ${item?.total.toLocaleString()}`,
+              ` Total calls: ${(ctx.parsed.x ?? 0).toLocaleString()}`,
+              ` Success rate: ${item?.successRate.toFixed(1)}%`,
             ];
           },
         },
@@ -1734,13 +1733,9 @@ function ServerSuccessRateChart({
     },
     scales: {
       x: {
-        min: 0,
-        max: 100,
+        beginAtZero: true,
         grid: { color: "rgba(128,128,128,0.15)" },
-        ticks: {
-          color: "#64748b",
-          callback: (v: number | string) => `${v}%`,
-        },
+        ticks: { color: "#64748b" },
       },
       y: {
         grid: { display: false },
@@ -1816,7 +1811,7 @@ function SourceSuccessRateChart({ traces }: { traces: HookTrace[] }) {
           label: (ctx: TooltipItem<"bar">) => {
             const item = items[ctx.dataIndex];
             return [
-              ` Success rate: ${ctx.parsed.x.toFixed(1)}%`,
+              ` Success rate: ${(ctx.parsed.x ?? 0).toFixed(1)}%`,
               ` Total calls: ${item?.total.toLocaleString()}`,
             ];
           },
@@ -1899,7 +1894,7 @@ function UserSuccessRateChart({ users }: { users: HooksUserSummary[] }) {
           label: (ctx: TooltipItem<"bar">) => {
             const item = items[ctx.dataIndex];
             return [
-              ` Success rate: ${ctx.parsed.x.toFixed(1)}%`,
+              ` Success rate: ${(ctx.parsed.x ?? 0).toFixed(1)}%`,
               ` Total calls: ${item?.total.toLocaleString()}`,
             ];
           },
@@ -2162,10 +2157,8 @@ function HooksAnalytics({
       {hasServers && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">
-              Servers by Success Rate
-            </h3>
-            <ServerSuccessRateChart
+            <h3 className="text-sm font-semibold mb-4">Volume by Server</h3>
+            <ServerVolumeChart
               servers={summaryData!.servers}
               serverNameMappings={serverNameMappings}
             />
