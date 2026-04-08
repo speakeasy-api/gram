@@ -1,6 +1,12 @@
 {
   "hooks": {
-    "userPromptSubmit": [
+    "sessionStart": [
+      {
+        "command": "echo '{\"env\":{\"GRAM_PLUGIN_DIR\":\"'\"$(pwd)\"'\"}}'",
+        "timeout": 5
+      }
+    ],
+    "beforeSubmitPrompt": [
       {
         "command": "./hooks/send_hook.sh",
         "timeout": 10
@@ -8,7 +14,7 @@
     ],
     "stop": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
         "timeout": 10
       }
     ],

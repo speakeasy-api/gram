@@ -159,11 +159,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 // so no Redis buffering is needed.
 func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) {
 	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID)
-	toolName, ok := attrs[attr.ToolNameKey].(string)
-	if !ok {
-		s.logger.ErrorContext(ctx, "Tool name not found in Cursor hook attributes")
-		return
-	}
+	toolName, _ := attrs[attr.ToolNameKey].(string)
 
 	parsedProjectID, err := uuid.Parse(projectID)
 	if err != nil {
@@ -215,19 +211,25 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		hookEvent = "PostToolUse"
 	case "postToolUseFailure":
 		hookEvent = "PostToolUseFailure"
-	case "userPromptSubmit":
-		hookEvent = "UserPromptSubmit"
+	case "beforeSubmitPrompt":
+		hookEvent = "BeforeSubmitPrompt"
 	case "stop":
 		hookEvent = "Stop"
 	}
 
+	// For conversation events (no tool), use the hook event name as the display name
+	displayName := toolName
+	if displayName == "" {
+		displayName = hookEvent
+	}
+
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.ToolNameKey:       toolName,
+		attr.ToolNameKey:       displayName,
 		attr.HookEventKey:      hookEvent,
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
-		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, hookEvent),
+		attr.LogBodyKey:        fmt.Sprintf("Hook: %s", hookEvent),
 		attr.UserEmailKey:      userEmail,
 		attr.ProjectIDKey:      projectID,
 		attr.OrganizationIDKey: orgID,
@@ -259,6 +261,19 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	}
 	if payload.ToolUseID != nil {
 		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
+	}
+
+	// Store prompt text for beforeSubmitPrompt events
+	if payload.Prompt != nil && *payload.Prompt != "" {
+		attrs[attr.LogBodyKey] = *payload.Prompt
+	}
+
+	// Store token usage from stop events
+	if payload.InputTokens != nil {
+		attrs[attr.GenAIUsageInputTokensKey] = *payload.InputTokens
+	}
+	if payload.OutputTokens != nil {
+		attrs[attr.GenAIUsageOutputTokensKey] = *payload.OutputTokens
 	}
 
 	// Stringify ToolInput and ToolResponse to prevent JSON path explosion in ClickHouse

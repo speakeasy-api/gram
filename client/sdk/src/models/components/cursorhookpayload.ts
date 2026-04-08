@@ -14,6 +14,18 @@ export type CursorHookPayload = {
    */
   additionalData?: { [k: string]: any } | undefined;
   /**
+   * Tokens read from cache (stop only)
+   */
+  cacheReadTokens?: number | undefined;
+  /**
+   * Tokens written to cache (stop only)
+   */
+  cacheWriteTokens?: number | undefined;
+  /**
+   * The composer mode, e.g. agent (beforeSubmitPrompt only)
+   */
+  composerMode?: string | undefined;
+  /**
    * The Cursor conversation ID
    */
   conversationId?: string | undefined;
@@ -30,23 +42,31 @@ export type CursorHookPayload = {
    */
   generationId?: string | undefined;
   /**
-   * The type of hook event (e.g. userPromptSubmit, stop, preToolUse, postToolUse, postToolUseFailure)
+   * The type of hook event (e.g. beforeSubmitPrompt, stop, preToolUse, postToolUse, postToolUseFailure)
    */
   hookEventName: string;
+  /**
+   * Total input tokens used (stop only)
+   */
+  inputTokens?: number | undefined;
   /**
    * Whether the failure was caused by user interruption
    */
   isInterrupt?: boolean | undefined;
   /**
-   * The assistant's final response text (stop only)
+   * Number of agentic loops executed (stop only)
    */
-  lastAssistantMessage?: string | undefined;
+  loopCount?: number | undefined;
   /**
    * The model being used
    */
   model?: string | undefined;
   /**
-   * The user's prompt text (userPromptSubmit only)
+   * Total output tokens used (stop only)
+   */
+  outputTokens?: number | undefined;
+  /**
+   * The user's prompt text (beforeSubmitPrompt only)
    */
   prompt?: string | undefined;
   /**
@@ -54,9 +74,9 @@ export type CursorHookPayload = {
    */
   sessionId?: string | undefined;
   /**
-   * Whether a stop hook continuation is active (stop only)
+   * Completion status, e.g. completed (stop only)
    */
-  stopHookActive?: boolean | undefined;
+  status?: string | undefined;
   /**
    * The input to the tool
    */
@@ -74,6 +94,10 @@ export type CursorHookPayload = {
    */
   toolUseId?: string | undefined;
   /**
+   * Path to the conversation transcript JSONL file
+   */
+  transcriptPath?: string | undefined;
+  /**
    * Email of the authenticated Cursor user, if available
    */
   userEmail?: string | undefined;
@@ -82,21 +106,27 @@ export type CursorHookPayload = {
 /** @internal */
 export type CursorHookPayload$Outbound = {
   additional_data?: { [k: string]: any } | undefined;
+  cache_read_tokens?: number | undefined;
+  cache_write_tokens?: number | undefined;
+  composer_mode?: string | undefined;
   conversation_id?: string | undefined;
   cursor_version?: string | undefined;
   error?: any | undefined;
   generation_id?: string | undefined;
   hook_event_name: string;
+  input_tokens?: number | undefined;
   is_interrupt?: boolean | undefined;
-  last_assistant_message?: string | undefined;
+  loop_count?: number | undefined;
   model?: string | undefined;
+  output_tokens?: number | undefined;
   prompt?: string | undefined;
   session_id?: string | undefined;
-  stop_hook_active?: boolean | undefined;
+  status?: string | undefined;
   tool_input?: any | undefined;
   tool_name?: string | undefined;
   tool_response?: any | undefined;
   tool_use_id?: string | undefined;
+  transcript_path?: string | undefined;
   user_email?: string | undefined;
 };
 
@@ -107,38 +137,49 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     additionalData: z.optional(z.record(z.string(), z.any())),
+    cacheReadTokens: z.optional(z.int()),
+    cacheWriteTokens: z.optional(z.int()),
+    composerMode: z.optional(z.string()),
     conversationId: z.optional(z.string()),
     cursorVersion: z.optional(z.string()),
     error: z.optional(z.any()),
     generationId: z.optional(z.string()),
     hookEventName: z.string(),
+    inputTokens: z.optional(z.int()),
     isInterrupt: z.optional(z.boolean()),
-    lastAssistantMessage: z.optional(z.string()),
+    loopCount: z.optional(z.int()),
     model: z.optional(z.string()),
+    outputTokens: z.optional(z.int()),
     prompt: z.optional(z.string()),
     sessionId: z.optional(z.string()),
-    stopHookActive: z.optional(z.boolean()),
+    status: z.optional(z.string()),
     toolInput: z.optional(z.any()),
     toolName: z.optional(z.string()),
     toolResponse: z.optional(z.any()),
     toolUseId: z.optional(z.string()),
+    transcriptPath: z.optional(z.string()),
     userEmail: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       additionalData: "additional_data",
+      cacheReadTokens: "cache_read_tokens",
+      cacheWriteTokens: "cache_write_tokens",
+      composerMode: "composer_mode",
       conversationId: "conversation_id",
       cursorVersion: "cursor_version",
       generationId: "generation_id",
       hookEventName: "hook_event_name",
+      inputTokens: "input_tokens",
       isInterrupt: "is_interrupt",
-      lastAssistantMessage: "last_assistant_message",
+      loopCount: "loop_count",
+      outputTokens: "output_tokens",
       sessionId: "session_id",
-      stopHookActive: "stop_hook_active",
       toolInput: "tool_input",
       toolName: "tool_name",
       toolResponse: "tool_response",
       toolUseId: "tool_use_id",
+      transcriptPath: "transcript_path",
       userEmail: "user_email",
     });
   }),

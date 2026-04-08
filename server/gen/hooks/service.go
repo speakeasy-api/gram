@@ -19,8 +19,8 @@ type Service interface {
 	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
 	Claude(context.Context, *ClaudeHookPayload) (res *ClaudeHookResult, err error)
-	// Endpoint for Cursor hook events. Handles userPromptSubmit, stop, preToolUse,
-	// postToolUse, and postToolUseFailure.
+	// Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop,
+	// preToolUse, postToolUse, and postToolUseFailure.
 	Cursor(context.Context, *CursorPayload) (res *CursorHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
@@ -120,7 +120,7 @@ type CursorHookResult struct {
 type CursorPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// The type of hook event (e.g. userPromptSubmit, stop, preToolUse,
+	// The type of hook event (e.g. beforeSubmitPrompt, stop, preToolUse,
 	// postToolUse, postToolUseFailure)
 	HookEventName string
 	// The Cursor conversation ID
@@ -149,12 +149,24 @@ type CursorPayload struct {
 	IsInterrupt *bool
 	// Additional hook-specific data
 	AdditionalData map[string]any
-	// The user's prompt text (userPromptSubmit only)
+	// The user's prompt text (beforeSubmitPrompt only)
 	Prompt *string
-	// The assistant's final response text (stop only)
-	LastAssistantMessage *string
-	// Whether a stop hook continuation is active (stop only)
-	StopHookActive *bool
+	// The composer mode, e.g. agent (beforeSubmitPrompt only)
+	ComposerMode *string
+	// Path to the conversation transcript JSONL file
+	TranscriptPath *string
+	// Completion status, e.g. completed (stop only)
+	Status *string
+	// Number of agentic loops executed (stop only)
+	LoopCount *int
+	// Total input tokens used (stop only)
+	InputTokens *int
+	// Total output tokens used (stop only)
+	OutputTokens *int
+	// Tokens read from cache (stop only)
+	CacheReadTokens *int
+	// Tokens written to cache (stop only)
+	CacheWriteTokens *int
 }
 
 // LogsPayload is the payload type of the hooks service logs method.

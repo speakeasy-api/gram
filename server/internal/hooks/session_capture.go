@@ -325,12 +325,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 
 // isCursorConversationEvent returns true if the Cursor event is a conversation capture event (not a tool call).
 func isCursorConversationEvent(eventName string) bool {
-	switch eventName {
-	case "userPromptSubmit", "stop":
-		return true
-	default:
-		return false
-	}
+	return eventName == "beforeSubmitPrompt"
 }
 
 // persistCursorConversationEvent writes a Cursor conversation event (user prompt or assistant response) to PostgreSQL.
@@ -347,21 +342,7 @@ func (s *Service) persistCursorConversationEvent(ctx context.Context, payload *g
 
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
-	var role, content string
-	var model pgtype.Text
-
-	switch payload.HookEventName {
-	case "userPromptSubmit":
-		role = "user"
-		content = conv.PtrValOr(payload.Prompt, "")
-	case "stop":
-		role = "assistant"
-		content = conv.PtrValOr(payload.LastAssistantMessage, "")
-		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
-	default:
-		return nil
-	}
-
+	content := conv.PtrValOr(payload.Prompt, "")
 	if content == "" {
 		return nil
 	}
@@ -378,9 +359,9 @@ func (s *Service) persistCursorConversationEvent(ctx context.Context, payload *g
 	msgParams := chatRepo.CreateChatMessageParams{
 		ChatID:           chatID,
 		ProjectID:        parsedProjectID,
-		Role:             role,
+		Role:             "user",
 		Content:          content,
-		Model:            model,
+		Model:            conv.ToPGTextEmpty(""),
 		UserID:           conv.ToPGTextEmpty(""),
 		Source:           conv.ToPGText("Cursor"),
 		PromptTokens:     0,
@@ -399,23 +380,7 @@ func (s *Service) persistCursorConversationEvent(ctx context.Context, payload *g
 		IpAddress:        conv.ToPGTextEmpty(""),
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, activities.DefaultCursorChatTitle); err != nil {
-		return err
-	}
-
-	// Schedule chat title generation for assistant messages
-	if role == "assistant" && s.chatTitleGenerator != nil {
-		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
-			context.WithoutCancel(ctx),
-			chatID.String(),
-			orgID,
-			projectID,
-		); err != nil {
-			s.logger.WarnContext(ctx, "failed to schedule chat title generation for Cursor", attr.SlogError(err))
-		}
-	}
-
-	return nil
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, activities.DefaultCursorChatTitle)
 }
 
 // marshalToJSON converts any value to a JSON string.

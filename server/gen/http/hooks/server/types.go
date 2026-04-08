@@ -61,7 +61,7 @@ type ClaudeRequestBody struct {
 // CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
 // request body.
 type CursorRequestBody struct {
-	// The type of hook event (e.g. userPromptSubmit, stop, preToolUse,
+	// The type of hook event (e.g. beforeSubmitPrompt, stop, preToolUse,
 	// postToolUse, postToolUseFailure)
 	HookEventName *string `form:"hook_event_name,omitempty" json:"hook_event_name,omitempty" xml:"hook_event_name,omitempty"`
 	// The Cursor conversation ID
@@ -90,12 +90,24 @@ type CursorRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// Additional hook-specific data
 	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
-	// The user's prompt text (userPromptSubmit only)
+	// The user's prompt text (beforeSubmitPrompt only)
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// The assistant's final response text (stop only)
-	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
-	// Whether a stop hook continuation is active (stop only)
-	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
+	// The composer mode, e.g. agent (beforeSubmitPrompt only)
+	ComposerMode *string `form:"composer_mode,omitempty" json:"composer_mode,omitempty" xml:"composer_mode,omitempty"`
+	// Path to the conversation transcript JSONL file
+	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
+	// Completion status, e.g. completed (stop only)
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Number of agentic loops executed (stop only)
+	LoopCount *int `form:"loop_count,omitempty" json:"loop_count,omitempty" xml:"loop_count,omitempty"`
+	// Total input tokens used (stop only)
+	InputTokens *int `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Total output tokens used (stop only)
+	OutputTokens *int `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Tokens read from cache (stop only)
+	CacheReadTokens *int `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Tokens written to cache (stop only)
+	CacheWriteTokens *int `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -1227,22 +1239,28 @@ func NewClaudeHookPayload(body *ClaudeRequestBody) *hooks.ClaudeHookPayload {
 // NewCursorPayload builds a hooks service cursor endpoint payload.
 func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.CursorPayload {
 	v := &hooks.CursorPayload{
-		HookEventName:        *body.HookEventName,
-		ConversationID:       body.ConversationID,
-		GenerationID:         body.GenerationID,
-		Model:                body.Model,
-		CursorVersion:        body.CursorVersion,
-		UserEmail:            body.UserEmail,
-		SessionID:            body.SessionID,
-		ToolName:             body.ToolName,
-		ToolUseID:            body.ToolUseID,
-		ToolInput:            body.ToolInput,
-		ToolResponse:         body.ToolResponse,
-		Error:                body.Error,
-		IsInterrupt:          body.IsInterrupt,
-		Prompt:               body.Prompt,
-		LastAssistantMessage: body.LastAssistantMessage,
-		StopHookActive:       body.StopHookActive,
+		HookEventName:    *body.HookEventName,
+		ConversationID:   body.ConversationID,
+		GenerationID:     body.GenerationID,
+		Model:            body.Model,
+		CursorVersion:    body.CursorVersion,
+		UserEmail:        body.UserEmail,
+		SessionID:        body.SessionID,
+		ToolName:         body.ToolName,
+		ToolUseID:        body.ToolUseID,
+		ToolInput:        body.ToolInput,
+		ToolResponse:     body.ToolResponse,
+		Error:            body.Error,
+		IsInterrupt:      body.IsInterrupt,
+		Prompt:           body.Prompt,
+		ComposerMode:     body.ComposerMode,
+		TranscriptPath:   body.TranscriptPath,
+		Status:           body.Status,
+		LoopCount:        body.LoopCount,
+		InputTokens:      body.InputTokens,
+		OutputTokens:     body.OutputTokens,
+		CacheReadTokens:  body.CacheReadTokens,
+		CacheWriteTokens: body.CacheWriteTokens,
 	}
 	if body.AdditionalData != nil {
 		v.AdditionalData = make(map[string]any, len(body.AdditionalData))

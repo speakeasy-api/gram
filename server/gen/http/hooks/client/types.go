@@ -61,7 +61,7 @@ type ClaudeRequestBody struct {
 // CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
 // request body.
 type CursorRequestBody struct {
-	// The type of hook event (e.g. userPromptSubmit, stop, preToolUse,
+	// The type of hook event (e.g. beforeSubmitPrompt, stop, preToolUse,
 	// postToolUse, postToolUseFailure)
 	HookEventName string `form:"hook_event_name" json:"hook_event_name" xml:"hook_event_name"`
 	// The Cursor conversation ID
@@ -90,12 +90,24 @@ type CursorRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// Additional hook-specific data
 	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
-	// The user's prompt text (userPromptSubmit only)
+	// The user's prompt text (beforeSubmitPrompt only)
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// The assistant's final response text (stop only)
-	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
-	// Whether a stop hook continuation is active (stop only)
-	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
+	// The composer mode, e.g. agent (beforeSubmitPrompt only)
+	ComposerMode *string `form:"composer_mode,omitempty" json:"composer_mode,omitempty" xml:"composer_mode,omitempty"`
+	// Path to the conversation transcript JSONL file
+	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
+	// Completion status, e.g. completed (stop only)
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Number of agentic loops executed (stop only)
+	LoopCount *int `form:"loop_count,omitempty" json:"loop_count,omitempty" xml:"loop_count,omitempty"`
+	// Total input tokens used (stop only)
+	InputTokens *int `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Total output tokens used (stop only)
+	OutputTokens *int `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Tokens read from cache (stop only)
+	CacheReadTokens *int `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Tokens written to cache (stop only)
+	CacheWriteTokens *int `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -785,22 +797,28 @@ func NewClaudeRequestBody(p *hooks.ClaudeHookPayload) *ClaudeRequestBody {
 // "cursor" endpoint of the "hooks" service.
 func NewCursorRequestBody(p *hooks.CursorPayload) *CursorRequestBody {
 	body := &CursorRequestBody{
-		HookEventName:        p.HookEventName,
-		ConversationID:       p.ConversationID,
-		GenerationID:         p.GenerationID,
-		Model:                p.Model,
-		CursorVersion:        p.CursorVersion,
-		UserEmail:            p.UserEmail,
-		SessionID:            p.SessionID,
-		ToolName:             p.ToolName,
-		ToolUseID:            p.ToolUseID,
-		ToolInput:            p.ToolInput,
-		ToolResponse:         p.ToolResponse,
-		Error:                p.Error,
-		IsInterrupt:          p.IsInterrupt,
-		Prompt:               p.Prompt,
-		LastAssistantMessage: p.LastAssistantMessage,
-		StopHookActive:       p.StopHookActive,
+		HookEventName:    p.HookEventName,
+		ConversationID:   p.ConversationID,
+		GenerationID:     p.GenerationID,
+		Model:            p.Model,
+		CursorVersion:    p.CursorVersion,
+		UserEmail:        p.UserEmail,
+		SessionID:        p.SessionID,
+		ToolName:         p.ToolName,
+		ToolUseID:        p.ToolUseID,
+		ToolInput:        p.ToolInput,
+		ToolResponse:     p.ToolResponse,
+		Error:            p.Error,
+		IsInterrupt:      p.IsInterrupt,
+		Prompt:           p.Prompt,
+		ComposerMode:     p.ComposerMode,
+		TranscriptPath:   p.TranscriptPath,
+		Status:           p.Status,
+		LoopCount:        p.LoopCount,
+		InputTokens:      p.InputTokens,
+		OutputTokens:     p.OutputTokens,
+		CacheReadTokens:  p.CacheReadTokens,
+		CacheWriteTokens: p.CacheWriteTokens,
 	}
 	if p.AdditionalData != nil {
 		body.AdditionalData = make(map[string]any, len(p.AdditionalData))
