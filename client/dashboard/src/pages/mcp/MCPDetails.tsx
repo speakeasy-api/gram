@@ -74,7 +74,13 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
@@ -2173,6 +2179,13 @@ function OAuthTabModal({
   );
   const [proxyAudience, setProxyAudience] = useState("");
   const [proxyError, setProxyError] = useState<string | null>(null);
+  // Snapshot the prefilled audience so we can detect whether the user actually
+  // changed it on submit. Without this, opening the edit modal on a proxy
+  // whose audience is NULL would silently submit `audience: ""` (because the
+  // form prefills empty-string for null DB values), mutating NULL → "" on the
+  // server. Empty audience and absent audience are NOT equivalent in OAuth
+  // authorization URL handling.
+  const proxyAudiencePrefilledRef = useRef<string>("");
 
   // Pre-fill from editMode whenever it changes (e.g., modal re-opened with a different proxy).
   useEffect(() => {
@@ -2180,7 +2193,9 @@ function OAuthTabModal({
     const { proxyServer } = editMode;
     const provider = proxyServer.oauthProxyProviders?.[0];
     setProxySlug(proxyServer.slug ?? "");
-    setProxyAudience(proxyServer.audience ?? "");
+    const initialAudience = proxyServer.audience ?? "";
+    setProxyAudience(initialAudience);
+    proxyAudiencePrefilledRef.current = initialAudience;
     setProxyAuthorizationEndpoint(provider?.authorizationEndpoint ?? "");
     setProxyTokenEndpoint(provider?.tokenEndpoint ?? "");
     setProxyScopes((provider?.scopesSupported ?? []).join(", "));
@@ -2357,16 +2372,20 @@ function OAuthTabModal({
     }
 
     if (editMode) {
+      // Only send audience when the user actually changed it. Comparing the
+      // current form value to the prefilled snapshot avoids the silent
+      // NULL → "" mutation that happens when the user opens the modal on a
+      // proxy whose audience was NULL (the form prefills "") and saves
+      // without touching the field. The server treats absent vs empty
+      // differently in OAuth URL construction.
+      const audienceChanged =
+        proxyAudience !== proxyAudiencePrefilledRef.current;
       updateOAuthProxyMutation.mutate({
         request: {
           slug: toolsetSlug,
           updateOAuthProxyServerRequestBody: {
             oauthProxyServer: {
-              // Pass proxyAudience as-is so the user can clear it by emptying
-              // the field. Coercing empty string to undefined would silently
-              // skip the update server-side and prevent the user from clearing
-              // a previously-set audience.
-              audience: proxyAudience,
+              audience: audienceChanged ? proxyAudience : undefined,
               authorizationEndpoint: proxyAuthorizationEndpoint,
               tokenEndpoint: proxyTokenEndpoint,
               scopesSupported: scopesArray,
