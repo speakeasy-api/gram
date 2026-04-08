@@ -1765,94 +1765,53 @@ function ServerVolumeChart({
   );
 }
 
-function SourceSuccessRateChart({ traces }: { traces: HookTrace[] }) {
+function SourceVolumeChart({ traces }: { traces: HookTrace[] }) {
   const items = useMemo(() => {
-    const map = new Map<string, { success: number; total: number }>();
+    const map = new Map<string, { total: number; success: number }>();
     for (const t of traces) {
-      const source = t.hookSource || t.toolSource || "unknown";
-      const entry = map.get(source) ?? { success: 0, total: 0 };
+      const source = t.hookSource ?? "unknown";
+      const entry = map.get(source) ?? { total: 0, success: 0 };
       entry.total += 1;
       if (t.hookStatus === "success") entry.success += 1;
       map.set(source, entry);
     }
     return Array.from(map.entries())
-      .map(([label, { success, total }]) => ({
-        label,
+      .map(([source, { total, success }]) => ({
+        key: source,
+        value: total,
         successRate: total > 0 ? (success / total) * 100 : 0,
-        total,
       }))
-      .sort((a, b) => a.successRate - b.successRate);
+      .sort((a, b) => {
+        if (a.key === "unknown") return 1;
+        if (b.key === "unknown") return -1;
+        return b.value - a.value;
+      });
   }, [traces]);
 
-  const height = Math.max(120, items.length * 28 + 40);
-
-  const chartData = {
-    labels: items.map((i) => i.label),
-    datasets: [
-      {
-        data: items.map((i) => i.successRate),
-        backgroundColor: items.map((i) => successRateColor(i.successRate)),
-        borderWidth: 0,
-        borderRadius: 3,
-        barThickness: 16,
-      },
-    ],
-  };
-
-  const options = {
-    indexAxis: "y" as const,
-    animation: false as const,
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: "rgba(0,0,0,0.85)",
-        titleColor: "#fff",
-        bodyColor: "#e5e7eb",
-        borderColor: "rgba(255,255,255,0.1)",
-        borderWidth: 1,
-        padding: 10,
-        callbacks: {
-          label: (ctx: TooltipItem<"bar">) => {
-            const item = items[ctx.dataIndex];
-            return [
-              ` Success rate: ${(ctx.parsed.x ?? 0).toFixed(1)}%`,
-              ` Total calls: ${item?.total.toLocaleString()}`,
-            ];
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        min: 0,
-        max: 100,
-        grid: { color: "rgba(128,128,128,0.15)" },
-        ticks: {
-          color: "#64748b",
-          callback: (v: number | string) => `${v}%`,
-        },
-      },
-      y: {
-        grid: { display: false },
-        ticks: { color: "#94a3b8", font: { size: 12 } },
-      },
-    },
-  };
-
-  if (items.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
-        No data
-      </div>
-    );
-  }
-
   return (
-    <div style={{ position: "relative", height }}>
-      <Bar data={chartData} options={options} />
-    </div>
+    <BarList
+      items={items}
+      barClassName="bg-[hsl(280,40%,50%)]"
+      renderLabel={(item) => (
+        <>
+          <span className="truncate">{item.key}</span>
+          <HookSourceIcon
+            source={item.key}
+            className="size-3.5 shrink-0 text-muted-foreground"
+          />
+        </>
+      )}
+      renderRight={(item) => (
+        <span
+          className={cn(
+            "w-10 text-right text-xs font-medium tabular-nums",
+            successRateClass(item.successRate),
+          )}
+        >
+          {item.successRate.toFixed(0)}%
+        </span>
+      )}
+    />
   );
 }
 
@@ -2110,7 +2069,7 @@ function HooksAnalytics({
       groupedTraces.map((t) => t.userEmail).filter(Boolean),
     ).size;
 
-    const activeClients = new Set(
+    const activeSources = new Set(
       groupedTraces.map((t) => t.hookSource).filter(Boolean),
     ).size;
 
@@ -2120,7 +2079,7 @@ function HooksAnalytics({
       avgSuccessRate,
       totalEvents,
       activeUsers,
-      activeClients,
+      activeSources,
       uniqueTools,
     };
   }, [summaryData, groupedTraces]);
@@ -2154,11 +2113,11 @@ function HooksAnalytics({
           subtext="from loaded traces"
         />
         <MetricCard
-          title="Active Clients"
-          value={kpis.activeClients}
+          title="Active Sources"
+          value={kpis.activeSources}
           icon="monitor"
           accentColor="blue"
-          subtext="distinct clients"
+          subtext="distinct sources"
         />
         <MetricCard
           title="Unique Tools"
@@ -2180,10 +2139,11 @@ function HooksAnalytics({
             />
           </div>
           <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-4">
-              Call Sources by Success Rate
-            </h3>
-            <SourceSuccessRateChart traces={groupedTraces} />
+            <h3 className="text-sm font-semibold mb-4">Activity by Source</h3>
+            <p className="text-[10px] text-muted-foreground -mt-2 mb-3">
+              based on loaded traces
+            </p>
+            <SourceVolumeChart traces={groupedTraces} />
           </div>
           <div className="rounded-lg border border-border bg-card p-4">
             <h3 className="text-sm font-semibold mb-4">Volume by User</h3>
