@@ -1,13 +1,11 @@
--- atlas:txmode none
-
 -- Create "organization_mcp_collections" table
 CREATE TABLE "organization_mcp_collections" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "organization_id" text NOT NULL,
   "name" text NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   "description" text NULL,
-  "slug" text NOT NULL,
-  "visibility" text NOT NULL,
+  "slug" text NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
+  "visibility" text NOT NULL CHECK (visibility <> '' AND CHAR_LENGTH(visibility) <= 20),
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,
@@ -19,7 +17,7 @@ CREATE TABLE "organization_mcp_collections" (
 CREATE TABLE "organization_mcp_collection_registries" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "collection_id" uuid NOT NULL,
-  "namespace" text NOT NULL,
+  "namespace" text NOT NULL CHECK (namespace <> '' AND CHAR_LENGTH(namespace) <= 200),
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,

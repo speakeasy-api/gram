@@ -1284,8 +1284,8 @@ CREATE TABLE IF NOT EXISTS organization_mcp_collections (
   organization_id TEXT NOT NULL,
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   description TEXT,
-  slug TEXT NOT NULL,
-  visibility TEXT NOT NULL,
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
+  visibility TEXT NOT NULL CHECK (visibility <> '' AND CHAR_LENGTH(visibility) <= 20),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1304,7 +1304,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collections_slug_organization
 CREATE TABLE IF NOT EXISTS organization_mcp_collection_registries (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   collection_id uuid NOT NULL,
-  namespace TEXT NOT NULL,
+  namespace TEXT NOT NULL CHECK (namespace <> '' AND CHAR_LENGTH(namespace) <= 200),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1317,6 +1317,10 @@ CREATE TABLE IF NOT EXISTS organization_mcp_collection_registries (
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_namespace_key
   ON organization_mcp_collection_registries (namespace)
+  WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_collection_id_key
+  ON organization_mcp_collection_registries (collection_id)
   WHERE deleted IS FALSE;
 
 -- Join table linking servers to collections (for catalog publishing)

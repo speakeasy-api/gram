@@ -294,6 +294,26 @@ func (q *Queries) DeleteCollection(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteCollectionRegistriesByCollectionID = `-- name: DeleteCollectionRegistriesByCollectionID :exec
+UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
+WHERE collection_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) DeleteCollectionRegistriesByCollectionID(ctx context.Context, collectionID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCollectionRegistriesByCollectionID, collectionID)
+	return err
+}
+
+const deleteCollectionServerAttachmentsByCollectionID = `-- name: DeleteCollectionServerAttachmentsByCollectionID :exec
+UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
+WHERE collection_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) DeleteCollectionServerAttachmentsByCollectionID(ctx context.Context, collectionID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCollectionServerAttachmentsByCollectionID, collectionID)
+	return err
+}
+
 const getCollectionByID = `-- name: GetCollectionByID :one
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections

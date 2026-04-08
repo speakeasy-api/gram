@@ -43,6 +43,14 @@ RETURNING id, organization_id, name, description, slug, visibility, created_at, 
 UPDATE organization_mcp_collections SET deleted_at = clock_timestamp()
 WHERE id = @id AND deleted IS FALSE;
 
+-- name: DeleteCollectionRegistriesByCollectionID :exec
+UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
+WHERE collection_id = @collection_id AND deleted IS FALSE;
+
+-- name: DeleteCollectionServerAttachmentsByCollectionID :exec
+UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
+WHERE collection_id = @collection_id AND deleted IS FALSE;
+
 -- name: CreateCollectionRegistry :one
 INSERT INTO organization_mcp_collection_registries (collection_id, namespace)
 VALUES (@collection_id, @namespace)
