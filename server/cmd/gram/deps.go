@@ -412,17 +412,25 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, c *cli.Cont
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
-		provider, err := workos.NewClient(apiKey)
-		if err != nil {
-			return nil, fmt.Errorf("create WorkOS client: %w", err)
-		}
-		return provider, nil
+		return workos.NewClient(apiKey), nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
 		return workos.NewStubClient(), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
+}
+
+func newWorkOSClient(c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
+	env := c.String("environment")
+	apiKey := c.String("workos-api-key")
+
+	haveAPIKey := apiKey != "" && apiKey != "unset"
+	if env != "local" && !haveAPIKey {
+		return nil, false, errors.New("WorkOS API key not provided")
+	}
+
+	return workos.NewClient(apiKey), haveAPIKey, nil
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {

@@ -90,6 +90,7 @@ func NewService(
 	telemService *tm.Service,
 	featClient *productfeatures.Client,
 	serverURL *url.URL,
+	accessLoader auth.AccessLoader,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -99,7 +100,7 @@ func NewService(
 		logger:           logger,
 		tracer:           tracer,
 		db:               db,
-		auth:             auth.New(logger, db, sessions),
+		auth:             auth.New(logger, db, sessions, accessLoader),
 		chatSessions:     chatSessions,
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,
@@ -434,6 +435,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			}
 			if authCtx.APIKeyID != "" {
 				attrRecorder[attr.APIKeyIDKey] = authCtx.APIKeyID
+			}
+			if authCtx.Email != nil && *authCtx.Email != "" {
+				attrRecorder[attr.UserEmailKey] = *authCtx.Email
 			}
 		}
 

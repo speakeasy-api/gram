@@ -548,8 +548,9 @@ const getToolsetByMcpSlug = `-- name: GetToolsetByMcpSlug :one
 SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1
-  AND custom_domain_id IS NULL
   AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC
+LIMIT 1
 `
 
 func (q *Queries) GetToolsetByMcpSlug(ctx context.Context, mcpSlug pgtype.Text) (Toolset, error) {
@@ -632,6 +633,40 @@ type GetToolsetByMcpSlugAndProjectParams struct {
 
 func (q *Queries) GetToolsetByMcpSlugAndProject(ctx context.Context, arg GetToolsetByMcpSlugAndProjectParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, getToolsetByMcpSlugAndProject, arg.McpSlug, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getToolsetByPlatformMcpSlug = `-- name: GetToolsetByPlatformMcpSlug :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+FROM toolsets
+WHERE mcp_slug = $1
+  AND custom_domain_id IS NULL
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtype.Text) (Toolset, error) {
+	row := q.db.QueryRow(ctx, getToolsetByPlatformMcpSlug, mcpSlug)
 	var i Toolset
 	err := row.Scan(
 		&i.ID,
@@ -787,6 +822,55 @@ ORDER BY t.created_at DESC
 
 func (q *Queries) ListEnabledToolsetsByOrganization(ctx context.Context, organizationID string) ([]Toolset, error) {
 	rows, err := q.db.Query(ctx, listEnabledToolsetsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Toolset
+	for rows.Next() {
+		var i Toolset
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.DefaultEnvironmentSlug,
+			&i.McpSlug,
+			&i.McpIsPublic,
+			&i.McpEnabled,
+			&i.ToolSelectionMode,
+			&i.CustomDomainID,
+			&i.ExternalOauthServerID,
+			&i.OauthProxyServerID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetsByOrganization = `-- name: ListToolsetsByOrganization :many
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
+FROM toolsets t
+JOIN projects p ON t.project_id = p.id
+WHERE p.organization_id = $1
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY t.created_at DESC
+`
+
+func (q *Queries) ListToolsetsByOrganization(ctx context.Context, organizationID string) ([]Toolset, error) {
+	rows, err := q.db.Query(ctx, listToolsetsByOrganization, organizationID)
 	if err != nil {
 		return nil, err
 	}

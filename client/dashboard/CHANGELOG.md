@@ -1,5 +1,18 @@
 # dashboard
 
+## 0.37.1
+
+### Patch Changes
+
+- fc19ac9: Rename Chat Sessions, Slack, and CLIs dashboard nav tabs to Agent Sessions, Assistants, and Skills
+- 3af7f95: fix install instructions for cursor hooks
+- d571001: Fix tool request/result JSON clipping in playground by adding `overflow-auto` to the details container
+- 4531f8e: Performance tab for MCP page tool selection mode for static and dynamic toolsets.
+- 8c488a2: Restore audit logs sidebar link alongside roles & permissions
+- 7a685a7: Update playground models to latest OpenRouter offerings — add Claude Sonnet 4.6, GPT-5.4 Mini, o4-mini, o3, Gemini 3.1 Pro, DeepSeek R1/V3.2, Llama 4 Maverick, Grok 4, Qwen3 Coder and remove superseded models
+- Updated dependencies [7a685a7]
+  - @gram-ai/elements@1.27.6
+
 ## 0.37.0
 
 ### Minor Changes

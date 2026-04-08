@@ -113,6 +113,28 @@ func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsL
 	return v, nil
 }
 
+// BuildListToolsetsForOrgPayload builds the payload for the toolsets
+// listToolsetsForOrg endpoint from CLI flags.
+func BuildListToolsetsForOrgPayload(toolsetsListToolsetsForOrgSessionToken string, toolsetsListToolsetsForOrgApikeyToken string) (*toolsets.ListToolsetsForOrgPayload, error) {
+	var sessionToken *string
+	{
+		if toolsetsListToolsetsForOrgSessionToken != "" {
+			sessionToken = &toolsetsListToolsetsForOrgSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsListToolsetsForOrgApikeyToken != "" {
+			apikeyToken = &toolsetsListToolsetsForOrgApikeyToken
+		}
+	}
+	v := &toolsets.ListToolsetsForOrgPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildUpdateToolsetPayload builds the payload for the toolsets updateToolset
 // endpoint from CLI flags.
 func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetSlug string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetApikeyToken string, toolsetsUpdateToolsetProjectSlugInput string) (*toolsets.UpdateToolsetPayload, error) {

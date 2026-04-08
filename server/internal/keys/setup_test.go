@@ -6,15 +6,21 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -66,8 +72,10 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = withDefaultOrgAdminGrant(t, ctx, conn)
 
-	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local")
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", accessManager)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 
 	return ctx, &testInstance{
@@ -76,4 +84,28 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		keyAuth:        keyAuth,
 	}
+}
+
+func withDefaultOrgAdminGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "keys-default-grants-"+uuid.NewString())
+	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   principal,
+		Scope:          string(access.ScopeOrgAdmin),
+		Resource:       authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	loadedGrants, err := access.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
+	require.NoError(t, err)
+
+	return access.GrantsToContext(ctx, loadedGrants)
 }

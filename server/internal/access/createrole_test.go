@@ -1,4 +1,4 @@
-package access_test
+package access
 
 import (
 	"errors"
@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -61,8 +60,8 @@ func TestService_CreateRole(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1", "project-2"}},
-			{Scope: string(access.ScopeMCPConnect), Resources: nil},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1", "project-2"}},
+			{Scope: string(ScopeMCPConnect), Resources: nil},
 		},
 		MemberIds: []string{"user_1", "user_2"},
 	})
@@ -93,7 +92,7 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.Error(t, err)
@@ -119,7 +118,7 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.NoError(t, err)
@@ -140,7 +139,7 @@ func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 		Name:        "!!!",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.Error(t, err)
@@ -171,7 +170,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 		Name:        "Audit Builder",
 		Description: "Tracks audit writes",
 		Grants: []*gen.RoleGrant{{
-			Scope:     string(access.ScopeBuildRead),
+			Scope:     string(ScopeBuildRead),
 			Resources: []string{"project-1"},
 		}},
 	})
@@ -195,7 +194,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 	require.Len(t, grants, 1)
 	grant, ok := grants[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, string(access.ScopeBuildRead), grant["Scope"])
+	require.Equal(t, string(ScopeBuildRead), grant["Scope"])
 	resources, ok := grant["Resources"].([]any)
 	require.True(t, ok)
 	require.Len(t, resources, 1)
@@ -237,7 +236,7 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 		Name:        "Broken Builder",
 		Description: "Will fail grant sync",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(access.ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
 		},
 		MemberIds: []string{"user_1", "user_2"},
 	})

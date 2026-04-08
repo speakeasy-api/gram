@@ -128,6 +128,13 @@ type ListMembersResponseBody struct {
 	Members []*AccessMemberResponseBody `form:"members" json:"members" xml:"members"`
 }
 
+// ListGrantsResponseBody is the type of the "access" service "listGrants"
+// endpoint HTTP response body.
+type ListGrantsResponseBody struct {
+	// The user's effective grants in this organization.
+	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
+}
+
 // UpdateMemberRoleResponseBody is the type of the "access" service
 // "updateMemberRole" endpoint HTTP response body.
 type UpdateMemberRoleResponseBody struct {
@@ -1406,6 +1413,186 @@ type ListMembersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListGrantsUnauthorizedResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "unauthorized" error.
+type ListGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsForbiddenResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "forbidden" error.
+type ListGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsBadRequestResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "bad_request" error.
+type ListGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsNotFoundResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "not_found" error.
+type ListGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsConflictResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "conflict" error.
+type ListGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsUnsupportedMediaResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "unsupported_media" error.
+type ListGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsInvalidResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "invalid" error.
+type ListGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsInvariantViolationResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "invariant_violation" error.
+type ListGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsUnexpectedResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "unexpected" error.
+type ListGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGrantsGatewayErrorResponseBody is the type of the "access" service
+// "listGrants" endpoint HTTP response body for the "gateway_error" error.
+type ListGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpdateMemberRoleUnauthorizedResponseBody is the type of the "access" service
 // "updateMemberRole" endpoint HTTP response body for the "unauthorized" error.
 type UpdateMemberRoleUnauthorizedResponseBody struct {
@@ -1784,6 +1971,25 @@ func NewListMembersResponseBody(res *access.ListMembersResult) *ListMembersRespo
 		}
 	} else {
 		body.Members = []*AccessMemberResponseBody{}
+	}
+	return body
+}
+
+// NewListGrantsResponseBody builds the HTTP response body from the result of
+// the "listGrants" endpoint of the "access" service.
+func NewListGrantsResponseBody(res *access.ListUserGrantsResult) *ListGrantsResponseBody {
+	body := &ListGrantsResponseBody{}
+	if res.Grants != nil {
+		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
+		for i, val := range res.Grants {
+			if val == nil {
+				body.Grants[i] = nil
+				continue
+			}
+			body.Grants[i] = marshalAccessRoleGrantToRoleGrantResponseBody(val)
+		}
+	} else {
+		body.Grants = []*RoleGrantResponseBody{}
 	}
 	return body
 }
@@ -2782,6 +2988,146 @@ func NewListMembersGatewayErrorResponseBody(res *goa.ServiceError) *ListMembersG
 	return body
 }
 
+// NewListGrantsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsUnauthorizedResponseBody(res *goa.ServiceError) *ListGrantsUnauthorizedResponseBody {
+	body := &ListGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsForbiddenResponseBody(res *goa.ServiceError) *ListGrantsForbiddenResponseBody {
+	body := &ListGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsBadRequestResponseBody(res *goa.ServiceError) *ListGrantsBadRequestResponseBody {
+	body := &ListGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsNotFoundResponseBody(res *goa.ServiceError) *ListGrantsNotFoundResponseBody {
+	body := &ListGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsConflictResponseBody builds the HTTP response body from the
+// result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsConflictResponseBody(res *goa.ServiceError) *ListGrantsConflictResponseBody {
+	body := &ListGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListGrantsUnsupportedMediaResponseBody {
+	body := &ListGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsInvalidResponseBody builds the HTTP response body from the
+// result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsInvalidResponseBody(res *goa.ServiceError) *ListGrantsInvalidResponseBody {
+	body := &ListGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsInvariantViolationResponseBody(res *goa.ServiceError) *ListGrantsInvariantViolationResponseBody {
+	body := &ListGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsUnexpectedResponseBody(res *goa.ServiceError) *ListGrantsUnexpectedResponseBody {
+	body := &ListGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGrantsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listGrants" endpoint of the "access" service.
+func NewListGrantsGatewayErrorResponseBody(res *goa.ServiceError) *ListGrantsGatewayErrorResponseBody {
+	body := &ListGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpdateMemberRoleUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "updateMemberRole" endpoint of the "access" service.
 func NewUpdateMemberRoleUnauthorizedResponseBody(res *goa.ServiceError) *UpdateMemberRoleUnauthorizedResponseBody {
@@ -3020,6 +3366,15 @@ func NewListScopesPayload(apikeyToken *string, sessionToken *string) *access.Lis
 // NewListMembersPayload builds a access service listMembers endpoint payload.
 func NewListMembersPayload(apikeyToken *string, sessionToken *string) *access.ListMembersPayload {
 	v := &access.ListMembersPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListGrantsPayload builds a access service listGrants endpoint payload.
+func NewListGrantsPayload(apikeyToken *string, sessionToken *string) *access.ListGrantsPayload {
+	v := &access.ListGrantsPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

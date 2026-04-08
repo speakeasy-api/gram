@@ -5,12 +5,15 @@
 
 set -euo pipefail
 
-echo "Starting Claude Code with Gram hooks plugin..."
-echo ""
-echo "Plugin directory: ./hooks/plugin-claude-test"
-echo ""
+export GRAM_HOOKS_SERVER_URL=$GRAM_SERVER_URL
 
-
-
-export GRAM_HOOKS_SERVER_URL=http://localhost:8080
-exec claude --plugin-dir ./hooks/plugin-claude-test --debug
+if git diff --quiet HEAD -- hooks/; then
+  echo "No local changes in hooks/ — using published plugin"
+  echo ""
+  exec claude --debug
+else
+  echo "Local changes detected in hooks/ — using local plugin directory"
+  echo "Plugin directory: ./hooks/plugin-claude-test"
+  echo ""
+  exec claude --plugin-dir ./hooks/plugin-claude-test --debug
+fi

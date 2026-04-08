@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -65,7 +67,12 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient)
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {
+		return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: organizationID})
+	}, func(ctx context.Context, organizationID string) error {
+		return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: organizationID})
+	})
 
 	return ctx, &testInstance{
 		service:        svc,

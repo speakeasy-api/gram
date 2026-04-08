@@ -81,6 +81,7 @@ import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
+import { MCPPerformanceTab } from "./MCPPerformanceTab";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -162,8 +163,9 @@ export function MCPDetailPage() {
       "tools",
       "resources",
       "prompts",
-      "settings",
       "authentication",
+      "performance",
+      "settings",
     ];
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
@@ -312,6 +314,9 @@ export function MCPDetailPage() {
                     )}
                   </span>
                 </PageTabsTrigger>
+                <PageTabsTrigger value="performance">
+                  Performance
+                </PageTabsTrigger>
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
@@ -337,6 +342,10 @@ export function MCPDetailPage() {
 
             <TabsContent value="authentication" className="mt-0 w-full">
               <MCPAuthenticationTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="performance" className="mt-0 w-full">
+              <MCPPerformanceTab toolset={toolset} />
             </TabsContent>
 
             <TabsContent value="settings" className="mt-0 w-full">
@@ -894,7 +903,7 @@ function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
 }
 
 /**
- * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode, Actions, Danger Zone
+ * Settings Tab - Visibility, Slug, Custom Domain, Actions, Danger Zone
  */
 function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
@@ -1178,45 +1187,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     );
   };
 
-  const ToolSelectionModeToggle = ({
-    toolSelectionMode,
-  }: {
-    toolSelectionMode: string;
-  }) => {
-    const onToggle = (value: string) => {
-      updateToolsetMutation.mutate({
-        request: {
-          slug: toolset.slug,
-          updateToolsetRequestBody: { toolSelectionMode: value },
-        },
-      });
-    };
-
-    return (
-      <BigToggle
-        align="start"
-        options={[
-          {
-            value: "static",
-            icon: "list-ordered",
-            label: "Static",
-            description:
-              "Traditional MCP. Every tool is added into context up front.",
-          },
-          {
-            value: "dynamic",
-            icon: "search",
-            label: "Dynamic",
-            description:
-              "Highly token efficient and effective for large toolsets. The LLM can discover tools as it needs them.",
-          },
-        ]}
-        selectedValue={toolSelectionMode}
-        onSelect={onToggle}
-      />
-    );
-  };
-
   return (
     <Stack className="mb-4">
       <PageSection
@@ -1297,16 +1267,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             </Stack>
           </BlockInner>
         </Block>
-      </PageSection>
-
-      <PageSection
-        heading="Tool Selection Mode"
-        featureType="experimental"
-        description="Change how this server's tools will be presented to the LLM. Can have drastic effects on context management, especially for larger toolsets. Use with care."
-      >
-        <ToolSelectionModeToggle
-          toolSelectionMode={toolset.toolSelectionMode ?? "static"}
-        />
       </PageSection>
 
       <PageSection

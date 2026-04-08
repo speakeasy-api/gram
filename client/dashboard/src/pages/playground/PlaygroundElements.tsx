@@ -8,7 +8,7 @@ import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -69,8 +69,8 @@ export function PlaygroundElements({
   // Get toolset data to construct MCP URL
   const { data: toolset } = useToolset(toolsetSlug ?? undefined);
 
-  // Get MCP URL from toolset (uses custom domain if configured)
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  // Always use the platform domain for the playground to avoid CSP issues
+  const mcpUrl = useInternalMcpUrl(toolset);
 
   // Get environments and MCP metadata for auth status check
   const { data: environmentsData } = useListEnvironments();
@@ -127,7 +127,7 @@ export function PlaygroundElements({
       });
       return result.clientToken;
     } catch (error) {
-      toast.error("Failed to create chat session. Please try again.");
+      toast.error("Failed to create session. Please try again.");
       throw error;
     }
   }, [

@@ -73,7 +73,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, redisClient *redis.Client, client *slack_client.SlackClient, temporal *temporal.Environment, cfg Configurations) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, redisClient *redis.Client, client *slack_client.SlackClient, temporal *temporal.Environment, cfg Configurations, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("slack"))
 
 	redisCacheAdapter := cache.NewRedisCacheAdapter(redisClient)
@@ -85,7 +85,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		sessions:            sessions,
 		enc:                 enc,
 		repo:                repo.New(db),
-		auth:                auth.New(logger, db, sessions),
+		auth:                auth.New(logger, db, sessions, accessLoader),
 		toolsetRepo:         toolset_repo.New(db),
 		cfg:                 &cfg,
 		client:              client,

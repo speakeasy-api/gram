@@ -39,7 +39,7 @@ type TelemetryService interface {
 }
 
 const (
-	DefaultChatModel = "openai/gpt-4o"
+	DefaultChatModel = "openai/gpt-5.4"
 )
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
@@ -238,6 +238,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionReques
 		req.ChatID.String(),
 		req.UserID,
 		req.ExternalUserID,
+		req.UserEmail,
 		req.APIKeyID,
 		response,
 	)
@@ -412,6 +413,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		UsageSource:    req.UsageSource,
 		UserID:         req.UserID,
 		ExternalUserID: req.ExternalUserID,
+		UserEmail:      "",
 		HTTPMetadata:   req.HTTPMetadata,
 		JSONSchema:     req.JSONSchema,
 		ChatID:         uuid.Nil,
@@ -592,7 +594,7 @@ func (r *streamingResponseReader) processSSELine(line string) {
 func (c *ChatClient) emitGenAITelemetry(
 	ctx context.Context,
 	toolCalls []ToolCall,
-	orgID, projectID, chatID, userID, externalUserID, apiKeyID string,
+	orgID, projectID, chatID, userID, externalUserID, userEmail, apiKeyID string,
 	result CompletionResponse,
 ) {
 	// Skip telemetry if no telemetry service configured
@@ -638,6 +640,9 @@ func (c *ChatClient) emitGenAITelemetry(
 	}
 	if externalUserID != "" {
 		attrs[attr.ExternalUserIDKey] = externalUserID
+	}
+	if userEmail != "" {
+		attrs[attr.UserEmailKey] = userEmail
 	}
 
 	// Extract trace context from the request context

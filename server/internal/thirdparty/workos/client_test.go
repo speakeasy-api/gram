@@ -455,11 +455,10 @@ func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.Client, *fakeWorkOS)
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 
-	client, err := workos.NewClient("test-api-key", workos.ClientOpts{
+	client := workos.NewClient("test-api-key", workos.ClientOpts{
 		Endpoint:   srv.URL,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	})
-	require.NoError(t, err)
 	return client, fake
 }
 
@@ -767,6 +766,16 @@ func TestRoleClient_FindInvitationByToken(t *testing.T) {
 	require.Equal(t, "tok_1", invite.Token)
 }
 
+func TestRoleClient_FindInvitationByToken_NotFound(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	client, _ := newTestClient(t, fake)
+
+	invite, err := client.FindInvitationByToken(context.Background(), "nonexistent-token")
+	require.True(t, workos.IsNotFound(err))
+	require.Nil(t, invite)
+}
+
 func TestRoleClient_GetInvitation(t *testing.T) {
 	t.Parallel()
 	fake := newFakeWorkOS()
@@ -776,6 +785,16 @@ func TestRoleClient_GetInvitation(t *testing.T) {
 	invite, err := client.GetInvitation(context.Background(), "inv_1")
 	require.NoError(t, err)
 	require.Equal(t, "alice@example.com", invite.Email)
+}
+
+func TestRoleClient_GetInvitation_NotFound(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	client, _ := newTestClient(t, fake)
+
+	invite, err := client.GetInvitation(context.Background(), "nonexistent-id")
+	require.True(t, workos.IsNotFound(err))
+	require.Nil(t, invite)
 }
 
 func TestRoleClient_DeleteOrganizationMembership(t *testing.T) {
@@ -831,13 +850,4 @@ func TestRoleClient_ListOrgUsers(t *testing.T) {
 	require.Equal(t, "Alice", users["user_1"].FirstName)
 	require.Equal(t, "Bob", users["user_2"].FirstName)
 	require.NotContains(t, users, "user_3")
-}
-
-func TestRoleClient_NilClient(t *testing.T) {
-	t.Parallel()
-
-	var rc *workos.Client
-	_, err := rc.ListRoles(context.Background(), "org_1")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not initialized")
 }

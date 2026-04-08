@@ -1,4 +1,4 @@
-package access_test
+package access
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -43,7 +43,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service *access.Service
+	service *Service
 	conn    *pgxpool.Pool
 	roles   *MockRoleProvider
 }
@@ -79,7 +79,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	roles := newMockRoleProvider(t)
 
-	svc := access.NewService(logger, tracerProvider, conn, sessionManager, roles)
+	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		service: svc,
@@ -88,9 +88,22 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func enterpriseCtx(ctx context.Context) context.Context {
+func enterpriseTestCtx(ctx context.Context) context.Context {
+	sessionID := "session_test"
 	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		AccountType: "enterprise",
+		ActiveOrganizationID:  "org_test",
+		UserID:                "user_test",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		SessionID:             &sessionID,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "enterprise",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
 	})
 }
 
@@ -115,7 +128,7 @@ func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	require.NoError(t, err)
 }
 
-func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope access.Scope, resource string) {
+func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope Scope, resource string) {
 	t.Helper()
 
 	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{

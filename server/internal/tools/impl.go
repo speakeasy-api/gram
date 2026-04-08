@@ -41,7 +41,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("tools"))
 
 	return &Service{
@@ -50,7 +50,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:             db,
 		repo:           repo.New(db),
 		variationsRepo: vr.New(db),
-		auth:           auth.New(logger, db, sessions),
+		auth:           auth.New(logger, db, sessions, accessLoader),
 	}
 }
 

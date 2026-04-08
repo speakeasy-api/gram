@@ -176,7 +176,7 @@ const timeRangeSchema = z.object({
   label: z.string().describe("Short semantic label for the range"),
 });
 
-const TIME_RANGE_MODEL = "openai/gpt-4o-mini";
+const TIME_RANGE_MODEL = "openai/gpt-5.4-mini";
 
 /**
  * Parse an ISO date string as a local date (ignoring timezone).

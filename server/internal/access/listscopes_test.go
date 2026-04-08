@@ -1,4 +1,4 @@
-package access_test
+package access
 
 import (
 	"testing"
@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -24,10 +23,10 @@ func TestService_ListScopes(t *testing.T) {
 		bySlug[scope.Slug] = scope
 	}
 
-	require.Equal(t, "org", bySlug[string(access.ScopeOrgRead)].ResourceType)
-	require.Equal(t, "project", bySlug[string(access.ScopeBuildWrite)].ResourceType)
-	require.Equal(t, "mcp", bySlug[string(access.ScopeMCPConnect)].ResourceType)
-	require.Equal(t, "Read organization metadata and members.", bySlug[string(access.ScopeOrgRead)].Description)
+	require.Equal(t, "org", bySlug[string(ScopeOrgRead)].ResourceType)
+	require.Equal(t, "project", bySlug[string(ScopeBuildWrite)].ResourceType)
+	require.Equal(t, "mcp", bySlug[string(ScopeMCPConnect)].ResourceType)
+	require.Equal(t, "Read organization metadata and members.", bySlug[string(ScopeOrgRead)].Description)
 }
 
 func TestService_ListScopes_Unauthorized(t *testing.T) {

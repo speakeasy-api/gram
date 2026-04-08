@@ -163,6 +163,9 @@ type ListHooksTracesRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Filter conditions for the search query
 	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Hook types to include (mcp, local, skill). If empty or not provided,
+	// includes all types.
+	TypesToInclude []string `form:"types_to_include,omitempty" json:"types_to_include,omitempty" xml:"types_to_include,omitempty"`
 	// Cursor for pagination (trace_id)
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Sort order
@@ -266,6 +269,8 @@ type GetHooksSummaryResponseBody struct {
 	Servers []*HooksServerSummaryResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// Aggregated metrics grouped by user
 	Users []*HooksUserSummaryResponseBody `form:"users" json:"users" xml:"users"`
+	// Aggregated metrics grouped by skill
+	Skills []*SkillSummaryResponseBody `form:"skills" json:"skills" xml:"skills"`
 	// Total number of hook events
 	TotalEvents int64 `form:"total_events" json:"total_events" xml:"total_events"`
 	// Total number of unique sessions
@@ -2795,6 +2800,16 @@ type HooksUserSummaryResponseBody struct {
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// SkillSummaryResponseBody is used to define fields on response body types.
+type SkillSummaryResponseBody struct {
+	// Skill name (extracted from tool name)
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// Total number of times this skill was used
+	UseCount int64 `form:"use_count" json:"use_count" xml:"use_count"`
+	// Number of unique users who used this skill
+	UniqueUsers int64 `form:"unique_users" json:"unique_users" xml:"unique_users"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -2817,6 +2832,8 @@ type HookTraceSummaryResponseBody struct {
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// Hook source (from attributes.gram.hook.source)
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Skill name (from materialized column, only for Skill tool)
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
 }
 
 // LogFilterRequestBody is used to define fields on request body types.
@@ -3141,6 +3158,18 @@ func NewGetHooksSummaryResponseBody(res *telemetry.GetHooksSummaryResult) *GetHo
 		}
 	} else {
 		body.Users = []*HooksUserSummaryResponseBody{}
+	}
+	if res.Skills != nil {
+		body.Skills = make([]*SkillSummaryResponseBody, len(res.Skills))
+		for i, val := range res.Skills {
+			if val == nil {
+				body.Skills[i] = nil
+				continue
+			}
+			body.Skills[i] = marshalTelemetrySkillSummaryToSkillSummaryResponseBody(val)
+		}
+	} else {
+		body.Skills = []*SkillSummaryResponseBody{}
 	}
 	return body
 }
@@ -5156,6 +5185,12 @@ func NewListHooksTracesPayload(body *ListHooksTracesRequestBody, apikeyToken *st
 			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
+	if body.TypesToInclude != nil {
+		v.TypesToInclude = make([]string, len(body.TypesToInclude))
+		for i, val := range body.TypesToInclude {
+			v.TypesToInclude[i] = val
+		}
+	}
 	if body.Sort == nil {
 		v.Sort = "desc"
 	}
@@ -5452,6 +5487,11 @@ func ValidateListHooksTracesRequestBody(body *ListHooksTracesRequestBody) (err e
 			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	for _, e := range body.TypesToInclude {
+		if !(e == "mcp" || e == "local" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.types_to_include[*]", e, []any{"mcp", "local", "skill"}))
 		}
 	}
 	if body.Sort != nil {

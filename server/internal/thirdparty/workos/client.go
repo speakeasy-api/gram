@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -31,6 +32,22 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("workos api %s %s: status %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
+}
+
+// IsNotFound reports whether err is an APIError with a 404 status code.
+func IsNotFound(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
+}
+
+// wrapSDKError translates WorkOS SDK errors into APIError so that all WorkOS
+// errors surface through a single type. Non-HTTP errors are wrapped normally.
+func wrapSDKError(err error, context string) error {
+	var httpErr workos_errors.HTTPError
+	if errors.As(err, &httpErr) {
+		return &APIError{Method: "", Path: "", StatusCode: httpErr.Code, Body: httpErr.Message}
+	}
+	return fmt.Errorf("%s: %w", context, err)
 }
 
 // Client wraps WorkOS API calls for role and membership management.
@@ -52,11 +69,7 @@ type ClientOpts struct {
 	HTTPClient *http.Client
 }
 
-func NewClient(apiKey string, opts ...ClientOpts) (*Client, error) {
-	if apiKey == "" || apiKey == "unset" {
-		return nil, errors.New("no API key provided to initialize WorkOS client")
-	}
-
+func NewClient(apiKey string, opts ...ClientOpts) *Client {
 	var opt ClientOpts
 	if len(opts) > 0 {
 		opt = opts[0]
@@ -70,7 +83,7 @@ func NewClient(apiKey string, opts ...ClientOpts) (*Client, error) {
 	httpClient := opt.HTTPClient
 	if httpClient == nil {
 		rc := retryablehttp.NewClient()
-		rc.HTTPClient.Timeout = 30 * time.Second
+		rc.HTTPClient.Timeout = 10 * time.Second
 		httpClient = rc.StandardClient()
 	}
 
@@ -86,7 +99,7 @@ func NewClient(apiKey string, opts ...ClientOpts) (*Client, error) {
 		httpClient: httpClient,
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:         um,
-	}, nil
+	}
 }
 
 // do performs a raw HTTP request against the WorkOS REST API.

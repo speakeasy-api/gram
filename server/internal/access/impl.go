@@ -54,20 +54,22 @@ type Service struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
+	access *Manager
 	roles  RoleProvider
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider, accessManager *Manager) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
 		logger: logger,
 		db:     db,
-		auth:   auth.New(logger, db, sessions),
+		auth:   auth.New(logger, db, sessions, accessManager),
+		access: accessManager,
 		roles:  roles,
 	}
 }
@@ -91,6 +93,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.access.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -128,6 +133,9 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 	if err != nil {
 		return nil, err
 	}
+	if err := s.access.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
@@ -163,6 +171,9 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload) (*gen.Role, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.access.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -276,6 +287,9 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, err
 	}
+	if err := s.access.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
@@ -387,6 +401,9 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	if err != nil {
 		return err
 	}
+	if err := s.access.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return err
+	}
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
@@ -450,6 +467,9 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
 	}
+	if err := s.access.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
@@ -472,6 +492,9 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	_, workosOrgID, err := s.roleOrgContext(ctx)
 	ac, _ := s.authContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.access.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -518,11 +541,61 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	return &gen.ListMembersResult{Members: result}, nil
 }
 
+// ListGrants returns the effective grants for the current user by combining
+// direct user grants with grants inherited from their currently assigned role.
+func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*gen.ListUserGrantsResult, error) {
+	ac, workosOrgID, err := s.roleOrgContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogAccessMemberID(ac.UserID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessMemberID(ac.UserID),
+	)
+
+	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
+	switch {
+	case errors.Is(err, errConnectedUserNotFound):
+		return nil, oops.E(oops.CodeNotFound, nil, "current user is not connected locally").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
+	}
+
+	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)}
+	roleSlugs, err := s.memberRoleSlugs(ctx, workosOrgID, connectedUser.WorkosID.String)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
+	}
+	for _, roleSlug := range roleSlugs {
+		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	}
+	if len(roleSlugs) == 1 {
+		logger = logger.With(attr.SlogAccessRoleSlug(roleSlugs[0]))
+		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(roleSlugs[0]))
+	}
+
+	grants, err := LoadGrants(ctx, s.db, ac.ActiveOrganizationID, principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load effective user grants").Log(ctx, logger)
+	}
+
+	return &gen.ListUserGrantsResult{Grants: grantsFromRows(grants.rows)}, nil
+}
+
 // UpdateMemberRole is intentionally stricter than member listing: it only
 // mutates access for users Gram knows are connected to the local organization.
 func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.access.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 	logger := s.logger.With(
@@ -725,6 +798,34 @@ func membershipsByUserID(members []workos.Member) map[string]string {
 	}
 
 	return membershipByUser
+}
+
+func (s *Service) memberRoleSlugs(ctx context.Context, workosOrgID string, workosUserID string) ([]string, error) {
+	if workosUserID == "" {
+		return nil, nil
+	}
+
+	members, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		return nil, fmt.Errorf("list members for role lookup: %w", err)
+	}
+
+	roleSlugs := make([]string, 0, len(members))
+	seenRoleSlugs := make(map[string]struct{}, len(members))
+
+	for _, member := range members {
+		if member.UserID != workosUserID || member.RoleSlug == "" {
+			continue
+		}
+		if _, ok := seenRoleSlugs[member.RoleSlug]; ok {
+			continue
+		}
+
+		seenRoleSlugs[member.RoleSlug] = struct{}{}
+		roleSlugs = append(roleSlugs, member.RoleSlug)
+	}
+
+	return roleSlugs, nil
 }
 
 func findRoleByID(roles []workos.Role, id string) (workos.Role, bool) {

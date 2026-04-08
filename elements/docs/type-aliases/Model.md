@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.27.5**](../README.md)
+[**@gram-ai/elements v1.27.6**](../README.md)
 
 ***
 
@@ -15,7 +15,7 @@ The LLM model to use for the Elements library.
 ```ts
 const config: ElementsConfig = {
   model: {
-    defaultModel: 'openai/gpt-4o',
+    defaultModel: 'openai/gpt-5.4',
   },
 }
 ```

@@ -61,6 +61,8 @@ var hostedPageTmplData string
 //go:embed hosted_page.js
 var hostedPageScriptData []byte
 
+var errToolsetNotFound = errors.New("toolset not found")
+
 type securityMode string
 
 const (
@@ -162,7 +164,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_metadata"))
 
 	// Calculate content hash for install page script (for cache busting)
@@ -177,7 +179,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		toolsetRepo:  toolsets_repo.New(db),
 		orgsRepo:     organizations_repo.New(db),
 		domainsRepo:  customdomains_repo.New(db),
-		auth:         auth.New(logger, db, sessions),
+		auth:         auth.New(logger, db, sessions, accessLoader),
 		serverURL:    serverURL,
 		siteURL:      siteURL,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
@@ -420,9 +422,9 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
+		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
 	}
 
 	if !toolset.McpEnabled {
@@ -733,8 +735,11 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	authCtx, authOk := contextvalues.GetAuthContext(ctx)
 
 	toolset, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, errToolsetNotFound):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load mcp server").Log(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
 	}
 
 	// Load organization information
@@ -1061,8 +1066,11 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
 
-	if toolsetErr != nil {
-		return nil, oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(toolsetErr, pgx.ErrNoRows):
+		return nil, fmt.Errorf("%w: %w", errToolsetNotFound, toolsetErr)
+	case toolsetErr != nil:
+		return nil, fmt.Errorf("lookup toolset: %w", toolsetErr)
 	}
 
 	return &toolset, nil

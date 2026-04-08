@@ -229,7 +229,7 @@ export const AgentifyButton = ({
 
     generateObject({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: openrouter.chat("openai/gpt-4o-mini") as any,
+      model: openrouter.chat("openai/gpt-5.4-mini") as any,
       mode: "json",
       prompt: `
           <instructions>

@@ -49,6 +49,7 @@ type CompletionRequest struct {
 	ChatID         uuid.UUID
 	UserID         string
 	ExternalUserID string
+	UserEmail      string
 	HTTPMetadata   *HTTPMetadata
 	APIKeyID       string
 

@@ -17,6 +17,11 @@ func ListToolsetsToolsetsPath() string {
 	return "/rpc/toolsets.list"
 }
 
+// ListToolsetsForOrgToolsetsPath returns the URL path to the toolsets service listToolsetsForOrg HTTP endpoint.
+func ListToolsetsForOrgToolsetsPath() string {
+	return "/rpc/toolsets.listForOrg"
+}
+
 // UpdateToolsetToolsetsPath returns the URL path to the toolsets service updateToolset HTTP endpoint.
 func UpdateToolsetToolsetsPath() string {
 	return "/rpc/toolsets.update"

@@ -594,6 +594,7 @@ func (s *Service) GetCompletionFromMessages(
 		ChatID:         uuid.Nil,
 		UserID:         "",
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 		APIKeyID:       "",
 		JSONSchema:     nil,

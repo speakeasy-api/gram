@@ -8,9 +8,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export function RegistryCacheSection() {
-  const { data, isLoading } = useListMCPRegistries({
-    gramSession: "",
-  });
+  const { data, isLoading } = useListMCPRegistries();
   const [clearingId, setClearingId] = useState<string | null>(null);
 
   const clearCacheMutation = useMcpRegistriesClearCacheMutation({

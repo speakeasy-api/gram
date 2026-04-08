@@ -74,6 +74,14 @@ WHERE key = ANY(@security_keys::TEXT[]) AND deployment_id = ANY(@deployment_ids:
 SELECT *
 FROM toolsets
 WHERE mcp_slug = @mcp_slug
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC
+LIMIT 1;
+
+-- name: GetToolsetByPlatformMcpSlug :one
+SELECT *
+FROM toolsets
+WHERE mcp_slug = @mcp_slug
   AND custom_domain_id IS NULL
   AND deleted IS FALSE;
 
@@ -140,6 +148,15 @@ FROM toolsets t
 JOIN projects p ON t.project_id = p.id
 WHERE p.organization_id = @organization_id
   AND t.mcp_enabled IS TRUE
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY t.created_at DESC;
+
+-- name: ListToolsetsByOrganization :many
+SELECT t.*
+FROM toolsets t
+JOIN projects p ON t.project_id = p.id
+WHERE p.organization_id = @organization_id
   AND t.deleted IS FALSE
   AND p.deleted IS FALSE
 ORDER BY t.created_at DESC;

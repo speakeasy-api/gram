@@ -257,7 +257,7 @@ func (s *StubClient) FindInvitationByToken(_ context.Context, token string) (*In
 		}
 	}
 
-	return nil, nil
+	return nil, &APIError{Method: "GET", Path: "find_invitation_by_token", StatusCode: 404, Body: "invitation not found"}
 }
 
 func (s *StubClient) GetInvitation(_ context.Context, invitationID string) (*Invitation, error) {
@@ -271,7 +271,7 @@ func (s *StubClient) GetInvitation(_ context.Context, invitationID string) (*Inv
 		}
 	}
 
-	return nil, nil
+	return nil, &APIError{Method: "GET", Path: "get_invitation", StatusCode: 404, Body: "invitation not found"}
 }
 
 func (s *StubClient) DeleteOrganizationMembership(_ context.Context, membershipID string) error {
@@ -290,6 +290,24 @@ func (s *StubClient) DeleteOrganizationMembership(_ context.Context, membershipI
 
 func (s *StubClient) ListOrgMemberships(_ context.Context, orgID string) ([]Member, error) {
 	return s.ListMembers(context.Background(), orgID)
+}
+
+func (s *StubClient) GetOrgMembership(_ context.Context, workOSUserID, workOSOrgID string) (*Member, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state, ok := s.orgs[workOSOrgID]
+	if !ok {
+		return nil, nil
+	}
+	for _, m := range state.memberships {
+		if m.UserID == workOSUserID && m.OrganizationID == workOSOrgID {
+			cp := m
+			return &cp, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func (s *StubClient) ListOrgUsers(_ context.Context, orgID string) (map[string]User, error) {

@@ -259,6 +259,28 @@ func BuildListMembersPayload(accessListMembersApikeyToken string, accessListMemb
 	return v, nil
 }
 
+// BuildListGrantsPayload builds the payload for the access listGrants endpoint
+// from CLI flags.
+func BuildListGrantsPayload(accessListGrantsApikeyToken string, accessListGrantsSessionToken string) (*access.ListGrantsPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListGrantsApikeyToken != "" {
+			apikeyToken = &accessListGrantsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListGrantsSessionToken != "" {
+			sessionToken = &accessListGrantsSessionToken
+		}
+	}
+	v := &access.ListGrantsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildUpdateMemberRolePayload builds the payload for the access
 // updateMemberRole endpoint from CLI flags.
 func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdateMemberRoleApikeyToken string, accessUpdateMemberRoleSessionToken string) (*access.UpdateMemberRolePayload, error) {

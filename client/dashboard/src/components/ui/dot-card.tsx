@@ -44,7 +44,7 @@ export function DotCard({
         />
         {icon && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
+            <div className="bg-background/90 backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none rounded-lg p-3 shadow-lg">
               {icon}
             </div>
           </div>

@@ -64,7 +64,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
@@ -72,7 +72,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:          logger,
 		db:              db,
 		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions),
+		auth:            auth.New(logger, db, sessions, accessLoader),
 		environmentRepo: environmentsRepo.New(db),
 		toolsets:        NewToolsets(db),
 		domainsRepo:     domainsRepo.New(db),
@@ -213,7 +213,32 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 
 	result := make([]*types.ToolsetEntry, len(toolsets))
 	for i, toolset := range toolsets {
-		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug))
+		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
+		if err != nil {
+			return nil, err
+		}
+		result[i] = toolsetDetails
+	}
+
+	return &gen.ListToolsetsResult{
+		Toolsets: result,
+	}, nil
+}
+
+func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListToolsetsForOrgPayload) (*gen.ListToolsetsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsets, err := s.repo.ListToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets for organization").Log(ctx, s.logger)
+	}
+
+	result := make([]*types.ToolsetEntry, len(toolsets))
+	for i, toolset := range toolsets {
+		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
 		if err != nil {
 			return nil, err
 		}
@@ -299,13 +324,15 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.McpSlug != nil && *payload.McpSlug != "" {
-		// For free accounts, enforce that the MCP slug is prefixed with the org slug
+		// Slugs on the platform domain (no custom domain, or free accounts) must be prefixed with the org slug
 		if toolsetDomainID == nil || authCtx.AccountType == "free" {
 			if !strings.HasPrefix(conv.ToLower(*payload.McpSlug), authCtx.OrganizationSlug+"-") {
 				return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts")
 			}
 
-			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
+			// Check slug uniqueness on the platform domain only (no custom domain).
+			// Custom domains have a separate namespace so the same slug can exist on both.
+			mcpToolset, mcpToolsetErr := tr.GetToolsetByPlatformMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
 			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
 				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
 			}

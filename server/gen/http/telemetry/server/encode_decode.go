@@ -3268,6 +3268,18 @@ func marshalTelemetryHooksUserSummaryToHooksUserSummaryResponseBody(v *telemetry
 	return res
 }
 
+// marshalTelemetrySkillSummaryToSkillSummaryResponseBody builds a value of
+// type *SkillSummaryResponseBody from a value of type *telemetry.SkillSummary.
+func marshalTelemetrySkillSummaryToSkillSummaryResponseBody(v *telemetry.SkillSummary) *SkillSummaryResponseBody {
+	res := &SkillSummaryResponseBody{
+		SkillName:   v.SkillName,
+		UseCount:    v.UseCount,
+		UniqueUsers: v.UniqueUsers,
+	}
+
+	return res
+}
+
 // marshalTelemetryHookTraceSummaryToHookTraceSummaryResponseBody builds a
 // value of type *HookTraceSummaryResponseBody from a value of type
 // *telemetry.HookTraceSummary.
@@ -3283,6 +3295,7 @@ func marshalTelemetryHookTraceSummaryToHookTraceSummaryResponseBody(v *telemetry
 		EventSource:       v.EventSource,
 		UserEmail:         v.UserEmail,
 		HookSource:        v.HookSource,
+		SkillName:         v.SkillName,
 	}
 
 	return res

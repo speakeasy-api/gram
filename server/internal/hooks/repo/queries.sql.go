@@ -88,6 +88,7 @@ INSERT INTO chats (
   , project_id
   , organization_id
   , user_id
+  , external_user_id
   , title
   , created_at
   , updated_at
@@ -98,6 +99,7 @@ VALUES (
     $3,
     $4,
     $5,
+    $6,
     NOW(),
     NOW()
 )
@@ -110,6 +112,7 @@ type UpsertClaudeCodeSessionParams struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
 	Title          pgtype.Text
 }
 
@@ -119,6 +122,7 @@ func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeC
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.UserID,
+		arg.ExternalUserID,
 		arg.Title,
 	)
 	var id uuid.UUID

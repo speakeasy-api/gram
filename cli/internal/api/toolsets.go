@@ -32,6 +32,7 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 	client := toolsets.NewClient(
 		h.CreateToolset(),
 		h.ListToolsets(),
+		h.ListToolsetsForOrg(),
 		h.UpdateToolset(),
 		h.DeleteToolset(),
 		h.GetToolset(),

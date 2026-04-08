@@ -1,3 +1,3 @@
 # SECURITY
 
-Check out https://getgram.ai/.well-known/security.txt for our security policy.
+Check out https://www.speakeasy.com/security for our security policy and trust center.

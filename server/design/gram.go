@@ -22,6 +22,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/integrations"
 	_ "github.com/speakeasy-api/gram/server/design/keys"
 	_ "github.com/speakeasy-api/gram/server/design/mcpmetadata"
+	_ "github.com/speakeasy-api/gram/server/design/organizations"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
 	_ "github.com/speakeasy-api/gram/server/design/productfeatures"
 	_ "github.com/speakeasy-api/gram/server/design/projects"

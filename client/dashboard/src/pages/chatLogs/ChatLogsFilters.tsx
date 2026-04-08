@@ -12,7 +12,7 @@ const resolutionStatusOptions = [
   {
     value: "all",
     label: "All Statuses",
-    description: "Show all chat sessions regardless of outcome",
+    description: "Show all agent sessions regardless of outcome",
   },
   {
     value: "success",
