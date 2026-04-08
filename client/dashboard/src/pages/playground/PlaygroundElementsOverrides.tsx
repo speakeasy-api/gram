@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { useGramElements } from "@gram-ai/elements";
@@ -31,9 +30,12 @@ export const GramThreadWelcome: FC = () => {
               send
               asChild
             >
-              <Button variant="outline" size="sm" className="rounded-full">
+              <button
+                type="button"
+                className="inline-flex items-center rounded-full border border-input bg-background px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+              >
                 {suggestion.title}
-              </Button>
+              </button>
             </ThreadPrimitive.Suggestion>
           ))}
         </div>
