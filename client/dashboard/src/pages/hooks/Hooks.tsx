@@ -29,6 +29,7 @@ import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksT
 import type {
   GetHooksSummaryResult,
   HooksServerSummary,
+  HooksUserSummary,
   HookTraceSummary as HookTrace,
   LogFilter,
   SkillSummary,
@@ -39,7 +40,22 @@ import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { MetricCard } from "@/components/chart/MetricCard";
+import { smoothData, formatChartLabel } from "@/components/chart/chartUtils";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import {
+  BarElement,
+  BarController,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+  Chart as ChartJS,
+  type TooltipItem,
+} from "chart.js";
+import { Bar, Line } from "react-chartjs-2";
 import { Filter, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -48,6 +64,18 @@ import { TraceLogsList } from "../logs/TraceLogsList";
 import { EditServerNameDialog } from "./EditServerNameDialog";
 import { HooksEmptyState } from "./HooksEmptyState";
 import { HookSourceIcon } from "./HookSourceIcon";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  BarController,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+);
 import { HooksSetupButton } from "./HooksSetupDialog";
 
 const validPresets: DateRangePreset[] = [
@@ -661,6 +689,10 @@ function HooksInnerContent({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
   const orgRoutes = useOrgRoutes();
+  const { from, to } = useMemo(
+    () => customRange ?? getPresetRange(dateRange),
+    [customRange, dateRange],
+  );
 
   return (
     <>
@@ -684,6 +716,14 @@ function HooksInnerContent({
               </Button>
             </div>
           </div>
+
+          <HooksAnalytics
+            summaryData={summaryData}
+            groupedTraces={groupedTraces}
+            serverNameMappings={serverNameMappings}
+            from={from}
+            to={to}
+          />
 
           {/* Summary Tables */}
           {summaryData &&
@@ -1618,6 +1658,560 @@ function HookTraceRow({
           onLogClick={onLogClick}
           parentTimestamp={trace.startTimeUnixNano}
         />
+      )}
+    </div>
+  );
+}
+
+function successRateColor(rate: number): string {
+  if (rate >= 90) return "#10b981";
+  if (rate >= 70) return "#f59e0b";
+  return "#ef4444";
+}
+
+function ServerSuccessRateChart({
+  servers,
+  serverNameMappings,
+}: {
+  servers: HooksServerSummary[];
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
+}) {
+  const items = useMemo(() => {
+    return servers
+      .map((s) => {
+        const displayName = !s.serverName
+          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+          : (serverNameMappings.rawToDisplay.get(s.serverName) ?? s.serverName);
+        const successRate = (1 - s.failureRate) * 100;
+        return {
+          label: displayName,
+          successRate,
+          total: s.successCount + s.failureCount,
+        };
+      })
+      .sort((a, b) => a.successRate - b.successRate);
+  }, [servers, serverNameMappings.rawToDisplay]);
+
+  const height = Math.max(120, items.length * 28 + 40);
+
+  const chartData = {
+    labels: items.map((i) => i.label),
+    datasets: [
+      {
+        data: items.map((i) => i.successRate),
+        backgroundColor: items.map((i) => successRateColor(i.successRate)),
+        borderWidth: 0,
+        borderRadius: 3,
+        barThickness: 16,
+      },
+    ],
+  };
+
+  const options = {
+    indexAxis: "y" as const,
+    animation: false as const,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "rgba(0,0,0,0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255,255,255,0.1)",
+        borderWidth: 1,
+        padding: 10,
+        callbacks: {
+          label: (ctx: TooltipItem<"bar">) => {
+            const item = items[ctx.dataIndex];
+            return [
+              ` Success rate: ${ctx.parsed.x.toFixed(1)}%`,
+              ` Total calls: ${item?.total.toLocaleString()}`,
+            ];
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        min: 0,
+        max: 100,
+        grid: { color: "rgba(128,128,128,0.15)" },
+        ticks: {
+          color: "#64748b",
+          callback: (v: number | string) => `${v}%`,
+        },
+      },
+      y: {
+        grid: { display: false },
+        ticks: { color: "#94a3b8", font: { size: 12 } },
+      },
+    },
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
+        No data
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative", height }}>
+      <Bar data={chartData} options={options} />
+    </div>
+  );
+}
+
+function SourceSuccessRateChart({ traces }: { traces: HookTrace[] }) {
+  const items = useMemo(() => {
+    const map = new Map<string, { success: number; total: number }>();
+    for (const t of traces) {
+      const source = t.hookSource || t.toolSource || "unknown";
+      const entry = map.get(source) ?? { success: 0, total: 0 };
+      entry.total += 1;
+      if (t.hookStatus === "success") entry.success += 1;
+      map.set(source, entry);
+    }
+    return Array.from(map.entries())
+      .map(([label, { success, total }]) => ({
+        label,
+        successRate: total > 0 ? (success / total) * 100 : 0,
+        total,
+      }))
+      .sort((a, b) => a.successRate - b.successRate);
+  }, [traces]);
+
+  const height = Math.max(120, items.length * 28 + 40);
+
+  const chartData = {
+    labels: items.map((i) => i.label),
+    datasets: [
+      {
+        data: items.map((i) => i.successRate),
+        backgroundColor: items.map((i) => successRateColor(i.successRate)),
+        borderWidth: 0,
+        borderRadius: 3,
+        barThickness: 16,
+      },
+    ],
+  };
+
+  const options = {
+    indexAxis: "y" as const,
+    animation: false as const,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "rgba(0,0,0,0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255,255,255,0.1)",
+        borderWidth: 1,
+        padding: 10,
+        callbacks: {
+          label: (ctx: TooltipItem<"bar">) => {
+            const item = items[ctx.dataIndex];
+            return [
+              ` Success rate: ${ctx.parsed.x.toFixed(1)}%`,
+              ` Total calls: ${item?.total.toLocaleString()}`,
+            ];
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        min: 0,
+        max: 100,
+        grid: { color: "rgba(128,128,128,0.15)" },
+        ticks: {
+          color: "#64748b",
+          callback: (v: number | string) => `${v}%`,
+        },
+      },
+      y: {
+        grid: { display: false },
+        ticks: { color: "#94a3b8", font: { size: 12 } },
+      },
+    },
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
+        No data
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative", height }}>
+      <Bar data={chartData} options={options} />
+    </div>
+  );
+}
+
+function UserSuccessRateChart({ users }: { users: HooksUserSummary[] }) {
+  const items = useMemo(() => {
+    return users
+      .map((u) => ({
+        label: u.userEmail,
+        successRate: (1 - u.failureRate) * 100,
+        total: u.successCount + u.failureCount,
+      }))
+      .sort((a, b) => a.successRate - b.successRate);
+  }, [users]);
+
+  const height = Math.max(120, items.length * 28 + 40);
+
+  const chartData = {
+    labels: items.map((i) => i.label),
+    datasets: [
+      {
+        data: items.map((i) => i.successRate),
+        backgroundColor: items.map((i) => successRateColor(i.successRate)),
+        borderWidth: 0,
+        borderRadius: 3,
+        barThickness: 16,
+      },
+    ],
+  };
+
+  const options = {
+    indexAxis: "y" as const,
+    animation: false as const,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "rgba(0,0,0,0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255,255,255,0.1)",
+        borderWidth: 1,
+        padding: 10,
+        callbacks: {
+          label: (ctx: TooltipItem<"bar">) => {
+            const item = items[ctx.dataIndex];
+            return [
+              ` Success rate: ${ctx.parsed.x.toFixed(1)}%`,
+              ` Total calls: ${item?.total.toLocaleString()}`,
+            ];
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        min: 0,
+        max: 100,
+        grid: { color: "rgba(128,128,128,0.15)" },
+        ticks: {
+          color: "#64748b",
+          callback: (v: number | string) => `${v}%`,
+        },
+      },
+      y: {
+        grid: { display: false },
+        ticks: { color: "#94a3b8", font: { size: 12 } },
+      },
+    },
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
+        No data
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative", height }}>
+      <Bar data={chartData} options={options} />
+    </div>
+  );
+}
+
+function HooksTotalTimeSeries({
+  traces,
+  from,
+  to,
+}: {
+  traces: HookTrace[];
+  from: Date;
+  to: Date;
+}) {
+  const timeRangeMs = to.getTime() - from.getTime();
+
+  const { labels, successData, errorsData } = useMemo(() => {
+    if (traces.length === 0)
+      return { labels: [], successData: [], errorsData: [] };
+
+    const bucketMs =
+      timeRangeMs <= 24 * 60 * 60 * 1000 ? 5 * 60 * 1000 : 60 * 60 * 1000;
+    const buckets = new Map<number, { success: number; errors: number }>();
+
+    for (const t of traces) {
+      const ms = Number(t.startTimeUnixNano) / 1_000_000;
+      if (!ms) continue;
+      const bucket = Math.floor(ms / bucketMs) * bucketMs;
+      const entry = buckets.get(bucket) ?? { success: 0, errors: 0 };
+      if (t.hookStatus === "success") entry.success += 1;
+      else entry.errors += 1;
+      buckets.set(bucket, entry);
+    }
+
+    const sorted = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]);
+    return {
+      labels: sorted.map(([ts]) => formatChartLabel(new Date(ts), timeRangeMs)),
+      successData: smoothData(sorted.map(([, e]) => e.success)),
+      errorsData: smoothData(sorted.map(([, e]) => e.errors)),
+    };
+  }, [traces, timeRangeMs]);
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: " Successes",
+        data: successData,
+        borderColor: "#10b981",
+        backgroundColor: "rgba(16, 185, 129, 0.1)",
+        pointBackgroundColor: "#10b981",
+        fill: true,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      },
+      {
+        label: " Errors",
+        data: errorsData,
+        borderColor: "#ef4444",
+        backgroundColor: "rgba(239, 68, 68, 0.1)",
+        pointBackgroundColor: "#ef4444",
+        fill: true,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index" as const, intersect: false },
+    plugins: {
+      legend: {
+        position: "top" as const,
+        align: "end" as const,
+        labels: {
+          boxWidth: 12,
+          boxHeight: 12,
+          useBorderRadius: true,
+          borderRadius: 2,
+          padding: 16,
+          color: "#9ca3af",
+          font: { size: 12 },
+        },
+      },
+      tooltip: {
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        borderWidth: 1,
+        padding: 12,
+        boxPadding: 4,
+        usePointStyle: true,
+        callbacks: {
+          label: (ctx: TooltipItem<"line">) => {
+            const label = ctx.dataset.label || "";
+            const value = ctx.parsed.y ?? 0;
+            return `${label}: ${Math.round(value).toLocaleString()}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: true,
+          color: "rgba(128, 128, 128, 0.1)",
+          lineWidth: 1,
+        },
+        ticks: { maxTicksLimit: 8 },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: "rgba(128, 128, 128, 0.2)" },
+      },
+    },
+  };
+
+  if (labels.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
+        No data
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative", height: 240 }}>
+      <Line data={chartData} options={options} />
+    </div>
+  );
+}
+
+function HooksAnalytics({
+  summaryData,
+  groupedTraces,
+  serverNameMappings,
+  from,
+  to,
+}: {
+  summaryData?: GetHooksSummaryResult;
+  groupedTraces: HookTrace[];
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  from: Date;
+  to: Date;
+}) {
+  const kpis = useMemo(() => {
+    const servers = summaryData?.servers ?? [];
+    const totalEvents = summaryData?.totalEvents ?? 0;
+    const totalSessions = summaryData?.totalSessions ?? 0;
+
+    const avgSuccessRate =
+      servers.length > 0
+        ? servers.reduce((sum, s) => sum + (1 - s.failureRate) * 100, 0) /
+          servers.length
+        : null;
+
+    const uniqueUsers = new Set(
+      groupedTraces.map((t) => t.userEmail).filter(Boolean),
+    ).size;
+
+    const sortedBySuccess = [...servers].sort(
+      (a, b) => a.failureRate - b.failureRate,
+    );
+    const bestServer = sortedBySuccess[0];
+    const worstServer = sortedBySuccess[sortedBySuccess.length - 1];
+
+    const getDisplayName = (s: HooksServerSummary) =>
+      !s.serverName
+        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+        : (serverNameMappings.rawToDisplay.get(s.serverName) ?? s.serverName);
+
+    return {
+      avgSuccessRate,
+      totalEvents,
+      totalSessions,
+      uniqueUsers,
+      bestServer: bestServer
+        ? {
+            name: getDisplayName(bestServer),
+            rate: (1 - bestServer.failureRate) * 100,
+          }
+        : null,
+      worstServer: worstServer
+        ? {
+            name: getDisplayName(worstServer),
+            rate: (1 - worstServer.failureRate) * 100,
+          }
+        : null,
+    };
+  }, [summaryData, groupedTraces, serverNameMappings.rawToDisplay]);
+
+  const hasServers = (summaryData?.servers.length ?? 0) > 0;
+
+  return (
+    <div className="mb-4 space-y-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <MetricCard
+          title="Avg Success Rate"
+          value={kpis.avgSuccessRate ?? 0}
+          format="percent"
+          icon="circle-check"
+          accentColor="green"
+          subtext="across all servers"
+        />
+        <MetricCard
+          title="Total Events"
+          value={kpis.totalEvents}
+          icon="activity"
+          accentColor="purple"
+          subtext="this period"
+        />
+        <MetricCard
+          title="Sessions"
+          value={kpis.totalSessions}
+          icon="users"
+          accentColor="yellow"
+          subtext="unique sessions"
+        />
+        <MetricCard
+          title="Best Server"
+          value={kpis.bestServer?.rate ?? 0}
+          format="percent"
+          icon="trending-up"
+          accentColor="blue"
+          subtext={kpis.bestServer?.name ?? "no data"}
+        />
+        <MetricCard
+          title="Worst Server"
+          value={kpis.worstServer?.rate ?? 0}
+          format="percent"
+          icon="trending-down"
+          accentColor="red"
+          subtext={kpis.worstServer?.name ?? "no data"}
+        />
+      </div>
+
+      {/* Bar Charts */}
+      {hasServers && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold mb-4">
+              Servers by Success Rate
+            </h3>
+            <ServerSuccessRateChart
+              servers={summaryData!.servers}
+              serverNameMappings={serverNameMappings}
+            />
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold mb-4">
+              Call Sources by Success Rate
+            </h3>
+            <SourceSuccessRateChart traces={groupedTraces} />
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold mb-4">
+              Users by Success Rate
+            </h3>
+            <UserSuccessRateChart users={summaryData!.users ?? []} />
+          </div>
+        </div>
+      )}
+
+      {/* Time Series */}
+      {groupedTraces.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold mb-4">
+            Success & Error Rate Over Time
+          </h3>
+          <HooksTotalTimeSeries traces={groupedTraces} from={from} to={to} />
+        </div>
       )}
     </div>
   );
