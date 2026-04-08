@@ -1280,12 +1280,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_registries_url_key
 -- Organization MCP collections: named groups of toolsets published within an org
 CREATE TABLE IF NOT EXISTS organization_mcp_collections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  registry_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   description TEXT,
   slug TEXT NOT NULL,
-  mcp_registry_namespace TEXT NOT NULL,
   visibility TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1294,13 +1292,32 @@ CREATE TABLE IF NOT EXISTS organization_mcp_collections (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT organization_mcp_collections_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_mcp_collections_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries (id) ON DELETE CASCADE,
   CONSTRAINT organization_mcp_collections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
--- Unique namespace per organization
-CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collections_namespace_organization_id_key
-  ON organization_mcp_collections (mcp_registry_namespace, organization_id)
+CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collections_slug_organization_id_key
+  ON organization_mcp_collections (slug, organization_id)
+  WHERE deleted IS FALSE;
+
+-- MCP registry details for collections that are published as registries
+CREATE TABLE IF NOT EXISTS organization_mcp_collection_registries (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  collection_id uuid NOT NULL,
+  registry_id uuid NOT NULL,
+  namespace TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT organization_mcp_collection_registries_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_mcp_collection_registries_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
+  CONSTRAINT organization_mcp_collection_registries_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_namespace_key
+  ON organization_mcp_collection_registries (namespace)
   WHERE deleted IS FALSE;
 
 -- Join table linking toolsets to collections (for catalog publishing)

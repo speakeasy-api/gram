@@ -14,56 +14,76 @@ import (
 )
 
 const createCollection = `-- name: CreateCollection :one
-INSERT INTO organization_mcp_collections (registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+INSERT INTO organization_mcp_collections (organization_id, name, description, slug, visibility)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at
 `
 
 type CreateCollectionParams struct {
-	RegistryID           uuid.UUID
-	OrganizationID       string
-	Name                 string
-	Description          pgtype.Text
-	Slug                 string
-	McpRegistryNamespace string
-	Visibility           string
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
 }
 
 type CreateCollectionRow struct {
-	ID                   uuid.UUID
-	RegistryID           uuid.UUID
-	OrganizationID       string
-	Name                 string
-	Description          pgtype.Text
-	Slug                 string
-	McpRegistryNamespace string
-	Visibility           string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) CreateCollection(ctx context.Context, arg CreateCollectionParams) (CreateCollectionRow, error) {
 	row := q.db.QueryRow(ctx, createCollection,
-		arg.RegistryID,
 		arg.OrganizationID,
 		arg.Name,
 		arg.Description,
 		arg.Slug,
-		arg.McpRegistryNamespace,
 		arg.Visibility,
 	)
 	var i CreateCollectionRow
 	err := row.Scan(
 		&i.ID,
-		&i.RegistryID,
 		&i.OrganizationID,
 		&i.Name,
 		&i.Description,
 		&i.Slug,
-		&i.McpRegistryNamespace,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createCollectionRegistry = `-- name: CreateCollectionRegistry :one
+INSERT INTO organization_mcp_collection_registries (collection_id, registry_id, namespace)
+VALUES ($1, $2, $3)
+RETURNING id, collection_id, registry_id, namespace, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateCollectionRegistryParams struct {
+	CollectionID uuid.UUID
+	RegistryID   uuid.UUID
+	Namespace    string
+}
+
+func (q *Queries) CreateCollectionRegistry(ctx context.Context, arg CreateCollectionRegistryParams) (OrganizationMcpCollectionRegistry, error) {
+	row := q.db.QueryRow(ctx, createCollectionRegistry, arg.CollectionID, arg.RegistryID, arg.Namespace)
+	var i OrganizationMcpCollectionRegistry
+	err := row.Scan(
+		&i.ID,
+		&i.CollectionID,
+		&i.RegistryID,
+		&i.Namespace,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -277,22 +297,20 @@ func (q *Queries) DeleteCollection(ctx context.Context, id uuid.UUID) error {
 }
 
 const getCollectionByID = `-- name: GetCollectionByID :one
-SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
 WHERE id = $1 AND deleted IS FALSE
 `
 
 type GetCollectionByIDRow struct {
-	ID                   uuid.UUID
-	RegistryID           uuid.UUID
-	OrganizationID       string
-	Name                 string
-	Description          pgtype.Text
-	Slug                 string
-	McpRegistryNamespace string
-	Visibility           string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) GetCollectionByID(ctx context.Context, id uuid.UUID) (GetCollectionByIDRow, error) {
@@ -300,12 +318,10 @@ func (q *Queries) GetCollectionByID(ctx context.Context, id uuid.UUID) (GetColle
 	var i GetCollectionByIDRow
 	err := row.Scan(
 		&i.ID,
-		&i.RegistryID,
 		&i.OrganizationID,
 		&i.Name,
 		&i.Description,
 		&i.Slug,
-		&i.McpRegistryNamespace,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -313,44 +329,82 @@ func (q *Queries) GetCollectionByID(ctx context.Context, id uuid.UUID) (GetColle
 	return i, err
 }
 
-const getCollectionByNamespace = `-- name: GetCollectionByNamespace :one
-SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+const getCollectionBySlugAndOrg = `-- name: GetCollectionBySlugAndOrg :one
+SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
-WHERE mcp_registry_namespace = $1 AND organization_id = $2 AND deleted IS FALSE
+WHERE slug = $1 AND organization_id = $2 AND deleted IS FALSE
 `
 
-type GetCollectionByNamespaceParams struct {
-	McpRegistryNamespace string
-	OrganizationID       string
+type GetCollectionBySlugAndOrgParams struct {
+	Slug           string
+	OrganizationID string
 }
 
-type GetCollectionByNamespaceRow struct {
-	ID                   uuid.UUID
-	RegistryID           uuid.UUID
-	OrganizationID       string
-	Name                 string
-	Description          pgtype.Text
-	Slug                 string
-	McpRegistryNamespace string
-	Visibility           string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+type GetCollectionBySlugAndOrgRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
-func (q *Queries) GetCollectionByNamespace(ctx context.Context, arg GetCollectionByNamespaceParams) (GetCollectionByNamespaceRow, error) {
-	row := q.db.QueryRow(ctx, getCollectionByNamespace, arg.McpRegistryNamespace, arg.OrganizationID)
-	var i GetCollectionByNamespaceRow
+func (q *Queries) GetCollectionBySlugAndOrg(ctx context.Context, arg GetCollectionBySlugAndOrgParams) (GetCollectionBySlugAndOrgRow, error) {
+	row := q.db.QueryRow(ctx, getCollectionBySlugAndOrg, arg.Slug, arg.OrganizationID)
+	var i GetCollectionBySlugAndOrgRow
 	err := row.Scan(
 		&i.ID,
-		&i.RegistryID,
 		&i.OrganizationID,
 		&i.Name,
 		&i.Description,
 		&i.Slug,
-		&i.McpRegistryNamespace,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCollectionRegistryByCollectionID = `-- name: GetCollectionRegistryByCollectionID :one
+SELECT id, collection_id, registry_id, namespace, created_at, updated_at, deleted_at, deleted FROM organization_mcp_collection_registries
+WHERE collection_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) GetCollectionRegistryByCollectionID(ctx context.Context, collectionID uuid.UUID) (OrganizationMcpCollectionRegistry, error) {
+	row := q.db.QueryRow(ctx, getCollectionRegistryByCollectionID, collectionID)
+	var i OrganizationMcpCollectionRegistry
+	err := row.Scan(
+		&i.ID,
+		&i.CollectionID,
+		&i.RegistryID,
+		&i.Namespace,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getCollectionRegistryByNamespace = `-- name: GetCollectionRegistryByNamespace :one
+SELECT id, collection_id, registry_id, namespace, created_at, updated_at, deleted_at, deleted FROM organization_mcp_collection_registries
+WHERE namespace = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) GetCollectionRegistryByNamespace(ctx context.Context, namespace string) (OrganizationMcpCollectionRegistry, error) {
+	row := q.db.QueryRow(ctx, getCollectionRegistryByNamespace, namespace)
+	var i OrganizationMcpCollectionRegistry
+	err := row.Scan(
+		&i.ID,
+		&i.CollectionID,
+		&i.RegistryID,
+		&i.Namespace,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -680,23 +734,21 @@ func (q *Queries) IsToolsetPublished(ctx context.Context, arg IsToolsetPublished
 }
 
 const listCollectionsForOrganization = `-- name: ListCollectionsForOrganization :many
-SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
 WHERE organization_id = $1 AND deleted IS FALSE
 ORDER BY name ASC
 `
 
 type ListCollectionsForOrganizationRow struct {
-	ID                   uuid.UUID
-	RegistryID           uuid.UUID
-	OrganizationID       string
-	Name                 string
-	Description          pgtype.Text
-	Slug                 string
-	McpRegistryNamespace string
-	Visibility           string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) ListCollectionsForOrganization(ctx context.Context, organizationID string) ([]ListCollectionsForOrganizationRow, error) {
@@ -710,12 +762,10 @@ func (q *Queries) ListCollectionsForOrganization(ctx context.Context, organizati
 		var i ListCollectionsForOrganizationRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.RegistryID,
 			&i.OrganizationID,
 			&i.Name,
 			&i.Description,
 			&i.Slug,
-			&i.McpRegistryNamespace,
 			&i.Visibility,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1035,7 +1085,7 @@ SET name = COALESCE($1, name),
     visibility = COALESCE($3, visibility),
     updated_at = clock_timestamp()
 WHERE id = $4 AND deleted IS FALSE
-RETURNING id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at
 `
 
 type UpdateCollectionParams struct {
@@ -1046,16 +1096,14 @@ type UpdateCollectionParams struct {
 }
 
 type UpdateCollectionRow struct {
-	ID                   uuid.UUID
-	RegistryID           uuid.UUID
-	OrganizationID       string
-	Name                 string
-	Description          pgtype.Text
-	Slug                 string
-	McpRegistryNamespace string
-	Visibility           string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (UpdateCollectionRow, error) {
@@ -1068,12 +1116,10 @@ func (q *Queries) UpdateCollection(ctx context.Context, arg UpdateCollectionPara
 	var i UpdateCollectionRow
 	err := row.Scan(
 		&i.ID,
-		&i.RegistryID,
 		&i.OrganizationID,
 		&i.Name,
 		&i.Description,
 		&i.Slug,
-		&i.McpRegistryNamespace,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,

@@ -598,18 +598,27 @@ type OrganizationFeature struct {
 }
 
 type OrganizationMcpCollection struct {
-	ID                   uuid.UUID
-	RegistryID           uuid.UUID
-	OrganizationID       string
-	Name                 string
-	Description          pgtype.Text
-	Slug                 string
-	McpRegistryNamespace string
-	Visibility           string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type OrganizationMcpCollectionRegistry struct {
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	RegistryID   uuid.UUID
+	Namespace    string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
 }
 
 type OrganizationMetadatum struct {

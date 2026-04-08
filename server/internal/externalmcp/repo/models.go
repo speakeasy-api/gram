@@ -21,6 +21,17 @@ type McpRegistryToolset struct {
 	Deleted      bool
 }
 
+type OrganizationMcpCollectionRegistry struct {
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	RegistryID   uuid.UUID
+	Namespace    string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type Toolset struct {
 	ID                     uuid.UUID
 	OrganizationID         string

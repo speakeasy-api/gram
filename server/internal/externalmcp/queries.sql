@@ -10,22 +10,22 @@ FROM mcp_registries
 WHERE id = @id AND deleted IS FALSE;
 
 -- name: CreateCollection :one
-INSERT INTO organization_mcp_collections (registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility)
-VALUES (@registry_id, @organization_id, @name, @description, @slug, @mcp_registry_namespace, @visibility)
-RETURNING id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at;
+INSERT INTO organization_mcp_collections (organization_id, name, description, slug, visibility)
+VALUES (@organization_id, @name, @description, @slug, @visibility)
+RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at;
 
 -- name: GetCollectionByID :one
-SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
 WHERE id = @id AND deleted IS FALSE;
 
--- name: GetCollectionByNamespace :one
-SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+-- name: GetCollectionBySlugAndOrg :one
+SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
-WHERE mcp_registry_namespace = @mcp_registry_namespace AND organization_id = @organization_id AND deleted IS FALSE;
+WHERE slug = @slug AND organization_id = @organization_id AND deleted IS FALSE;
 
 -- name: ListCollectionsForOrganization :many
-SELECT id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at
+SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
 WHERE organization_id = @organization_id AND deleted IS FALSE
 ORDER BY name ASC;
@@ -37,11 +37,24 @@ SET name = COALESCE(sqlc.narg('name'), name),
     visibility = COALESCE(sqlc.narg('visibility'), visibility),
     updated_at = clock_timestamp()
 WHERE id = @id AND deleted IS FALSE
-RETURNING id, registry_id, organization_id, name, description, slug, mcp_registry_namespace, visibility, created_at, updated_at;
+RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at;
 
 -- name: DeleteCollection :exec
 UPDATE organization_mcp_collections SET deleted_at = clock_timestamp()
 WHERE id = @id AND deleted IS FALSE;
+
+-- name: CreateCollectionRegistry :one
+INSERT INTO organization_mcp_collection_registries (collection_id, registry_id, namespace)
+VALUES (@collection_id, @registry_id, @namespace)
+RETURNING *;
+
+-- name: GetCollectionRegistryByCollectionID :one
+SELECT * FROM organization_mcp_collection_registries
+WHERE collection_id = @collection_id AND deleted IS FALSE;
+
+-- name: GetCollectionRegistryByNamespace :one
+SELECT * FROM organization_mcp_collection_registries
+WHERE namespace = @namespace AND deleted IS FALSE;
 
 -- name: PublishToolsetToCollection :one
 INSERT INTO mcp_registry_toolsets (collection_id, toolset_id, published_by)
