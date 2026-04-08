@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -45,6 +47,7 @@ type testInstance struct {
 	service        *templates.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	toolsetsSvc    *toolsetsServiceStub
 }
 
 func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
@@ -73,12 +76,13 @@ func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
 			return nil
 		},
 	}
-	svc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)
+	svc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		toolsetsSvc:    toolsetsSvc,
 	}
 }
 

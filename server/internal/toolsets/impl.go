@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -65,15 +64,15 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache, accessLoader auth.AccessLoader) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
-		tracer:          otel.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
 		logger:          logger,
 		db:              db,
 		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions),
+		auth:            auth.New(logger, db, sessions, accessLoader),
 		environmentRepo: environmentsRepo.New(db),
 		toolsets:        NewToolsets(db),
 		domainsRepo:     domainsRepo.New(db),
@@ -300,13 +299,15 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.McpSlug != nil && *payload.McpSlug != "" {
-		// For free accounts, enforce that the MCP slug is prefixed with the org slug
+		// Slugs on the platform domain (no custom domain, or free accounts) must be prefixed with the org slug
 		if toolsetDomainID == nil || authCtx.AccountType == "free" {
 			if !strings.HasPrefix(conv.ToLower(*payload.McpSlug), authCtx.OrganizationSlug+"-") {
 				return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts")
 			}
 
-			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
+			// Check slug uniqueness on the platform domain only (no custom domain).
+			// Custom domains have a separate namespace so the same slug can exist on both.
+			mcpToolset, mcpToolsetErr := tr.GetToolsetByPlatformMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
 			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
 				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
 			}

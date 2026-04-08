@@ -79,6 +79,23 @@ type TraceSummary struct {
 	EventSource       *string `ch:"event_source"`         // String - event source
 }
 
+// HookTraceSummary represents an aggregated view of a hook trace (one row per trace).
+// Similar to TraceSummary but includes user_email and hook_source for hooks page.
+// Queries telemetry_logs directly to access user.email from attributes JSON.
+type HookTraceSummary struct {
+	TraceID           string  `ch:"trace_id"`             // FixedString(32)
+	StartTimeUnixNano int64   `ch:"start_time_unix_nano"` // Int64 - earliest log timestamp
+	LogCount          uint64  `ch:"log_count"`            // UInt64 - total logs in trace
+	HookStatus        *string `ch:"hook_status"`          // String - hook execution status: "success", "failure", or "pending"
+	GramURN           string  `ch:"gram_urn"`             // String - any gram_urn from the trace
+	ToolName          *string `ch:"tool_name"`            // String - tool name from materialized column
+	ToolSource        *string `ch:"tool_source"`          // String - tool call source from materialized column
+	EventSource       *string `ch:"event_source"`         // String - event source from materialized column
+	UserEmail         *string `ch:"user_email"`           // String - user email from attributes.user.email
+	HookSource        *string `ch:"hook_source"`          // String - hook source from attributes.gram.hook.source
+	SkillName         *string `ch:"skill_name"`           // String - skill name from materialized column (only for Skill tool)
+}
+
 // ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).
 // Used for displaying a list of chat sessions in the UI.
 type ChatSummary struct {

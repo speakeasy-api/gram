@@ -26,6 +26,10 @@ export type InfoResponseBody = {
   userId: string;
   userPhotoUrl?: string | undefined;
   userSignature?: string | undefined;
+  /**
+   * Whether the organization is whitelisted to access the platform
+   */
+  whitelisted: boolean;
 };
 
 /** @internal */
@@ -44,6 +48,7 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
     user_id: z.string(),
     user_photo_url: z.optional(z.string()),
     user_signature: z.optional(z.string()),
+    whitelisted: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {

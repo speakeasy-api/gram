@@ -81,6 +81,7 @@ import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
+import { MCPPerformanceTab } from "./MCPPerformanceTab";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -162,8 +163,9 @@ export function MCPDetailPage() {
       "tools",
       "resources",
       "prompts",
-      "settings",
       "authentication",
+      "performance",
+      "settings",
     ];
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
@@ -312,6 +314,9 @@ export function MCPDetailPage() {
                     )}
                   </span>
                 </PageTabsTrigger>
+                <PageTabsTrigger value="performance">
+                  Performance
+                </PageTabsTrigger>
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
@@ -320,7 +325,7 @@ export function MCPDetailPage() {
           {/* Tab Content */}
           <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
             <TabsContent value="overview" className="mt-0 w-full">
-              <MCPOverviewTab toolset={toolset} />
+              <MCPOverviewTab toolset={toolset} onTabChange={handleTabChange} />
             </TabsContent>
 
             <TabsContent value="tools" className="mt-0 w-full">
@@ -337,6 +342,10 @@ export function MCPDetailPage() {
 
             <TabsContent value="authentication" className="mt-0 w-full">
               <MCPAuthenticationTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="performance" className="mt-0 w-full">
+              <MCPPerformanceTab toolset={toolset} />
             </TabsContent>
 
             <TabsContent value="settings" className="mt-0 w-full">
@@ -402,7 +411,13 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 /**
  * Overview Tab - Hosted URL and Installation instructions
  */
-function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
+function MCPOverviewTab({
+  toolset,
+  onTabChange,
+}: {
+  toolset: Toolset;
+  onTabChange: (tab: string) => void;
+}) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
@@ -434,7 +449,14 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
             Your server is private. To share with external users, you must make
-            it public in the server settings.
+            it public in the{" "}
+            <button
+              className="underline appearance-none"
+              onClick={() => onTabChange("settings")}
+            >
+              server settings
+            </button>
+            .
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
@@ -881,7 +903,7 @@ function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
 }
 
 /**
- * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode, Actions, Danger Zone
+ * Settings Tab - Visibility, Slug, Custom Domain, Actions, Danger Zone
  */
 function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
@@ -904,6 +926,10 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+
+  // Delete mcp server state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeletingMcpServer, setIsDeletingMcpServer] = useState(false);
 
   // Export mutation
   const exportMutation = useExportMcpMetadataMutation();
@@ -947,7 +973,9 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       console.error("Failed to export MCP configuration:", error);
       toast.error(
         `Failed to export: ${error instanceof Error ? error.message : "Unknown error"}`,
-        { id: toastId },
+        {
+          id: toastId,
+        },
       );
     }
   };
@@ -955,16 +983,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const handleDeleteMcpServer = async () => {
     if (!toolset) return;
 
-    if (
-      !confirm(
-        "Are you sure you want to delete this MCP server? This action cannot be undone.",
-      )
-    ) {
-      return;
-    }
-
-    routes.mcp.goTo();
-    const toastId = toast.loading("Deleting MCP server...");
+    setIsDeletingMcpServer(true);
 
     try {
       const externalMcpUrn = toolset.toolUrns?.find((urn) =>
@@ -997,13 +1016,14 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       invalidateAllGetPeriodUsage(queryClient);
       refetchDeployment();
 
-      toast.success("MCP server deleted", { id: toastId });
+      toast.success(`MCP server "${toolset.slug}" deleted`);
+      setIsDeleteDialogOpen(false);
+      routes.mcp.goTo();
     } catch (error) {
       console.error("Failed to delete MCP server:", error);
-      toast.error(
-        `Failed to delete: ${error instanceof Error ? error.message : "Unknown error"}`,
-        { id: toastId },
-      );
+      toast.error(`Failed to delete MCP server "${toolset.slug}"`);
+    } finally {
+      setIsDeletingMcpServer(false);
     }
   };
 
@@ -1167,45 +1187,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     );
   };
 
-  const ToolSelectionModeToggle = ({
-    toolSelectionMode,
-  }: {
-    toolSelectionMode: string;
-  }) => {
-    const onToggle = (value: string) => {
-      updateToolsetMutation.mutate({
-        request: {
-          slug: toolset.slug,
-          updateToolsetRequestBody: { toolSelectionMode: value },
-        },
-      });
-    };
-
-    return (
-      <BigToggle
-        align="start"
-        options={[
-          {
-            value: "static",
-            icon: "list-ordered",
-            label: "Static",
-            description:
-              "Traditional MCP. Every tool is added into context up front.",
-          },
-          {
-            value: "dynamic",
-            icon: "search",
-            label: "Dynamic",
-            description:
-              "Highly token efficient and effective for large toolsets. The LLM can discover tools as it needs them.",
-          },
-        ]}
-        selectedValue={toolSelectionMode}
-        onSelect={onToggle}
-      />
-    );
-  };
-
   return (
     <Stack className="mb-4">
       <PageSection
@@ -1289,16 +1270,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       <PageSection
-        heading="Tool Selection Mode"
-        featureType="experimental"
-        description="Change how this server's tools will be presented to the LLM. Can have drastic effects on context management, especially for larger toolsets. Use with care."
-      >
-        <ToolSelectionModeToggle
-          toolSelectionMode={toolset.toolSelectionMode ?? "static"}
-        />
-      </PageSection>
-
-      <PageSection
         heading="Actions"
         description="Export or configure your MCP server."
       >
@@ -1375,7 +1346,8 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         <Button
           variant="destructive-primary"
           size="md"
-          onClick={handleDeleteMcpServer}
+          onClick={() => setIsDeleteDialogOpen(true)}
+          disabled={isDeleteDialogOpen}
         >
           <Button.LeftIcon>
             <Trash2 className="h-4 w-4" />
@@ -1383,6 +1355,45 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           <Button.Text>Delete MCP Server</Button.Text>
         </Button>
       </div>
+
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeletingMcpServer) setIsDeleteDialogOpen(open);
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Delete MCP Server</Dialog.Title>
+          </Dialog.Header>
+          <div className="space-y-4 py-4">
+            <Type variant="body">
+              <code className="font-mono font-bold px-1 py-0.5 bg-muted rounded">
+                {toolset.name}
+              </code>{" "}
+              and all its configuration will be permanently deleted. Connected
+              clients will immediately lose access. This action cannot be
+              undone.
+            </Type>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="secondary"
+                onClick={() => setIsDeleteDialogOpen(false)}
+                disabled={isDeletingMcpServer}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={handleDeleteMcpServer}
+                disabled={isDeletingMcpServer}
+              >
+                Delete MCP Server
+              </Button>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog>
 
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
@@ -1577,9 +1588,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
 
   const mcpJsonPublic = `{
   "mcpServers": {
-    "Gram${toolset.slug
-      .replace(/-/g, "")
-      .replace(/^./, (c) => c.toUpperCase())}": {
+    "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
       "args": ${argsStringIndented}${
         !toolset.mcpIsPublic
@@ -1595,9 +1604,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
 
   const mcpJsonInternal = `{
   "mcpServers": {
-    "Gram${toolset.slug
-      .replace(/-/g, "")
-      .replace(/^./, (c) => c.toUpperCase())}": {
+    "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
       "args": [
         "mcp-remote@0.1.25",
@@ -1876,9 +1883,7 @@ function OAuthDetailsModal({
                     </Type>
                     <CodeBlock className="mt-1">
                       {mcpUrl
-                        ? `${
-                            new URL(mcpUrl).origin
-                          }/.well-known/oauth-authorization-server/mcp/${
+                        ? `${new URL(mcpUrl).origin}/.well-known/oauth-authorization-server/mcp/${
                             toolset.mcpSlug
                           }`
                         : ""}
@@ -2194,7 +2199,7 @@ function OAuthTabModal({
     let parsedMetadata;
     try {
       parsedMetadata = JSON.parse(metadataJson);
-    } catch (_e) {
+    } catch {
       setJsonError("Invalid JSON format");
       return;
     }
@@ -2371,7 +2376,7 @@ function OAuthTabModal({
                       OAuth Authorization Server Metadata
                     </Type>
                     {jsonError && (
-                      <Type className="!text-red-500 text-sm mt-1">
+                      <Type className="text-red-500! text-sm mt-1">
                         {jsonError}
                       </Type>
                     )}
@@ -2449,7 +2454,7 @@ function OAuthTabModal({
                 )}
 
                 {proxyError && (
-                  <Type className="!text-red-500 text-sm mb-4">
+                  <Type className="text-red-500! text-sm mb-4">
                     {proxyError}
                   </Type>
                 )}

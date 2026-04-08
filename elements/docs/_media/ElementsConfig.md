@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.27.5**](../README.md)
+[**@gram-ai/elements v1.27.6**](../README.md)
 
 ***
 
@@ -162,7 +162,7 @@ LLM model configuration.
 ```ts
 const config: ElementsConfig = {
   model: {
-    defaultModel: 'openai/gpt-4o',
+    defaultModel: 'openai/gpt-5.4',
     showModelPicker: true,
   },
 }

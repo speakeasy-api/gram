@@ -223,6 +223,7 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("user_id", String, "The ID of the user who created the chat")
 	Attribute("external_user_id", String, "The ID of the external user who created the chat")
 	Attribute("num_messages", Int, "The number of messages in the chat")
+	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
 	Attribute("created_at", String, func() {
 		Description("When the chat was created.")
 		Format(FormatDateTime)

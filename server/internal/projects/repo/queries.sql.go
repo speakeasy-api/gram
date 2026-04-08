@@ -127,7 +127,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.sso_connection_id, om.workos_id, om.free_trial_started_at, om.free_trial_ends_at, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.sso_connection_id, om.workos_id, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -145,6 +145,7 @@ type GetProjectWithOrganizationMetadataRow struct {
 	GramAccountType    string
 	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
+	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
@@ -165,6 +166,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.GramAccountType,
 		&i.SsoConnectionID,
 		&i.WorkosID,
+		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
 		&i.CreatedAt,
@@ -277,6 +279,23 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 		return nil, err
 	}
 	return items, nil
+}
+
+const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :exec
+UPDATE organization_metadata
+SET whitelisted = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type SetOrganizationWhitelistParams struct {
+	Whitelisted    bool
+	OrganizationID string
+}
+
+func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizationWhitelistParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationWhitelist, arg.Whitelisted, arg.OrganizationID)
+	return err
 }
 
 const uploadProjectLogo = `-- name: UploadProjectLogo :one

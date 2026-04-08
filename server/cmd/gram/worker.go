@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -287,12 +289,14 @@ func newWorkerCommand() *cli.Command {
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "worker"
 			logger := PullLogger(c.Context).With(
+				attr.SlogComponent("worker"),
 				attr.SlogServiceName(serviceName),
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
+			slog.SetDefault(logger)
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -381,6 +385,7 @@ func newWorkerCommand() *cli.Command {
 				}
 
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
+					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					nil,
 					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalEnv.Client()}},
@@ -392,7 +397,7 @@ func newWorkerCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			productFeatures := productfeatures.NewClient(logger, db, redisClient)
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {
@@ -450,7 +455,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
-			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
+			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient, nil)
 
 			/**
 			 * BEGIN -- MCP service setup for agent client
@@ -489,6 +494,7 @@ func newWorkerCommand() *cli.Command {
 			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
+			accessManager := access.NewManager(logger, db, productFeatures)
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
 
@@ -513,6 +519,7 @@ func newWorkerCommand() *cli.Command {
 				productFeatures,
 				ragService,
 				temporalEnv,
+				accessManager,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

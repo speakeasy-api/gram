@@ -8,6 +8,7 @@ import { projectsList } from "../funcs/projectsList.js";
 import { projectsListAllowedOrigins } from "../funcs/projectsListAllowedOrigins.js";
 import { projectsRead } from "../funcs/projectsRead.js";
 import { projectsSetLogo } from "../funcs/projectsSetLogo.js";
+import { projectsSetOrganizationWhitelist } from "../funcs/projectsSetOrganizationWhitelist.js";
 import { projectsUpsertAllowedOrigin } from "../funcs/projectsUpsertAllowedOrigin.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -122,6 +123,25 @@ export class Projects extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.SetProjectLogoResult> {
     return unwrapAsync(projectsSetLogo(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationWhitelist projects
+   *
+   * @remarks
+   * Set organization whitelist status (admin only - requires speakeasy-team API key)
+   */
+  async setOrganizationWhitelist(
+    request: operations.SetOrganizationWhitelistRequest,
+    security?: operations.SetOrganizationWhitelistSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(projectsSetOrganizationWhitelist(
       this,
       request,
       security,

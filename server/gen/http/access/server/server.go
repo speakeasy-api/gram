@@ -18,11 +18,15 @@ import (
 
 // Server lists the access service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	ListGrants            http.Handler
-	UpsertGrants          http.Handler
-	RemoveGrants          http.Handler
-	RemovePrincipalGrants http.Handler
+	Mounts           []*MountPoint
+	ListRoles        http.Handler
+	GetRole          http.Handler
+	CreateRole       http.Handler
+	UpdateRole       http.Handler
+	DeleteRole       http.Handler
+	ListScopes       http.Handler
+	ListMembers      http.Handler
+	UpdateMemberRole http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,15 +56,23 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"ListGrants", "GET", "/rpc/access.listGrants"},
-			{"UpsertGrants", "POST", "/rpc/access.upsertGrants"},
-			{"RemoveGrants", "POST", "/rpc/access.removeGrants"},
-			{"RemovePrincipalGrants", "POST", "/rpc/access.removePrincipalGrants"},
+			{"ListRoles", "GET", "/rpc/access.listRoles"},
+			{"GetRole", "GET", "/rpc/access.getRole"},
+			{"CreateRole", "POST", "/rpc/access.createRole"},
+			{"UpdateRole", "PUT", "/rpc/access.updateRole"},
+			{"DeleteRole", "DELETE", "/rpc/access.deleteRole"},
+			{"ListScopes", "GET", "/rpc/access.listScopes"},
+			{"ListMembers", "GET", "/rpc/access.listMembers"},
+			{"UpdateMemberRole", "PUT", "/rpc/access.updateMemberRole"},
 		},
-		ListGrants:            NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
-		UpsertGrants:          NewUpsertGrantsHandler(e.UpsertGrants, mux, decoder, encoder, errhandler, formatter),
-		RemoveGrants:          NewRemoveGrantsHandler(e.RemoveGrants, mux, decoder, encoder, errhandler, formatter),
-		RemovePrincipalGrants: NewRemovePrincipalGrantsHandler(e.RemovePrincipalGrants, mux, decoder, encoder, errhandler, formatter),
+		ListRoles:        NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
+		GetRole:          NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
+		CreateRole:       NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
+		UpdateRole:       NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
+		DeleteRole:       NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
+		ListScopes:       NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
+		ListMembers:      NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
+		UpdateMemberRole: NewUpdateMemberRoleHandler(e.UpdateMemberRole, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -69,10 +81,14 @@ func (s *Server) Service() string { return "access" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.ListGrants = m(s.ListGrants)
-	s.UpsertGrants = m(s.UpsertGrants)
-	s.RemoveGrants = m(s.RemoveGrants)
-	s.RemovePrincipalGrants = m(s.RemovePrincipalGrants)
+	s.ListRoles = m(s.ListRoles)
+	s.GetRole = m(s.GetRole)
+	s.CreateRole = m(s.CreateRole)
+	s.UpdateRole = m(s.UpdateRole)
+	s.DeleteRole = m(s.DeleteRole)
+	s.ListScopes = m(s.ListScopes)
+	s.ListMembers = m(s.ListMembers)
+	s.UpdateMemberRole = m(s.UpdateMemberRole)
 }
 
 // MethodNames returns the methods served.
@@ -80,10 +96,14 @@ func (s *Server) MethodNames() []string { return access.MethodNames[:] }
 
 // Mount configures the mux to serve the access endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountListGrantsHandler(mux, h.ListGrants)
-	MountUpsertGrantsHandler(mux, h.UpsertGrants)
-	MountRemoveGrantsHandler(mux, h.RemoveGrants)
-	MountRemovePrincipalGrantsHandler(mux, h.RemovePrincipalGrants)
+	MountListRolesHandler(mux, h.ListRoles)
+	MountGetRoleHandler(mux, h.GetRole)
+	MountCreateRoleHandler(mux, h.CreateRole)
+	MountUpdateRoleHandler(mux, h.UpdateRole)
+	MountDeleteRoleHandler(mux, h.DeleteRole)
+	MountListScopesHandler(mux, h.ListScopes)
+	MountListMembersHandler(mux, h.ListMembers)
+	MountUpdateMemberRoleHandler(mux, h.UpdateMemberRole)
 }
 
 // Mount configures the mux to serve the access endpoints.
@@ -91,21 +111,21 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountListGrantsHandler configures the mux to serve the "access" service
-// "listGrants" endpoint.
-func MountListGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountListRolesHandler configures the mux to serve the "access" service
+// "listRoles" endpoint.
+func MountListRolesHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/access.listGrants", f)
+	mux.Handle("GET", "/rpc/access.listRoles", f)
 }
 
-// NewListGrantsHandler creates a HTTP handler which loads the HTTP request and
-// calls the "access" service "listGrants" endpoint.
-func NewListGrantsHandler(
+// NewListRolesHandler creates a HTTP handler which loads the HTTP request and
+// calls the "access" service "listRoles" endpoint.
+func NewListRolesHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -114,13 +134,13 @@ func NewListGrantsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeListGrantsRequest(mux, decoder)
-		encodeResponse = EncodeListGrantsResponse(encoder)
-		encodeError    = EncodeListGrantsError(encoder, formatter)
+		decodeRequest  = DecodeListRolesRequest(mux, decoder)
+		encodeResponse = EncodeListRolesResponse(encoder)
+		encodeError    = EncodeListRolesError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listGrants")
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRoles")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -144,21 +164,21 @@ func NewListGrantsHandler(
 	})
 }
 
-// MountUpsertGrantsHandler configures the mux to serve the "access" service
-// "upsertGrants" endpoint.
-func MountUpsertGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetRoleHandler configures the mux to serve the "access" service
+// "getRole" endpoint.
+func MountGetRoleHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.upsertGrants", f)
+	mux.Handle("GET", "/rpc/access.getRole", f)
 }
 
-// NewUpsertGrantsHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "upsertGrants" endpoint.
-func NewUpsertGrantsHandler(
+// NewGetRoleHandler creates a HTTP handler which loads the HTTP request and
+// calls the "access" service "getRole" endpoint.
+func NewGetRoleHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -167,13 +187,13 @@ func NewUpsertGrantsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeUpsertGrantsRequest(mux, decoder)
-		encodeResponse = EncodeUpsertGrantsResponse(encoder)
-		encodeError    = EncodeUpsertGrantsError(encoder, formatter)
+		decodeRequest  = DecodeGetRoleRequest(mux, decoder)
+		encodeResponse = EncodeGetRoleResponse(encoder)
+		encodeError    = EncodeGetRoleError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "upsertGrants")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRole")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -197,21 +217,21 @@ func NewUpsertGrantsHandler(
 	})
 }
 
-// MountRemoveGrantsHandler configures the mux to serve the "access" service
-// "removeGrants" endpoint.
-func MountRemoveGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountCreateRoleHandler configures the mux to serve the "access" service
+// "createRole" endpoint.
+func MountCreateRoleHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.removeGrants", f)
+	mux.Handle("POST", "/rpc/access.createRole", f)
 }
 
-// NewRemoveGrantsHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "removeGrants" endpoint.
-func NewRemoveGrantsHandler(
+// NewCreateRoleHandler creates a HTTP handler which loads the HTTP request and
+// calls the "access" service "createRole" endpoint.
+func NewCreateRoleHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -220,13 +240,13 @@ func NewRemoveGrantsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeRemoveGrantsRequest(mux, decoder)
-		encodeResponse = EncodeRemoveGrantsResponse(encoder)
-		encodeError    = EncodeRemoveGrantsError(encoder, formatter)
+		decodeRequest  = DecodeCreateRoleRequest(mux, decoder)
+		encodeResponse = EncodeCreateRoleResponse(encoder)
+		encodeError    = EncodeCreateRoleError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "removeGrants")
+		ctx = context.WithValue(ctx, goa.MethodKey, "createRole")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -250,21 +270,21 @@ func NewRemoveGrantsHandler(
 	})
 }
 
-// MountRemovePrincipalGrantsHandler configures the mux to serve the "access"
-// service "removePrincipalGrants" endpoint.
-func MountRemovePrincipalGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountUpdateRoleHandler configures the mux to serve the "access" service
+// "updateRole" endpoint.
+func MountUpdateRoleHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.removePrincipalGrants", f)
+	mux.Handle("PUT", "/rpc/access.updateRole", f)
 }
 
-// NewRemovePrincipalGrantsHandler creates a HTTP handler which loads the HTTP
-// request and calls the "access" service "removePrincipalGrants" endpoint.
-func NewRemovePrincipalGrantsHandler(
+// NewUpdateRoleHandler creates a HTTP handler which loads the HTTP request and
+// calls the "access" service "updateRole" endpoint.
+func NewUpdateRoleHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -273,13 +293,225 @@ func NewRemovePrincipalGrantsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeRemovePrincipalGrantsRequest(mux, decoder)
-		encodeResponse = EncodeRemovePrincipalGrantsResponse(encoder)
-		encodeError    = EncodeRemovePrincipalGrantsError(encoder, formatter)
+		decodeRequest  = DecodeUpdateRoleRequest(mux, decoder)
+		encodeResponse = EncodeUpdateRoleResponse(encoder)
+		encodeError    = EncodeUpdateRoleError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "removePrincipalGrants")
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateRole")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteRoleHandler configures the mux to serve the "access" service
+// "deleteRole" endpoint.
+func MountDeleteRoleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/access.deleteRole", f)
+}
+
+// NewDeleteRoleHandler creates a HTTP handler which loads the HTTP request and
+// calls the "access" service "deleteRole" endpoint.
+func NewDeleteRoleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteRoleRequest(mux, decoder)
+		encodeResponse = EncodeDeleteRoleResponse(encoder)
+		encodeError    = EncodeDeleteRoleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteRole")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListScopesHandler configures the mux to serve the "access" service
+// "listScopes" endpoint.
+func MountListScopesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listScopes", f)
+}
+
+// NewListScopesHandler creates a HTTP handler which loads the HTTP request and
+// calls the "access" service "listScopes" endpoint.
+func NewListScopesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListScopesRequest(mux, decoder)
+		encodeResponse = EncodeListScopesResponse(encoder)
+		encodeError    = EncodeListScopesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listScopes")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListMembersHandler configures the mux to serve the "access" service
+// "listMembers" endpoint.
+func MountListMembersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listMembers", f)
+}
+
+// NewListMembersHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "listMembers" endpoint.
+func NewListMembersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListMembersRequest(mux, decoder)
+		encodeResponse = EncodeListMembersResponse(encoder)
+		encodeError    = EncodeListMembersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listMembers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateMemberRoleHandler configures the mux to serve the "access"
+// service "updateMemberRole" endpoint.
+func MountUpdateMemberRoleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/access.updateMemberRole", f)
+}
+
+// NewUpdateMemberRoleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "updateMemberRole" endpoint.
+func NewUpdateMemberRoleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateMemberRoleRequest(mux, decoder)
+		encodeResponse = EncodeUpdateMemberRoleResponse(encoder)
+		encodeError    = EncodeUpdateMemberRoleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateMemberRole")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

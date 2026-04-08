@@ -1,5 +1,66 @@
 # server
 
+## 0.35.0
+
+### Minor Changes
+
+- ba10ce4: Add Cursor hooks support with authenticated endpoint, plugin, and setup
+
+### Patch Changes
+
+- 0a3af53: Adds support for full session capture from Claude. Complete transcripts of prompts, responses, and tool calls
+- c28788e: Add MCP App support across the playground, local functions runner, and the functions SDK.
+
+  Improve local runner lifecycle handling for proxied tool and resource responses, and only seed MCP App function assets when the functions backend is local.
+
+- 86dbcd6: Redesign the Available Tools section on MCP install pages to use a compact expandable table instead of overflowing badges. Each tool row shows its name and description, with an inline detail panel revealing the title and color-coded annotation badges (read-only, destructive, idempotent, open-world) on click. Servers with more than 10 tools show a "Show N more" button.
+
+## 0.34.2
+
+### Patch Changes
+
+- bfae9f2: Adds role based access control enforcement to projects (behind feature flag)
+- f2ec00c: Fixes issue with Oauth validation checks.
+- c0d3215: Fix custom domain verification to fail fast on transient database errors instead of incorrectly creating a new domain record
+
+## 0.34.1
+
+### Patch Changes
+
+- 9f179d5: Ensure `DeleteProject` returns idempotent success for non-existent project.
+- a1c64a1: Fix toolset cache not being invalidated when a template is deleted.
+- a64842e: Removes grants api endpoints (replaced by roles management).
+
+## 0.34.0
+
+### Minor Changes
+
+- c9d23f8: Adds an API for role, membership and grants management.
+- e177e45: Improve user-facing deployment logs with source processing details and aggregate summary
+
+### Patch Changes
+
+- 0c07035: fix: revert "feat: allow other security schemes when public OAuth is configured"
+- 7978914: Validate that default_environment_id belongs to the caller's project before storing it in MCP metadata
+
+## 0.33.0
+
+### Minor Changes
+
+- 2850644: Allow multiple security schemes even when OAuth servers are configured on public servers
+
+### Patch Changes
+
+- 6160abf: Moved control server initialization after all routes and middleware are attached, and added a /healthz endpoint to the main API mux so the control server can verify the API is actually serving traffic before reporting healthy.
+
+## 0.32.1
+
+### Patch Changes
+
+- 1295324: Strip tools from toolset audit log snapshots
+
+  The Tools field on Toolset can be very large. Cloning the before/after snapshots and nilling out Tools avoids serializing this data into audit log entries where it is not needed.
+
 ## 0.32.0
 
 ### Minor Changes

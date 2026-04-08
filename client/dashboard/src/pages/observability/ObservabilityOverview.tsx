@@ -165,7 +165,7 @@ function SetupRequiredModal({
             Get Started with Insights
           </Dialog.Title>
           <Dialog.Description className="text-center">
-            Start capturing chat sessions and tool metrics by integrating Gram
+            Start capturing agent sessions and tool metrics by integrating Gram
             Elements into your application.
           </Dialog.Description>
         </Dialog.Header>
@@ -958,7 +958,7 @@ function InsightsPageHeader({
       <div className="flex flex-col gap-1 min-w-0">
         <h1 className="text-xl font-semibold">Insights</h1>
         <p className="text-sm text-muted-foreground">
-          Monitor chat sessions, tool performance, and system health
+          Monitor agent sessions, tool performance, and system health
         </p>
       </div>
       <div

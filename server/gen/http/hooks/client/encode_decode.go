@@ -244,6 +244,240 @@ func DecodeClaudeResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildCursorRequest instantiates a HTTP request object with method and path
+// set to call the "hooks" service "cursor" endpoint
+func (c *Client) BuildCursorRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CursorHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "cursor", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCursorRequest returns an encoder for requests sent to the hooks cursor
+// server.
+func EncodeCursorRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.CursorPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "cursor", "*hooks.CursorPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCursorRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "cursor", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCursorResponse returns a decoder for responses returned by the hooks
+// cursor endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeCursorResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCursorResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CursorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			res := NewCursorHookResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CursorUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			err = ValidateCursorUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+			}
+			return nil, NewCursorUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CursorForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			err = ValidateCursorForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+			}
+			return nil, NewCursorForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CursorBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			err = ValidateCursorBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+			}
+			return nil, NewCursorBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CursorNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			err = ValidateCursorNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+			}
+			return nil, NewCursorNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CursorConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			err = ValidateCursorConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+			}
+			return nil, NewCursorConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CursorUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			err = ValidateCursorUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+			}
+			return nil, NewCursorUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CursorInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			err = ValidateCursorInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+			}
+			return nil, NewCursorInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CursorInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+				}
+				err = ValidateCursorInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+				}
+				return nil, NewCursorInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CursorUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+				}
+				err = ValidateCursorUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+				}
+				return nil, NewCursorUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "cursor", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CursorGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "cursor", err)
+			}
+			err = ValidateCursorGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "cursor", err)
+			}
+			return nil, NewCursorGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "cursor", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildLogsRequest instantiates a HTTP request object with method and path set
 // to call the "hooks" service "logs" endpoint
 func (c *Client) BuildLogsRequest(ctx context.Context, v any) (*http.Request, error) {

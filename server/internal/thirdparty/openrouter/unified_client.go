@@ -39,7 +39,7 @@ type TelemetryService interface {
 }
 
 const (
-	DefaultChatModel = "openai/gpt-4o"
+	DefaultChatModel = "openai/gpt-5.4"
 )
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
@@ -66,7 +66,7 @@ func NewUnifiedClient(
 	telemetryService TelemetryService,
 ) *ChatClient {
 	return &ChatClient{
-		logger:                 logger,
+		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
 		httpClient:             cleanhttp.DefaultPooledClient(),
 		provisioner:            provisioner,
 		messageCaptureStrategy: captureStrategy,

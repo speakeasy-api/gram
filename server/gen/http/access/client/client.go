@@ -17,21 +17,37 @@ import (
 
 // Client lists the access service endpoint HTTP clients.
 type Client struct {
-	// ListGrants Doer is the HTTP client used to make requests to the listGrants
+	// ListRoles Doer is the HTTP client used to make requests to the listRoles
 	// endpoint.
-	ListGrantsDoer goahttp.Doer
+	ListRolesDoer goahttp.Doer
 
-	// UpsertGrants Doer is the HTTP client used to make requests to the
-	// upsertGrants endpoint.
-	UpsertGrantsDoer goahttp.Doer
+	// GetRole Doer is the HTTP client used to make requests to the getRole
+	// endpoint.
+	GetRoleDoer goahttp.Doer
 
-	// RemoveGrants Doer is the HTTP client used to make requests to the
-	// removeGrants endpoint.
-	RemoveGrantsDoer goahttp.Doer
+	// CreateRole Doer is the HTTP client used to make requests to the createRole
+	// endpoint.
+	CreateRoleDoer goahttp.Doer
 
-	// RemovePrincipalGrants Doer is the HTTP client used to make requests to the
-	// removePrincipalGrants endpoint.
-	RemovePrincipalGrantsDoer goahttp.Doer
+	// UpdateRole Doer is the HTTP client used to make requests to the updateRole
+	// endpoint.
+	UpdateRoleDoer goahttp.Doer
+
+	// DeleteRole Doer is the HTTP client used to make requests to the deleteRole
+	// endpoint.
+	DeleteRoleDoer goahttp.Doer
+
+	// ListScopes Doer is the HTTP client used to make requests to the listScopes
+	// endpoint.
+	ListScopesDoer goahttp.Doer
+
+	// ListMembers Doer is the HTTP client used to make requests to the listMembers
+	// endpoint.
+	ListMembersDoer goahttp.Doer
+
+	// UpdateMemberRole Doer is the HTTP client used to make requests to the
+	// updateMemberRole endpoint.
+	UpdateMemberRoleDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -53,27 +69,31 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListGrantsDoer:            doer,
-		UpsertGrantsDoer:          doer,
-		RemoveGrantsDoer:          doer,
-		RemovePrincipalGrantsDoer: doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ListRolesDoer:        doer,
+		GetRoleDoer:          doer,
+		CreateRoleDoer:       doer,
+		UpdateRoleDoer:       doer,
+		DeleteRoleDoer:       doer,
+		ListScopesDoer:       doer,
+		ListMembersDoer:      doer,
+		UpdateMemberRoleDoer: doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
 	}
 }
 
-// ListGrants returns an endpoint that makes HTTP requests to the access
-// service listGrants server.
-func (c *Client) ListGrants() goa.Endpoint {
+// ListRoles returns an endpoint that makes HTTP requests to the access service
+// listRoles server.
+func (c *Client) ListRoles() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListGrantsRequest(c.encoder)
-		decodeResponse = DecodeListGrantsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListRolesRequest(c.encoder)
+		decodeResponse = DecodeListRolesResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListGrantsRequest(ctx, v)
+		req, err := c.BuildListRolesRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -81,23 +101,23 @@ func (c *Client) ListGrants() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListGrantsDoer.Do(req)
+		resp, err := c.ListRolesDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "listGrants", err)
+			return nil, goahttp.ErrRequestError("access", "listRoles", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// UpsertGrants returns an endpoint that makes HTTP requests to the access
-// service upsertGrants server.
-func (c *Client) UpsertGrants() goa.Endpoint {
+// GetRole returns an endpoint that makes HTTP requests to the access service
+// getRole server.
+func (c *Client) GetRole() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeUpsertGrantsRequest(c.encoder)
-		decodeResponse = DecodeUpsertGrantsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetRoleRequest(c.encoder)
+		decodeResponse = DecodeGetRoleResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpsertGrantsRequest(ctx, v)
+		req, err := c.BuildGetRoleRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -105,23 +125,23 @@ func (c *Client) UpsertGrants() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.UpsertGrantsDoer.Do(req)
+		resp, err := c.GetRoleDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "upsertGrants", err)
+			return nil, goahttp.ErrRequestError("access", "getRole", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// RemoveGrants returns an endpoint that makes HTTP requests to the access
-// service removeGrants server.
-func (c *Client) RemoveGrants() goa.Endpoint {
+// CreateRole returns an endpoint that makes HTTP requests to the access
+// service createRole server.
+func (c *Client) CreateRole() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeRemoveGrantsRequest(c.encoder)
-		decodeResponse = DecodeRemoveGrantsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeCreateRoleRequest(c.encoder)
+		decodeResponse = DecodeCreateRoleResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRemoveGrantsRequest(ctx, v)
+		req, err := c.BuildCreateRoleRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -129,23 +149,23 @@ func (c *Client) RemoveGrants() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.RemoveGrantsDoer.Do(req)
+		resp, err := c.CreateRoleDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "removeGrants", err)
+			return nil, goahttp.ErrRequestError("access", "createRole", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// RemovePrincipalGrants returns an endpoint that makes HTTP requests to the
-// access service removePrincipalGrants server.
-func (c *Client) RemovePrincipalGrants() goa.Endpoint {
+// UpdateRole returns an endpoint that makes HTTP requests to the access
+// service updateRole server.
+func (c *Client) UpdateRole() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeRemovePrincipalGrantsRequest(c.encoder)
-		decodeResponse = DecodeRemovePrincipalGrantsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeUpdateRoleRequest(c.encoder)
+		decodeResponse = DecodeUpdateRoleResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRemovePrincipalGrantsRequest(ctx, v)
+		req, err := c.BuildUpdateRoleRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -153,9 +173,105 @@ func (c *Client) RemovePrincipalGrants() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.RemovePrincipalGrantsDoer.Do(req)
+		resp, err := c.UpdateRoleDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "removePrincipalGrants", err)
+			return nil, goahttp.ErrRequestError("access", "updateRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteRole returns an endpoint that makes HTTP requests to the access
+// service deleteRole server.
+func (c *Client) DeleteRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteRoleRequest(c.encoder)
+		decodeResponse = DecodeDeleteRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "deleteRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListScopes returns an endpoint that makes HTTP requests to the access
+// service listScopes server.
+func (c *Client) ListScopes() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListScopesRequest(c.encoder)
+		decodeResponse = DecodeListScopesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListScopesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListScopesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listScopes", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMembers returns an endpoint that makes HTTP requests to the access
+// service listMembers server.
+func (c *Client) ListMembers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMembersRequest(c.encoder)
+		decodeResponse = DecodeListMembersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMembersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMembersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listMembers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateMemberRole returns an endpoint that makes HTTP requests to the access
+// service updateMemberRole server.
+func (c *Client) UpdateMemberRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateMemberRoleRequest(c.encoder)
+		decodeResponse = DecodeUpdateMemberRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateMemberRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateMemberRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "updateMemberRole", err)
 		}
 		return decodeResponse(resp)
 	}

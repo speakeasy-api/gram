@@ -180,7 +180,7 @@ export default function CatalogDetail() {
           <div className="lg:col-span-2 space-y-6">
             {/* Header */}
             <div className="flex items-start gap-6">
-              <div className="w-24 h-24 rounded-xl bg-primary/5 flex items-center justify-center shrink-0">
+              <div className="w-24 h-24 rounded-xl bg-primary/5 dark:bg-neutral-800 flex items-center justify-center shrink-0">
                 {server.iconUrl ? (
                   <img
                     src={server.iconUrl}

@@ -6,17 +6,113 @@ info:
 servers:
     - url: https://app.getgram.ai
 paths:
-    /rpc/access.listGrants:
-        get:
-            description: List all permissions in your organization, optionally filtered to a specific user or role.
-            operationId: listGrants
+    /rpc/access.createRole:
+        post:
+            description: Create a new custom role.
+            operationId: createRole
             parameters:
                 - allowEmptyValue: true
-                  description: Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit to return all grants.
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRoleForm'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Role'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: createRole access
+            tags:
+                - access
+            x-speakeasy-name-override: createRole
+            x-speakeasy-react-hook:
+                name: CreateRole
+    /rpc/access.deleteRole:
+        delete:
+            description: Delete a custom role (system roles cannot be deleted).
+            operationId: deleteRole
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the role to delete.
                   in: query
-                  name: principal_urn
+                  name: id
+                  required: true
                   schema:
-                    description: Filter to a specific user or role (e.g. "user:user_abc", "role:admin"). Omit to return all grants.
+                    description: The ID of the role to delete.
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -32,101 +128,6 @@ paths:
                   schema:
                     description: Session header
                     type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListGrantsResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: listGrants access
-            tags:
-                - access
-            x-speakeasy-name-override: list
-            x-speakeasy-react-hook:
-                name: Grants
-    /rpc/access.removeGrants:
-        post:
-            description: Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).
-            operationId: removeGrants
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/GrantsForm'
-                required: true
             responses:
                 "204":
                     description: No Content response.
@@ -187,17 +188,25 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
-            summary: removeGrants access
+            summary: deleteRole access
             tags:
                 - access
-            x-speakeasy-name-override: remove
+            x-speakeasy-name-override: deleteRole
             x-speakeasy-react-hook:
-                name: RemoveGrants
-    /rpc/access.removePrincipalGrants:
-        post:
-            description: Revoke all permissions for a specific user or role.
-            operationId: removePrincipalGrants
+                name: DeleteRole
+    /rpc/access.getRole:
+        get:
+            description: Get a role by ID.
+            operationId: getRole
             parameters:
+                - allowEmptyValue: true
+                  description: The ID of the role.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the role.
+                    type: string
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -212,109 +221,12 @@ paths:
                   schema:
                     description: Session header
                     type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RemovePrincipalGrantsRequestBody'
-                required: true
-            responses:
-                "204":
-                    description: No Content response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: removePrincipalGrants access
-            tags:
-                - access
-            x-speakeasy-name-override: removePrincipal
-            x-speakeasy-react-hook:
-                name: RemovePrincipalGrants
-    /rpc/access.upsertGrants:
-        post:
-            description: Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.
-            operationId: upsertGrants
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/GrantsForm'
-                required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/UpsertGrantsResult'
+                                $ref: '#/components/schemas/Role'
                     description: OK response.
                 "400":
                     content:
@@ -373,12 +285,469 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
-            summary: upsertGrants access
+            summary: getRole access
             tags:
                 - access
-            x-speakeasy-name-override: upsert
+            x-speakeasy-name-override: getRole
             x-speakeasy-react-hook:
-                name: UpsertGrants
+                name: Role
+    /rpc/access.listMembers:
+        get:
+            description: List all team members with their role assignments.
+            operationId: listMembers
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMembersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listMembers access
+            tags:
+                - access
+            x-speakeasy-name-override: listMembers
+            x-speakeasy-react-hook:
+                name: Members
+    /rpc/access.listRoles:
+        get:
+            description: List all roles for the current organization.
+            operationId: listRoles
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRolesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listRoles access
+            tags:
+                - access
+            x-speakeasy-name-override: listRoles
+            x-speakeasy-react-hook:
+                name: Roles
+    /rpc/access.listScopes:
+        get:
+            description: List all available scopes and their resource types.
+            operationId: listScopes
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListScopesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listScopes access
+            tags:
+                - access
+            x-speakeasy-name-override: listScopes
+            x-speakeasy-react-hook:
+                name: ListScopes
+    /rpc/access.updateMemberRole:
+        put:
+            description: Change a team member's role assignment.
+            operationId: updateMemberRole
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateMemberRoleForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccessMember'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: updateMemberRole access
+            tags:
+                - access
+            x-speakeasy-name-override: updateMemberRole
+            x-speakeasy-react-hook:
+                name: UpdateMemberRole
+    /rpc/access.updateRole:
+        put:
+            description: Update an existing custom role.
+            operationId: updateRole
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRoleForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Role'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: updateRole access
+            tags:
+                - access
+            x-speakeasy-name-override: updateRole
+            x-speakeasy-react-hook:
+                name: UpdateRole
     /rpc/assets.createSignedChatAttachmentURL:
         post:
             description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -2119,13 +2488,6 @@ paths:
                   name: redirect
                   schema:
                     description: Optional URL to redirect to after successful authentication
-                    type: string
-                - allowEmptyValue: true
-                  description: Optional invite token to process after authentication
-                  in: query
-                  name: invite_token
-                  schema:
-                    description: Optional invite token to process after authentication
                     type: string
             responses:
                 "307":
@@ -5465,6 +5827,98 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /rpc/hooks.cursor:
+        post:
+            tags:
+                - hooks
+            summary: cursor hooks
+            description: Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.
+            operationId: hooks#cursor
+            parameters:
+                - name: Gram-Key
+                  in: header
+                  description: API Key header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: API Key header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CursorHookPayload'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CursorHookResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
     /rpc/hooks.deleteServerNameOverride:
         post:
             tags:
@@ -7245,6 +7699,505 @@ paths:
             x-speakeasy-name-override: listRegistries
             x-speakeasy-react-hook:
                 name: ListMCPRegistries
+    /rpc/organizations.getInviteByToken:
+        get:
+            description: Resolve a WorkOS invitation from its token (e.g. accept-flow).
+            operationId: getInviteByToken
+            parameters:
+                - allowEmptyValue: true
+                  description: Invitation token from the invite link.
+                  in: query
+                  name: token
+                  required: true
+                  schema:
+                    description: Invitation token from the invite link.
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationInvitationAccept'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: getInviteByToken organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: getInviteByToken
+            x-speakeasy-react-hook:
+                name: GetInviteByToken
+    /rpc/organizations.listInvites:
+        get:
+            description: List pending WorkOS invitations for the active organization.
+            operationId: listInvites
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListInvitesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listInvites organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: listInvites
+            x-speakeasy-react-hook:
+                name: ListInvites
+    /rpc/organizations.listUsers:
+        get:
+            description: List users in the active organization from Gram organization_user_relationships.
+            operationId: listOrganizationUsers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUsersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listUsers organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: listUsers
+            x-speakeasy-react-hook:
+                name: ListOrganizationUsers
+    /rpc/organizations.removeUser:
+        delete:
+            description: Remove a user from the active organization in Gram and delete their WorkOS organization membership.
+            operationId: removeOrganizationUser
+            parameters:
+                - allowEmptyValue: true
+                  description: Gram user ID to remove.
+                  in: query
+                  name: user_id
+                  required: true
+                  schema:
+                    description: Gram user ID to remove.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: removeUser organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: removeUser
+            x-speakeasy-react-hook:
+                name: RemoveOrganizationUser
+    /rpc/organizations.revokeInvite:
+        delete:
+            description: Revoke a pending WorkOS invitation.
+            operationId: revokeInvite
+            parameters:
+                - allowEmptyValue: true
+                  description: WorkOS invitation ID.
+                  in: query
+                  name: invitation_id
+                  required: true
+                  schema:
+                    description: WorkOS invitation ID.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: revokeInvite organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: revokeInvite
+            x-speakeasy-react-hook:
+                name: RevokeInvite
+    /rpc/organizations.sendInvite:
+        post:
+            description: Send a WorkOS invitation for the active organization.
+            operationId: sendInvite
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SendInviteRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationInvitation'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: sendInvite organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: sendInvite
+            x-speakeasy-react-hook:
+                name: SendInvite
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -8514,6 +9467,87 @@ paths:
             x-speakeasy-name-override: setLogo
             x-speakeasy-react-hook:
                 name: setProjectLogo
+    /rpc/projects.setOrganizationWhitelist:
+        post:
+            description: Set organization whitelist status (admin only - requires speakeasy-team API key)
+            operationId: setOrganizationWhitelist
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationWhitelistRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: setOrganizationWhitelist projects
+            tags:
+                - projects
+            x-speakeasy-name-override: setOrganizationWhitelist
     /rpc/projects.upsertAllowedOrigin:
         post:
             description: Upsert an allowed origin for a project.
@@ -9295,617 +10329,6 @@ paths:
             x-speakeasy-name-override: updateSlackApp
             x-speakeasy-react-hook:
                 name: updateSlackApp
-    /rpc/teams.cancelInvite:
-        delete:
-            description: Cancel a pending invite.
-            operationId: cancelTeamInvite
-            parameters:
-                - allowEmptyValue: true
-                  description: The ID of the invite to cancel
-                  in: query
-                  name: invite_id
-                  required: true
-                  schema:
-                    description: The ID of the invite to cancel
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "204":
-                    description: No Content response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: cancelInvite teams
-            tags:
-                - teams
-            x-speakeasy-name-override: cancelInvite
-            x-speakeasy-react-hook:
-                name: CancelTeamInvite
-    /rpc/teams.getInviteInfo:
-        get:
-            description: Get information about a team invite by its token. Used to display invite details before accepting.
-            operationId: getTeamInviteInfo
-            parameters:
-                - allowEmptyValue: true
-                  description: The invite token from the email link
-                  in: query
-                  name: token
-                  required: true
-                  schema:
-                    description: The invite token from the email link
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/InviteInfoResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            summary: getInviteInfo teams
-            tags:
-                - teams
-            x-speakeasy-name-override: getInviteInfo
-            x-speakeasy-react-hook:
-                name: GetTeamInviteInfo
-    /rpc/teams.invite:
-        post:
-            description: Invite a new member to the organization.
-            operationId: inviteTeamMember
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/InviteMemberForm'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/InviteMemberResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: inviteMember teams
-            tags:
-                - teams
-            x-speakeasy-name-override: inviteMember
-            x-speakeasy-react-hook:
-                name: InviteTeamMember
-    /rpc/teams.listInvites:
-        get:
-            description: List pending invites for an organization.
-            operationId: listTeamInvites
-            parameters:
-                - allowEmptyValue: true
-                  description: The ID of the organization
-                  in: query
-                  name: organization_id
-                  required: true
-                  schema:
-                    description: The ID of the organization
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListInvitesResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: listInvites teams
-            tags:
-                - teams
-            x-speakeasy-name-override: listInvites
-            x-speakeasy-react-hook:
-                name: ListTeamInvites
-    /rpc/teams.listMembers:
-        get:
-            description: List all members of an organization.
-            operationId: listTeamMembers
-            parameters:
-                - allowEmptyValue: true
-                  description: The ID of the organization
-                  in: query
-                  name: organization_id
-                  required: true
-                  schema:
-                    description: The ID of the organization
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListMembersResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: listMembers teams
-            tags:
-                - teams
-            x-speakeasy-name-override: listMembers
-            x-speakeasy-react-hook:
-                name: ListTeamMembers
-    /rpc/teams.removeMember:
-        delete:
-            description: Remove a member from the organization.
-            operationId: removeTeamMember
-            parameters:
-                - allowEmptyValue: true
-                  description: The ID of the organization
-                  in: query
-                  name: organization_id
-                  required: true
-                  schema:
-                    description: The ID of the organization
-                    type: string
-                - allowEmptyValue: true
-                  description: The ID of the user to remove
-                  in: query
-                  name: user_id
-                  required: true
-                  schema:
-                    description: The ID of the user to remove
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "204":
-                    description: No Content response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: removeMember teams
-            tags:
-                - teams
-            x-speakeasy-name-override: removeMember
-            x-speakeasy-react-hook:
-                name: RemoveTeamMember
-    /rpc/teams.resendInvite:
-        post:
-            description: Resend an invite email.
-            operationId: resendTeamInvite
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ResendInviteRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ResendInviteResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: resendInvite teams
-            tags:
-                - teams
-            x-speakeasy-name-override: resendInvite
-            x-speakeasy-react-hook:
-                name: ResendTeamInvite
     /rpc/telemetry.captureEvent:
         post:
             description: Capture a telemetry event and forward it to PostHog
@@ -10645,6 +11068,111 @@ paths:
             x-speakeasy-name-override: listFilterOptions
             x-speakeasy-react-hook:
                 name: ListFilterOptions
+                type: query
+    /rpc/telemetry.listHooksTraces:
+        post:
+            description: List hook traces aggregated by trace_id with user information
+            operationId: listHooksTraces
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListHooksTracesPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListHooksTracesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listHooksTraces telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: listHooksTraces
+            x-speakeasy-react-hook:
+                name: ListHooksTraces
                 type: query
     /rpc/telemetry.searchChats:
         post:
@@ -13905,6 +14433,34 @@ paths:
                   project_slug_header_Gram-Project: []
 components:
     schemas:
+        AccessMember:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email address.
+                id:
+                    type: string
+                    description: User ID.
+                joined_at:
+                    type: string
+                    description: When the member joined the organization.
+                    format: date-time
+                name:
+                    type: string
+                    description: Display name.
+                photo_url:
+                    type: string
+                    description: Avatar URL.
+                role_id:
+                    type: string
+                    description: Currently assigned role ID.
+            required:
+                - id
+                - name
+                - email
+                - role_id
+                - joined_at
         AddDeploymentPackageForm:
             type: object
             properties:
@@ -14387,6 +14943,9 @@ components:
                     type: integer
                     description: The number of messages in the chat
                     format: int64
+                source:
+                    type: string
+                    description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
                 title:
                     type: string
                     description: The title of the chat
@@ -14460,6 +15019,9 @@ components:
                     type: integer
                     description: The number of messages in the chat
                     format: int64
+                source:
+                    type: string
+                    description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
                 title:
                     type: string
                     description: The title of the chat
@@ -14498,6 +15060,9 @@ components:
                     items:
                         $ref: '#/components/schemas/ChatResolution'
                     description: List of resolutions for this chat
+                source:
+                    type: string
+                    description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
                 title:
                     type: string
                     description: The title of the chat
@@ -14629,6 +15194,9 @@ components:
                     type: object
                     description: Additional hook-specific data
                     additionalProperties: true
+                cwd:
+                    type: string
+                    description: The working directory when the event fired
                 error:
                     description: The error from the tool (PostToolUseFailure only)
                 hook_event_name:
@@ -14639,12 +15207,43 @@ components:
                         - PreToolUse
                         - PostToolUse
                         - PostToolUseFailure
+                        - UserPromptSubmit
+                        - Stop
+                        - SessionEnd
+                        - Notification
                 is_interrupt:
                     type: boolean
                     description: Whether the failure was caused by user interruption (PostToolUseFailure only)
+                last_assistant_message:
+                    type: string
+                    description: Claude's final response text (Stop only)
+                message:
+                    type: string
+                    description: Notification message text (Notification only)
+                model:
+                    type: string
+                    description: The model identifier (SessionStart, Stop)
+                notification_type:
+                    type: string
+                    description: 'Type of notification: permission_prompt, idle_prompt, auth_success, elicitation_dialog (Notification only)'
+                prompt:
+                    type: string
+                    description: The user's prompt text (UserPromptSubmit only)
+                reason:
+                    type: string
+                    description: Why the session ended (SessionEnd only)
                 session_id:
                     type: string
                     description: The Claude Code session ID
+                source:
+                    type: string
+                    description: 'How the session started: startup, resume, clear, compact (SessionStart only)'
+                stop_hook_active:
+                    type: boolean
+                    description: Whether a stop hook continuation is active (Stop only)
+                title:
+                    type: string
+                    description: Notification title (Notification only)
                 tool_input:
                     description: The input to the tool
                 tool_name:
@@ -14655,6 +15254,9 @@ components:
                 tool_use_id:
                     type: string
                     description: The unique ID for this tool use
+                transcript_path:
+                    type: string
+                    description: Path to the conversation transcript file
             description: Unified payload for all Claude Code hook events
             required:
                 - hook_event_name
@@ -14669,6 +15271,9 @@ components:
                 stopReason:
                     type: string
                     description: Reason if blocked (SessionStart only)
+                suppressOutput:
+                    type: boolean
+                    description: Whether to suppress the hook's output
             description: Unified result for all Claude Code hook events with proper response structure
         ConfigureSlackAppRequestBody:
             type: object
@@ -15008,6 +15613,29 @@ components:
                 - client_token
                 - expires_after
                 - status
+        CreateRoleForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what this role can do.
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Scope grants to assign.
+                member_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional member IDs to additionally assign to this role on creation.
+                name:
+                    type: string
+                    description: Display name for the role.
+            required:
+                - name
+                - description
+                - grants
         CreateSignedChatAttachmentURLForm:
             type: object
             properties:
@@ -15159,6 +15787,65 @@ components:
             required:
                 - credits_used
                 - monthly_credits
+        CursorHookPayload:
+            type: object
+            properties:
+                additional_data:
+                    type: object
+                    description: Additional hook-specific data
+                    additionalProperties: true
+                conversation_id:
+                    type: string
+                    description: The Cursor conversation ID
+                cursor_version:
+                    type: string
+                    description: The Cursor IDE version
+                error:
+                    description: The error from the tool (postToolUseFailure only)
+                generation_id:
+                    type: string
+                    description: The Cursor generation ID
+                hook_event_name:
+                    type: string
+                    description: The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+                is_interrupt:
+                    type: boolean
+                    description: Whether the failure was caused by user interruption
+                model:
+                    type: string
+                    description: The model being used
+                session_id:
+                    type: string
+                    description: The session ID from Cursor
+                tool_input:
+                    description: The input to the tool
+                tool_name:
+                    type: string
+                    description: The name of the tool
+                tool_response:
+                    description: The response from the tool (postToolUse only)
+                tool_use_id:
+                    type: string
+                    description: The unique ID for this tool use
+                user_email:
+                    type: string
+                    description: Email of the authenticated Cursor user, if available
+            description: Payload for Cursor hook events
+            required:
+                - hook_event_name
+        CursorHookResult:
+            type: object
+            properties:
+                additional_context:
+                    type: string
+                    description: Additional context to inject into the conversation
+                permission:
+                    type: string
+                    description: 'Permission decision for preToolUse: allow or deny'
+                user_message:
+                    type: string
+                    description: Message to display to the user
+            description: Result for Cursor hook events
         CustomDomain:
             type: object
             properties:
@@ -16276,6 +16963,11 @@ components:
                     items:
                         $ref: '#/components/schemas/HooksServerSummary'
                     description: Aggregated metrics grouped by server
+                skills:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillSummary'
+                    description: Aggregated metrics grouped by skill
                 total_events:
                     type: integer
                     description: Total number of hook events
@@ -16293,6 +16985,7 @@ components:
             required:
                 - servers
                 - users
+                - skills
                 - total_events
                 - total_sessions
         GetInstanceForm:
@@ -16552,6 +17245,9 @@ components:
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
+                session_capture_enabled:
+                    type: boolean
+                    description: Whether Claude Code session capture is enabled
                 tool_io_logs_enabled:
                     type: boolean
                     description: Whether tool I/O logging is enabled
@@ -16559,79 +17255,7 @@ components:
             required:
                 - logs_enabled
                 - tool_io_logs_enabled
-        Grant:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: When this permission was granted.
-                    format: date-time
-                id:
-                    type: string
-                    description: Unique identifier of this permission.
-                    format: uuid
-                organization_id:
-                    type: string
-                    description: The organization this permission belongs to.
-                principal_type:
-                    type: string
-                    description: Whether the principal is a user or a role.
-                principal_urn:
-                    type: string
-                    description: The user or role that holds this permission (e.g. "user:user_abc", "role:admin").
-                resource:
-                    type: string
-                    description: The resource this permission applies to. "*" means all resources.
-                scope:
-                    type: string
-                    description: The action this permission allows (e.g. "build:read", "mcp:connect").
-                updated_at:
-                    type: string
-                    description: When this permission was last updated.
-                    format: date-time
-            description: A permission record giving a user or role the ability to perform an action on a resource.
-            required:
-                - id
-                - organization_id
-                - principal_urn
-                - principal_type
-                - scope
-                - resource
-                - created_at
-                - updated_at
-        GrantEntry:
-            type: object
-            properties:
-                principal_urn:
-                    type: string
-                    description: The user or role this permission entry applies to (e.g. "user:user_abc", "role:admin").
-                resource:
-                    type: string
-                    description: The resource this permission applies to. Use "*" for unrestricted access.
-                    maxLength: 260
-                scope:
-                    type: string
-                    description: The action being permitted (e.g. "build:read", "mcp:connect").
-                    minLength: 3
-                    maxLength: 60
-            description: A permission entry identifying who it applies to, what action it covers, and which resource it targets.
-            required:
-                - principal_urn
-                - scope
-                - resource
-        GrantsForm:
-            type: object
-            properties:
-                grants:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/GrantEntry'
-                    description: The permissions to process.
-                    minItems: 1
-                    maxItems: 100
-            description: A batch of permission entries to apply to access-management operations.
-            required:
-                - grants
+                - session_capture_enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -16736,6 +17360,54 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        HookTraceSummary:
+            type: object
+            properties:
+                event_source:
+                    type: string
+                    description: Event source (from materialized column)
+                gram_urn:
+                    type: string
+                    description: Gram URN associated with this hook trace
+                hook_source:
+                    type: string
+                    description: Hook source (from attributes.gram.hook.source)
+                hook_status:
+                    type: string
+                    description: Hook execution status
+                    enum:
+                        - success
+                        - failure
+                        - pending
+                log_count:
+                    type: integer
+                    description: Total number of logs in this trace
+                    format: int64
+                skill_name:
+                    type: string
+                    description: Skill name (from materialized column, only for Skill tool)
+                start_time_unix_nano:
+                    type: string
+                    description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+                tool_name:
+                    type: string
+                    description: Tool name (from materialized column)
+                tool_source:
+                    type: string
+                    description: Tool call source (from materialized column)
+                trace_id:
+                    type: string
+                    description: Trace ID (32 hex characters)
+                    pattern: ^[a-f0-9]{32}$
+                user_email:
+                    type: string
+                    description: User email (from attributes.user.email)
+            description: Summary information for a hook trace
+            required:
+                - trace_id
+                - start_time_unix_nano
+                - log_count
+                - gram_urn
         HooksServerSummary:
             type: object
             properties:
@@ -16830,6 +17502,9 @@ components:
                     type: string
                 user_signature:
                     type: string
+                whitelisted:
+                    type: boolean
+                    description: Whether the organization is whitelisted to access the platform
             required:
                 - user_id
                 - user_email
@@ -16838,6 +17513,7 @@ components:
                 - organizations
                 - gram_account_type
                 - has_active_subscription
+                - whitelisted
         InstanceMcpServer:
             type: object
             properties:
@@ -16936,52 +17612,6 @@ components:
             required:
                 - version
                 - created_at
-        InviteInfoResult:
-            type: object
-            properties:
-                email:
-                    type: string
-                    description: The email address the invite was sent to
-                inviter_name:
-                    type: string
-                    description: Display name of the user who sent the invite
-                organization_name:
-                    type: string
-                    description: Name of the organization
-                status:
-                    type: string
-                    description: Current status of the invite
-                    enum:
-                        - pending
-                        - accepted
-                        - expired
-                        - cancelled
-            required:
-                - inviter_name
-                - organization_name
-                - email
-                - status
-        InviteMemberForm:
-            type: object
-            properties:
-                email:
-                    type: string
-                    description: Email address to invite
-                    format: email
-                    maxLength: 255
-                organization_id:
-                    type: string
-                    description: The ID of the organization
-            required:
-                - organization_id
-                - email
-        InviteMemberResult:
-            type: object
-            properties:
-                invite:
-                    $ref: '#/components/schemas/TeamInvite'
-            required:
-                - invite
         Key:
             type: object
             properties:
@@ -17234,16 +17864,71 @@ components:
             description: Result of listing filter options
             required:
                 - options
-        ListGrantsResult:
+        ListHooksTracesPayload:
             type: object
             properties:
-                grants:
+                cursor:
+                    type: string
+                    description: Cursor for pagination (trace_id)
+                filters:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Grant'
-                    description: The permissions in your organization.
+                        $ref: '#/components/schemas/LogFilter'
+                    description: Filter conditions for the search query
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                limit:
+                    type: integer
+                    description: Number of items to return (1-1000)
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 1000
+                sort:
+                    type: string
+                    description: Sort order
+                    default: desc
+                    enum:
+                        - asc
+                        - desc
+                to:
+                    type: string
+                    description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+                types_to_include:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - mcp
+                            - local
+                            - skill
+                    description: Hook types to include (mcp, local, skill). If empty or not provided, includes all types.
+                    example:
+                        - mcp
+                        - skill
+            description: Payload for listing hook traces
             required:
-                - grants
+                - from
+                - to
+        ListHooksTracesResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                traces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HookTraceSummary'
+                    description: List of hook trace summaries
+            description: Result of listing hook traces
+            required:
+                - traces
         ListIntegrationsForm:
             type: object
             properties:
@@ -17264,13 +17949,13 @@ components:
         ListInvitesResult:
             type: object
             properties:
-                invites:
+                invitations:
                     type: array
                     items:
-                        $ref: '#/components/schemas/TeamInvite'
-                    description: List of pending invites
+                        $ref: '#/components/schemas/OrganizationInvitation'
+                    description: Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.
             required:
-                - invites
+                - invitations
         ListKeysResult:
             type: object
             properties:
@@ -17286,8 +17971,8 @@ components:
                 members:
                     type: array
                     items:
-                        $ref: '#/components/schemas/TeamMember'
-                    description: List of organization members
+                        $ref: '#/components/schemas/AccessMember'
+                    description: The members in your organization.
             required:
                 - members
         ListPackagesResult:
@@ -17355,6 +18040,26 @@ components:
                     description: The list of resources
             required:
                 - resources
+        ListRolesResult:
+            type: object
+            properties:
+                roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Role'
+                    description: The roles in your organization.
+            required:
+                - roles
+        ListScopesResult:
+            type: object
+            properties:
+                scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ScopeDefinition'
+                    description: The scopes available in access control.
+            required:
+                - scopes
         ListSlackAppsResult:
             type: object
             properties:
@@ -17388,6 +18093,16 @@ components:
                     description: The list of toolsets
             required:
                 - toolsets
+        ListUsersResult:
+            type: object
+            properties:
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationUser'
+                    description: Users linked to the organization in Gram.
+            required:
+                - users
         ListVariationsResult:
             type: object
             properties:
@@ -18029,6 +18744,102 @@ components:
                 - name
                 - slug
                 - projects
+        OrganizationInvitation:
+            type: object
+            properties:
+                accepted_at:
+                    type: string
+                    description: When the invitation was accepted.
+                    format: date-time
+                created_at:
+                    type: string
+                    format: date-time
+                email:
+                    type: string
+                    description: Invitee email address.
+                expires_at:
+                    type: string
+                    description: When the invitation expires.
+                    format: date-time
+                id:
+                    type: string
+                    description: WorkOS invitation ID.
+                inviter_user_id:
+                    type: string
+                    description: Gram user ID of the inviter, when known.
+                revoked_at:
+                    type: string
+                    description: When the invitation was revoked.
+                    format: date-time
+                state:
+                    type: string
+                    description: Invitation lifecycle state.
+                    enum:
+                        - pending
+                        - accepted
+                        - expired
+                        - revoked
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - email
+                - state
+                - created_at
+                - updated_at
+        OrganizationInvitationAccept:
+            type: object
+            properties:
+                accept_invitation_url:
+                    type: string
+                    description: URL to complete acceptance in WorkOS (may be empty when not actionable).
+                email:
+                    type: string
+                    description: Invitee email address.
+                organization_name:
+                    type: string
+                    description: Gram organization display name when the org is linked in Gram; empty if unknown.
+                state:
+                    type: string
+                    description: Invitation lifecycle state.
+                    enum:
+                        - pending
+                        - accepted
+                        - expired
+                        - revoked
+            required:
+                - email
+                - state
+                - organization_name
+                - accept_invitation_url
+        OrganizationUser:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: Gram relationship row ID.
+                organization_id:
+                    type: string
+                    description: Gram organization ID.
+                updated_at:
+                    type: string
+                    format: date-time
+                user_id:
+                    type: string
+                    description: Gram user ID.
+                workos_membership_id:
+                    type: string
+                    description: WorkOS organization membership ID when known.
+            required:
+                - id
+                - organization_id
+                - user_id
+                - created_at
+                - updated_at
         Package:
             type: object
             properties:
@@ -18508,14 +19319,6 @@ components:
                     description: The name of the org to register
             required:
                 - org_name
-        RemovePrincipalGrantsRequestBody:
-            type: object
-            properties:
-                principal_urn:
-                    type: string
-                    description: The user or role to revoke all permissions from (e.g. "user:user_abc", "role:admin").
-            required:
-                - principal_urn
         RenderTemplateByIDRequestBody:
             type: object
             properties:
@@ -18559,22 +19362,6 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
-        ResendInviteRequestBody:
-            type: object
-            properties:
-                invite_id:
-                    type: string
-                    description: The ID of the invite to resend
-                    format: uuid
-            required:
-                - invite_id
-        ResendInviteResult:
-            type: object
-            properties:
-                invite:
-                    $ref: '#/components/schemas/TeamInvite'
-            required:
-                - invite
         Resource:
             type: object
             properties:
@@ -18627,6 +19414,94 @@ components:
                 - type
                 - status_codes
                 - content_types
+        Role:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                description:
+                    type: string
+                    description: Human-readable description.
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Scope grants assigned to this role.
+                id:
+                    type: string
+                    description: Unique role identifier.
+                is_system:
+                    type: boolean
+                    description: Whether this is a built-in system role that cannot be deleted.
+                member_count:
+                    type: integer
+                    description: Number of members assigned to this role.
+                    format: int64
+                name:
+                    type: string
+                    description: Display name of the role.
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - name
+                - description
+                - is_system
+                - grants
+                - member_count
+                - created_at
+                - updated_at
+        RoleGrant:
+            type: object
+            properties:
+                resources:
+                    type: array
+                    items:
+                        type: string
+                    description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
+                scope:
+                    type: string
+                    description: The scope slug this grant applies to.
+                    enum:
+                        - org:read
+                        - org:admin
+                        - build:read
+                        - build:write
+                        - mcp:read
+                        - mcp:write
+                        - mcp:connect
+            required:
+                - scope
+        ScopeDefinition:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What this scope protects.
+                resource_type:
+                    type: string
+                    description: The type of resource this scope applies to.
+                    enum:
+                        - org
+                        - project
+                        - mcp
+                slug:
+                    type: string
+                    description: Unique scope identifier.
+                    enum:
+                        - org:read
+                        - org:admin
+                        - build:read
+                        - build:write
+                        - mcp:read
+                        - mcp:write
+                        - mcp:connect
+            required:
+                - slug
+                - description
+                - resource_type
         SearchChatsFilter:
             type: object
             properties:
@@ -18995,6 +19870,17 @@ components:
                 - in_placement
                 - scheme
                 - env_variables
+        SendInviteRequestBody:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email address to invite.
+                role_slug:
+                    type: string
+                    description: Optional WorkOS role slug for the invitee.
+            required:
+                - email
         ServeChatAttachmentForm:
             type: object
             properties:
@@ -19213,6 +20099,18 @@ components:
                     maxLength: 40
             required:
                 - toolset_slug
+        SetOrganizationWhitelistRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The ID of the organization to update
+                whitelisted:
+                    type: boolean
+                    description: Whether the organization should be whitelisted
+            required:
+                - organization_id
+                - whitelisted
         SetProductFeatureRequestBody:
             type: object
             properties:
@@ -19225,6 +20123,7 @@ components:
                     enum:
                         - logs
                         - tool_io_logs
+                        - session_capture
                     maxLength: 60
             required:
                 - feature_name
@@ -19278,6 +20177,25 @@ components:
             required:
                 - toolset_id
                 - environment_id
+        SkillSummary:
+            type: object
+            properties:
+                skill_name:
+                    type: string
+                    description: Skill name (extracted from tool name)
+                unique_users:
+                    type: integer
+                    description: Number of unique users who used this skill
+                    format: int64
+                use_count:
+                    type: integer
+                    description: Total number of times this skill was used
+                    format: int64
+            description: Aggregated skills metrics for a single skill
+            required:
+                - skill_name
+                - use_count
+                - unique_users
         SlackAppResult:
             type: object
             properties:
@@ -19371,65 +20289,6 @@ components:
             required:
                 - id
                 - feedback
-        TeamInvite:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: When the invite was created
-                    format: date-time
-                email:
-                    type: string
-                    description: The invited email address
-                expires_at:
-                    type: string
-                    description: When the invite expires
-                    format: date-time
-                id:
-                    type: string
-                    description: The invite ID
-                    format: uuid
-                invited_by:
-                    type: string
-                    description: Name of the user who sent the invite
-                status:
-                    type: string
-                    enum:
-                        - pending
-                        - accepted
-                        - expired
-                        - cancelled
-            required:
-                - id
-                - email
-                - status
-                - invited_by
-                - created_at
-                - expires_at
-        TeamMember:
-            type: object
-            properties:
-                display_name:
-                    type: string
-                    description: The user's display name
-                email:
-                    type: string
-                    description: The user's email address
-                id:
-                    type: string
-                    description: The user's ID
-                joined_at:
-                    type: string
-                    description: When the user joined the organization
-                    format: date-time
-                photo_url:
-                    type: string
-                    description: URL to the user's profile photo
-            required:
-                - id
-                - email
-                - display_name
-                - joined_at
         TelemetryFilter:
             type: object
             properties:
@@ -20118,6 +20977,18 @@ components:
             required:
                 - entries_to_update
                 - entries_to_remove
+        UpdateMemberRoleForm:
+            type: object
+            properties:
+                role_id:
+                    type: string
+                    description: The new role ID to assign.
+                user_id:
+                    type: string
+                    description: The user ID to update.
+            required:
+                - user_id
+                - role_id
         UpdatePackageForm:
             type: object
             properties:
@@ -20211,6 +21082,30 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        UpdateRoleForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Updated description.
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Updated scope grants.
+                id:
+                    type: string
+                    description: The ID of the role to update.
+                member_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional member IDs to additionally assign to this role. Existing assignments are preserved.
+                name:
+                    type: string
+                    description: Updated display name.
+            required:
+                - id
         UpdateSecurityVariableDisplayNameForm:
             type: object
             properties:
@@ -20542,16 +21437,6 @@ components:
                     $ref: '#/components/schemas/ToolVariation'
             required:
                 - variation
-        UpsertGrantsResult:
-            type: object
-            properties:
-                grants:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/Grant'
-                    description: The permissions that were created or already existed.
-            required:
-                - grants
         UpsertRequestBody:
             type: object
             properties:
@@ -20880,7 +21765,7 @@ components:
             in: header
 tags:
     - name: access
-      description: Manage access permissions for users and roles across your organization.
+      description: Manage roles and team member access control.
     - name: agentworkflows
       description: OpenAI Responses API compatible endpoint for running agent workflows.
     - name: assets
@@ -20906,7 +21791,7 @@ tags:
     - name: hooksServerNames
       description: Manages display name overrides for hooks servers.
     - name: hooks
-      description: Receives Claude Code hook events for tool usage observability.
+      description: Receives hook events from coding assistants for tool usage observability.
     - name: instances
       description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations
@@ -20915,6 +21800,8 @@ tags:
       description: Managing system api keys.
     - name: mcpMetadata
       description: Manages metadata for the MCP install page shown to users.
+    - name: organizations
+      description: Organization membership, invitations, and directory.
     - name: packages
       description: Manages packages in Gram.
     - name: features
@@ -20925,8 +21812,6 @@ tags:
       description: Dashboard API for interacting with resources.
     - name: slack
       description: Auth and interactions for the Gram Slack App.
-    - name: teams
-      description: Manages team members and invites for organizations in Gram.
     - name: telemetry
       description: Fetch telemetry data for tools in Gram.
     - name: templates

@@ -650,3 +650,208 @@ describe("extend", () => {
     expect((await res3.json()).from).toBe("g3");
   });
 });
+
+test("resource() adds resources to manifest", () => {
+  const g = new Gram()
+    .tool({
+      name: "echo",
+      inputSchema: { message: z.string() },
+      async execute(ctx, input) {
+        return ctx.json({ echoed: input.message });
+      },
+    })
+    .resource({
+      name: "my-resource",
+      uri: "resource://my-resource",
+      description: "A test resource",
+      mimeType: "text/plain",
+      content: "hello",
+    });
+
+  const manifest = g.manifest();
+  expect(manifest.resources).toEqual([
+    {
+      name: "my-resource",
+      uri: "resource://my-resource",
+      description: "A test resource",
+      mimeType: "text/plain",
+    },
+  ]);
+});
+
+test("experimental_uiResource() sets mimeType to text/html;profile=mcp-app", () => {
+  const g = new Gram().experimental_uiResource({
+    name: "bar-chart",
+    uri: "ui://charts/bar-chart",
+    description: "Interactive bar chart",
+    content: "<html><body>chart</body></html>",
+  });
+
+  const manifest = g.manifest();
+  expect(manifest.resources).toEqual([
+    {
+      name: "bar-chart",
+      uri: "ui://charts/bar-chart",
+      description: "Interactive bar chart",
+      mimeType: "text/html;profile=mcp-app",
+    },
+  ]);
+});
+
+test("experimental_uiResource() auto-generates uri from name when omitted", () => {
+  const g = new Gram().experimental_uiResource({
+    name: "bar-chart",
+    description: "Interactive bar chart",
+    content: "<html><body>chart</body></html>",
+  });
+
+  const manifest = g.manifest();
+  expect(manifest.resources?.[0]?.uri).toBe("ui://bar-chart");
+});
+
+test("experimental_uiResource() with body/styles wraps in scaffold with Gram.onData", async () => {
+  const g = new Gram().experimental_uiResource({
+    name: "chart",
+    description: "A chart",
+    body: '<div id="chart"></div>',
+    styles: ".chart { color: red; }",
+  });
+
+  const response = await g.handleResourceRead({ uri: "ui://chart" });
+  const html = await response.text();
+
+  // Scaffold structure
+  expect(html).toContain("<!DOCTYPE html>");
+  expect(html).toContain("<html>");
+  expect(html).toContain("</html>");
+
+  // Styles injected
+  expect(html).toContain(".chart { color: red; }");
+
+  // Body injected
+  expect(html).toContain('<div id="chart"></div>');
+
+  // Gram.onData helper injected
+  expect(html).toContain("Gram={onData");
+  expect(html).toContain('addEventListener("message"');
+});
+
+test("experimental_uiResource() with body but no styles still works", async () => {
+  const g = new Gram().experimental_uiResource({
+    name: "simple",
+    description: "Simple UI",
+    body: "<p>hello</p>",
+  });
+
+  const response = await g.handleResourceRead({ uri: "ui://simple" });
+  const html = await response.text();
+  expect(html).toContain("<!DOCTYPE html>");
+  expect(html).toContain("<p>hello</p>");
+  expect(html).toContain("Gram={onData");
+});
+
+test("handleResourceRead() returns static content", async () => {
+  const g = new Gram().resource({
+    name: "greeting",
+    uri: "resource://greeting",
+    description: "A greeting",
+    mimeType: "text/plain",
+    content: "Hello, world!",
+  });
+
+  const response = await g.handleResourceRead({ uri: "resource://greeting" });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Content-Type")).toBe("text/plain");
+  expect(await response.text()).toBe("Hello, world!");
+});
+
+test("handleResourceRead() supports lazy function content", async () => {
+  const g = new Gram().experimental_uiResource({
+    name: "dynamic",
+    uri: "ui://dynamic",
+    description: "Dynamic resource",
+    content: () => Promise.resolve("<html>dynamic</html>"),
+  });
+
+  const response = await g.handleResourceRead({ uri: "ui://dynamic" });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Content-Type")).toBe(
+    "text/html;profile=mcp-app",
+  );
+  expect(await response.text()).toBe("<html>dynamic</html>");
+});
+
+test("handleResourceRead() throws on unknown URI", async () => {
+  const g = new Gram();
+  await expect(
+    g.handleResourceRead({ uri: "resource://missing" }),
+  ).rejects.toThrow("Resource not found: resource://missing");
+});
+
+test("tool meta flows through to manifest", () => {
+  const g = new Gram()
+    .experimental_uiResource({
+      name: "chart",
+      uri: "ui://charts/bar",
+      description: "Bar chart",
+      content: "<html>chart</html>",
+    })
+    .tool({
+      name: "generate-chart",
+      description: "Generates a chart",
+      inputSchema: { data: z.array(z.number()) },
+      meta: { "ui/resourceUri": "ui://charts/bar" },
+      async execute(ctx, input) {
+        return ctx.json({ values: input.data });
+      },
+    });
+
+  const manifest = g.manifest();
+  const tool = manifest.tools?.find((t) => t.name === "generate-chart");
+  expect(tool?.meta).toEqual({ "ui/resourceUri": "ui://charts/bar" });
+});
+
+test("manifest omits resources key when no resources registered", () => {
+  const g = new Gram().tool({
+    name: "echo",
+    inputSchema: { message: z.string() },
+    async execute(ctx, input) {
+      return ctx.json({ echoed: input.message });
+    },
+  });
+
+  const manifest = g.manifest();
+  expect(manifest.resources).toBeUndefined();
+});
+
+test("extend() merges resources from another Gram instance", () => {
+  const g1 = new Gram().resource({
+    name: "r1",
+    uri: "resource://r1",
+    description: "Resource 1",
+    content: "content1",
+  });
+
+  const g2 = new Gram().experimental_uiResource({
+    name: "r2",
+    uri: "ui://r2",
+    description: "Resource 2",
+    content: "<html>r2</html>",
+  });
+
+  const merged = g1.extend(g2);
+  const manifest = merged.manifest();
+  expect(manifest.resources).toEqual([
+    {
+      name: "r1",
+      uri: "resource://r1",
+      description: "Resource 1",
+    },
+    {
+      name: "r2",
+      uri: "ui://r2",
+      description: "Resource 2",
+      mimeType: "text/html;profile=mcp-app",
+    },
+  ]);
+});

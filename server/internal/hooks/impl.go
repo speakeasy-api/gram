@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -36,14 +37,16 @@ import (
 )
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	db               *pgxpool.Pool
-	telemetryService *telemetry.Service
-	auth             *auth.Auth
-	cache            cache.Cache
-	temporalEnv      *tenv.Environment
-	repo             *repo.Queries
+	tracer             trace.Tracer
+	logger             *slog.Logger
+	db                 *pgxpool.Pool
+	telemetryService   *telemetry.Service
+	auth               *auth.Auth
+	cache              cache.Cache
+	temporalEnv        *tenv.Environment
+	repo               *repo.Queries
+	productFeatures    ProductFeaturesClient
+	chatTitleGenerator ChatTitleGenerator
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -64,6 +67,16 @@ type HookSpecificOutput struct {
 	PermissionDecisionReason *string `json:"permissionDecisionReason,omitempty"`
 }
 
+// ProductFeaturesClient checks whether product features are enabled for an org.
+type ProductFeaturesClient interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+}
+
+// ChatTitleGenerator schedules async chat title generation.
+type ChatTitleGenerator interface {
+	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
+}
+
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
@@ -76,16 +89,21 @@ func NewService(
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
+	accessLoader auth.AccessLoader,
+	pfClient ProductFeaturesClient,
+	chatTitleGenerator ChatTitleGenerator,
 ) *Service {
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
-		logger:           logger.With(attr.SlogComponent("hooks")),
-		db:               db,
-		telemetryService: telemetryService,
-		auth:             auth.New(logger, db, sessionsMgr),
-		cache:            cacheAdapter,
-		temporalEnv:      temporalEnv,
-		repo:             repo.New(db),
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
+		logger:             logger.With(attr.SlogComponent("hooks")),
+		db:                 db,
+		telemetryService:   telemetryService,
+		auth:               auth.New(logger, db, sessionsMgr, accessLoader),
+		cache:              cacheAdapter,
+		temporalEnv:        temporalEnv,
+		repo:               repo.New(db),
+		productFeatures:    pfClient,
+		chatTitleGenerator: chatTitleGenerator,
 	}
 }
 
@@ -257,7 +275,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 		}),
 	)
 
-	s.recordToolEvent(ctx, payload)
+	s.recordHook(ctx, payload)
 
 	// Route to appropriate handler based on hook type
 	switch payload.HookEventName {
@@ -269,29 +287,29 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 		return s.handlePostToolUse(ctx, payload)
 	case "PostToolUseFailure":
 		return s.handlePostToolUseFailure(ctx, payload)
+	case "UserPromptSubmit":
+		return s.handleUserPromptSubmit(ctx, payload)
+	case "Stop":
+		return s.handleStop(ctx, payload)
+	case "SessionEnd":
+		return s.handleSessionEnd(ctx, payload)
+	case "Notification":
+		return s.handleNotification(ctx, payload)
 	default:
 		s.logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
-		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-				HookEventName: &payload.HookEventName,
-			},
-		}, nil
+		return makeHookResult(payload.HookEventName), nil
 	}
 }
 
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	// For now, always allow sessions to start
+	// Always allow sessions to start
 	continueVal := true
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		Continue: &continueVal,
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	result := makeHookResult(payload.HookEventName)
+	result.Continue = &continueVal
+	return result, nil
 }
 
-// recordToolEvent records a tool event, either directly to ClickHouse if session is validated, or buffers it
-func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudeHookPayload) {
+func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudeHookPayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
 		s.logger.WarnContext(ctx, "Tool event called without session ID")
 		return
@@ -300,11 +318,23 @@ func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudeHookPa
 	sessionID := *payload.SessionID
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
-		s.writeHookToClickHouseWithMetadata(ctx, payload, &metadata)
+		s.persistHook(ctx, payload, &metadata)
 	} else {
 		// Session not validated yet - buffer in Redis
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to buffer hook", attr.SlogError(err))
+		}
+	}
+}
+
+func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+	if isConversationEvent(payload.HookEventName) {
+		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
+		}
+	} else {
+		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
 		}
 	}
 }
@@ -321,28 +351,52 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow tools
 	allow := "allow"
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName:      &payload.HookEventName,
-			PermissionDecision: &allow,
-		},
-	}, nil
+	result := makeHookResult(payload.HookEventName)
+	if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
+		output.PermissionDecision = &allow
+	}
+	return result, nil
 }
 
 func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	return makeHookResult(payload.HookEventName), nil
 }
 
 func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-			HookEventName: &payload.HookEventName,
-		},
-	}, nil
+	return makeHookResult(payload.HookEventName), nil
+}
+
+// Cursor is the endpoint for Cursor hook events
+func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+
+	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Cursor: %s", payload.HookEventName),
+		attr.SlogEvent("cursor_hook"),
+		attr.SlogValueAny(map[string]any{
+			"hookEventName": payload.HookEventName,
+			"toolName":      payload.ToolName,
+		}),
+	)
+
+	s.writeCursorHookToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	result := &gen.CursorHookResult{
+		Permission:        nil,
+		UserMessage:       nil,
+		AdditionalContext: nil,
+	}
+
+	switch payload.HookEventName {
+	case "preToolUse":
+		result.Permission = new("allow")
+	default:
+		// nothing to do
+	}
+
+	return result, nil
 }
 
 // generateTraceID generates a W3C-compliant trace ID (32 hex characters)

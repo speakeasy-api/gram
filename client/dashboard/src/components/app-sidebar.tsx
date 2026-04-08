@@ -23,8 +23,9 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
-
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  const settingsItems = [routes.settings] as AppRoute[];
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
@@ -35,7 +36,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       routes.chatSessions,
       routes.hooks,
     ],
-    settings: [routes.settings] as AppRoute[],
+    settings: settingsItems,
   };
 
   return (

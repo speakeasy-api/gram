@@ -36,9 +36,7 @@ describe("fromGram", () => {
       });
 
       expect(result.isError).toBe(false);
-      expect(result.content).toEqual([
-        { type: "text", text: "Hello world" },
-      ]);
+      expect(result.content).toEqual([{ type: "text", text: "Hello world" }]);
     });
 
     test("isError is true for a 500 text response", async () => {
@@ -86,9 +84,7 @@ describe("fromGram", () => {
       });
 
       expect(result.isError).toBe(true);
-      expect(result.content).toEqual([
-        { type: "text", text: "Bad request" },
-      ]);
+      expect(result.content).toEqual([{ type: "text", text: "Bad request" }]);
     });
   });
 
@@ -110,9 +106,7 @@ describe("fromGram", () => {
       });
 
       expect(result.isError).toBe(false);
-      expect(result.content).toEqual([
-        { type: "text", text: '{"sum":3}' },
-      ]);
+      expect(result.content).toEqual([{ type: "text", text: '{"sum":3}' }]);
     });
 
     test("isError is true for a 500 JSON response", async () => {

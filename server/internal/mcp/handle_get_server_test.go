@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 )
 
@@ -21,11 +22,13 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 	// Create metadata service using the same dependencies
 	metadataService := mcpmetadata.NewService(
 		testInstance.logger,
+		testInstance.tracerProvider,
 		testInstance.conn,
 		testInstance.sessionManager,
 		testInstance.serverURL,
 		testInstance.siteURL,
 		testInstance.cacheAdapter,
+		access.NewManager(testInstance.logger, testInstance.conn, nil),
 	)
 
 	tests := []struct {

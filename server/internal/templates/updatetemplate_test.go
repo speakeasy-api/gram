@@ -1,6 +1,7 @@
 package templates_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
@@ -72,6 +74,51 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	require.NoError(t, err, "render updated template")
 	require.NotNil(t, rendered, "rendered result is nil")
 	require.Equal(t, "Updated prompt TestUser!", rendered.Prompt, "rendered prompt should use updated template")
+}
+
+func TestTemplatesService_UpdateTemplate_InvalidatesToolsetCache(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+
+	var invalidateCallCount int
+	ti.toolsetsSvc.InvalidateCacheByToolFunc = func(_ context.Context, _ urn.Tool, _ uuid.UUID) error {
+		invalidateCallCount++
+		return nil
+	}
+
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("cache-invalidate-update"),
+		Prompt:           "Original prompt",
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+
+	// Reset counter after create (which may also trigger invalidation)
+	invalidateCallCount = 0
+
+	_, err = ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               created.Template.ID,
+		Prompt:           new("Updated prompt"),
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           nil,
+		Kind:             nil,
+		ToolsHint:        nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, invalidateCallCount, "expected toolset cache invalidation on update")
 }
 
 func TestTemplatesService_UpdateTemplate_PartialUpdate(t *testing.T) {

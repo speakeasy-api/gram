@@ -338,22 +338,15 @@ export function InstallPageConfigForm({
   }
 
   return (
-    <Stack direction="horizontal" align="center" gap={2}>
+    <div className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
       <CodeBlock
-        className="flex-grow overflow-hidden pr-10"
+        className="flex-grow overflow-hidden"
+        innerClassName="!p-2 !pr-10 !bg-white dark:!bg-zinc-950"
         preClassName="whitespace-nowrap overflow-auto"
         copyable={true}
       >
         {installPageUrl}
       </CodeBlock>
-      <Link external to={installPageUrl} noIcon>
-        <Button variant="secondary" className="px-4">
-          <Button.Text>View</Button.Text>
-          <Button.RightIcon>
-            <Icon name="external-link" className="w-4 h-4" />
-          </Button.RightIcon>
-        </Button>
-      </Link>
       <Dialog
         open={open}
         onOpenChange={(nextOpen) => {
@@ -365,10 +358,10 @@ export function InstallPageConfigForm({
       >
         <Dialog.Trigger asChild>
           <Button variant="secondary">
-            <Button.Text>Branding</Button.Text>
-            <Button.RightIcon>
-              <Icon name="settings" />
-            </Button.RightIcon>
+            <Button.LeftIcon>
+              <Icon name="palette" />
+            </Button.LeftIcon>
+            <Button.Text>Edit Branding</Button.Text>
           </Button>
         </Dialog.Trigger>
         <Dialog.Content>
@@ -470,6 +463,14 @@ export function InstallPageConfigForm({
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-    </Stack>
+      <Link external to={installPageUrl} noIcon>
+        <Button variant="primary" className="px-4">
+          <Button.LeftIcon>
+            <Icon name="external-link" className="w-4 h-4" />
+          </Button.LeftIcon>
+          <Button.Text>View</Button.Text>
+        </Button>
+      </Link>
+    </div>
   );
 }

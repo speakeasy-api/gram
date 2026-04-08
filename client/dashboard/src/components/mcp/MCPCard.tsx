@@ -130,3 +130,21 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
     </DotCard>
   );
 }
+
+export function MCPCardSkeleton() {
+  return (
+    <DotCard>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="h-5 w-2/3 bg-muted rounded animate-pulse" />
+        <div className="h-5 w-10 bg-muted rounded-full animate-pulse" />
+      </div>
+      <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+        <div className="flex items-center gap-2">
+          <div className="h-2.5 w-2.5 rounded-full bg-muted animate-pulse" />
+          <div className="h-3.5 w-12 bg-muted rounded animate-pulse" />
+        </div>
+        <div className="h-3.5 w-10 bg-muted rounded animate-pulse" />
+      </div>
+    </DotCard>
+  );
+}

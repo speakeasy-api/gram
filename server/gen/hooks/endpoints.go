@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "hooks" service endpoints.
 type Endpoints struct {
 	Claude goa.Endpoint
+	Cursor goa.Endpoint
 	Logs   goa.Endpoint
 }
 
@@ -26,6 +27,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Claude: NewClaudeEndpoint(s),
+		Cursor: NewCursorEndpoint(s, a.APIKeyAuth),
 		Logs:   NewLogsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -33,6 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "hooks" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Claude = m(e.Claude)
+	e.Cursor = m(e.Cursor)
 	e.Logs = m(e.Logs)
 }
 
@@ -42,6 +45,41 @@ func NewClaudeEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ClaudeHookPayload)
 		return s.Claude(ctx, p)
+	}
+}
+
+// NewCursorEndpoint returns an endpoint function that calls the method
+// "cursor" of service "hooks".
+func NewCursorEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CursorPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Cursor(ctx, p)
 	}
 }
 

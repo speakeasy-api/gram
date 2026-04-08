@@ -1,4 +1,4 @@
-h1:PK/2o540JDE4fCatu2Mi7EsFEEEAk+5j8MemwfIzK1Q=
+h1:v3U+7AFBJjYT8N8NhpSTHQkaWMts24qZOwoUvA9cq3U=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -29,3 +29,7 @@ h1:PK/2o540JDE4fCatu2Mi7EsFEEEAk+5j8MemwfIzK1Q=
 20260226021100_add-tool-event-source-cols.sql h1:2wEI67ZeRw/n+huRlbd51FfGZ5bCvr3AzBNzDcPUQl0=
 20260312103219_fix-mv-chat-id-consistency.sql h1:zQ6kNeH47NUINVxQ4BnDp2gDbwAoZUkaROXlDHqZZTY=
 20260317141703_add-toolset-slug-materialized-col.sql h1:2Zsgy6UACkwVOXhTGLckHM0JsuyTMtkDc/LWQAddKqs=
+20260326183210_add-user-email-hook-source-cols.sql h1:N0mZcdbqqlg8Ml9XBw9lWXu+l6SF9qzd8SQtdsLVN4s=
+20260326185334_add-user-email-hook-source-to-trace-summaries.sql h1:5Qkgq91xvqA3CRt/ELCc/zbSRF8i7/RTUKoOf+GJKWA=
+20260327155404_add-hook-status-to-trace-summaries.sql h1:qoLmWslLKmxush52MV577I+EaDonKduMSYDsrMQI8v8=
+20260407215736_materialzie_skill_name.sql h1:Wip8uGwT5fGot1WLOd/x6yblZz6W+pb1KWmpzjxTZK8=

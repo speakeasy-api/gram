@@ -176,7 +176,7 @@ const timeRangeSchema = z.object({
   label: z.string().describe("Short semantic label for the range"),
 });
 
-const TIME_RANGE_MODEL = "openai/gpt-4o-mini";
+const TIME_RANGE_MODEL = "openai/gpt-5.4-mini";
 
 /**
  * Parse an ISO date string as a local date (ignoring timezone).
@@ -561,8 +561,9 @@ function TimeRangePicker({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-64 p-0"
-        align="start"
+        className="w-fit max-w-[500px] p-0"
+        align="end"
+        collisionPadding={16}
         onOpenAutoFocus={(e) => {
           // Prevent popover from stealing focus from the input
           e.preventDefault();

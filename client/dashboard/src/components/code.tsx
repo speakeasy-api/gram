@@ -13,6 +13,7 @@ export function CodeBlock({
   children: code,
   language,
   className,
+  innerClassName,
   copyable = true,
   onCopy,
   preClassName,
@@ -20,6 +21,7 @@ export function CodeBlock({
   children: string;
   language?: string;
   className?: string;
+  innerClassName?: string;
   copyable?: boolean;
   onCopy?: () => void;
   preClassName?: string;
@@ -58,18 +60,18 @@ export function CodeBlock({
     }).then(setHighlightedCode);
   }, [code, language, preClassName]);
 
+  const baseClasses =
+    "rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap truncate";
+
   return (
-    <div className="relative group">
+    <div className={cn("relative group", className)}>
       {highlightedCode ? (
         <div
-          className={cn(
-            "p-4 rounded-md font-mono text-sm text-wrap overflow-x-auto border whitespace-pre-wrap break-all pr-12",
-            className,
-          )}
+          className={cn(baseClasses, "p-4 pr-12", innerClassName)}
           dangerouslySetInnerHTML={{ __html: highlightedCode ?? "" }}
         />
       ) : (
-        <div className="p-4 rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap truncate pr-12">
+        <div className={cn(baseClasses, "p-4 pr-12", innerClassName)}>
           {code}
         </div>
       )}
@@ -78,7 +80,7 @@ export function CodeBlock({
           variant="tertiary"
           size="sm"
           onClick={handleCopy}
-          className="absolute top-2 right-2 p-2"
+          className="absolute top-1/2 -translate-y-1/2 right-2 p-2"
         >
           <Button.LeftIcon>
             {copied ? (

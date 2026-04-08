@@ -20,7 +20,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -72,6 +71,7 @@ type Service struct {
 
 func NewService(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
@@ -80,17 +80,18 @@ func NewService(
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
+	accessLoader auth.AccessLoader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions),
+		auth:             auth.New(logger, db, sessions, accessLoader),
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
 		logger:           logger,
 		repo:             repo.New(db),
-		tracer:           otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:       openRouter,
 		completionClient: completionClient,
 		assetStorage:     assetStorage,
@@ -204,6 +205,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				ID:             chat.ID.String(),
 				UserID:         nil,
 				ExternalUserID: &chat.ExternalUserID.String,
+				Source:         conv.FromPGText[string](chat.Source),
 				Title:          chat.Title.String,
 				NumMessages:    int(chat.NumMessages),
 				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -226,6 +228,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				ID:             chat.ID.String(),
 				UserID:         &chat.UserID.String,
 				ExternalUserID: nil,
+				Source:         conv.FromPGText[string](chat.Source),
 				Title:          chat.Title.String,
 				NumMessages:    int(chat.NumMessages),
 				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -254,6 +257,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			ID:             chat.ID.String(),
 			UserID:         &chat.UserID.String,
 			ExternalUserID: nil,
+			Source:         conv.FromPGText[string](chat.Source),
 			Title:          chat.Title.String,
 			NumMessages:    int(chat.NumMessages),
 			CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
@@ -358,6 +362,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 				Title:          row.Title.String,
 				UserID:         conv.FromPGText[string](row.UserID),
 				ExternalUserID: conv.FromPGText[string](row.ExternalUserID),
+				Source:         conv.FromPGText[string](row.Source),
 				NumMessages:    int(row.NumMessages),
 				CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
@@ -464,11 +469,22 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
+	// Infer source from the most recent message with a source
+	var source *string
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Source.Valid && messages[i].Source.String != "" {
+			s := messages[i].Source.String
+			source = &s
+			break
+		}
+	}
+
 	return &gen.Chat{
 		ID:             chat.ID.String(),
 		Title:          chat.Title.String,
 		UserID:         &chat.UserID.String,
 		ExternalUserID: &chat.ExternalUserID.String,
+		Source:         source,
 		NumMessages:    len(messages),
 		CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),

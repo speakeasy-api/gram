@@ -11,16 +11,35 @@ var ClaudeHookPayload = Type("ClaudeHookPayload", func() {
 	Description("Unified payload for all Claude Code hook events")
 	Required("hook_event_name")
 	Attribute("hook_event_name", String, "The type of hook event", func() {
-		Enum("SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure")
+		Enum("SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure",
+			"UserPromptSubmit", "Stop", "SessionEnd", "Notification")
 	})
+	// Tool-related fields (PreToolUse, PostToolUse, PostToolUseFailure)
 	Attribute("tool_name", String, "The name of the tool (for tool-related events)")
 	Attribute("tool_use_id", String, "The unique ID for this tool use")
 	Attribute("tool_input", Any, "The input to the tool")
 	Attribute("tool_response", Any, "The response from the tool (PostToolUse only)")
 	Attribute("error", Any, "The error from the tool (PostToolUseFailure only)")
 	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption (PostToolUseFailure only)")
+	// Common fields
 	Attribute("session_id", String, "The Claude Code session ID")
+	Attribute("cwd", String, "The working directory when the event fired")
+	Attribute("transcript_path", String, "Path to the conversation transcript file")
 	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+	// SessionStart fields
+	Attribute("source", String, "How the session started: startup, resume, clear, compact (SessionStart only)")
+	Attribute("model", String, "The model identifier (SessionStart, Stop)")
+	// UserPromptSubmit fields
+	Attribute("prompt", String, "The user's prompt text (UserPromptSubmit only)")
+	// Stop fields
+	Attribute("last_assistant_message", String, "Claude's final response text (Stop only)")
+	Attribute("stop_hook_active", Boolean, "Whether a stop hook continuation is active (Stop only)")
+	// SessionEnd fields
+	Attribute("reason", String, "Why the session ended (SessionEnd only)")
+	// Notification fields
+	Attribute("notification_type", String, "Type of notification: permission_prompt, idle_prompt, auth_success, elicitation_dialog (Notification only)")
+	Attribute("message", String, "Notification message text (Notification only)")
+	Attribute("title", String, "Notification title (Notification only)")
 })
 
 // Unified Claude Code hook result with proper hook response structure
@@ -28,7 +47,36 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Description("Unified result for all Claude Code hook events with proper response structure")
 	Attribute("continue", Boolean, "Whether to continue (SessionStart only)")
 	Attribute("stopReason", String, "Reason if blocked (SessionStart only)")
+	Attribute("suppressOutput", Boolean, "Whether to suppress the hook's output")
 	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
+})
+
+// Cursor hook payload
+var CursorHookPayload = Type("CursorHookPayload", func() {
+	Description("Payload for Cursor hook events")
+	Required("hook_event_name")
+	Attribute("hook_event_name", String, "The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)")
+	Attribute("conversation_id", String, "The Cursor conversation ID")
+	Attribute("generation_id", String, "The Cursor generation ID")
+	Attribute("model", String, "The model being used")
+	Attribute("cursor_version", String, "The Cursor IDE version")
+	Attribute("user_email", String, "Email of the authenticated Cursor user, if available")
+	Attribute("session_id", String, "The session ID from Cursor")
+	Attribute("tool_name", String, "The name of the tool")
+	Attribute("tool_use_id", String, "The unique ID for this tool use")
+	Attribute("tool_input", Any, "The input to the tool")
+	Attribute("tool_response", Any, "The response from the tool (postToolUse only)")
+	Attribute("error", Any, "The error from the tool (postToolUseFailure only)")
+	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption")
+	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+})
+
+// Cursor hook result
+var CursorHookResult = Type("CursorHookResult", func() {
+	Description("Result for Cursor hook events")
+	Attribute("permission", String, "Permission decision for preToolUse: allow or deny")
+	Attribute("user_message", String, "Message to display to the user")
+	Attribute("additional_context", String, "Additional context to inject into the conversation")
 })
 
 // Server name override types
@@ -41,7 +89,7 @@ var ServerNameOverride = Type("ServerNameOverride", func() {
 })
 
 var _ = Service("hooks", func() {
-	Description("Receives Claude Code hook events for tool usage observability.")
+	Description("Receives hook events from coding assistants for tool usage observability.")
 
 	shared.DeclareErrorResponses()
 
@@ -55,11 +103,33 @@ var _ = Service("hooks", func() {
 		})
 	})
 
+	Method("cursor", func() {
+		Description("Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(CursorHookPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CursorHookResult)
+
+		HTTP(func() {
+			POST("/rpc/hooks.cursor")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+		})
+	})
+
 	Method("logs", func() {
 		Description("Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("hooks") // NOTE: This is the ONLY endpoint that should allow the hooks scope
+			Scope("hooks")
 		})
 
 		Payload(func() {

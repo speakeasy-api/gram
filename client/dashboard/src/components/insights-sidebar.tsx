@@ -1,9 +1,10 @@
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { Wand2, ChevronRight, Sparkles } from "lucide-react";
+import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
 import { useState, useMemo, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
+import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
 
 // Context for sidebar state
 const InsightsContext = createContext<{
@@ -172,6 +173,20 @@ When the user asks about "current period", "selected period", "this timeframe", 
               <ChevronRight className="size-5" />
             </button>
           </div>
+
+          {/* Dev notice when MCP is not configured */}
+          {devObservabilityMcpMissing && !("mcp" in mcpConfig) && (
+            <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              <Terminal className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                AI tools are unavailable. Run{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
+                  mise seed
+                </code>{" "}
+                to enable the observability MCP server.
+              </span>
+            </div>
+          )}
 
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">

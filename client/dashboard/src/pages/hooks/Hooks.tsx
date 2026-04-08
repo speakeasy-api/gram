@@ -1,31 +1,39 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { useOrgRoutes } from "@/routes";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { PieProgress } from "@/components/PieProgress";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSearch } from "@/components/ui/multi-search";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
+import { useOrgRoutes } from "@/routes";
 import {
   getPresetRange,
   TimeRangePicker,
   type DateRangePreset,
 } from "@gram-ai/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
-import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
+import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
 import type {
   GetHooksSummaryResult,
   HooksServerSummary,
+  HookTraceSummary as HookTrace,
   LogFilter,
+  SkillSummary,
   TelemetryLogRecord,
-  ToolCallSummary,
+  TypesToInclude,
 } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -39,6 +47,7 @@ import { TraceLogsList } from "../logs/TraceLogsList";
 import { EditServerNameDialog } from "./EditServerNameDialog";
 import { HooksEmptyState } from "./HooksEmptyState";
 import { HookSourceIcon } from "./HookSourceIcon";
+import { HooksSetupButton } from "./HooksSetupDialog";
 
 const validPresets: DateRangePreset[] = [
   "15m",
@@ -55,11 +64,6 @@ const validPresets: DateRangePreset[] = [
 
 function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
-}
-
-interface HookTrace extends ToolCallSummary {
-  userEmail?: string;
-  hookSource?: string;
 }
 
 // Generic filter chip that displays one thing but filters on multiple values
@@ -113,7 +117,17 @@ function HooksContent() {
 
   const initialServer = searchParams.get("server");
   const initialUserEmail = searchParams.get("user");
-  const initialHideLocal = searchParams.get("hideLocal") !== "false"; // default to true
+
+  // Parse initial hook types from URL (default to all types)
+  const initialHookTypes = searchParams.get("hookTypes");
+  const defaultHookTypes: TypesToInclude[] = ["mcp", "local", "skill"];
+  const parsedHookTypes: TypesToInclude[] = initialHookTypes
+    ? (initialHookTypes
+        .split(",")
+        .filter((t) =>
+          ["mcp", "local", "skill"].includes(t),
+        ) as TypesToInclude[])
+    : defaultHookTypes;
 
   // Active filter chips
   const [activeFilters, setActiveFilters] = useState<FilterChip[]>(() => {
@@ -154,11 +168,11 @@ function HooksContent() {
 
   const [serverInput, setServerInput] = useState("");
   const [userEmailInput, setUserEmailInput] = useState("");
-  const [hideLocalToolCalls, setHideLocalToolCalls] =
-    useState(initialHideLocal);
-  const [summaryView, setSummaryView] = useState<"servers" | "users">(
-    "servers",
-  );
+  const [selectedHookTypes, setSelectedHookTypes] =
+    useState<TypesToInclude[]>(parsedHookTypes);
+  const [summaryView, setSummaryView] = useState<
+    "servers" | "users" | "skills"
+  >("servers");
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
@@ -279,21 +293,12 @@ function HooksContent() {
       });
     }
 
-    // Hide local tool calls (filter out empty gram.tool_call.source)
-    if (hideLocalToolCalls) {
-      filters.push({
-        path: "gram.tool_call.source",
-        operator: "not_eq",
-        values: [""],
-      });
-    }
-
     return filters.length > 0 ? filters : undefined;
-  }, [activeFilters, hideLocalToolCalls]);
+  }, [activeFilters]);
 
-  // Fetch hooks logs with infinite scroll
+  // Fetch hooks traces with infinite scroll (pre-aggregated by backend)
   const {
-    data: logsData,
+    data: tracesData,
     error,
     fetchNextPage,
     hasNextPage,
@@ -304,20 +309,21 @@ function HooksContent() {
   } = useLogsEnabledErrorCheck(
     useInfiniteQuery({
       queryKey: [
-        "hooks-logs",
+        "hooks-traces",
         activeFilters,
-        hideLocalToolCalls,
+        selectedHookTypes,
         from.toISOString(),
         to.toISOString(),
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
-          telemetrySearchLogs(client, {
-            searchLogsPayload: {
+          telemetryListHooksTraces(client, {
+            listHooksTracesPayload: {
               from,
               to,
               filters: logFilters,
-              filter: { eventSource: "hook" },
+              typesToInclude:
+                selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -330,77 +336,10 @@ function HooksContent() {
     }),
   );
 
-  const logs = logsData?.pages.flatMap((page) => page.logs) ?? [];
-
-  // Group logs by trace ID to create ToolCallSummary objects with extra metadata
+  // No more client-side grouping - traces are pre-aggregated by backend
   const groupedTraces = useMemo(() => {
-    const traceMap = new Map<string, HookTrace>();
-
-    for (const log of logs) {
-      const traceId = log.traceId;
-      if (!traceId) continue;
-
-      const existing = traceMap.get(traceId);
-      if (existing) {
-        // Update existing trace
-        existing.logCount++;
-
-        // Update status based on hook event
-        const hookEvent = log.attributes?.gram?.hook?.event as
-          | string
-          | undefined;
-        if (hookEvent === "PostToolUseFailure") {
-          existing.httpStatusCode = 500; // Mark as failure
-        } else if (hookEvent === "PostToolUse" && !existing.httpStatusCode) {
-          existing.httpStatusCode = 200; // Mark as success
-        }
-
-        // Track earliest timestamp
-        if (BigInt(log.timeUnixNano) < BigInt(existing.startTimeUnixNano)) {
-          existing.startTimeUnixNano = log.timeUnixNano;
-        }
-      } else {
-        // Create new trace summary
-        const hookEvent = log.attributes?.gram?.hook?.event as
-          | string
-          | undefined;
-        const toolName = log.attributes?.gram?.tool?.name as string | undefined;
-        const serverName = log.attributes?.gram?.tool_call?.source as
-          | string
-          | undefined;
-        const userEmail = log.attributes?.user?.email as string | undefined;
-        const hookSource = log.attributes?.gram?.hook?.source as
-          | string
-          | undefined;
-
-        // Determine initial status
-        let httpStatusCode: number | undefined;
-        if (hookEvent === "PostToolUseFailure") {
-          httpStatusCode = 500;
-        } else if (hookEvent === "PostToolUse") {
-          httpStatusCode = 200;
-        }
-
-        traceMap.set(traceId, {
-          traceId,
-          gramUrn: toolName || "",
-          toolName: toolName,
-          toolSource: serverName,
-          logCount: 1,
-          startTimeUnixNano: log.timeUnixNano,
-          httpStatusCode,
-          eventSource: "hook",
-          userEmail,
-          hookSource,
-        });
-      }
-    }
-
-    // Sort by timestamp descending
-    return Array.from(traceMap.values()).sort((a, b) =>
-      a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
-    );
-  }, [logsData]);
+    return tracesData?.pages.flatMap((page) => page.traces) ?? [];
+  }, [tracesData]);
 
   // Add a filter chip
   const addFilter = useCallback(
@@ -536,16 +475,20 @@ function HooksContent() {
     setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
   };
 
-  const handleHideLocalToggle = useCallback(
-    (value: boolean) => {
-      setHideLocalToolCalls(value);
+  const handleHookTypesChange = useCallback(
+    (types: TypesToInclude[]) => {
+      setSelectedHookTypes(types);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (value) {
-            next.delete("hideLocal"); // default is true, so remove param
+          if (types.length === 3) {
+            // All types selected - remove param (default)
+            next.delete("hookTypes");
+          } else if (types.length > 0) {
+            next.set("hookTypes", types.join(","));
           } else {
-            next.set("hideLocal", "false");
+            // No types selected - still store it
+            next.set("hookTypes", "");
           }
           return next;
         },
@@ -615,8 +558,8 @@ function HooksContent() {
                   activeFilters={activeFilters}
                   addFilter={addFilter}
                   removeFilter={removeFilter}
-                  hideLocalToolCalls={hideLocalToolCalls}
-                  onHideLocalToggle={handleHideLocalToggle}
+                  selectedHookTypes={selectedHookTypes}
+                  onHookTypesChange={handleHookTypesChange}
                   expandedTraceId={expandedTraceId}
                   toggleExpand={toggleExpand}
                   selectedLog={selectedLog}
@@ -660,8 +603,8 @@ function HooksInnerContent({
   activeFilters,
   addFilter,
   removeFilter,
-  hideLocalToolCalls,
-  onHideLocalToggle,
+  selectedHookTypes,
+  onHookTypesChange,
   expandedTraceId,
   toggleExpand,
   selectedLog,
@@ -685,8 +628,8 @@ function HooksInnerContent({
   isFetching: boolean;
   error: Error | null;
   summaryData?: GetHooksSummaryResult;
-  summaryView: "servers" | "users";
-  onSummaryViewChange: (view: "servers" | "users") => void;
+  summaryView: "servers" | "users" | "skills";
+  onSummaryViewChange: (view: "servers" | "users" | "skills") => void;
   groupedTraces: HookTrace[];
   serverInput: string;
   setServerInput: (value: string) => void;
@@ -695,8 +638,8 @@ function HooksInnerContent({
   activeFilters: FilterChip[];
   addFilter: (chip: FilterChip) => void;
   removeFilter: (path: string, display?: string) => void;
-  hideLocalToolCalls: boolean;
-  onHideLocalToggle: (value: boolean) => void;
+  selectedHookTypes: TypesToInclude[];
+  onHookTypesChange: (types: TypesToInclude[]) => void;
   expandedTraceId: string | null;
   toggleExpand: (traceId: string) => void;
   selectedLog: TelemetryLogRecord | null;
@@ -730,21 +673,25 @@ function HooksInnerContent({
                 Monitor hook events and tool executions across all servers
               </p>
             </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link to={orgRoutes.logs.href()}>
-                <Settings className="h-4 w-4" />
-                Configure settings
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <HooksSetupButton />
+              <Button variant="outline" size="sm" asChild>
+                <Link to={orgRoutes.logs.href()}>
+                  <Settings className="h-4 w-4" />
+                  Configure settings
+                </Link>
+              </Button>
+            </div>
           </div>
 
           {/* Summary Tables */}
           {summaryData &&
             (summaryData.servers.length > 0 ||
-              (summaryData.users && summaryData.users.length > 0)) && (
+              (summaryData.users && summaryData.users.length > 0) ||
+              (summaryData.skills && summaryData.skills.length > 0)) && (
               <div className="mb-4 border rounded-lg overflow-hidden">
-                {summaryView === "servers" &&
-                  summaryData.servers.length > 0 && (
+                {summaryData.servers.length > 0 && (
+                  <div className={summaryView !== "servers" ? "hidden" : ""}>
                     <HooksServerTable
                       servers={summaryData.servers}
                       onFilterSelect={addFilter}
@@ -752,17 +699,27 @@ function HooksInnerContent({
                       onSummaryViewChange={onSummaryViewChange}
                       serverNameMappings={serverNameMappings}
                     />
-                  )}
-                {summaryView === "users" &&
-                  summaryData.users &&
-                  summaryData.users.length > 0 && (
+                  </div>
+                )}
+                {summaryData.users && summaryData.users.length > 0 && (
+                  <div className={summaryView !== "users" ? "hidden" : ""}>
                     <HooksUserTable
                       users={summaryData.users}
                       onFilterSelect={addFilter}
                       summaryView={summaryView}
                       onSummaryViewChange={onSummaryViewChange}
                     />
-                  )}
+                  </div>
+                )}
+                {summaryData.skills && summaryData.skills.length > 0 && (
+                  <div className={summaryView !== "skills" ? "hidden" : ""}>
+                    <HooksSkillTable
+                      skills={summaryData.skills}
+                      summaryView={summaryView}
+                      onSummaryViewChange={onSummaryViewChange}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -790,21 +747,10 @@ function HooksInnerContent({
                 .map((f) => ({ display: f.display, value: f.display }))}
               onRemoveChip={(display) => removeFilter("user.email", display)}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onHideLocalToggle(!hideLocalToolCalls)}
-              className={cn(
-                "shrink-0 h-[42px]",
-                hideLocalToolCalls ? "bg-primary/5" : "",
-              )}
-            >
-              <Icon
-                name={hideLocalToolCalls ? "eye-off" : "eye"}
-                className="size-4"
-              />
-              {hideLocalToolCalls ? "Hiding local" : "Showing local"}
-            </Button>
+            <HookTypeFilter
+              selectedHookTypes={selectedHookTypes}
+              onHookTypesChange={onHookTypesChange}
+            />
             <div className="ml-auto">
               <TimeRangePicker
                 preset={customRange ? null : dateRange}
@@ -880,6 +826,81 @@ function HooksInnerContent({
   );
 }
 
+const HOOK_TYPE_OPTIONS = [
+  { label: "MCP Servers", value: "mcp" as TypesToInclude },
+  { label: "Local Tools", value: "local" as TypesToInclude },
+  { label: "Skills", value: "skill" as TypesToInclude },
+];
+
+function HookTypeFilter({
+  selectedHookTypes,
+  onHookTypesChange,
+}: {
+  selectedHookTypes: TypesToInclude[];
+  onHookTypesChange: (types: TypesToInclude[]) => void;
+}) {
+  const getButtonText = () => {
+    if (selectedHookTypes.length === 3) {
+      return "Showing all types";
+    }
+
+    if (selectedHookTypes.length === 0) {
+      return "No types selected";
+    }
+
+    if (selectedHookTypes.length === 1) {
+      const selected = HOOK_TYPE_OPTIONS.find(
+        (opt) => opt.value === selectedHookTypes[0],
+      );
+      return `Showing ${selected?.label || selectedHookTypes[0]}`;
+    }
+
+    return `Showing ${selectedHookTypes.length} of 3 types`;
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 w-[200px] h-[42px] justify-between"
+        >
+          <span className="text-sm">{getButtonText()}</span>
+          <Icon name="chevron-down" className="size-4 ml-2" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[200px] p-3" align="start">
+        <div className="space-y-2">
+          {HOOK_TYPE_OPTIONS.map((option) => (
+            <div key={option.value} className="flex items-center space-x-2">
+              <Checkbox
+                id={`hook-type-${option.value}`}
+                checked={selectedHookTypes.includes(option.value)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    onHookTypesChange([...selectedHookTypes, option.value]);
+                  } else {
+                    onHookTypesChange(
+                      selectedHookTypes.filter((t) => t !== option.value),
+                    );
+                  }
+                }}
+              />
+              <label
+                htmlFor={`hook-type-${option.value}`}
+                className="text-sm font-medium leading-none cursor-pointer"
+              >
+                {option.label}
+              </label>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 interface SummaryItemData {
   name: string;
   displayName?: string;
@@ -896,6 +917,9 @@ interface SummaryTableProps {
   tabValue?: string;
   onTabChange?: (value: string) => void;
   tabs?: Array<{ value: string; label: string }>;
+  uniqueToolsLabel?: string;
+  toolCallsLabel?: string;
+  hideFilterAction?: boolean;
 }
 
 function SummaryTable({
@@ -906,6 +930,9 @@ function SummaryTable({
   tabValue,
   onTabChange,
   tabs,
+  uniqueToolsLabel = "Unique Tools",
+  toolCallsLabel = "Tool Calls",
+  hideFilterAction = false,
 }: SummaryTableProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const sortedItems = useMemo(() => {
@@ -936,8 +963,8 @@ function SummaryTable({
             "Name"
           )}
         </div>
-        <div className="shrink-0 w-[100px] text-right">Unique Tools</div>
-        <div className="shrink-0 w-[100px] text-right">Tool Calls</div>
+        <div className="shrink-0 w-[100px] text-right">{uniqueToolsLabel}</div>
+        <div className="shrink-0 w-[100px] text-right">{toolCallsLabel}</div>
         <div className="shrink-0 w-[100px] text-right">Success Rate</div>
       </div>
 
@@ -961,13 +988,15 @@ function SummaryTable({
 
               {/* Actions - shown on hover */}
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button
-                  onClick={() => onItemSelect(item.name)}
-                  className="p-1.5 rounded hover:bg-primary/10"
-                  title={`Filter by ${item.displayName || item.name}`}
-                >
-                  <Filter className="size-4 text-muted-foreground hover:text-primary" />
-                </button>
+                {!hideFilterAction && (
+                  <button
+                    onClick={() => onItemSelect(item.name)}
+                    className="p-1.5 rounded hover:bg-primary/10"
+                    title={`Filter by ${item.displayName || item.name}`}
+                  >
+                    <Filter className="size-4 text-muted-foreground hover:text-primary" />
+                  </button>
+                )}
                 {onItemEdit && (
                   <button
                     onClick={() => onItemEdit(item.name)}
@@ -1037,8 +1066,8 @@ function HooksServerTable({
 }: {
   servers: HooksServerSummary[];
   onFilterSelect: (chip: FilterChip) => void;
-  summaryView: "servers" | "users";
-  onSummaryViewChange: (view: "servers" | "users") => void;
+  summaryView: "servers" | "users" | "skills";
+  onSummaryViewChange: (view: "servers" | "users" | "skills") => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
   const [editingServer, setEditingServer] = useState<string | null>(null);
@@ -1194,10 +1223,13 @@ function HooksServerTable({
           })
         }
         tabValue={summaryView}
-        onTabChange={(v) => onSummaryViewChange(v as "servers" | "users")}
+        onTabChange={(v) =>
+          onSummaryViewChange(v as "servers" | "users" | "skills")
+        }
         tabs={[
           { value: "servers", label: "Servers" },
           { value: "users", label: "Users" },
+          { value: "skills", label: "Skills" },
         ]}
       />
 
@@ -1232,8 +1264,8 @@ function HooksUserTable({
     failureRate: number;
   }>;
   onFilterSelect: (chip: FilterChip) => void;
-  summaryView: "servers" | "users";
-  onSummaryViewChange: (view: "servers" | "users") => void;
+  summaryView: "servers" | "users" | "skills";
+  onSummaryViewChange: (view: "servers" | "users" | "skills") => void;
 }) {
   const items: SummaryItemData[] = users.map((u) => ({
     name: u.userEmail,
@@ -1270,11 +1302,58 @@ function HooksUserTable({
         })
       }
       tabValue={summaryView}
-      onTabChange={(v) => onSummaryViewChange(v as "servers" | "users")}
+      onTabChange={(v) =>
+        onSummaryViewChange(v as "servers" | "users" | "skills")
+      }
       tabs={[
         { value: "servers", label: "Servers" },
         { value: "users", label: "Users" },
+        { value: "skills", label: "Skills" },
       ]}
+    />
+  );
+}
+
+function HooksSkillTable({
+  skills,
+  summaryView,
+  onSummaryViewChange,
+}: {
+  skills: SkillSummary[];
+  summaryView: "servers" | "users" | "skills";
+  onSummaryViewChange: (view: "servers" | "users" | "skills") => void;
+}) {
+  const items: SummaryItemData[] = skills.map((s) => ({
+    name: s.skillName,
+    displayName: s.skillName,
+    toolCallCount: s.useCount,
+    uniqueTools: s.uniqueUsers,
+    failureRate: 0, // Skills don't have failure rates in the summary
+  }));
+
+  return (
+    <SummaryTable
+      items={items}
+      onItemSelect={() => {
+        // Skills don't have filtering yet
+      }}
+      sortItems={(items) =>
+        [...items].sort((a, b) => {
+          return b.toolCallCount - a.toolCallCount;
+        })
+      }
+      tabValue={summaryView}
+      onTabChange={(v) =>
+        onSummaryViewChange(v as "servers" | "users" | "skills")
+      }
+      tabs={[
+        { value: "servers", label: "Servers" },
+        { value: "users", label: "Users" },
+        { value: "skills", label: "Skills" },
+      ]}
+      uniqueToolsLabel="Unique Users"
+      toolCallsLabel="Invocations"
+      hideFilterAction
     />
   );
 }
@@ -1406,6 +1485,7 @@ function HookTraceRow({
 
   const serverName = trace.toolSource;
   const toolName = trace.toolName;
+  const skillName = trace.skillName;
   const userEmail = trace.userEmail;
   const hookSource = trace.hookSource;
 
@@ -1416,6 +1496,15 @@ function HookTraceRow({
   }, [serverName, serverNameMappings.rawToDisplay]);
 
   const serverNameBadge = useMemo(() => {
+    // For skills, show [Skill] badge
+    if (toolName === "Skill" && skillName) {
+      return (
+        <span className="text-xs font-mono truncate px-2 py-1 rounded-md shrink-0 bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-medium">
+          Skill
+        </span>
+      );
+    }
+
     const isLocal = !serverName;
     return (
       <span
@@ -1429,16 +1518,16 @@ function HookTraceRow({
         {displayServerName || "local"}
       </span>
     );
-  }, [displayServerName]);
+  }, [displayServerName, toolName, skillName]);
 
   const statusConfig = useMemo(() => {
-    if (trace.httpStatusCode === 500) {
+    if (trace.hookStatus === "failure") {
       return {
         color: "text-destructive",
         bgColor: "bg-destructive/10",
         label: "Failure",
       };
-    } else if (trace.httpStatusCode === 200) {
+    } else if (trace.hookStatus === "success") {
       return {
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
@@ -1450,7 +1539,7 @@ function HookTraceRow({
       bgColor: "bg-muted",
       label: "Pending",
     };
-  }, [trace.httpStatusCode]);
+  }, [trace.hookStatus]);
 
   return (
     <div className="border-b border-border/50 last:border-b-0">
@@ -1476,7 +1565,9 @@ function HookTraceRow({
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {serverNameBadge}
           <span className="text-sm font-mono truncate">
-            {toolName || "unknown"}
+            {toolName === "Skill" && skillName
+              ? skillName
+              : toolName || "unknown"}
           </span>
         </div>
 

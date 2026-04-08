@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -22,6 +22,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/projects/server"
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -44,21 +45,23 @@ type Service struct {
 	envRepo  *envrepo.Queries
 	sessions *sessions.Manager
 	auth     *auth.Auth
+	access   *access.Manager
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
 		logger:   logger,
 		db:       db,
 		repo:     repo.New(db),
 		envRepo:  envrepo.New(db),
 		sessions: sessions,
-		auth:     auth.New(logger, db, sessions),
+		auth:     auth.New(logger, db, sessions, accessManager),
+		access:   accessManager,
 	}
 }
 
@@ -94,6 +97,14 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: proj.ID.String()}); err != nil {
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, err
+	}
+
 	return &gen.GetProjectResult{
 		Project: &gen.Project{
 			ID:             proj.ID.String(),
@@ -111,6 +122,14 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if payload.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: payload.OrganizationID}); err != nil {
+		return nil, err
 	}
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
@@ -199,6 +218,10 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if payload.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
+	}
+
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("get session user info: %w", err)
@@ -219,8 +242,27 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, fmt.Errorf("list projects by organization %s: %w", payload.OrganizationID, err)
 	}
 
+	projectIDs := make([]string, 0, len(projects))
+	for _, project := range projects {
+		projectIDs = append(projectIDs, project.ID.String())
+	}
+
+	allowedProjectIDs, err := s.access.Filter(ctx, access.ScopeBuildRead, projectIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	allowedProjects := make(map[string]struct{}, len(allowedProjectIDs))
+	for _, projectID := range allowedProjectIDs {
+		allowedProjects[projectID] = struct{}{}
+	}
+
 	entries := make([]*gen.ProjectEntry, 0, len(projects))
 	for _, project := range projects {
+		if _, ok := allowedProjects[project.ID.String()]; !ok {
+			continue
+		}
+
 		entries = append(entries, &gen.ProjectEntry{
 			ID:   project.ID.String(),
 			Name: project.Name,
@@ -237,6 +279,10 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	assetID, err := uuid.Parse(payload.AssetID)
@@ -301,6 +347,10 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	allowedOrigins, err := s.repo.ListAllowedOriginsByProjectID(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing allowed origins").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -327,6 +377,10 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	// Use the status from payload or default to "pending"
@@ -367,14 +421,21 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeInvalid, err, "invalid project id").Log(ctx, s.logger)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return err
+	}
+
 	err = s.auth.CheckProjectAccess(ctx, s.logger, projectID)
 	if err != nil {
 		return oops.E(oops.CodeForbidden, err, "forbidden")
 	}
 
 	project, err := s.repo.GetProjectByID(ctx, projectID)
-	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "cannot delete the default project").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "error retrieving project").Log(ctx, s.logger)
 	}
 
 	// The first project (ordered by id ASC) is the default project
@@ -414,6 +475,29 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error saving project deletion").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.SetOrganizationWhitelistPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// Check that the API key is from the speakeasy-team organization
+	const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
+	if authCtx.ActiveOrganizationID != speakeasyTeamOrgID {
+		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+
+	err := s.repo.SetOrganizationWhitelist(ctx, repo.SetOrganizationWhitelistParams{
+		OrganizationID: payload.OrganizationID,
+		Whitelisted:    payload.Whitelisted,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error setting organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
 
 	return nil

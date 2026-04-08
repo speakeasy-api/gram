@@ -6,8 +6,9 @@ import {
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -22,8 +23,8 @@ import {
   useGetMcpMetadata,
   useListEnvironments,
 } from "@gram/client/react-query/index.js";
-import { useToolset } from "@gram/client/react-query/toolset.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -33,6 +34,10 @@ import {
   useExternalMcpOAuthStatus,
 } from "./PlaygroundAuth";
 import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
+import {
+  PlaygroundMcpAppsProvider,
+  PlaygroundMcpToolFallback,
+} from "./PlaygroundMcpApps";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -62,14 +67,10 @@ export function PlaygroundElements({
   const initialThreadId = searchParams.get("threadId") ?? undefined;
 
   // Get toolset data to construct MCP URL
-  const { data: toolset } = useToolset(
-    { slug: toolsetSlug ?? "" },
-    {},
-    { enabled: !!toolsetSlug },
-  );
+  const { data: toolset } = useToolset(toolsetSlug ?? undefined);
 
-  // Get MCP URL from toolset (uses custom domain if configured)
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  // Always use the platform domain for the playground to avoid CSP issues
+  const mcpUrl = useInternalMcpUrl(toolset);
 
   // Get environments and MCP metadata for auth status check
   const { data: environmentsData } = useListEnvironments();
@@ -126,7 +127,7 @@ export function PlaygroundElements({
       });
       return result.clientToken;
     } catch (error) {
-      toast.error("Failed to create chat session. Please try again.");
+      toast.error("Failed to create session. Please try again.");
       throw error;
     }
   }, [
@@ -135,6 +136,37 @@ export function PlaygroundElements({
     session.user.id,
     project.id,
     project.slug,
+  ]);
+
+  const mcpAppSessionQuery = useQuery({
+    queryKey: [
+      "playground-mcp-app-session",
+      project.id,
+      toolsetSlug,
+      environmentSlug,
+      session.user.id,
+    ],
+    queryFn: getSession,
+    enabled: !!mcpUrl && !!toolsetSlug,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const mcpAppHeaders = useMemo(() => {
+    if (!mcpAppSessionQuery.data) {
+      return null;
+    }
+
+    return {
+      "Gram-Chat-Session": mcpAppSessionQuery.data,
+      "Gram-Project": project.slug,
+      ...(environmentSlug ? { "Gram-Environment": environmentSlug } : {}),
+      ...userProvidedHeaders,
+    };
+  }, [
+    environmentSlug,
+    mcpAppSessionQuery.data,
+    project.slug,
+    userProvidedHeaders,
   ]);
 
   // Don't render until we have a valid MCP URL
@@ -203,38 +235,46 @@ export function PlaygroundElements({
           radius: "soft",
         },
         components: {
+          ToolFallback: PlaygroundMcpToolFallback,
           ThreadWelcome: GramThreadWelcome,
         },
       }}
     >
-      <div className="h-full flex flex-col min-h-0">
-        <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
-          <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-            <PopoverTrigger asChild>
-              <Button size="sm" variant="ghost">
-                <HistoryIcon className="size-4 mr-2" />
-                Chat History
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="start"
-              className="w-72 p-0 min-h-fit max-h-96 overflow-y-scroll"
-            >
-              <ChatHistory className="h-full min-h-fit max-h-96 overflow-y-auto" />
-            </PopoverContent>
-          </Popover>
-          <div className="flex items-center gap-2">{additionalActions}</div>
+      <PlaygroundMcpAppsProvider
+        headers={mcpAppHeaders}
+        mcpUrl={mcpUrl}
+        theme={resolvedTheme === "dark" ? "dark" : "light"}
+        toolset={toolset}
+      >
+        <div className="h-full flex flex-col min-h-0">
+          <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
+            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="ghost">
+                  <HistoryIcon className="size-4 mr-2" />
+                  Chat History
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-72 p-0 min-h-fit max-h-96 overflow-y-scroll"
+              >
+                <ChatHistory className="h-full min-h-fit max-h-96 overflow-y-auto" />
+              </PopoverContent>
+            </Popover>
+            <div className="flex items-center gap-2">{additionalActions}</div>
+          </div>
+          {missingAuthCount > 0 && toolsetSlug && (
+            <AuthWarningBanner
+              missingCount={missingAuthCount}
+              toolsetSlug={toolsetSlug}
+            />
+          )}
+          <div className="h-full overflow-hidden">
+            <Chat />
+          </div>
         </div>
-        {missingAuthCount > 0 && toolsetSlug && (
-          <AuthWarningBanner
-            missingCount={missingAuthCount}
-            toolsetSlug={toolsetSlug}
-          />
-        )}
-        <div className="h-full overflow-hidden">
-          <Chat />
-        </div>
-      </div>
+      </PlaygroundMcpAppsProvider>
     </GramElementsProvider>
   );
 }

@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ]
+  }
+}

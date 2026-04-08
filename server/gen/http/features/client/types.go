@@ -29,6 +29,8 @@ type GetProductFeaturesResponseBody struct {
 	LogsEnabled *bool `form:"logs_enabled,omitempty" json:"logs_enabled,omitempty" xml:"logs_enabled,omitempty"`
 	// Whether tool I/O logging is enabled
 	ToolIoLogsEnabled *bool `form:"tool_io_logs_enabled,omitempty" json:"tool_io_logs_enabled,omitempty" xml:"tool_io_logs_enabled,omitempty"`
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -418,8 +420,9 @@ func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetP
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
 func NewGetProductFeaturesGramProductFeaturesOK(body *GetProductFeaturesResponseBody) *featuresviews.GramProductFeaturesView {
 	v := &featuresviews.GramProductFeaturesView{
-		LogsEnabled:       body.LogsEnabled,
-		ToolIoLogsEnabled: body.ToolIoLogsEnabled,
+		LogsEnabled:           body.LogsEnabled,
+		ToolIoLogsEnabled:     body.ToolIoLogsEnabled,
+		SessionCaptureEnabled: body.SessionCaptureEnabled,
 	}
 
 	return v

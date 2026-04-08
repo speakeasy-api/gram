@@ -15,57 +15,71 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// BuildListGrantsPayload builds the payload for the access listGrants endpoint
+// BuildListRolesPayload builds the payload for the access listRoles endpoint
 // from CLI flags.
-func BuildListGrantsPayload(accessListGrantsPrincipalUrn string, accessListGrantsApikeyToken string, accessListGrantsSessionToken string) (*access.ListGrantsPayload, error) {
-	var principalUrn *string
-	{
-		if accessListGrantsPrincipalUrn != "" {
-			principalUrn = &accessListGrantsPrincipalUrn
-		}
-	}
+func BuildListRolesPayload(accessListRolesApikeyToken string, accessListRolesSessionToken string) (*access.ListRolesPayload, error) {
 	var apikeyToken *string
 	{
-		if accessListGrantsApikeyToken != "" {
-			apikeyToken = &accessListGrantsApikeyToken
+		if accessListRolesApikeyToken != "" {
+			apikeyToken = &accessListRolesApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if accessListGrantsSessionToken != "" {
-			sessionToken = &accessListGrantsSessionToken
+		if accessListRolesSessionToken != "" {
+			sessionToken = &accessListRolesSessionToken
 		}
 	}
-	v := &access.ListGrantsPayload{}
-	v.PrincipalUrn = principalUrn
+	v := &access.ListRolesPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
-// BuildUpsertGrantsPayload builds the payload for the access upsertGrants
-// endpoint from CLI flags.
-func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsApikeyToken string, accessUpsertGrantsSessionToken string) (*access.UpsertGrantsPayload, error) {
-	var err error
-	var body UpsertGrantsRequestBody
+// BuildGetRolePayload builds the payload for the access getRole endpoint from
+// CLI flags.
+func BuildGetRolePayload(accessGetRoleID string, accessGetRoleApikeyToken string, accessGetRoleSessionToken string) (*access.GetRolePayload, error) {
+	var id string
 	{
-		err = json.Unmarshal([]byte(accessUpsertGrantsBody), &body)
+		id = accessGetRoleID
+	}
+	var apikeyToken *string
+	{
+		if accessGetRoleApikeyToken != "" {
+			apikeyToken = &accessGetRoleApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessGetRoleSessionToken != "" {
+			sessionToken = &accessGetRoleSessionToken
+		}
+	}
+	v := &access.GetRolePayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreateRolePayload builds the payload for the access createRole endpoint
+// from CLI flags.
+func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleApikeyToken string, accessCreateRoleSessionToken string) (*access.CreateRolePayload, error) {
+	var err error
+	var body CreateRoleRequestBody
+	{
+		err = json.Unmarshal([]byte(accessCreateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
 		}
 		if body.Grants == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
 		}
-		if len(body.Grants) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.grants", body.Grants, len(body.Grants), 1, true))
-		}
-		if len(body.Grants) > 100 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.grants", body.Grants, len(body.Grants), 100, false))
-		}
 		for _, e := range body.Grants {
 			if e != nil {
-				if err2 := ValidateGrantEntryRequestBody(e); err2 != nil {
+				if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -76,28 +90,37 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsA
 	}
 	var apikeyToken *string
 	{
-		if accessUpsertGrantsApikeyToken != "" {
-			apikeyToken = &accessUpsertGrantsApikeyToken
+		if accessCreateRoleApikeyToken != "" {
+			apikeyToken = &accessCreateRoleApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if accessUpsertGrantsSessionToken != "" {
-			sessionToken = &accessUpsertGrantsSessionToken
+		if accessCreateRoleSessionToken != "" {
+			sessionToken = &accessCreateRoleSessionToken
 		}
 	}
-	v := &access.UpsertGrantsPayload{}
+	v := &access.CreateRolePayload{
+		Name:        body.Name,
+		Description: body.Description,
+	}
 	if body.Grants != nil {
-		v.Grants = make([]*access.GrantEntry, len(body.Grants))
+		v.Grants = make([]*access.RoleGrant, len(body.Grants))
 		for i, val := range body.Grants {
 			if val == nil {
 				v.Grants[i] = nil
 				continue
 			}
-			v.Grants[i] = marshalGrantEntryRequestBodyToAccessGrantEntry(val)
+			v.Grants[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
 		}
 	} else {
-		v.Grants = []*access.GrantEntry{}
+		v.Grants = []*access.RoleGrant{}
+	}
+	if body.MemberIds != nil {
+		v.MemberIds = make([]string, len(body.MemberIds))
+		for i, val := range body.MemberIds {
+			v.MemberIds[i] = val
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -105,28 +128,19 @@ func BuildUpsertGrantsPayload(accessUpsertGrantsBody string, accessUpsertGrantsA
 	return v, nil
 }
 
-// BuildRemoveGrantsPayload builds the payload for the access removeGrants
-// endpoint from CLI flags.
-func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsApikeyToken string, accessRemoveGrantsSessionToken string) (*access.RemoveGrantsPayload, error) {
+// BuildUpdateRolePayload builds the payload for the access updateRole endpoint
+// from CLI flags.
+func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyToken string, accessUpdateRoleSessionToken string) (*access.UpdateRolePayload, error) {
 	var err error
-	var body RemoveGrantsRequestBody
+	var body UpdateRoleRequestBody
 	{
-		err = json.Unmarshal([]byte(accessRemoveGrantsBody), &body)
+		err = json.Unmarshal([]byte(accessUpdateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }'")
-		}
-		if body.Grants == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
-		}
-		if len(body.Grants) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.grants", body.Grants, len(body.Grants), 1, true))
-		}
-		if len(body.Grants) > 100 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.grants", body.Grants, len(body.Grants), 100, false))
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
 		}
 		for _, e := range body.Grants {
 			if e != nil {
-				if err2 := ValidateGrantEntryRequestBody(e); err2 != nil {
+				if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -137,28 +151,36 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsA
 	}
 	var apikeyToken *string
 	{
-		if accessRemoveGrantsApikeyToken != "" {
-			apikeyToken = &accessRemoveGrantsApikeyToken
+		if accessUpdateRoleApikeyToken != "" {
+			apikeyToken = &accessUpdateRoleApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if accessRemoveGrantsSessionToken != "" {
-			sessionToken = &accessRemoveGrantsSessionToken
+		if accessUpdateRoleSessionToken != "" {
+			sessionToken = &accessUpdateRoleSessionToken
 		}
 	}
-	v := &access.RemoveGrantsPayload{}
+	v := &access.UpdateRolePayload{
+		ID:          body.ID,
+		Name:        body.Name,
+		Description: body.Description,
+	}
 	if body.Grants != nil {
-		v.Grants = make([]*access.GrantEntry, len(body.Grants))
+		v.Grants = make([]*access.RoleGrant, len(body.Grants))
 		for i, val := range body.Grants {
 			if val == nil {
 				v.Grants[i] = nil
 				continue
 			}
-			v.Grants[i] = marshalGrantEntryRequestBodyToAccessGrantEntry(val)
+			v.Grants[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
 		}
-	} else {
-		v.Grants = []*access.GrantEntry{}
+	}
+	if body.MemberIds != nil {
+		v.MemberIds = make([]string, len(body.MemberIds))
+		for i, val := range body.MemberIds {
+			v.MemberIds[i] = val
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -166,31 +188,103 @@ func BuildRemoveGrantsPayload(accessRemoveGrantsBody string, accessRemoveGrantsA
 	return v, nil
 }
 
-// BuildRemovePrincipalGrantsPayload builds the payload for the access
-// removePrincipalGrants endpoint from CLI flags.
-func BuildRemovePrincipalGrantsPayload(accessRemovePrincipalGrantsBody string, accessRemovePrincipalGrantsApikeyToken string, accessRemovePrincipalGrantsSessionToken string) (*access.RemovePrincipalGrantsPayload, error) {
-	var err error
-	var body RemovePrincipalGrantsRequestBody
+// BuildDeleteRolePayload builds the payload for the access deleteRole endpoint
+// from CLI flags.
+func BuildDeleteRolePayload(accessDeleteRoleID string, accessDeleteRoleApikeyToken string, accessDeleteRoleSessionToken string) (*access.DeleteRolePayload, error) {
+	var id string
 	{
-		err = json.Unmarshal([]byte(accessRemovePrincipalGrantsBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"principal_urn\": \"abc123\"\n   }'")
-		}
+		id = accessDeleteRoleID
 	}
 	var apikeyToken *string
 	{
-		if accessRemovePrincipalGrantsApikeyToken != "" {
-			apikeyToken = &accessRemovePrincipalGrantsApikeyToken
+		if accessDeleteRoleApikeyToken != "" {
+			apikeyToken = &accessDeleteRoleApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if accessRemovePrincipalGrantsSessionToken != "" {
-			sessionToken = &accessRemovePrincipalGrantsSessionToken
+		if accessDeleteRoleSessionToken != "" {
+			sessionToken = &accessDeleteRoleSessionToken
 		}
 	}
-	v := &access.RemovePrincipalGrantsPayload{
-		PrincipalUrn: body.PrincipalUrn,
+	v := &access.DeleteRolePayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListScopesPayload builds the payload for the access listScopes endpoint
+// from CLI flags.
+func BuildListScopesPayload(accessListScopesApikeyToken string, accessListScopesSessionToken string) (*access.ListScopesPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListScopesApikeyToken != "" {
+			apikeyToken = &accessListScopesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListScopesSessionToken != "" {
+			sessionToken = &accessListScopesSessionToken
+		}
+	}
+	v := &access.ListScopesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListMembersPayload builds the payload for the access listMembers
+// endpoint from CLI flags.
+func BuildListMembersPayload(accessListMembersApikeyToken string, accessListMembersSessionToken string) (*access.ListMembersPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListMembersApikeyToken != "" {
+			apikeyToken = &accessListMembersApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListMembersSessionToken != "" {
+			sessionToken = &accessListMembersSessionToken
+		}
+	}
+	v := &access.ListMembersPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpdateMemberRolePayload builds the payload for the access
+// updateMemberRole endpoint from CLI flags.
+func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdateMemberRoleApikeyToken string, accessUpdateMemberRoleSessionToken string) (*access.UpdateMemberRolePayload, error) {
+	var err error
+	var body UpdateMemberRoleRequestBody
+	{
+		err = json.Unmarshal([]byte(accessUpdateMemberRoleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessUpdateMemberRoleApikeyToken != "" {
+			apikeyToken = &accessUpdateMemberRoleApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessUpdateMemberRoleSessionToken != "" {
+			sessionToken = &accessUpdateMemberRoleSessionToken
+		}
+	}
+	v := &access.UpdateMemberRolePayload{
+		UserID: body.UserID,
+		RoleID: body.RoleID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

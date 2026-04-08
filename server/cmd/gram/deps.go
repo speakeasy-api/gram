@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -53,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -69,6 +71,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent("clickhouse"))
 	nilFunc := func(context.Context) error { return nil }
 
 	host := c.String("clickhouse-host")
@@ -173,7 +176,7 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 			Name:    "pgx",
 			Options: []trace.TracerOption{},
 		},
-		o11y.NewPGXLogger(logger, consoleLogLevel),
+		o11y.NewPGXLogger(logger.With(attr.SlogComponent("pgx")), consoleLogLevel),
 	)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolcfg)
@@ -404,6 +407,32 @@ func newBillingProvider(
 	}
 }
 
+func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, c *cli.Context) (access.RoleProvider, error) {
+	apiKey := c.String("workos-api-key")
+
+	switch {
+	case apiKey != "" && apiKey != "unset":
+		return workos.NewClient(apiKey), nil
+	case c.String("environment") == "local":
+		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
+		return workos.NewStubClient(), nil
+	default:
+		return nil, errors.New("WorkOS API key not provided")
+	}
+}
+
+func newWorkOSClient(c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
+	env := c.String("environment")
+	apiKey := c.String("workos-api-key")
+
+	haveAPIKey := apiKey != "" && apiKey != "unset"
+	if env != "local" && !haveAPIKey {
+		return nil, false, errors.New("WorkOS API key not provided")
+	}
+
+	return workos.NewClient(apiKey), haveAPIKey, nil
+}
+
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
 	nilShutdown := func(context.Context) error { return nil }
 
@@ -485,16 +514,13 @@ func newFunctionOrchestrator(
 			return nil, nilShutdown, fmt.Errorf("create local functions root directory: %w", err)
 		}
 
-		codeRoot, err := os.OpenRoot(codeRootDir)
+		surl := c.String("server-url")
+		serverURL, err := url.Parse(surl)
 		if err != nil {
-			return nil, nilShutdown, fmt.Errorf("open local functions root directory: %w", err)
+			return nil, nilShutdown, fmt.Errorf("parse server url for local functions provider: %w", err)
 		}
 
-		shutdown := func(ctx context.Context) error {
-			return codeRoot.Close()
-		}
-
-		return functions.NewLocalRunner(codeRoot), shutdown, nil
+		return functions.NewLocalRunner(logger, codeRootDir, serverURL, assetStore), nilShutdown, nil
 	case "flyio":
 		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")

@@ -17,6 +17,8 @@ import (
 
 func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
 	domainsRepo := domainsRepo.New(db)
+	logger = logger.With(attr.SlogComponent("custom_domains_middleware"))
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()

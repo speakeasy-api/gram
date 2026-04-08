@@ -19,32 +19,27 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeListGrantsResponse returns an encoder for responses returned by the
-// access listGrants endpoint.
-func EncodeListGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListRolesResponse returns an encoder for responses returned by the
+// access listRoles endpoint.
+func EncodeListRolesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*access.ListGrantsResult)
+		res, _ := v.(*access.ListRolesResult)
 		enc := encoder(ctx, w)
-		body := NewListGrantsResponseBody(res)
+		body := NewListRolesResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListGrantsRequest returns a decoder for requests sent to the access
-// listGrants endpoint.
-func DecodeListGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListGrantsPayload, error) {
-	return func(r *http.Request) (*access.ListGrantsPayload, error) {
-		var payload *access.ListGrantsPayload
+// DecodeListRolesRequest returns a decoder for requests sent to the access
+// listRoles endpoint.
+func DecodeListRolesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListRolesPayload, error) {
+	return func(r *http.Request) (*access.ListRolesPayload, error) {
+		var payload *access.ListRolesPayload
 		var (
-			principalUrn *string
 			apikeyToken  *string
 			sessionToken *string
 		)
-		principalUrnRaw := r.URL.Query().Get("principal_urn")
-		if principalUrnRaw != "" {
-			principalUrn = &principalUrnRaw
-		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -53,7 +48,7 @@ func DecodeListGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListGrantsPayload(principalUrn, apikeyToken, sessionToken)
+		payload = NewListRolesPayload(apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -73,9 +68,9 @@ func DecodeListGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	}
 }
 
-// EncodeListGrantsError returns an encoder for errors returned by the
-// listGrants access endpoint.
-func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListRolesError returns an encoder for errors returned by the listRoles
+// access endpoint.
+func EncodeListRolesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -92,7 +87,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsUnauthorizedResponseBody(res)
+				body = NewListRolesUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -106,7 +101,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsForbiddenResponseBody(res)
+				body = NewListRolesForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -120,7 +115,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsBadRequestResponseBody(res)
+				body = NewListRolesBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -134,7 +129,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsNotFoundResponseBody(res)
+				body = NewListRolesNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -148,7 +143,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsConflictResponseBody(res)
+				body = NewListRolesConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -162,7 +157,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsUnsupportedMediaResponseBody(res)
+				body = NewListRolesUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -176,7 +171,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsInvalidResponseBody(res)
+				body = NewListRolesInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -190,7 +185,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsInvariantViolationResponseBody(res)
+				body = NewListRolesInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -204,7 +199,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsUnexpectedResponseBody(res)
+				body = NewListRolesUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -218,7 +213,7 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListGrantsGatewayErrorResponseBody(res)
+				body = NewListRolesGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -229,25 +224,239 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 	}
 }
 
-// EncodeUpsertGrantsResponse returns an encoder for responses returned by the
-// access upsertGrants endpoint.
-func EncodeUpsertGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetRoleResponse returns an encoder for responses returned by the
+// access getRole endpoint.
+func EncodeGetRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*access.UpsertGrantsResult)
+		res, _ := v.(*access.Role)
 		enc := encoder(ctx, w)
-		body := NewUpsertGrantsResponseBody(res)
+		body := NewGetRoleResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeUpsertGrantsRequest returns a decoder for requests sent to the access
-// upsertGrants endpoint.
-func DecodeUpsertGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpsertGrantsPayload, error) {
-	return func(r *http.Request) (*access.UpsertGrantsPayload, error) {
-		var payload *access.UpsertGrantsPayload
+// DecodeGetRoleRequest returns a decoder for requests sent to the access
+// getRole endpoint.
+func DecodeGetRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.GetRolePayload, error) {
+	return func(r *http.Request) (*access.GetRolePayload, error) {
+		var payload *access.GetRolePayload
 		var (
-			body UpsertGrantsRequestBody
+			id           string
+			apikeyToken  *string
+			sessionToken *string
+			err          error
+		)
+		id = r.URL.Query().Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetRolePayload(id, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetRoleError returns an encoder for errors returned by the getRole
+// access endpoint.
+func EncodeGetRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRoleGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeCreateRoleResponse returns an encoder for responses returned by the
+// access createRole endpoint.
+func EncodeCreateRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.Role)
+		enc := encoder(ctx, w)
+		body := NewCreateRoleResponseBody(res)
+		w.WriteHeader(http.StatusCreated)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeCreateRoleRequest returns a decoder for requests sent to the access
+// createRole endpoint.
+func DecodeCreateRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.CreateRolePayload, error) {
+	return func(r *http.Request) (*access.CreateRolePayload, error) {
+		var payload *access.CreateRolePayload
+		var (
+			body CreateRoleRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -261,7 +470,7 @@ func DecodeUpsertGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateUpsertGrantsRequestBody(&body)
+		err = ValidateCreateRoleRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -278,7 +487,7 @@ func DecodeUpsertGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpsertGrantsPayload(&body, apikeyToken, sessionToken)
+		payload = NewCreateRolePayload(&body, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -298,9 +507,9 @@ func DecodeUpsertGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	}
 }
 
-// EncodeUpsertGrantsError returns an encoder for errors returned by the
-// upsertGrants access endpoint.
-func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeCreateRoleError returns an encoder for errors returned by the
+// createRole access endpoint.
+func EncodeCreateRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -317,7 +526,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsUnauthorizedResponseBody(res)
+				body = NewCreateRoleUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -331,7 +540,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsForbiddenResponseBody(res)
+				body = NewCreateRoleForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -345,7 +554,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsBadRequestResponseBody(res)
+				body = NewCreateRoleBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -359,7 +568,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsNotFoundResponseBody(res)
+				body = NewCreateRoleNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -373,7 +582,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsConflictResponseBody(res)
+				body = NewCreateRoleConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -387,7 +596,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsUnsupportedMediaResponseBody(res)
+				body = NewCreateRoleUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -401,7 +610,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsInvalidResponseBody(res)
+				body = NewCreateRoleInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -415,7 +624,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsInvariantViolationResponseBody(res)
+				body = NewCreateRoleInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -429,7 +638,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsUnexpectedResponseBody(res)
+				body = NewCreateRoleUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -443,7 +652,7 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertGrantsGatewayErrorResponseBody(res)
+				body = NewCreateRoleGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -454,44 +663,255 @@ func EncodeUpsertGrantsError(encoder func(context.Context, http.ResponseWriter) 
 	}
 }
 
-// EncodeRemoveGrantsResponse returns an encoder for responses returned by the
-// access removeGrants endpoint.
-func EncodeRemoveGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeUpdateRoleResponse returns an encoder for responses returned by the
+// access updateRole endpoint.
+func EncodeUpdateRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.Role)
+		enc := encoder(ctx, w)
+		body := NewUpdateRoleResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeUpdateRoleRequest returns a decoder for requests sent to the access
+// updateRole endpoint.
+func DecodeUpdateRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpdateRolePayload, error) {
+	return func(r *http.Request) (*access.UpdateRolePayload, error) {
+		var payload *access.UpdateRolePayload
+		var (
+			body UpdateRoleRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUpdateRoleRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewUpdateRolePayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUpdateRoleError returns an encoder for errors returned by the
+// updateRole access endpoint.
+func EncodeUpdateRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateRoleGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeDeleteRoleResponse returns an encoder for responses returned by the
+// access deleteRole endpoint.
+func EncodeDeleteRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}
 }
 
-// DecodeRemoveGrantsRequest returns a decoder for requests sent to the access
-// removeGrants endpoint.
-func DecodeRemoveGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.RemoveGrantsPayload, error) {
-	return func(r *http.Request) (*access.RemoveGrantsPayload, error) {
-		var payload *access.RemoveGrantsPayload
+// DecodeDeleteRoleRequest returns a decoder for requests sent to the access
+// deleteRole endpoint.
+func DecodeDeleteRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.DeleteRolePayload, error) {
+	return func(r *http.Request) (*access.DeleteRolePayload, error) {
+		var payload *access.DeleteRolePayload
 		var (
-			body RemoveGrantsRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateRemoveGrantsRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
-
-		var (
+			id           string
 			apikeyToken  *string
 			sessionToken *string
+			err          error
 		)
+		id = r.URL.Query().Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -500,7 +920,10 @@ func DecodeRemoveGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewRemoveGrantsPayload(&body, apikeyToken, sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewDeleteRolePayload(id, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -520,9 +943,9 @@ func DecodeRemoveGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	}
 }
 
-// EncodeRemoveGrantsError returns an encoder for errors returned by the
-// removeGrants access endpoint.
-func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeDeleteRoleError returns an encoder for errors returned by the
+// deleteRole access endpoint.
+func EncodeDeleteRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -539,7 +962,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsUnauthorizedResponseBody(res)
+				body = NewDeleteRoleUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -553,7 +976,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsForbiddenResponseBody(res)
+				body = NewDeleteRoleForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -567,7 +990,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsBadRequestResponseBody(res)
+				body = NewDeleteRoleBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -581,7 +1004,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsNotFoundResponseBody(res)
+				body = NewDeleteRoleNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -595,7 +1018,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsConflictResponseBody(res)
+				body = NewDeleteRoleConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -609,7 +1032,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsUnsupportedMediaResponseBody(res)
+				body = NewDeleteRoleUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -623,7 +1046,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsInvalidResponseBody(res)
+				body = NewDeleteRoleInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -637,7 +1060,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsInvariantViolationResponseBody(res)
+				body = NewDeleteRoleInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -651,7 +1074,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsUnexpectedResponseBody(res)
+				body = NewDeleteRoleUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -665,7 +1088,7 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveGrantsGatewayErrorResponseBody(res)
+				body = NewDeleteRoleGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -676,40 +1099,23 @@ func EncodeRemoveGrantsError(encoder func(context.Context, http.ResponseWriter) 
 	}
 }
 
-// EncodeRemovePrincipalGrantsResponse returns an encoder for responses
-// returned by the access removePrincipalGrants endpoint.
-func EncodeRemovePrincipalGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListScopesResponse returns an encoder for responses returned by the
+// access listScopes endpoint.
+func EncodeListScopesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		w.WriteHeader(http.StatusNoContent)
-		return nil
+		res, _ := v.(*access.ListScopesResult)
+		enc := encoder(ctx, w)
+		body := NewListScopesResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
 	}
 }
 
-// DecodeRemovePrincipalGrantsRequest returns a decoder for requests sent to
-// the access removePrincipalGrants endpoint.
-func DecodeRemovePrincipalGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.RemovePrincipalGrantsPayload, error) {
-	return func(r *http.Request) (*access.RemovePrincipalGrantsPayload, error) {
-		var payload *access.RemovePrincipalGrantsPayload
-		var (
-			body RemovePrincipalGrantsRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateRemovePrincipalGrantsRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
-
+// DecodeListScopesRequest returns a decoder for requests sent to the access
+// listScopes endpoint.
+func DecodeListScopesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListScopesPayload, error) {
+	return func(r *http.Request) (*access.ListScopesPayload, error) {
+		var payload *access.ListScopesPayload
 		var (
 			apikeyToken  *string
 			sessionToken *string
@@ -722,7 +1128,7 @@ func DecodeRemovePrincipalGrantsRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewRemovePrincipalGrantsPayload(&body, apikeyToken, sessionToken)
+		payload = NewListScopesPayload(apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -742,9 +1148,9 @@ func DecodeRemovePrincipalGrantsRequest(mux goahttp.Muxer, decoder func(*http.Re
 	}
 }
 
-// EncodeRemovePrincipalGrantsError returns an encoder for errors returned by
-// the removePrincipalGrants access endpoint.
-func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListScopesError returns an encoder for errors returned by the
+// listScopes access endpoint.
+func EncodeListScopesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -761,7 +1167,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsUnauthorizedResponseBody(res)
+				body = NewListScopesUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -775,7 +1181,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsForbiddenResponseBody(res)
+				body = NewListScopesForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -789,7 +1195,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsBadRequestResponseBody(res)
+				body = NewListScopesBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -803,7 +1209,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsNotFoundResponseBody(res)
+				body = NewListScopesNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -817,7 +1223,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsConflictResponseBody(res)
+				body = NewListScopesConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -831,7 +1237,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsUnsupportedMediaResponseBody(res)
+				body = NewListScopesUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -845,7 +1251,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsInvalidResponseBody(res)
+				body = NewListScopesInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -859,7 +1265,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsInvariantViolationResponseBody(res)
+				body = NewListScopesInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -873,7 +1279,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsUnexpectedResponseBody(res)
+				body = NewListScopesUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -887,7 +1293,7 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemovePrincipalGrantsGatewayErrorResponseBody(res)
+				body = NewListScopesGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -898,30 +1304,519 @@ func EncodeRemovePrincipalGrantsError(encoder func(context.Context, http.Respons
 	}
 }
 
-// marshalAccessGrantToGrantResponseBody builds a value of type
-// *GrantResponseBody from a value of type *access.Grant.
-func marshalAccessGrantToGrantResponseBody(v *access.Grant) *GrantResponseBody {
-	res := &GrantResponseBody{
-		ID:             v.ID,
-		OrganizationID: v.OrganizationID,
-		PrincipalUrn:   v.PrincipalUrn,
-		PrincipalType:  v.PrincipalType,
-		Scope:          v.Scope,
-		Resource:       v.Resource,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+// EncodeListMembersResponse returns an encoder for responses returned by the
+// access listMembers endpoint.
+func EncodeListMembersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.ListMembersResult)
+		enc := encoder(ctx, w)
+		body := NewListMembersResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListMembersRequest returns a decoder for requests sent to the access
+// listMembers endpoint.
+func DecodeListMembersRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListMembersPayload, error) {
+	return func(r *http.Request) (*access.ListMembersPayload, error) {
+		var payload *access.ListMembersPayload
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewListMembersPayload(apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListMembersError returns an encoder for errors returned by the
+// listMembers access endpoint.
+func EncodeListMembersError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMembersGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeUpdateMemberRoleResponse returns an encoder for responses returned by
+// the access updateMemberRole endpoint.
+func EncodeUpdateMemberRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.AccessMember)
+		enc := encoder(ctx, w)
+		body := NewUpdateMemberRoleResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeUpdateMemberRoleRequest returns a decoder for requests sent to the
+// access updateMemberRole endpoint.
+func DecodeUpdateMemberRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpdateMemberRolePayload, error) {
+	return func(r *http.Request) (*access.UpdateMemberRolePayload, error) {
+		var payload *access.UpdateMemberRolePayload
+		var (
+			body UpdateMemberRoleRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUpdateMemberRoleRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewUpdateMemberRolePayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUpdateMemberRoleError returns an encoder for errors returned by the
+// updateMemberRole access endpoint.
+func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateMemberRoleGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// marshalAccessRoleToRoleResponseBody builds a value of type *RoleResponseBody
+// from a value of type *access.Role.
+func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
+	res := &RoleResponseBody{
+		ID:          v.ID,
+		Name:        v.Name,
+		Description: v.Description,
+		IsSystem:    v.IsSystem,
+		MemberCount: v.MemberCount,
+		CreatedAt:   v.CreatedAt,
+		UpdatedAt:   v.UpdatedAt,
+	}
+	if v.Grants != nil {
+		res.Grants = make([]*RoleGrantResponseBody, len(v.Grants))
+		for i, val := range v.Grants {
+			if val == nil {
+				res.Grants[i] = nil
+				continue
+			}
+			res.Grants[i] = marshalAccessRoleGrantToRoleGrantResponseBody(val)
+		}
+	} else {
+		res.Grants = []*RoleGrantResponseBody{}
 	}
 
 	return res
 }
 
-// unmarshalGrantEntryRequestBodyToAccessGrantEntry builds a value of type
-// *access.GrantEntry from a value of type *GrantEntryRequestBody.
-func unmarshalGrantEntryRequestBodyToAccessGrantEntry(v *GrantEntryRequestBody) *access.GrantEntry {
-	res := &access.GrantEntry{
-		PrincipalUrn: *v.PrincipalUrn,
-		Scope:        *v.Scope,
-		Resource:     *v.Resource,
+// marshalAccessRoleGrantToRoleGrantResponseBody builds a value of type
+// *RoleGrantResponseBody from a value of type *access.RoleGrant.
+func marshalAccessRoleGrantToRoleGrantResponseBody(v *access.RoleGrant) *RoleGrantResponseBody {
+	res := &RoleGrantResponseBody{
+		Scope: v.Scope,
+	}
+	if v.Resources != nil {
+		res.Resources = make([]string, len(v.Resources))
+		for i, val := range v.Resources {
+			res.Resources[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalRoleGrantRequestBodyToAccessRoleGrant builds a value of type
+// *access.RoleGrant from a value of type *RoleGrantRequestBody.
+func unmarshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *access.RoleGrant {
+	res := &access.RoleGrant{
+		Scope: *v.Scope,
+	}
+	if v.Resources != nil {
+		res.Resources = make([]string, len(v.Resources))
+		for i, val := range v.Resources {
+			res.Resources[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalAccessScopeDefinitionToScopeDefinitionResponseBody builds a value of
+// type *ScopeDefinitionResponseBody from a value of type
+// *access.ScopeDefinition.
+func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDefinition) *ScopeDefinitionResponseBody {
+	res := &ScopeDefinitionResponseBody{
+		Slug:         v.Slug,
+		Description:  v.Description,
+		ResourceType: v.ResourceType,
+	}
+
+	return res
+}
+
+// marshalAccessAccessMemberToAccessMemberResponseBody builds a value of type
+// *AccessMemberResponseBody from a value of type *access.AccessMember.
+func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember) *AccessMemberResponseBody {
+	res := &AccessMemberResponseBody{
+		ID:       v.ID,
+		Name:     v.Name,
+		Email:    v.Email,
+		PhotoURL: v.PhotoURL,
+		RoleID:   v.RoleID,
+		JoinedAt: v.JoinedAt,
 	}
 
 	return res

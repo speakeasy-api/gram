@@ -184,6 +184,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 
 		client := productfeatures.NewClient(
 			testenv.NewLogger(t),
+			testenv.NewTracerProvider(t),
 			ti.conn,
 			redisClient,
 		)
@@ -213,6 +214,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 
 		client := productfeatures.NewClient(
 			testenv.NewLogger(t),
+			testenv.NewTracerProvider(t),
 			ti.conn,
 			redisClient,
 		)
@@ -236,6 +238,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 
 		client := productfeatures.NewClient(
 			testenv.NewLogger(t),
+			testenv.NewTracerProvider(t),
 			ti.conn,
 			redisClient,
 		)
@@ -261,6 +264,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 		// Create a new client with the same redis to verify cache is being used
 		client2 := productfeatures.NewClient(
 			testenv.NewLogger(t),
+			testenv.NewTracerProvider(t),
 			ti.conn,
 			redisClient,
 		)
@@ -284,6 +288,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 
 		client := productfeatures.NewClient(
 			testenv.NewLogger(t),
+			testenv.NewTracerProvider(t),
 			ti.conn,
 			redisClient,
 		)

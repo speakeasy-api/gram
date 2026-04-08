@@ -13,6 +13,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
+var (
+	toolName   = "test_tool"
+	toolUseID  = "toolu_123"
+	toolName1  = "tool1"
+	toolUseID1 = "toolu_123"
+	toolName2  = "tool2"
+	toolUseID2 = "toolu_234"
+)
+
 // TestBufferHook_AtomicAppend tests that buffering hooks uses atomic RPUSH
 func TestBufferHook_AtomicAppend(t *testing.T) {
 	t.Parallel()
@@ -100,8 +109,8 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 		payload := hooks.ClaudeHookPayload{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
-			ToolName:      new("test_tool"),
-			ToolUseID:     new(uuid.NewString()),
+			ToolName:      &toolName,
+			ToolUseID:     &toolUseID,
 		}
 
 		err := cacheAdapter.ListAppend(ctx, "hook:pending:"+sessionID, payload, 24*time.Hour)
@@ -284,14 +293,14 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 		{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
-			ToolName:      new("tool1"),
-			ToolUseID:     new("id1"),
+			ToolName:      &toolName1,
+			ToolUseID:     &toolUseID1,
 		},
 		{
 			HookEventName: "PostToolUse",
 			SessionID:     &sessionID,
-			ToolName:      new("tool2"),
-			ToolUseID:     new("id2"),
+			ToolName:      &toolName2,
+			ToolUseID:     &toolUseID2,
 		},
 	}
 

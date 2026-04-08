@@ -15,25 +15,27 @@ import (
 
 // Client is the "projects" service client.
 type Client struct {
-	GetProjectEndpoint          goa.Endpoint
-	CreateProjectEndpoint       goa.Endpoint
-	ListProjectsEndpoint        goa.Endpoint
-	SetLogoEndpoint             goa.Endpoint
-	ListAllowedOriginsEndpoint  goa.Endpoint
-	UpsertAllowedOriginEndpoint goa.Endpoint
-	DeleteProjectEndpoint       goa.Endpoint
+	GetProjectEndpoint               goa.Endpoint
+	CreateProjectEndpoint            goa.Endpoint
+	ListProjectsEndpoint             goa.Endpoint
+	SetLogoEndpoint                  goa.Endpoint
+	ListAllowedOriginsEndpoint       goa.Endpoint
+	UpsertAllowedOriginEndpoint      goa.Endpoint
+	DeleteProjectEndpoint            goa.Endpoint
+	SetOrganizationWhitelistEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "projects" service client given the endpoints.
-func NewClient(getProject, createProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject goa.Endpoint) *Client {
+func NewClient(getProject, createProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject, setOrganizationWhitelist goa.Endpoint) *Client {
 	return &Client{
-		GetProjectEndpoint:          getProject,
-		CreateProjectEndpoint:       createProject,
-		ListProjectsEndpoint:        listProjects,
-		SetLogoEndpoint:             setLogo,
-		ListAllowedOriginsEndpoint:  listAllowedOrigins,
-		UpsertAllowedOriginEndpoint: upsertAllowedOrigin,
-		DeleteProjectEndpoint:       deleteProject,
+		GetProjectEndpoint:               getProject,
+		CreateProjectEndpoint:            createProject,
+		ListProjectsEndpoint:             listProjects,
+		SetLogoEndpoint:                  setLogo,
+		ListAllowedOriginsEndpoint:       listAllowedOrigins,
+		UpsertAllowedOriginEndpoint:      upsertAllowedOrigin,
+		DeleteProjectEndpoint:            deleteProject,
+		SetOrganizationWhitelistEndpoint: setOrganizationWhitelist,
 	}
 }
 
@@ -186,5 +188,24 @@ func (c *Client) UpsertAllowedOrigin(ctx context.Context, p *UpsertAllowedOrigin
 //   - error: internal error
 func (c *Client) DeleteProject(ctx context.Context, p *DeleteProjectPayload) (err error) {
 	_, err = c.DeleteProjectEndpoint(ctx, p)
+	return
+}
+
+// SetOrganizationWhitelist calls the "setOrganizationWhitelist" endpoint of
+// the "projects" service.
+// SetOrganizationWhitelist may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetOrganizationWhitelist(ctx context.Context, p *SetOrganizationWhitelistPayload) (err error) {
+	_, err = c.SetOrganizationWhitelistEndpoint(ctx, p)
 	return
 }

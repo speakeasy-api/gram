@@ -109,6 +109,7 @@ Activate a skill when your task falls within its scope.
 | `gram-functions`              | Understanding or modifying the Gram Functions serverless execution feature |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
 | `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |
+| `datadog-insights`            | Running the full Gram production health digest and posting it to Slack     |
 
 # Plan Mode
 

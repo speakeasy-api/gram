@@ -347,26 +347,179 @@
     * AVAILABLE TOOLS *
     *******************/
 
-      .tool-names {
+      .tool-count {
+        font-weight: 300;
+        color: var(--text-default);
+      }
+
+      .tools-search {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        font-family: var(--font-diatype);
+        font-size: 0.8125rem;
+        font-weight: 300;
+        color: var(--text-default);
+        background: var(--bg-surface-primary-default);
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem 0.5rem 0 0;
+        border-bottom: none;
+        outline: none;
+        box-sizing: border-box;
+      }
+
+      .tools-search:focus {
+        border-color: var(--fill-neutral-default);
+      }
+
+      .tools-search::placeholder {
+        color: var(--border-neutral-softest);
+      }
+
+      .tools-search + .tools-table {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
+
+      .tools-table {
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem;
+        overflow-y: auto;
+        background: var(--bg-surface-primary-default);
+      }
+
+      .tools-table.scrollable {
+        max-height: 32rem;
+      }
+
+      .tool-row {
         display: flex;
-        gap: 0.75rem;
-        row-gap: 0.5rem;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-bottom: solid 1px var(--border-neutral-softest);
+        cursor: pointer;
+        transition: background-color 200ms var(--ease-in-out-quad);
+        gap: 1rem;
+      }
+
+      .tool-row:hover {
+        background: var(--bg-surface-secondary-default);
+      }
+
+      .tools-table > .tool-detail:last-of-type {
+        border-bottom: none;
+      }
+
+      .tool-row .tool-name {
+        font-family: var(--font-diatype-mono);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--fill-neutral-default);
+        min-width: 10rem;
+        flex-shrink: 0;
+      }
+
+      .tool-row .tool-desc {
+        color: var(--text-default);
+        font-size: 0.8125rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
+
+      .tool-chevron {
+        color: var(--text-default);
+        font-size: 0.75rem;
+        flex-shrink: 0;
+        transition: transform 200ms var(--ease-in-out-quad);
+      }
+
+      .tool-row.expanded .tool-chevron {
+        transform: rotate(180deg);
+      }
+
+      .tool-detail {
+        display: none;
+        padding: 0 1rem 0.75rem 1rem;
+        border-bottom: solid 1px var(--border-neutral-softest);
+        background: var(--bg-surface-primary-default);
+      }
+
+      .tool-detail.visible {
+        display: block;
+      }
+
+      .tool-detail-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+        padding: 0.75rem 1rem;
+        border-radius: 0.375rem;
+        background: var(--bg-surface-secondary-default);
+      }
+
+      .tool-detail-title {
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--fill-neutral-default);
+      }
+
+      .tool-detail-description {
+        font-size: 0.8125rem;
+        color: var(--text-default);
+        line-height: 1.6;
+      }
+
+      .annotation-badges {
+        display: flex;
+        gap: 0.5rem;
         flex-wrap: wrap;
       }
 
-      .badge {
+      .annotation-badge {
         font-family: var(--font-diatype-mono);
-        font-weight: 300;
-        display: inline-block;
-        border-radius: 0.125rem;
-        background: var(--bg-surface-primary-default);
-        border: solid 1px var(--border-neutral-softest);
-        padding: 0.125rem 0.25rem;
-        text-transform: UPPERCASE;
+        font-size: 0.6875rem;
+        font-weight: 400;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.1875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
       }
 
-      .tool-name.hidden {
+      .annotation-badge.read-only {
+        background: var(--color-feedback-green-100);
+        color: var(--color-feedback-green-700);
+        border: solid 1px var(--color-feedback-green-300);
+      }
+
+      .annotation-badge.destructive {
+        background: hsl(0, 40%, 95%);
+        color: hsl(0, 50%, 35%);
+        border: solid 1px hsl(0, 30%, 80%);
+      }
+
+      .annotation-badge.idempotent {
+        background: hsl(215, 40%, 95%);
+        color: hsl(215, 50%, 35%);
+        border: solid 1px hsl(215, 30%, 80%);
+      }
+
+      .annotation-badge.open-world {
+        background: hsl(268, 30%, 95%);
+        color: hsl(268, 40%, 35%);
+        border: solid 1px hsl(268, 25%, 80%);
+      }
+
+      .filtered-out {
         display: none;
+      }
+
+      .tools-no-results {
+        display: none;
+        padding: 1.5rem 1rem;
+        text-align: center;
+        font-size: 0.8125rem;
+        color: var(--text-default);
       }
 
       /******************
@@ -1393,21 +1546,54 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
             </div>
           </div>
         </section>
+        {{- if .Tools }}
         <section class="available-tools container">
-          <header class="section-title">Available Tools</header>
-          <span class="tool-names container">
-            {{- range $i, $toolName := .ToolNames }} {{- if lt $i 10 }}
-            <span class="badge">
-              {{ else }}
-              <span class="badge hidden"> {{- end }} {{ $toolName }} </span>
-              {{- end }} {{- if gt (len .ToolNames) 10 }}
-              <div class="tool-name badge more-tools">
-                And {{ diff (len .ToolNames) 10 }} more
+          <header class="section-title">
+            Available Tools <span class="tool-count">({{ len .Tools }})</span>
+          </header>
+          {{- if gt (len .Tools) 10 }}
+          <input
+            class="tools-search"
+            type="text"
+            placeholder="Search tools..."
+          />
+          {{- end }}
+          <div class="tools-table{{ if gt (len .Tools) 20 }} scrollable{{ end }}">
+            {{- range $i, $tool := .Tools }}
+            <div class="tool-row" data-tool-name="{{ $tool.Name }}">
+              <span class="tool-name">{{ $tool.Name }}</span>
+              <span class="tool-desc">{{ $tool.Description }}</span>
+              <span class="tool-chevron">&#9662;</span>
+            </div>
+            <div class="tool-detail">
+              <div class="tool-detail-inner">
+                {{- if $tool.Title }}
+                <div class="tool-detail-title">{{ $tool.Title }}</div>
+                {{- end }}
+                <div class="tool-detail-description">{{ $tool.Description }}</div>
+                {{- if or $tool.ReadOnlyHint $tool.DestructiveHint $tool.IdempotentHint $tool.OpenWorldHint }}
+                <div class="annotation-badges">
+                  {{- if $tool.ReadOnlyHint }}
+                  <span class="annotation-badge read-only">Read-only</span>
+                  {{- end }}
+                  {{- if $tool.DestructiveHint }}
+                  <span class="annotation-badge destructive">Destructive</span>
+                  {{- end }}
+                  {{- if $tool.IdempotentHint }}
+                  <span class="annotation-badge idempotent">Idempotent</span>
+                  {{- end }}
+                  {{- if $tool.OpenWorldHint }}
+                  <span class="annotation-badge open-world">Open-world</span>
+                  {{- end }}
+                </div>
+                {{- end }}
               </div>
-              {{- end }}
-            </span>
-          </span>
+            </div>
+            {{- end }}
+            <div class="tools-no-results">No tools match your search.</div>
+          </div>
         </section>
+        {{- end }}
         {{- if .Instructions }}
         <section class="server-instructions container">
           <header class="section-title">Server Instructions</header>

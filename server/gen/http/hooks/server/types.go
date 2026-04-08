@@ -31,6 +31,62 @@ type ClaudeRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// The Claude Code session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// The working directory when the event fired
+	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
+	// Path to the conversation transcript file
+	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
+	// How the session started: startup, resume, clear, compact (SessionStart only)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// The model identifier (SessionStart, Stop)
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The user's prompt text (UserPromptSubmit only)
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// Claude's final response text (Stop only)
+	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
+	// Whether a stop hook continuation is active (Stop only)
+	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
+	// Why the session ended (SessionEnd only)
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Type of notification: permission_prompt, idle_prompt, auth_success,
+	// elicitation_dialog (Notification only)
+	NotificationType *string `form:"notification_type,omitempty" json:"notification_type,omitempty" xml:"notification_type,omitempty"`
+	// Notification message text (Notification only)
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Notification title (Notification only)
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+}
+
+// CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
+// request body.
+type CursorRequestBody struct {
+	// The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+	HookEventName *string `form:"hook_event_name,omitempty" json:"hook_event_name,omitempty" xml:"hook_event_name,omitempty"`
+	// The Cursor conversation ID
+	ConversationID *string `form:"conversation_id,omitempty" json:"conversation_id,omitempty" xml:"conversation_id,omitempty"`
+	// The Cursor generation ID
+	GenerationID *string `form:"generation_id,omitempty" json:"generation_id,omitempty" xml:"generation_id,omitempty"`
+	// The model being used
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The Cursor IDE version
+	CursorVersion *string `form:"cursor_version,omitempty" json:"cursor_version,omitempty" xml:"cursor_version,omitempty"`
+	// Email of the authenticated Cursor user, if available
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// The session ID from Cursor
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// The name of the tool
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// The unique ID for this tool use
+	ToolUseID *string `form:"tool_use_id,omitempty" json:"tool_use_id,omitempty" xml:"tool_use_id,omitempty"`
+	// The input to the tool
+	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
+	// The response from the tool (postToolUse only)
+	ToolResponse any `form:"tool_response,omitempty" json:"tool_response,omitempty" xml:"tool_response,omitempty"`
+	// The error from the tool (postToolUseFailure only)
+	Error any `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Whether the failure was caused by user interruption
+	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// Additional hook-specific data
 	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
 }
@@ -49,8 +105,21 @@ type ClaudeResponseBody struct {
 	Continue *bool `form:"continue,omitempty" json:"continue,omitempty" xml:"continue,omitempty"`
 	// Reason if blocked (SessionStart only)
 	StopReason *string `form:"stopReason,omitempty" json:"stopReason,omitempty" xml:"stopReason,omitempty"`
+	// Whether to suppress the hook's output
+	SuppressOutput *bool `form:"suppressOutput,omitempty" json:"suppressOutput,omitempty" xml:"suppressOutput,omitempty"`
 	// Hook-specific output as JSON object
 	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
+}
+
+// CursorResponseBody is the type of the "hooks" service "cursor" endpoint HTTP
+// response body.
+type CursorResponseBody struct {
+	// Permission decision for preToolUse: allow or deny
+	Permission *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
+	// Message to display to the user
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Additional context to inject into the conversation
+	AdditionalContext *string `form:"additional_context,omitempty" json:"additional_context,omitempty" xml:"additional_context,omitempty"`
 }
 
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
@@ -218,6 +287,186 @@ type ClaudeUnexpectedResponseBody struct {
 // ClaudeGatewayErrorResponseBody is the type of the "hooks" service "claude"
 // endpoint HTTP response body for the "gateway_error" error.
 type ClaudeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorUnauthorizedResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "unauthorized" error.
+type CursorUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorForbiddenResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "forbidden" error.
+type CursorForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorBadRequestResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "bad_request" error.
+type CursorBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorNotFoundResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "not_found" error.
+type CursorNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorConflictResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "conflict" error.
+type CursorConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorUnsupportedMediaResponseBody is the type of the "hooks" service
+// "cursor" endpoint HTTP response body for the "unsupported_media" error.
+type CursorUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorInvalidResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "invalid" error.
+type CursorInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorInvariantViolationResponseBody is the type of the "hooks" service
+// "cursor" endpoint HTTP response body for the "invariant_violation" error.
+type CursorInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorUnexpectedResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "unexpected" error.
+type CursorUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CursorGatewayErrorResponseBody is the type of the "hooks" service "cursor"
+// endpoint HTTP response body for the "gateway_error" error.
+type CursorGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -496,7 +745,19 @@ func NewClaudeResponseBody(res *hooks.ClaudeHookResult) *ClaudeResponseBody {
 	body := &ClaudeResponseBody{
 		Continue:           res.Continue,
 		StopReason:         res.StopReason,
+		SuppressOutput:     res.SuppressOutput,
 		HookSpecificOutput: res.HookSpecificOutput,
+	}
+	return body
+}
+
+// NewCursorResponseBody builds the HTTP response body from the result of the
+// "cursor" endpoint of the "hooks" service.
+func NewCursorResponseBody(res *hooks.CursorHookResult) *CursorResponseBody {
+	body := &CursorResponseBody{
+		Permission:        res.Permission,
+		UserMessage:       res.UserMessage,
+		AdditionalContext: res.AdditionalContext,
 	}
 	return body
 }
@@ -631,6 +892,146 @@ func NewClaudeUnexpectedResponseBody(res *goa.ServiceError) *ClaudeUnexpectedRes
 // result of the "claude" endpoint of the "hooks" service.
 func NewClaudeGatewayErrorResponseBody(res *goa.ServiceError) *ClaudeGatewayErrorResponseBody {
 	body := &ClaudeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "cursor" endpoint of the "hooks" service.
+func NewCursorUnauthorizedResponseBody(res *goa.ServiceError) *CursorUnauthorizedResponseBody {
+	body := &CursorUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorForbiddenResponseBody builds the HTTP response body from the result
+// of the "cursor" endpoint of the "hooks" service.
+func NewCursorForbiddenResponseBody(res *goa.ServiceError) *CursorForbiddenResponseBody {
+	body := &CursorForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorBadRequestResponseBody builds the HTTP response body from the
+// result of the "cursor" endpoint of the "hooks" service.
+func NewCursorBadRequestResponseBody(res *goa.ServiceError) *CursorBadRequestResponseBody {
+	body := &CursorBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorNotFoundResponseBody builds the HTTP response body from the result
+// of the "cursor" endpoint of the "hooks" service.
+func NewCursorNotFoundResponseBody(res *goa.ServiceError) *CursorNotFoundResponseBody {
+	body := &CursorNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorConflictResponseBody builds the HTTP response body from the result
+// of the "cursor" endpoint of the "hooks" service.
+func NewCursorConflictResponseBody(res *goa.ServiceError) *CursorConflictResponseBody {
+	body := &CursorConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "cursor" endpoint of the "hooks" service.
+func NewCursorUnsupportedMediaResponseBody(res *goa.ServiceError) *CursorUnsupportedMediaResponseBody {
+	body := &CursorUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorInvalidResponseBody builds the HTTP response body from the result
+// of the "cursor" endpoint of the "hooks" service.
+func NewCursorInvalidResponseBody(res *goa.ServiceError) *CursorInvalidResponseBody {
+	body := &CursorInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "cursor" endpoint of the "hooks" service.
+func NewCursorInvariantViolationResponseBody(res *goa.ServiceError) *CursorInvariantViolationResponseBody {
+	body := &CursorInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorUnexpectedResponseBody builds the HTTP response body from the
+// result of the "cursor" endpoint of the "hooks" service.
+func NewCursorUnexpectedResponseBody(res *goa.ServiceError) *CursorUnexpectedResponseBody {
+	body := &CursorUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCursorGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "cursor" endpoint of the "hooks" service.
+func NewCursorGatewayErrorResponseBody(res *goa.ServiceError) *CursorGatewayErrorResponseBody {
+	body := &CursorGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -784,14 +1185,25 @@ func NewLogsGatewayErrorResponseBody(res *goa.ServiceError) *LogsGatewayErrorRes
 // NewClaudeHookPayload builds a hooks service claude endpoint payload.
 func NewClaudeHookPayload(body *ClaudeRequestBody) *hooks.ClaudeHookPayload {
 	v := &hooks.ClaudeHookPayload{
-		HookEventName: *body.HookEventName,
-		ToolName:      body.ToolName,
-		ToolUseID:     body.ToolUseID,
-		ToolInput:     body.ToolInput,
-		ToolResponse:  body.ToolResponse,
-		Error:         body.Error,
-		IsInterrupt:   body.IsInterrupt,
-		SessionID:     body.SessionID,
+		HookEventName:        *body.HookEventName,
+		ToolName:             body.ToolName,
+		ToolUseID:            body.ToolUseID,
+		ToolInput:            body.ToolInput,
+		ToolResponse:         body.ToolResponse,
+		Error:                body.Error,
+		IsInterrupt:          body.IsInterrupt,
+		SessionID:            body.SessionID,
+		Cwd:                  body.Cwd,
+		TranscriptPath:       body.TranscriptPath,
+		Source:               body.Source,
+		Model:                body.Model,
+		Prompt:               body.Prompt,
+		LastAssistantMessage: body.LastAssistantMessage,
+		StopHookActive:       body.StopHookActive,
+		Reason:               body.Reason,
+		NotificationType:     body.NotificationType,
+		Message:              body.Message,
+		Title:                body.Title,
 	}
 	if body.AdditionalData != nil {
 		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
@@ -801,6 +1213,37 @@ func NewClaudeHookPayload(body *ClaudeRequestBody) *hooks.ClaudeHookPayload {
 			v.AdditionalData[tk] = tv
 		}
 	}
+
+	return v
+}
+
+// NewCursorPayload builds a hooks service cursor endpoint payload.
+func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.CursorPayload {
+	v := &hooks.CursorPayload{
+		HookEventName:  *body.HookEventName,
+		ConversationID: body.ConversationID,
+		GenerationID:   body.GenerationID,
+		Model:          body.Model,
+		CursorVersion:  body.CursorVersion,
+		UserEmail:      body.UserEmail,
+		SessionID:      body.SessionID,
+		ToolName:       body.ToolName,
+		ToolUseID:      body.ToolUseID,
+		ToolInput:      body.ToolInput,
+		ToolResponse:   body.ToolResponse,
+		Error:          body.Error,
+		IsInterrupt:    body.IsInterrupt,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
@@ -828,9 +1271,17 @@ func ValidateClaudeRequestBody(body *ClaudeRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hook_event_name", "body"))
 	}
 	if body.HookEventName != nil {
-		if !(*body.HookEventName == "SessionStart" || *body.HookEventName == "PreToolUse" || *body.HookEventName == "PostToolUse" || *body.HookEventName == "PostToolUseFailure") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", *body.HookEventName, []any{"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure"}))
+		if !(*body.HookEventName == "SessionStart" || *body.HookEventName == "PreToolUse" || *body.HookEventName == "PostToolUse" || *body.HookEventName == "PostToolUseFailure" || *body.HookEventName == "UserPromptSubmit" || *body.HookEventName == "Stop" || *body.HookEventName == "SessionEnd" || *body.HookEventName == "Notification") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", *body.HookEventName, []any{"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SessionEnd", "Notification"}))
 		}
+	}
+	return
+}
+
+// ValidateCursorRequestBody runs the validations defined on CursorRequestBody
+func ValidateCursorRequestBody(body *CursorRequestBody) (err error) {
+	if body.HookEventName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook_event_name", "body"))
 	}
 	return
 }

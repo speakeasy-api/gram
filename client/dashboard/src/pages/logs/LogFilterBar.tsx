@@ -71,10 +71,12 @@ export function LogFilterBar({
 
   // Filter attribute keys by typed text (only relevant in key step)
   const filteredKeys =
-    step === "key" && searchInput.length > 0
-      ? attributeKeys.filter((k) =>
-          k.toLowerCase().includes(searchInput.toLowerCase()),
-        )
+    step === "key"
+      ? searchInput.length > 0
+        ? attributeKeys.filter((k) =>
+            k.toLowerCase().includes(searchInput.toLowerCase()),
+          )
+        : attributeKeys
       : [];
 
   // Show popover when there are matching suggestions or picking operator
@@ -378,7 +380,13 @@ export function LogFilterBar({
                   ? "Loading attributes..."
                   : "No matching attributes."}
               </CommandEmpty>
-              <CommandGroup heading="Filter by attribute">
+              <CommandGroup
+                heading={
+                  searchInput.length > 0
+                    ? "Filter by attribute"
+                    : "Available filters"
+                }
+              >
                 {filteredKeys.map((key) => (
                   <CommandItem
                     key={key}

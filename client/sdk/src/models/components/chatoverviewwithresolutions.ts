@@ -37,6 +37,10 @@ export type ChatOverviewWithResolutions = {
    */
   resolutions: Array<ChatResolution>;
   /**
+   * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
+   */
+  source?: string | undefined;
+  /**
    * The title of the chat
    */
   title: string;
@@ -64,6 +68,7 @@ export const ChatOverviewWithResolutions$inboundSchema: z.ZodMiniType<
     id: z.string(),
     num_messages: z.int(),
     resolutions: z.array(ChatResolution$inboundSchema),
+    source: z.optional(z.string()),
     title: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

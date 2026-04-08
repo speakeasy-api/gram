@@ -50,7 +50,10 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     tool_name String MATERIALIZED toString(attributes.gram.tool.name) COMMENT 'Tool name (materialized from attributes.gram.tool.name).',
     tool_source String MATERIALIZED toString(attributes.gram.tool_call.source) COMMENT 'Tool call source (materialized from attributes.gram.tool_call.source).',
     event_source String MATERIALIZED toString(attributes.gram.event.source) COMMENT 'Event source (materialized from attributes.gram.event.source).',
-    toolset_slug String MATERIALIZED toString(attributes.gram.toolset.slug) COMMENT 'Toolset slug (materialized from attributes.gram.toolset.slug).'
+    toolset_slug String MATERIALIZED toString(attributes.gram.toolset.slug) COMMENT 'Toolset slug (materialized from attributes.gram.toolset.slug).',
+    user_email String MATERIALIZED toString(attributes.user.email) COMMENT 'User email (materialized from attributes.user.email).',
+    hook_source String MATERIALIZED toString(attributes.gram.hook.source) COMMENT 'Hook source (materialized from attributes.gram.hook.source).',
+    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -80,6 +83,9 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_tool_name ON telemetry_logs (t
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_tool_source ON telemetry_logs (tool_source) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_event_source ON telemetry_logs (event_source) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_toolset_slug ON telemetry_logs (toolset_slug) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_email ON telemetry_logs (user_email) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_source ON telemetry_logs (hook_source) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
@@ -93,12 +99,20 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     tool_name SimpleAggregateFunction(any, String),
     tool_source SimpleAggregateFunction(any, String),
     event_source SimpleAggregateFunction(any, String),
+    user_email SimpleAggregateFunction(any, String),
+    hook_source SimpleAggregateFunction(any, String),
+    skill_name SimpleAggregateFunction(any, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
     log_count SimpleAggregateFunction(sum, UInt64),
 
-    http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8)
+    http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8),
+
+    -- Hook status tracking (0 = false, 1 = true)
+    -- Using max() ensures once we see a 1, it stays 1 across merges
+    hook_has_success SimpleAggregateFunction(max, UInt8),
+    hook_has_failure SimpleAggregateFunction(max, UInt8)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
@@ -115,12 +129,17 @@ SELECT
     any(tool_name) AS tool_name,
     any(tool_source) AS tool_source,
     any(event_source) AS event_source,
+    any(user_email) AS user_email,
+    any(hook_source) AS hook_source,
+    any(skill_name) AS skill_name,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(
         toInt32OrNull(toString(attributes.http.response.status_code)),
         toString(attributes.http.response.status_code) != ''
-    ) AS http_status_code
+    ) AS http_status_code,
+    max(if(toString(attributes.gram.hook.event) = 'PostToolUse', 1, 0)) AS hook_has_success,
+    max(if(toString(attributes.gram.hook.event) = 'PostToolUseFailure', 1, 0)) AS hook_has_failure
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;

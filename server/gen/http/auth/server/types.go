@@ -31,8 +31,10 @@ type InfoResponseBody struct {
 	ActiveOrganizationID string  `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
 	GramAccountType      string  `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	// Whether the organization has an active billing subscription
-	HasActiveSubscription bool                             `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
-	Organizations         []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
+	// Whether the organization is whitelisted to access the platform
+	Whitelisted   bool                             `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	Organizations []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1150,6 +1152,7 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		ActiveOrganizationID:  res.ActiveOrganizationID,
 		GramAccountType:       res.GramAccountType,
 		HasActiveSubscription: res.HasActiveSubscription,
+		Whitelisted:           res.Whitelisted,
 	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*OrganizationEntryResponseBody, len(res.Organizations))

@@ -18,13 +18,13 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildListGrantsRequest instantiates a HTTP request object with method and
-// path set to call the "access" service "listGrants" endpoint
-func (c *Client) BuildListGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListGrantsAccessPath()}
+// BuildListRolesRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "listRoles" endpoint
+func (c *Client) BuildListRolesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRolesAccessPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("access", "listGrants", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("access", "listRoles", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -33,13 +33,247 @@ func (c *Client) BuildListGrantsRequest(ctx context.Context, v any) (*http.Reque
 	return req, nil
 }
 
-// EncodeListGrantsRequest returns an encoder for requests sent to the access
-// listGrants server.
-func EncodeListGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListRolesRequest returns an encoder for requests sent to the access
+// listRoles server.
+func EncodeListRolesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*access.ListGrantsPayload)
+		p, ok := v.(*access.ListRolesPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("access", "listGrants", "*access.ListGrantsPayload", v)
+			return goahttp.ErrInvalidType("access", "listRoles", "*access.ListRolesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListRolesResponse returns a decoder for responses returned by the
+// access listRoles endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListRolesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRolesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRolesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			res := NewListRolesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRolesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			return nil, NewListRolesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRolesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			return nil, NewListRolesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRolesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			return nil, NewListRolesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRolesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			return nil, NewListRolesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRolesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			return nil, NewListRolesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRolesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			return nil, NewListRolesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRolesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			return nil, NewListRolesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRolesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+				}
+				err = ValidateListRolesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listRoles", err)
+				}
+				return nil, NewListRolesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRolesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+				}
+				err = ValidateListRolesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listRoles", err)
+				}
+				return nil, NewListRolesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listRoles", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRolesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listRoles", err)
+			}
+			err = ValidateListRolesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listRoles", err)
+			}
+			return nil, NewListRolesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listRoles", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetRoleRequest instantiates a HTTP request object with method and path
+// set to call the "access" service "getRole" endpoint
+func (c *Client) BuildGetRoleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRoleAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "getRole", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRoleRequest returns an encoder for requests sent to the access
+// getRole server.
+func EncodeGetRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.GetRolePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "getRole", "*access.GetRolePayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -50,18 +284,16 @@ func EncodeListGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			req.Header.Set("Gram-Session", head)
 		}
 		values := req.URL.Query()
-		if p.PrincipalUrn != nil {
-			values.Add("principal_urn", *p.PrincipalUrn)
-		}
+		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeListGrantsResponse returns a decoder for responses returned by the
-// access listGrants endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-// DecodeListGrantsResponse may return the following errors:
+// DecodeGetRoleResponse returns a decoder for responses returned by the access
+// getRole endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeGetRoleResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -73,7 +305,7 @@ func EncodeListGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeListGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeGetRoleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -90,180 +322,180 @@ func DecodeListGrantsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body ListGrantsResponseBody
+				body GetRoleResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsResponseBody(&body)
+			err = ValidateGetRoleResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			res := NewListGrantsResultOK(&body)
+			res := NewGetRoleRoleOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body ListGrantsUnauthorizedResponseBody
+				body GetRoleUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsUnauthorizedResponseBody(&body)
+			err = ValidateGetRoleUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			return nil, NewListGrantsUnauthorized(&body)
+			return nil, NewGetRoleUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body ListGrantsForbiddenResponseBody
+				body GetRoleForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsForbiddenResponseBody(&body)
+			err = ValidateGetRoleForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			return nil, NewListGrantsForbidden(&body)
+			return nil, NewGetRoleForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body ListGrantsBadRequestResponseBody
+				body GetRoleBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsBadRequestResponseBody(&body)
+			err = ValidateGetRoleBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			return nil, NewListGrantsBadRequest(&body)
+			return nil, NewGetRoleBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body ListGrantsNotFoundResponseBody
+				body GetRoleNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsNotFoundResponseBody(&body)
+			err = ValidateGetRoleNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			return nil, NewListGrantsNotFound(&body)
+			return nil, NewGetRoleNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body ListGrantsConflictResponseBody
+				body GetRoleConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsConflictResponseBody(&body)
+			err = ValidateGetRoleConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			return nil, NewListGrantsConflict(&body)
+			return nil, NewGetRoleConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body ListGrantsUnsupportedMediaResponseBody
+				body GetRoleUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsUnsupportedMediaResponseBody(&body)
+			err = ValidateGetRoleUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			return nil, NewListGrantsUnsupportedMedia(&body)
+			return nil, NewGetRoleUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body ListGrantsInvalidResponseBody
+				body GetRoleInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsInvalidResponseBody(&body)
+			err = ValidateGetRoleInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			return nil, NewListGrantsInvalid(&body)
+			return nil, NewGetRoleInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body ListGrantsInvariantViolationResponseBody
+					body GetRoleInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+					return nil, goahttp.ErrDecodingError("access", "getRole", err)
 				}
-				err = ValidateListGrantsInvariantViolationResponseBody(&body)
+				err = ValidateGetRoleInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "listGrants", err)
+					return nil, goahttp.ErrValidationError("access", "getRole", err)
 				}
-				return nil, NewListGrantsInvariantViolation(&body)
+				return nil, NewGetRoleInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body ListGrantsUnexpectedResponseBody
+					body GetRoleUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+					return nil, goahttp.ErrDecodingError("access", "getRole", err)
 				}
-				err = ValidateListGrantsUnexpectedResponseBody(&body)
+				err = ValidateGetRoleUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "listGrants", err)
+					return nil, goahttp.ErrValidationError("access", "getRole", err)
 				}
-				return nil, NewListGrantsUnexpected(&body)
+				return nil, NewGetRoleUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("access", "listGrants", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("access", "getRole", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body ListGrantsGatewayErrorResponseBody
+				body GetRoleGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "listGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "getRole", err)
 			}
-			err = ValidateListGrantsGatewayErrorResponseBody(&body)
+			err = ValidateGetRoleGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "listGrants", err)
+				return nil, goahttp.ErrValidationError("access", "getRole", err)
 			}
-			return nil, NewListGrantsGatewayError(&body)
+			return nil, NewGetRoleGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("access", "listGrants", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("access", "getRole", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildUpsertGrantsRequest instantiates a HTTP request object with method and
-// path set to call the "access" service "upsertGrants" endpoint
-func (c *Client) BuildUpsertGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertGrantsAccessPath()}
+// BuildCreateRoleRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "createRole" endpoint
+func (c *Client) BuildCreateRoleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateRoleAccessPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("access", "upsertGrants", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("access", "createRole", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -272,13 +504,13 @@ func (c *Client) BuildUpsertGrantsRequest(ctx context.Context, v any) (*http.Req
 	return req, nil
 }
 
-// EncodeUpsertGrantsRequest returns an encoder for requests sent to the access
-// upsertGrants server.
-func EncodeUpsertGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeCreateRoleRequest returns an encoder for requests sent to the access
+// createRole server.
+func EncodeCreateRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*access.UpsertGrantsPayload)
+		p, ok := v.(*access.CreateRolePayload)
 		if !ok {
-			return goahttp.ErrInvalidType("access", "upsertGrants", "*access.UpsertGrantsPayload", v)
+			return goahttp.ErrInvalidType("access", "createRole", "*access.CreateRolePayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -288,18 +520,18 @@ func EncodeUpsertGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewUpsertGrantsRequestBody(p)
+		body := NewCreateRoleRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("access", "upsertGrants", err)
+			return goahttp.ErrEncodingError("access", "createRole", err)
 		}
 		return nil
 	}
 }
 
-// DecodeUpsertGrantsResponse returns a decoder for responses returned by the
-// access upsertGrants endpoint. restoreBody controls whether the response body
+// DecodeCreateRoleResponse returns a decoder for responses returned by the
+// access createRole endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
-// DecodeUpsertGrantsResponse may return the following errors:
+// DecodeCreateRoleResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -311,7 +543,245 @@ func EncodeUpsertGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeUpsertGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeCreateRoleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusCreated:
+			var (
+				body CreateRoleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			res := NewCreateRoleRoleCreated(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateRoleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			return nil, NewCreateRoleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateRoleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			return nil, NewCreateRoleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateRoleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			return nil, NewCreateRoleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateRoleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			return nil, NewCreateRoleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateRoleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			return nil, NewCreateRoleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateRoleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			return nil, NewCreateRoleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateRoleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			return nil, NewCreateRoleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateRoleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "createRole", err)
+				}
+				err = ValidateCreateRoleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "createRole", err)
+				}
+				return nil, NewCreateRoleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateRoleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "createRole", err)
+				}
+				err = ValidateCreateRoleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "createRole", err)
+				}
+				return nil, NewCreateRoleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "createRole", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateRoleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createRole", err)
+			}
+			err = ValidateCreateRoleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createRole", err)
+			}
+			return nil, NewCreateRoleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "createRole", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateRoleRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "updateRole" endpoint
+func (c *Client) BuildUpdateRoleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateRoleAccessPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "updateRole", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateRoleRequest returns an encoder for requests sent to the access
+// updateRole server.
+func EncodeUpdateRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.UpdateRolePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "updateRole", "*access.UpdateRolePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateRoleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "updateRole", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateRoleResponse returns a decoder for responses returned by the
+// access updateRole endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeUpdateRoleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateRoleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -328,180 +798,180 @@ func DecodeUpsertGrantsResponse(decoder func(*http.Response) goahttp.Decoder, re
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body UpsertGrantsResponseBody
+				body UpdateRoleResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsResponseBody(&body)
+			err = ValidateUpdateRoleResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			res := NewUpsertGrantsResultOK(&body)
+			res := NewUpdateRoleRoleOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body UpsertGrantsUnauthorizedResponseBody
+				body UpdateRoleUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsUnauthorizedResponseBody(&body)
+			err = ValidateUpdateRoleUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			return nil, NewUpsertGrantsUnauthorized(&body)
+			return nil, NewUpdateRoleUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body UpsertGrantsForbiddenResponseBody
+				body UpdateRoleForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsForbiddenResponseBody(&body)
+			err = ValidateUpdateRoleForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			return nil, NewUpsertGrantsForbidden(&body)
+			return nil, NewUpdateRoleForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body UpsertGrantsBadRequestResponseBody
+				body UpdateRoleBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsBadRequestResponseBody(&body)
+			err = ValidateUpdateRoleBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			return nil, NewUpsertGrantsBadRequest(&body)
+			return nil, NewUpdateRoleBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body UpsertGrantsNotFoundResponseBody
+				body UpdateRoleNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsNotFoundResponseBody(&body)
+			err = ValidateUpdateRoleNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			return nil, NewUpsertGrantsNotFound(&body)
+			return nil, NewUpdateRoleNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body UpsertGrantsConflictResponseBody
+				body UpdateRoleConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsConflictResponseBody(&body)
+			err = ValidateUpdateRoleConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			return nil, NewUpsertGrantsConflict(&body)
+			return nil, NewUpdateRoleConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body UpsertGrantsUnsupportedMediaResponseBody
+				body UpdateRoleUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsUnsupportedMediaResponseBody(&body)
+			err = ValidateUpdateRoleUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			return nil, NewUpsertGrantsUnsupportedMedia(&body)
+			return nil, NewUpdateRoleUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body UpsertGrantsInvalidResponseBody
+				body UpdateRoleInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsInvalidResponseBody(&body)
+			err = ValidateUpdateRoleInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			return nil, NewUpsertGrantsInvalid(&body)
+			return nil, NewUpdateRoleInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body UpsertGrantsInvariantViolationResponseBody
+					body UpdateRoleInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+					return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 				}
-				err = ValidateUpsertGrantsInvariantViolationResponseBody(&body)
+				err = ValidateUpdateRoleInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+					return nil, goahttp.ErrValidationError("access", "updateRole", err)
 				}
-				return nil, NewUpsertGrantsInvariantViolation(&body)
+				return nil, NewUpdateRoleInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body UpsertGrantsUnexpectedResponseBody
+					body UpdateRoleUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+					return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 				}
-				err = ValidateUpsertGrantsUnexpectedResponseBody(&body)
+				err = ValidateUpdateRoleUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+					return nil, goahttp.ErrValidationError("access", "updateRole", err)
 				}
-				return nil, NewUpsertGrantsUnexpected(&body)
+				return nil, NewUpdateRoleUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("access", "upsertGrants", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("access", "updateRole", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body UpsertGrantsGatewayErrorResponseBody
+				body UpdateRoleGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "updateRole", err)
 			}
-			err = ValidateUpsertGrantsGatewayErrorResponseBody(&body)
+			err = ValidateUpdateRoleGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertGrants", err)
+				return nil, goahttp.ErrValidationError("access", "updateRole", err)
 			}
-			return nil, NewUpsertGrantsGatewayError(&body)
+			return nil, NewUpdateRoleGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("access", "upsertGrants", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("access", "updateRole", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildRemoveGrantsRequest instantiates a HTTP request object with method and
-// path set to call the "access" service "removeGrants" endpoint
-func (c *Client) BuildRemoveGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemoveGrantsAccessPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+// BuildDeleteRoleRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "deleteRole" endpoint
+func (c *Client) BuildDeleteRoleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteRoleAccessPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("access", "removeGrants", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("access", "deleteRole", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -510,13 +980,13 @@ func (c *Client) BuildRemoveGrantsRequest(ctx context.Context, v any) (*http.Req
 	return req, nil
 }
 
-// EncodeRemoveGrantsRequest returns an encoder for requests sent to the access
-// removeGrants server.
-func EncodeRemoveGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeDeleteRoleRequest returns an encoder for requests sent to the access
+// deleteRole server.
+func EncodeDeleteRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*access.RemoveGrantsPayload)
+		p, ok := v.(*access.DeleteRolePayload)
 		if !ok {
-			return goahttp.ErrInvalidType("access", "removeGrants", "*access.RemoveGrantsPayload", v)
+			return goahttp.ErrInvalidType("access", "deleteRole", "*access.DeleteRolePayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -526,18 +996,17 @@ func EncodeRemoveGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewRemoveGrantsRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("access", "removeGrants", err)
-		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeRemoveGrantsResponse returns a decoder for responses returned by the
-// access removeGrants endpoint. restoreBody controls whether the response body
+// DecodeDeleteRoleResponse returns a decoder for responses returned by the
+// access deleteRole endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
-// DecodeRemoveGrantsResponse may return the following errors:
+// DecodeDeleteRoleResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -549,7 +1018,7 @@ func EncodeRemoveGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeRemoveGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeDeleteRoleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -568,166 +1037,165 @@ func DecodeRemoveGrantsResponse(decoder func(*http.Response) goahttp.Decoder, re
 			return nil, nil
 		case http.StatusUnauthorized:
 			var (
-				body RemoveGrantsUnauthorizedResponseBody
+				body DeleteRoleUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 			}
-			err = ValidateRemoveGrantsUnauthorizedResponseBody(&body)
+			err = ValidateDeleteRoleUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+				return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 			}
-			return nil, NewRemoveGrantsUnauthorized(&body)
+			return nil, NewDeleteRoleUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body RemoveGrantsForbiddenResponseBody
+				body DeleteRoleForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 			}
-			err = ValidateRemoveGrantsForbiddenResponseBody(&body)
+			err = ValidateDeleteRoleForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+				return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 			}
-			return nil, NewRemoveGrantsForbidden(&body)
+			return nil, NewDeleteRoleForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body RemoveGrantsBadRequestResponseBody
+				body DeleteRoleBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 			}
-			err = ValidateRemoveGrantsBadRequestResponseBody(&body)
+			err = ValidateDeleteRoleBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+				return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 			}
-			return nil, NewRemoveGrantsBadRequest(&body)
+			return nil, NewDeleteRoleBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body RemoveGrantsNotFoundResponseBody
+				body DeleteRoleNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 			}
-			err = ValidateRemoveGrantsNotFoundResponseBody(&body)
+			err = ValidateDeleteRoleNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+				return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 			}
-			return nil, NewRemoveGrantsNotFound(&body)
+			return nil, NewDeleteRoleNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body RemoveGrantsConflictResponseBody
+				body DeleteRoleConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 			}
-			err = ValidateRemoveGrantsConflictResponseBody(&body)
+			err = ValidateDeleteRoleConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+				return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 			}
-			return nil, NewRemoveGrantsConflict(&body)
+			return nil, NewDeleteRoleConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body RemoveGrantsUnsupportedMediaResponseBody
+				body DeleteRoleUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 			}
-			err = ValidateRemoveGrantsUnsupportedMediaResponseBody(&body)
+			err = ValidateDeleteRoleUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+				return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 			}
-			return nil, NewRemoveGrantsUnsupportedMedia(&body)
+			return nil, NewDeleteRoleUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body RemoveGrantsInvalidResponseBody
+				body DeleteRoleInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 			}
-			err = ValidateRemoveGrantsInvalidResponseBody(&body)
+			err = ValidateDeleteRoleInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+				return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 			}
-			return nil, NewRemoveGrantsInvalid(&body)
+			return nil, NewDeleteRoleInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body RemoveGrantsInvariantViolationResponseBody
+					body DeleteRoleInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+					return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 				}
-				err = ValidateRemoveGrantsInvariantViolationResponseBody(&body)
+				err = ValidateDeleteRoleInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+					return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 				}
-				return nil, NewRemoveGrantsInvariantViolation(&body)
+				return nil, NewDeleteRoleInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body RemoveGrantsUnexpectedResponseBody
+					body DeleteRoleUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+					return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 				}
-				err = ValidateRemoveGrantsUnexpectedResponseBody(&body)
+				err = ValidateDeleteRoleUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+					return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 				}
-				return nil, NewRemoveGrantsUnexpected(&body)
+				return nil, NewDeleteRoleUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("access", "removeGrants", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("access", "deleteRole", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body RemoveGrantsGatewayErrorResponseBody
+				body DeleteRoleGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removeGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteRole", err)
 			}
-			err = ValidateRemoveGrantsGatewayErrorResponseBody(&body)
+			err = ValidateDeleteRoleGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removeGrants", err)
+				return nil, goahttp.ErrValidationError("access", "deleteRole", err)
 			}
-			return nil, NewRemoveGrantsGatewayError(&body)
+			return nil, NewDeleteRoleGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("access", "removeGrants", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("access", "deleteRole", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildRemovePrincipalGrantsRequest instantiates a HTTP request object with
-// method and path set to call the "access" service "removePrincipalGrants"
-// endpoint
-func (c *Client) BuildRemovePrincipalGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemovePrincipalGrantsAccessPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+// BuildListScopesRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "listScopes" endpoint
+func (c *Client) BuildListScopesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListScopesAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("access", "removePrincipalGrants", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("access", "listScopes", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -736,13 +1204,13 @@ func (c *Client) BuildRemovePrincipalGrantsRequest(ctx context.Context, v any) (
 	return req, nil
 }
 
-// EncodeRemovePrincipalGrantsRequest returns an encoder for requests sent to
-// the access removePrincipalGrants server.
-func EncodeRemovePrincipalGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListScopesRequest returns an encoder for requests sent to the access
+// listScopes server.
+func EncodeListScopesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*access.RemovePrincipalGrantsPayload)
+		p, ok := v.(*access.ListScopesPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("access", "removePrincipalGrants", "*access.RemovePrincipalGrantsPayload", v)
+			return goahttp.ErrInvalidType("access", "listScopes", "*access.ListScopesPayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -752,18 +1220,14 @@ func EncodeRemovePrincipalGrantsRequest(encoder func(*http.Request) goahttp.Enco
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewRemovePrincipalGrantsRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("access", "removePrincipalGrants", err)
-		}
 		return nil
 	}
 }
 
-// DecodeRemovePrincipalGrantsResponse returns a decoder for responses returned
-// by the access removePrincipalGrants endpoint. restoreBody controls whether
-// the response body should be restored after having been read.
-// DecodeRemovePrincipalGrantsResponse may return the following errors:
+// DecodeListScopesResponse returns a decoder for responses returned by the
+// access listScopes endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListScopesResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -775,7 +1239,7 @@ func EncodeRemovePrincipalGrantsRequest(encoder func(*http.Request) goahttp.Enco
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeRemovePrincipalGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -790,198 +1254,742 @@ func DecodeRemovePrincipalGrantsResponse(decoder func(*http.Response) goahttp.De
 			defer resp.Body.Close()
 		}
 		switch resp.StatusCode {
-		case http.StatusNoContent:
-			return nil, nil
+		case http.StatusOK:
+			var (
+				body ListScopesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
+			}
+			err = ValidateListScopesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
+			}
+			res := NewListScopesResultOK(&body)
+			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body RemovePrincipalGrantsUnauthorizedResponseBody
+				body ListScopesUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 			}
-			err = ValidateRemovePrincipalGrantsUnauthorizedResponseBody(&body)
+			err = ValidateListScopesUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
 			}
-			return nil, NewRemovePrincipalGrantsUnauthorized(&body)
+			return nil, NewListScopesUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body RemovePrincipalGrantsForbiddenResponseBody
+				body ListScopesForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 			}
-			err = ValidateRemovePrincipalGrantsForbiddenResponseBody(&body)
+			err = ValidateListScopesForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
 			}
-			return nil, NewRemovePrincipalGrantsForbidden(&body)
+			return nil, NewListScopesForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body RemovePrincipalGrantsBadRequestResponseBody
+				body ListScopesBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 			}
-			err = ValidateRemovePrincipalGrantsBadRequestResponseBody(&body)
+			err = ValidateListScopesBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
 			}
-			return nil, NewRemovePrincipalGrantsBadRequest(&body)
+			return nil, NewListScopesBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body RemovePrincipalGrantsNotFoundResponseBody
+				body ListScopesNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 			}
-			err = ValidateRemovePrincipalGrantsNotFoundResponseBody(&body)
+			err = ValidateListScopesNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
 			}
-			return nil, NewRemovePrincipalGrantsNotFound(&body)
+			return nil, NewListScopesNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body RemovePrincipalGrantsConflictResponseBody
+				body ListScopesConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 			}
-			err = ValidateRemovePrincipalGrantsConflictResponseBody(&body)
+			err = ValidateListScopesConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
 			}
-			return nil, NewRemovePrincipalGrantsConflict(&body)
+			return nil, NewListScopesConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body RemovePrincipalGrantsUnsupportedMediaResponseBody
+				body ListScopesUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 			}
-			err = ValidateRemovePrincipalGrantsUnsupportedMediaResponseBody(&body)
+			err = ValidateListScopesUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
 			}
-			return nil, NewRemovePrincipalGrantsUnsupportedMedia(&body)
+			return nil, NewListScopesUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body RemovePrincipalGrantsInvalidResponseBody
+				body ListScopesInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 			}
-			err = ValidateRemovePrincipalGrantsInvalidResponseBody(&body)
+			err = ValidateListScopesInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
 			}
-			return nil, NewRemovePrincipalGrantsInvalid(&body)
+			return nil, NewListScopesInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body RemovePrincipalGrantsInvariantViolationResponseBody
+					body ListScopesInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+					return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 				}
-				err = ValidateRemovePrincipalGrantsInvariantViolationResponseBody(&body)
+				err = ValidateListScopesInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+					return nil, goahttp.ErrValidationError("access", "listScopes", err)
 				}
-				return nil, NewRemovePrincipalGrantsInvariantViolation(&body)
+				return nil, NewListScopesInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body RemovePrincipalGrantsUnexpectedResponseBody
+					body ListScopesUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+					return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 				}
-				err = ValidateRemovePrincipalGrantsUnexpectedResponseBody(&body)
+				err = ValidateListScopesUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+					return nil, goahttp.ErrValidationError("access", "listScopes", err)
 				}
-				return nil, NewRemovePrincipalGrantsUnexpected(&body)
+				return nil, NewListScopesUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("access", "removePrincipalGrants", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("access", "listScopes", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body RemovePrincipalGrantsGatewayErrorResponseBody
+				body ListScopesGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrDecodingError("access", "listScopes", err)
 			}
-			err = ValidateRemovePrincipalGrantsGatewayErrorResponseBody(&body)
+			err = ValidateListScopesGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "removePrincipalGrants", err)
+				return nil, goahttp.ErrValidationError("access", "listScopes", err)
 			}
-			return nil, NewRemovePrincipalGrantsGatewayError(&body)
+			return nil, NewListScopesGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("access", "removePrincipalGrants", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("access", "listScopes", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// unmarshalGrantResponseBodyToAccessGrant builds a value of type *access.Grant
-// from a value of type *GrantResponseBody.
-func unmarshalGrantResponseBodyToAccessGrant(v *GrantResponseBody) *access.Grant {
-	res := &access.Grant{
-		ID:             *v.ID,
-		OrganizationID: *v.OrganizationID,
-		PrincipalUrn:   *v.PrincipalUrn,
-		PrincipalType:  *v.PrincipalType,
-		Scope:          *v.Scope,
-		Resource:       *v.Resource,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+// BuildListMembersRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "listMembers" endpoint
+func (c *Client) BuildListMembersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMembersAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listMembers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMembersRequest returns an encoder for requests sent to the access
+// listMembers server.
+func EncodeListMembersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListMembersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listMembers", "*access.ListMembersPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListMembersResponse returns a decoder for responses returned by the
+// access listMembers endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListMembersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListMembersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMembersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			res := NewListMembersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMembersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			return nil, NewListMembersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMembersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			return nil, NewListMembersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMembersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			return nil, NewListMembersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMembersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			return nil, NewListMembersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMembersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			return nil, NewListMembersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMembersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			return nil, NewListMembersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMembersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			return nil, NewListMembersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMembersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+				}
+				err = ValidateListMembersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listMembers", err)
+				}
+				return nil, NewListMembersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMembersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+				}
+				err = ValidateListMembersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listMembers", err)
+				}
+				return nil, NewListMembersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listMembers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMembersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMembers", err)
+			}
+			err = ValidateListMembersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMembers", err)
+			}
+			return nil, NewListMembersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listMembers", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateMemberRoleRequest instantiates a HTTP request object with method
+// and path set to call the "access" service "updateMemberRole" endpoint
+func (c *Client) BuildUpdateMemberRoleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateMemberRoleAccessPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "updateMemberRole", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateMemberRoleRequest returns an encoder for requests sent to the
+// access updateMemberRole server.
+func EncodeUpdateMemberRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.UpdateMemberRolePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "updateMemberRole", "*access.UpdateMemberRolePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateMemberRoleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "updateMemberRole", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateMemberRoleResponse returns a decoder for responses returned by
+// the access updateMemberRole endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateMemberRoleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateMemberRoleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateMemberRoleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			res := NewUpdateMemberRoleAccessMemberOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateMemberRoleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			return nil, NewUpdateMemberRoleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateMemberRoleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			return nil, NewUpdateMemberRoleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateMemberRoleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			return nil, NewUpdateMemberRoleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateMemberRoleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			return nil, NewUpdateMemberRoleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateMemberRoleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			return nil, NewUpdateMemberRoleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateMemberRoleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			return nil, NewUpdateMemberRoleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateMemberRoleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			return nil, NewUpdateMemberRoleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateMemberRoleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+				}
+				err = ValidateUpdateMemberRoleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+				}
+				return nil, NewUpdateMemberRoleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateMemberRoleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+				}
+				err = ValidateUpdateMemberRoleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+				}
+				return nil, NewUpdateMemberRoleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "updateMemberRole", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateMemberRoleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateMemberRole", err)
+			}
+			err = ValidateUpdateMemberRoleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateMemberRole", err)
+			}
+			return nil, NewUpdateMemberRoleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "updateMemberRole", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// unmarshalRoleResponseBodyToAccessRole builds a value of type *access.Role
+// from a value of type *RoleResponseBody.
+func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
+	res := &access.Role{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		Description: *v.Description,
+		IsSystem:    *v.IsSystem,
+		MemberCount: *v.MemberCount,
+		CreatedAt:   *v.CreatedAt,
+		UpdatedAt:   *v.UpdatedAt,
+	}
+	res.Grants = make([]*access.RoleGrant, len(v.Grants))
+	for i, val := range v.Grants {
+		if val == nil {
+			res.Grants[i] = nil
+			continue
+		}
+		res.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
 	}
 
 	return res
 }
 
-// marshalAccessGrantEntryToGrantEntryRequestBody builds a value of type
-// *GrantEntryRequestBody from a value of type *access.GrantEntry.
-func marshalAccessGrantEntryToGrantEntryRequestBody(v *access.GrantEntry) *GrantEntryRequestBody {
-	res := &GrantEntryRequestBody{
-		PrincipalUrn: v.PrincipalUrn,
-		Scope:        v.Scope,
-		Resource:     v.Resource,
+// unmarshalRoleGrantResponseBodyToAccessRoleGrant builds a value of type
+// *access.RoleGrant from a value of type *RoleGrantResponseBody.
+func unmarshalRoleGrantResponseBodyToAccessRoleGrant(v *RoleGrantResponseBody) *access.RoleGrant {
+	res := &access.RoleGrant{
+		Scope: *v.Scope,
+	}
+	if v.Resources != nil {
+		res.Resources = make([]string, len(v.Resources))
+		for i, val := range v.Resources {
+			res.Resources[i] = val
+		}
 	}
 
 	return res
 }
 
-// marshalGrantEntryRequestBodyToAccessGrantEntry builds a value of type
-// *access.GrantEntry from a value of type *GrantEntryRequestBody.
-func marshalGrantEntryRequestBodyToAccessGrantEntry(v *GrantEntryRequestBody) *access.GrantEntry {
-	res := &access.GrantEntry{
-		PrincipalUrn: v.PrincipalUrn,
-		Scope:        v.Scope,
-		Resource:     v.Resource,
+// marshalAccessRoleGrantToRoleGrantRequestBody builds a value of type
+// *RoleGrantRequestBody from a value of type *access.RoleGrant.
+func marshalAccessRoleGrantToRoleGrantRequestBody(v *access.RoleGrant) *RoleGrantRequestBody {
+	res := &RoleGrantRequestBody{
+		Scope: v.Scope,
+	}
+	if v.Resources != nil {
+		res.Resources = make([]string, len(v.Resources))
+		for i, val := range v.Resources {
+			res.Resources[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalRoleGrantRequestBodyToAccessRoleGrant builds a value of type
+// *access.RoleGrant from a value of type *RoleGrantRequestBody.
+func marshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *access.RoleGrant {
+	res := &access.RoleGrant{
+		Scope: v.Scope,
+	}
+	if v.Resources != nil {
+		res.Resources = make([]string, len(v.Resources))
+		for i, val := range v.Resources {
+			res.Resources[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition builds a value
+// of type *access.ScopeDefinition from a value of type
+// *ScopeDefinitionResponseBody.
+func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinitionResponseBody) *access.ScopeDefinition {
+	res := &access.ScopeDefinition{
+		Slug:         *v.Slug,
+		Description:  *v.Description,
+		ResourceType: *v.ResourceType,
+	}
+
+	return res
+}
+
+// unmarshalAccessMemberResponseBodyToAccessAccessMember builds a value of type
+// *access.AccessMember from a value of type *AccessMemberResponseBody.
+func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberResponseBody) *access.AccessMember {
+	res := &access.AccessMember{
+		ID:       *v.ID,
+		Name:     *v.Name,
+		Email:    *v.Email,
+		PhotoURL: v.PhotoURL,
+		RoleID:   *v.RoleID,
+		JoinedAt: *v.JoinedAt,
 	}
 
 	return res

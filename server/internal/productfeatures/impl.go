@@ -6,7 +6,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -41,15 +40,15 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, redisClient *redis.Client) *Service {
-	logger = logger.With(attr.SlogComponent("productfeatures"))
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, redisClient *redis.Client, accessLoader auth.AccessLoader) *Service {
+	logger = logger.With(attr.SlogComponent("product_features"))
 
 	return &Service{
-		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
 		logger:       logger,
 		db:           db,
 		repo:         repo.New(db),
-		auth:         auth.New(logger, db, sessions),
+		auth:         auth.New(logger, db, sessions, accessLoader),
 		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
@@ -159,8 +158,9 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	}
 
 	return &gen.GramProductFeatures{
-		LogsEnabled:       isEnabled(FeatureLogs),
-		ToolIoLogsEnabled: isEnabled(FeatureToolIOLogs),
+		LogsEnabled:           isEnabled(FeatureLogs),
+		ToolIoLogsEnabled:     isEnabled(FeatureToolIOLogs),
+		SessionCaptureEnabled: isEnabled(FeatureSessionCapture),
 	}, nil
 }
 

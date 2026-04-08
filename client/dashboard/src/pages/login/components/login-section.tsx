@@ -104,7 +104,8 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
           <div className="flex flex-col gap-2 text-sm text-center dark:text-black">
             <p>Securely scale AI usage across your organization.</p>
             <p className="text-[#8B8684]">
-              Control plane for distribution of MCP, Skills, CLIs and more.
+              Control plane for distribution of MCP, Skills, Assistants and
+              more.
             </p>
           </div>
           <FeatureBadges />

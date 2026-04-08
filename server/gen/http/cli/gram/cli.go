@@ -33,11 +33,11 @@ import (
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
+	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
-	teamsc "github.com/speakeasy-api/gram/server/gen/http/teams/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
 	toolsc "github.com/speakeasy-api/gram/server/gen/http/tools/client"
@@ -54,7 +54,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
-		"access (list-grants|upsert-grants|remove-grants|remove-principal-grants)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|update-member-role)",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
@@ -67,18 +67,18 @@ func UsageCommands() []string {
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|logs)",
+		"hooks (claude|cursor|logs)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
+		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"features (get-product-features|set-product-feature)",
-		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
+		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
-		"teams (list-members|invite-member|list-invites|cancel-invite|resend-invite|get-invite-info|remove-member)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
@@ -90,7 +90,7 @@ func UsageCommands() []string {
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
-		os.Args[0] + " " + "access list-grants --principal-urn \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
@@ -113,25 +113,42 @@ func ParseEndpoint(
 
 		accessFlags = flag.NewFlagSet("access", flag.ContinueOnError)
 
-		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
-		accessListGrantsPrincipalUrnFlag = accessListGrantsFlags.String("principal-urn", "", "")
-		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
-		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
+		accessListRolesFlags            = flag.NewFlagSet("list-roles", flag.ExitOnError)
+		accessListRolesApikeyTokenFlag  = accessListRolesFlags.String("apikey-token", "", "")
+		accessListRolesSessionTokenFlag = accessListRolesFlags.String("session-token", "", "")
 
-		accessUpsertGrantsFlags            = flag.NewFlagSet("upsert-grants", flag.ExitOnError)
-		accessUpsertGrantsBodyFlag         = accessUpsertGrantsFlags.String("body", "REQUIRED", "")
-		accessUpsertGrantsApikeyTokenFlag  = accessUpsertGrantsFlags.String("apikey-token", "", "")
-		accessUpsertGrantsSessionTokenFlag = accessUpsertGrantsFlags.String("session-token", "", "")
+		accessGetRoleFlags            = flag.NewFlagSet("get-role", flag.ExitOnError)
+		accessGetRoleIDFlag           = accessGetRoleFlags.String("id", "REQUIRED", "")
+		accessGetRoleApikeyTokenFlag  = accessGetRoleFlags.String("apikey-token", "", "")
+		accessGetRoleSessionTokenFlag = accessGetRoleFlags.String("session-token", "", "")
 
-		accessRemoveGrantsFlags            = flag.NewFlagSet("remove-grants", flag.ExitOnError)
-		accessRemoveGrantsBodyFlag         = accessRemoveGrantsFlags.String("body", "REQUIRED", "")
-		accessRemoveGrantsApikeyTokenFlag  = accessRemoveGrantsFlags.String("apikey-token", "", "")
-		accessRemoveGrantsSessionTokenFlag = accessRemoveGrantsFlags.String("session-token", "", "")
+		accessCreateRoleFlags            = flag.NewFlagSet("create-role", flag.ExitOnError)
+		accessCreateRoleBodyFlag         = accessCreateRoleFlags.String("body", "REQUIRED", "")
+		accessCreateRoleApikeyTokenFlag  = accessCreateRoleFlags.String("apikey-token", "", "")
+		accessCreateRoleSessionTokenFlag = accessCreateRoleFlags.String("session-token", "", "")
 
-		accessRemovePrincipalGrantsFlags            = flag.NewFlagSet("remove-principal-grants", flag.ExitOnError)
-		accessRemovePrincipalGrantsBodyFlag         = accessRemovePrincipalGrantsFlags.String("body", "REQUIRED", "")
-		accessRemovePrincipalGrantsApikeyTokenFlag  = accessRemovePrincipalGrantsFlags.String("apikey-token", "", "")
-		accessRemovePrincipalGrantsSessionTokenFlag = accessRemovePrincipalGrantsFlags.String("session-token", "", "")
+		accessUpdateRoleFlags            = flag.NewFlagSet("update-role", flag.ExitOnError)
+		accessUpdateRoleBodyFlag         = accessUpdateRoleFlags.String("body", "REQUIRED", "")
+		accessUpdateRoleApikeyTokenFlag  = accessUpdateRoleFlags.String("apikey-token", "", "")
+		accessUpdateRoleSessionTokenFlag = accessUpdateRoleFlags.String("session-token", "", "")
+
+		accessDeleteRoleFlags            = flag.NewFlagSet("delete-role", flag.ExitOnError)
+		accessDeleteRoleIDFlag           = accessDeleteRoleFlags.String("id", "REQUIRED", "")
+		accessDeleteRoleApikeyTokenFlag  = accessDeleteRoleFlags.String("apikey-token", "", "")
+		accessDeleteRoleSessionTokenFlag = accessDeleteRoleFlags.String("session-token", "", "")
+
+		accessListScopesFlags            = flag.NewFlagSet("list-scopes", flag.ExitOnError)
+		accessListScopesApikeyTokenFlag  = accessListScopesFlags.String("apikey-token", "", "")
+		accessListScopesSessionTokenFlag = accessListScopesFlags.String("session-token", "", "")
+
+		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
+		accessListMembersApikeyTokenFlag  = accessListMembersFlags.String("apikey-token", "", "")
+		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
+
+		accessUpdateMemberRoleFlags            = flag.NewFlagSet("update-member-role", flag.ExitOnError)
+		accessUpdateMemberRoleBodyFlag         = accessUpdateMemberRoleFlags.String("body", "REQUIRED", "")
+		accessUpdateMemberRoleApikeyTokenFlag  = accessUpdateMemberRoleFlags.String("apikey-token", "", "")
+		accessUpdateMemberRoleSessionTokenFlag = accessUpdateMemberRoleFlags.String("session-token", "", "")
 
 		agentworkflowsFlags = flag.NewFlagSet("agentworkflows", flag.ContinueOnError)
 
@@ -249,9 +266,8 @@ func ParseEndpoint(
 		authCallbackCodeFlag  = authCallbackFlags.String("code", "REQUIRED", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
-		authLoginFlags           = flag.NewFlagSet("login", flag.ExitOnError)
-		authLoginRedirectFlag    = authLoginFlags.String("redirect", "", "")
-		authLoginInviteTokenFlag = authLoginFlags.String("invite-token", "", "")
+		authLoginFlags        = flag.NewFlagSet("login", flag.ExitOnError)
+		authLoginRedirectFlag = authLoginFlags.String("redirect", "", "")
 
 		authSwitchScopesFlags              = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
 		authSwitchScopesOrganizationIDFlag = authSwitchScopesFlags.String("organization-id", "", "")
@@ -498,6 +514,11 @@ func ParseEndpoint(
 		hooksClaudeFlags    = flag.NewFlagSet("claude", flag.ExitOnError)
 		hooksClaudeBodyFlag = hooksClaudeFlags.String("body", "REQUIRED", "")
 
+		hooksCursorFlags                = flag.NewFlagSet("cursor", flag.ExitOnError)
+		hooksCursorBodyFlag             = hooksCursorFlags.String("body", "REQUIRED", "")
+		hooksCursorApikeyTokenFlag      = hooksCursorFlags.String("apikey-token", "", "")
+		hooksCursorProjectSlugInputFlag = hooksCursorFlags.String("project-slug-input", "", "")
+
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
 		hooksLogsApikeyTokenFlag      = hooksLogsFlags.String("apikey-token", "", "")
@@ -560,6 +581,29 @@ func ParseEndpoint(
 		mcpMetadataExportMcpMetadataApikeyTokenFlag      = mcpMetadataExportMcpMetadataFlags.String("apikey-token", "", "")
 		mcpMetadataExportMcpMetadataSessionTokenFlag     = mcpMetadataExportMcpMetadataFlags.String("session-token", "", "")
 		mcpMetadataExportMcpMetadataProjectSlugInputFlag = mcpMetadataExportMcpMetadataFlags.String("project-slug-input", "", "")
+
+		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
+
+		organizationsSendInviteFlags            = flag.NewFlagSet("send-invite", flag.ExitOnError)
+		organizationsSendInviteBodyFlag         = organizationsSendInviteFlags.String("body", "REQUIRED", "")
+		organizationsSendInviteSessionTokenFlag = organizationsSendInviteFlags.String("session-token", "", "")
+
+		organizationsRevokeInviteFlags            = flag.NewFlagSet("revoke-invite", flag.ExitOnError)
+		organizationsRevokeInviteInvitationIDFlag = organizationsRevokeInviteFlags.String("invitation-id", "REQUIRED", "")
+		organizationsRevokeInviteSessionTokenFlag = organizationsRevokeInviteFlags.String("session-token", "", "")
+
+		organizationsListInvitesFlags            = flag.NewFlagSet("list-invites", flag.ExitOnError)
+		organizationsListInvitesSessionTokenFlag = organizationsListInvitesFlags.String("session-token", "", "")
+
+		organizationsGetInviteByTokenFlags     = flag.NewFlagSet("get-invite-by-token", flag.ExitOnError)
+		organizationsGetInviteByTokenTokenFlag = organizationsGetInviteByTokenFlags.String("token", "REQUIRED", "")
+
+		organizationsListUsersFlags            = flag.NewFlagSet("list-users", flag.ExitOnError)
+		organizationsListUsersSessionTokenFlag = organizationsListUsersFlags.String("session-token", "", "")
+
+		organizationsRemoveUserFlags            = flag.NewFlagSet("remove-user", flag.ExitOnError)
+		organizationsRemoveUserUserIDFlag       = organizationsRemoveUserFlags.String("user-id", "REQUIRED", "")
+		organizationsRemoveUserSessionTokenFlag = organizationsRemoveUserFlags.String("session-token", "", "")
 
 		packagesFlags = flag.NewFlagSet("packages", flag.ContinueOnError)
 
@@ -640,6 +684,10 @@ func ParseEndpoint(
 		projectsDeleteProjectApikeyTokenFlag  = projectsDeleteProjectFlags.String("apikey-token", "", "")
 		projectsDeleteProjectSessionTokenFlag = projectsDeleteProjectFlags.String("session-token", "", "")
 
+		projectsSetOrganizationWhitelistFlags           = flag.NewFlagSet("set-organization-whitelist", flag.ExitOnError)
+		projectsSetOrganizationWhitelistBodyFlag        = projectsSetOrganizationWhitelistFlags.String("body", "REQUIRED", "")
+		projectsSetOrganizationWhitelistApikeyTokenFlag = projectsSetOrganizationWhitelistFlags.String("apikey-token", "", "")
+
 		resourcesFlags = flag.NewFlagSet("resources", flag.ContinueOnError)
 
 		resourcesListResourcesFlags                = flag.NewFlagSet("list-resources", flag.ExitOnError)
@@ -679,36 +727,6 @@ func ParseEndpoint(
 		slackDeleteSlackAppIDFlag               = slackDeleteSlackAppFlags.String("id", "REQUIRED", "")
 		slackDeleteSlackAppSessionTokenFlag     = slackDeleteSlackAppFlags.String("session-token", "", "")
 		slackDeleteSlackAppProjectSlugInputFlag = slackDeleteSlackAppFlags.String("project-slug-input", "", "")
-
-		teamsFlags = flag.NewFlagSet("teams", flag.ContinueOnError)
-
-		teamsListMembersFlags              = flag.NewFlagSet("list-members", flag.ExitOnError)
-		teamsListMembersOrganizationIDFlag = teamsListMembersFlags.String("organization-id", "REQUIRED", "")
-		teamsListMembersSessionTokenFlag   = teamsListMembersFlags.String("session-token", "", "")
-
-		teamsInviteMemberFlags            = flag.NewFlagSet("invite-member", flag.ExitOnError)
-		teamsInviteMemberBodyFlag         = teamsInviteMemberFlags.String("body", "REQUIRED", "")
-		teamsInviteMemberSessionTokenFlag = teamsInviteMemberFlags.String("session-token", "", "")
-
-		teamsListInvitesFlags              = flag.NewFlagSet("list-invites", flag.ExitOnError)
-		teamsListInvitesOrganizationIDFlag = teamsListInvitesFlags.String("organization-id", "REQUIRED", "")
-		teamsListInvitesSessionTokenFlag   = teamsListInvitesFlags.String("session-token", "", "")
-
-		teamsCancelInviteFlags            = flag.NewFlagSet("cancel-invite", flag.ExitOnError)
-		teamsCancelInviteInviteIDFlag     = teamsCancelInviteFlags.String("invite-id", "REQUIRED", "")
-		teamsCancelInviteSessionTokenFlag = teamsCancelInviteFlags.String("session-token", "", "")
-
-		teamsResendInviteFlags            = flag.NewFlagSet("resend-invite", flag.ExitOnError)
-		teamsResendInviteBodyFlag         = teamsResendInviteFlags.String("body", "REQUIRED", "")
-		teamsResendInviteSessionTokenFlag = teamsResendInviteFlags.String("session-token", "", "")
-
-		teamsGetInviteInfoFlags     = flag.NewFlagSet("get-invite-info", flag.ExitOnError)
-		teamsGetInviteInfoTokenFlag = teamsGetInviteInfoFlags.String("token", "REQUIRED", "")
-
-		teamsRemoveMemberFlags              = flag.NewFlagSet("remove-member", flag.ExitOnError)
-		teamsRemoveMemberOrganizationIDFlag = teamsRemoveMemberFlags.String("organization-id", "REQUIRED", "")
-		teamsRemoveMemberUserIDFlag         = teamsRemoveMemberFlags.String("user-id", "REQUIRED", "")
-		teamsRemoveMemberSessionTokenFlag   = teamsRemoveMemberFlags.String("session-token", "", "")
 
 		telemetryFlags = flag.NewFlagSet("telemetry", flag.ContinueOnError)
 
@@ -778,6 +796,12 @@ func ParseEndpoint(
 		telemetryGetHooksSummaryApikeyTokenFlag      = telemetryGetHooksSummaryFlags.String("apikey-token", "", "")
 		telemetryGetHooksSummarySessionTokenFlag     = telemetryGetHooksSummaryFlags.String("session-token", "", "")
 		telemetryGetHooksSummaryProjectSlugInputFlag = telemetryGetHooksSummaryFlags.String("project-slug-input", "", "")
+
+		telemetryListHooksTracesFlags                = flag.NewFlagSet("list-hooks-traces", flag.ExitOnError)
+		telemetryListHooksTracesBodyFlag             = telemetryListHooksTracesFlags.String("body", "REQUIRED", "")
+		telemetryListHooksTracesApikeyTokenFlag      = telemetryListHooksTracesFlags.String("apikey-token", "", "")
+		telemetryListHooksTracesSessionTokenFlag     = telemetryListHooksTracesFlags.String("session-token", "", "")
+		telemetryListHooksTracesProjectSlugInputFlag = telemetryListHooksTracesFlags.String("project-slug-input", "", "")
 
 		templatesFlags = flag.NewFlagSet("templates", flag.ContinueOnError)
 
@@ -935,10 +959,14 @@ func ParseEndpoint(
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
 
 	accessFlags.Usage = accessUsage
-	accessListGrantsFlags.Usage = accessListGrantsUsage
-	accessUpsertGrantsFlags.Usage = accessUpsertGrantsUsage
-	accessRemoveGrantsFlags.Usage = accessRemoveGrantsUsage
-	accessRemovePrincipalGrantsFlags.Usage = accessRemovePrincipalGrantsUsage
+	accessListRolesFlags.Usage = accessListRolesUsage
+	accessGetRoleFlags.Usage = accessGetRoleUsage
+	accessCreateRoleFlags.Usage = accessCreateRoleUsage
+	accessUpdateRoleFlags.Usage = accessUpdateRoleUsage
+	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
+	accessListScopesFlags.Usage = accessListScopesUsage
+	accessListMembersFlags.Usage = accessListMembersUsage
+	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
 
 	agentworkflowsFlags.Usage = agentworkflowsUsage
 	agentworkflowsCreateResponseFlags.Usage = agentworkflowsCreateResponseUsage
@@ -1026,6 +1054,7 @@ func ParseEndpoint(
 
 	hooksFlags.Usage = hooksUsage
 	hooksClaudeFlags.Usage = hooksClaudeUsage
+	hooksCursorFlags.Usage = hooksCursorUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 
 	instancesFlags.Usage = instancesUsage
@@ -1046,6 +1075,14 @@ func ParseEndpoint(
 	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
 	mcpMetadataExportMcpMetadataFlags.Usage = mcpMetadataExportMcpMetadataUsage
 
+	organizationsFlags.Usage = organizationsUsage
+	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
+	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
+	organizationsListInvitesFlags.Usage = organizationsListInvitesUsage
+	organizationsGetInviteByTokenFlags.Usage = organizationsGetInviteByTokenUsage
+	organizationsListUsersFlags.Usage = organizationsListUsersUsage
+	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
+
 	packagesFlags.Usage = packagesUsage
 	packagesCreatePackageFlags.Usage = packagesCreatePackageUsage
 	packagesUpdatePackageFlags.Usage = packagesUpdatePackageUsage
@@ -1065,6 +1102,7 @@ func ParseEndpoint(
 	projectsListAllowedOriginsFlags.Usage = projectsListAllowedOriginsUsage
 	projectsUpsertAllowedOriginFlags.Usage = projectsUpsertAllowedOriginUsage
 	projectsDeleteProjectFlags.Usage = projectsDeleteProjectUsage
+	projectsSetOrganizationWhitelistFlags.Usage = projectsSetOrganizationWhitelistUsage
 
 	resourcesFlags.Usage = resourcesUsage
 	resourcesListResourcesFlags.Usage = resourcesListResourcesUsage
@@ -1076,15 +1114,6 @@ func ParseEndpoint(
 	slackConfigureSlackAppFlags.Usage = slackConfigureSlackAppUsage
 	slackUpdateSlackAppFlags.Usage = slackUpdateSlackAppUsage
 	slackDeleteSlackAppFlags.Usage = slackDeleteSlackAppUsage
-
-	teamsFlags.Usage = teamsUsage
-	teamsListMembersFlags.Usage = teamsListMembersUsage
-	teamsInviteMemberFlags.Usage = teamsInviteMemberUsage
-	teamsListInvitesFlags.Usage = teamsListInvitesUsage
-	teamsCancelInviteFlags.Usage = teamsCancelInviteUsage
-	teamsResendInviteFlags.Usage = teamsResendInviteUsage
-	teamsGetInviteInfoFlags.Usage = teamsGetInviteInfoUsage
-	teamsRemoveMemberFlags.Usage = teamsRemoveMemberUsage
 
 	telemetryFlags.Usage = telemetryUsage
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
@@ -1098,6 +1127,7 @@ func ParseEndpoint(
 	telemetryListFilterOptionsFlags.Usage = telemetryListFilterOptionsUsage
 	telemetryListAttributeKeysFlags.Usage = telemetryListAttributeKeysUsage
 	telemetryGetHooksSummaryFlags.Usage = telemetryGetHooksSummaryUsage
+	telemetryListHooksTracesFlags.Usage = telemetryListHooksTracesUsage
 
 	templatesFlags.Usage = templatesUsage
 	templatesCreateTemplateFlags.Usage = templatesCreateTemplateUsage
@@ -1187,6 +1217,8 @@ func ParseEndpoint(
 			svcf = keysFlags
 		case "mcp-metadata":
 			svcf = mcpMetadataFlags
+		case "organizations":
+			svcf = organizationsFlags
 		case "packages":
 			svcf = packagesFlags
 		case "features":
@@ -1197,8 +1229,6 @@ func ParseEndpoint(
 			svcf = resourcesFlags
 		case "slack":
 			svcf = slackFlags
-		case "teams":
-			svcf = teamsFlags
 		case "telemetry":
 			svcf = telemetryFlags
 		case "templates":
@@ -1235,17 +1265,29 @@ func ParseEndpoint(
 
 		case "access":
 			switch epn {
-			case "list-grants":
-				epf = accessListGrantsFlags
+			case "list-roles":
+				epf = accessListRolesFlags
 
-			case "upsert-grants":
-				epf = accessUpsertGrantsFlags
+			case "get-role":
+				epf = accessGetRoleFlags
 
-			case "remove-grants":
-				epf = accessRemoveGrantsFlags
+			case "create-role":
+				epf = accessCreateRoleFlags
 
-			case "remove-principal-grants":
-				epf = accessRemovePrincipalGrantsFlags
+			case "update-role":
+				epf = accessUpdateRoleFlags
+
+			case "delete-role":
+				epf = accessDeleteRoleFlags
+
+			case "list-scopes":
+				epf = accessListScopesFlags
+
+			case "list-members":
+				epf = accessListMembersFlags
+
+			case "update-member-role":
+				epf = accessUpdateMemberRoleFlags
 
 			}
 
@@ -1482,6 +1524,9 @@ func ParseEndpoint(
 			case "claude":
 				epf = hooksClaudeFlags
 
+			case "cursor":
+				epf = hooksCursorFlags
+
 			case "logs":
 				epf = hooksLogsFlags
 
@@ -1530,6 +1575,28 @@ func ParseEndpoint(
 
 			case "export-mcp-metadata":
 				epf = mcpMetadataExportMcpMetadataFlags
+
+			}
+
+		case "organizations":
+			switch epn {
+			case "send-invite":
+				epf = organizationsSendInviteFlags
+
+			case "revoke-invite":
+				epf = organizationsRevokeInviteFlags
+
+			case "list-invites":
+				epf = organizationsListInvitesFlags
+
+			case "get-invite-by-token":
+				epf = organizationsGetInviteByTokenFlags
+
+			case "list-users":
+				epf = organizationsListUsersFlags
+
+			case "remove-user":
+				epf = organizationsRemoveUserFlags
 
 			}
 
@@ -1585,6 +1652,9 @@ func ParseEndpoint(
 			case "delete-project":
 				epf = projectsDeleteProjectFlags
 
+			case "set-organization-whitelist":
+				epf = projectsSetOrganizationWhitelistFlags
+
 			}
 
 		case "resources":
@@ -1613,31 +1683,6 @@ func ParseEndpoint(
 
 			case "delete-slack-app":
 				epf = slackDeleteSlackAppFlags
-
-			}
-
-		case "teams":
-			switch epn {
-			case "list-members":
-				epf = teamsListMembersFlags
-
-			case "invite-member":
-				epf = teamsInviteMemberFlags
-
-			case "list-invites":
-				epf = teamsListInvitesFlags
-
-			case "cancel-invite":
-				epf = teamsCancelInviteFlags
-
-			case "resend-invite":
-				epf = teamsResendInviteFlags
-
-			case "get-invite-info":
-				epf = teamsGetInviteInfoFlags
-
-			case "remove-member":
-				epf = teamsRemoveMemberFlags
 
 			}
 
@@ -1675,6 +1720,9 @@ func ParseEndpoint(
 
 			case "get-hooks-summary":
 				epf = telemetryGetHooksSummaryFlags
+
+			case "list-hooks-traces":
+				epf = telemetryListHooksTracesFlags
 
 			}
 
@@ -1802,18 +1850,30 @@ func ParseEndpoint(
 		case "access":
 			c := accessc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "list-grants":
-				endpoint = c.ListGrants()
-				data, err = accessc.BuildListGrantsPayload(*accessListGrantsPrincipalUrnFlag, *accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
-			case "upsert-grants":
-				endpoint = c.UpsertGrants()
-				data, err = accessc.BuildUpsertGrantsPayload(*accessUpsertGrantsBodyFlag, *accessUpsertGrantsApikeyTokenFlag, *accessUpsertGrantsSessionTokenFlag)
-			case "remove-grants":
-				endpoint = c.RemoveGrants()
-				data, err = accessc.BuildRemoveGrantsPayload(*accessRemoveGrantsBodyFlag, *accessRemoveGrantsApikeyTokenFlag, *accessRemoveGrantsSessionTokenFlag)
-			case "remove-principal-grants":
-				endpoint = c.RemovePrincipalGrants()
-				data, err = accessc.BuildRemovePrincipalGrantsPayload(*accessRemovePrincipalGrantsBodyFlag, *accessRemovePrincipalGrantsApikeyTokenFlag, *accessRemovePrincipalGrantsSessionTokenFlag)
+			case "list-roles":
+				endpoint = c.ListRoles()
+				data, err = accessc.BuildListRolesPayload(*accessListRolesApikeyTokenFlag, *accessListRolesSessionTokenFlag)
+			case "get-role":
+				endpoint = c.GetRole()
+				data, err = accessc.BuildGetRolePayload(*accessGetRoleIDFlag, *accessGetRoleApikeyTokenFlag, *accessGetRoleSessionTokenFlag)
+			case "create-role":
+				endpoint = c.CreateRole()
+				data, err = accessc.BuildCreateRolePayload(*accessCreateRoleBodyFlag, *accessCreateRoleApikeyTokenFlag, *accessCreateRoleSessionTokenFlag)
+			case "update-role":
+				endpoint = c.UpdateRole()
+				data, err = accessc.BuildUpdateRolePayload(*accessUpdateRoleBodyFlag, *accessUpdateRoleApikeyTokenFlag, *accessUpdateRoleSessionTokenFlag)
+			case "delete-role":
+				endpoint = c.DeleteRole()
+				data, err = accessc.BuildDeleteRolePayload(*accessDeleteRoleIDFlag, *accessDeleteRoleApikeyTokenFlag, *accessDeleteRoleSessionTokenFlag)
+			case "list-scopes":
+				endpoint = c.ListScopes()
+				data, err = accessc.BuildListScopesPayload(*accessListScopesApikeyTokenFlag, *accessListScopesSessionTokenFlag)
+			case "list-members":
+				endpoint = c.ListMembers()
+				data, err = accessc.BuildListMembersPayload(*accessListMembersApikeyTokenFlag, *accessListMembersSessionTokenFlag)
+			case "update-member-role":
+				endpoint = c.UpdateMemberRole()
+				data, err = accessc.BuildUpdateMemberRolePayload(*accessUpdateMemberRoleBodyFlag, *accessUpdateMemberRoleApikeyTokenFlag, *accessUpdateMemberRoleSessionTokenFlag)
 			}
 		case "agentworkflows":
 			c := agentworkflowsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -1898,7 +1958,7 @@ func ParseEndpoint(
 				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
-				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginInviteTokenFlag)
+				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag)
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
 				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
@@ -2061,6 +2121,9 @@ func ParseEndpoint(
 			case "claude":
 				endpoint = c.Claude()
 				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag)
+			case "cursor":
+				endpoint = c.Cursor()
+				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -2110,6 +2173,28 @@ func ParseEndpoint(
 			case "export-mcp-metadata":
 				endpoint = c.ExportMcpMetadata()
 				data, err = mcpmetadatac.BuildExportMcpMetadataPayload(*mcpMetadataExportMcpMetadataBodyFlag, *mcpMetadataExportMcpMetadataApikeyTokenFlag, *mcpMetadataExportMcpMetadataSessionTokenFlag, *mcpMetadataExportMcpMetadataProjectSlugInputFlag)
+			}
+		case "organizations":
+			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "send-invite":
+				endpoint = c.SendInvite()
+				data, err = organizationsc.BuildSendInvitePayload(*organizationsSendInviteBodyFlag, *organizationsSendInviteSessionTokenFlag)
+			case "revoke-invite":
+				endpoint = c.RevokeInvite()
+				data, err = organizationsc.BuildRevokeInvitePayload(*organizationsRevokeInviteInvitationIDFlag, *organizationsRevokeInviteSessionTokenFlag)
+			case "list-invites":
+				endpoint = c.ListInvites()
+				data, err = organizationsc.BuildListInvitesPayload(*organizationsListInvitesSessionTokenFlag)
+			case "get-invite-by-token":
+				endpoint = c.GetInviteByToken()
+				data, err = organizationsc.BuildGetInviteByTokenPayload(*organizationsGetInviteByTokenTokenFlag)
+			case "list-users":
+				endpoint = c.ListUsers()
+				data, err = organizationsc.BuildListUsersPayload(*organizationsListUsersSessionTokenFlag)
+			case "remove-user":
+				endpoint = c.RemoveUser()
+				data, err = organizationsc.BuildRemoveUserPayload(*organizationsRemoveUserUserIDFlag, *organizationsRemoveUserSessionTokenFlag)
 			}
 		case "packages":
 			c := packagesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2164,6 +2249,9 @@ func ParseEndpoint(
 			case "delete-project":
 				endpoint = c.DeleteProject()
 				data, err = projectsc.BuildDeleteProjectPayload(*projectsDeleteProjectIDFlag, *projectsDeleteProjectApikeyTokenFlag, *projectsDeleteProjectSessionTokenFlag)
+			case "set-organization-whitelist":
+				endpoint = c.SetOrganizationWhitelist()
+				data, err = projectsc.BuildSetOrganizationWhitelistPayload(*projectsSetOrganizationWhitelistBodyFlag, *projectsSetOrganizationWhitelistApikeyTokenFlag)
 			}
 		case "resources":
 			c := resourcesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2193,31 +2281,6 @@ func ParseEndpoint(
 			case "delete-slack-app":
 				endpoint = c.DeleteSlackApp()
 				data, err = slackc.BuildDeleteSlackAppPayload(*slackDeleteSlackAppIDFlag, *slackDeleteSlackAppSessionTokenFlag, *slackDeleteSlackAppProjectSlugInputFlag)
-			}
-		case "teams":
-			c := teamsc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "list-members":
-				endpoint = c.ListMembers()
-				data, err = teamsc.BuildListMembersPayload(*teamsListMembersOrganizationIDFlag, *teamsListMembersSessionTokenFlag)
-			case "invite-member":
-				endpoint = c.InviteMember()
-				data, err = teamsc.BuildInviteMemberPayload(*teamsInviteMemberBodyFlag, *teamsInviteMemberSessionTokenFlag)
-			case "list-invites":
-				endpoint = c.ListInvites()
-				data, err = teamsc.BuildListInvitesPayload(*teamsListInvitesOrganizationIDFlag, *teamsListInvitesSessionTokenFlag)
-			case "cancel-invite":
-				endpoint = c.CancelInvite()
-				data, err = teamsc.BuildCancelInvitePayload(*teamsCancelInviteInviteIDFlag, *teamsCancelInviteSessionTokenFlag)
-			case "resend-invite":
-				endpoint = c.ResendInvite()
-				data, err = teamsc.BuildResendInvitePayload(*teamsResendInviteBodyFlag, *teamsResendInviteSessionTokenFlag)
-			case "get-invite-info":
-				endpoint = c.GetInviteInfo()
-				data, err = teamsc.BuildGetInviteInfoPayload(*teamsGetInviteInfoTokenFlag)
-			case "remove-member":
-				endpoint = c.RemoveMember()
-				data, err = teamsc.BuildRemoveMemberPayload(*teamsRemoveMemberOrganizationIDFlag, *teamsRemoveMemberUserIDFlag, *teamsRemoveMemberSessionTokenFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2255,6 +2318,9 @@ func ParseEndpoint(
 			case "get-hooks-summary":
 				endpoint = c.GetHooksSummary()
 				data, err = telemetryc.BuildGetHooksSummaryPayload(*telemetryGetHooksSummaryBodyFlag, *telemetryGetHooksSummaryApikeyTokenFlag, *telemetryGetHooksSummarySessionTokenFlag, *telemetryGetHooksSummaryProjectSlugInputFlag)
+			case "list-hooks-traces":
+				endpoint = c.ListHooksTraces()
+				data, err = telemetryc.BuildListHooksTracesPayload(*telemetryListHooksTracesBodyFlag, *telemetryListHooksTracesApikeyTokenFlag, *telemetryListHooksTracesSessionTokenFlag, *telemetryListHooksTracesProjectSlugInputFlag)
 			}
 		case "templates":
 			c := templatesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2387,42 +2453,66 @@ func aboutOpenapiUsage() {
 
 // accessUsage displays the usage of the access command and its subcommands.
 func accessUsage() {
-	fmt.Fprintln(os.Stderr, `Manage access permissions for users and roles across your organization.`)
+	fmt.Fprintln(os.Stderr, `Manage roles and team member access control.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-grants: List all permissions in your organization, optionally filtered to a specific user or role.`)
-	fmt.Fprintln(os.Stderr, `    upsert-grants: Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.`)
-	fmt.Fprintln(os.Stderr, `    remove-grants: Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).`)
-	fmt.Fprintln(os.Stderr, `    remove-principal-grants: Revoke all permissions for a specific user or role.`)
+	fmt.Fprintln(os.Stderr, `    list-roles: List all roles for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    get-role: Get a role by ID.`)
+	fmt.Fprintln(os.Stderr, `    create-role: Create a new custom role.`)
+	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
+	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
+	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
+	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
+	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
 }
-func accessListGrantsUsage() {
+func accessListRolesUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-roles", os.Args[0])
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all permissions in your organization, optionally filtered to a specific user or role.`)
+	fmt.Fprintln(os.Stderr, `List all roles for the current organization.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --principal-urn \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
-func accessUpsertGrantsUsage() {
+func accessGetRoleUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access upsert-grants", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] access get-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a role by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-role --id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessCreateRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access create-role", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -2430,7 +2520,7 @@ func accessUpsertGrantsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Grant permissions to one or more users or roles. Safe to call multiple times — if a permission already exists it is left unchanged.`)
+	fmt.Fprintln(os.Stderr, `Create a new custom role.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -2439,12 +2529,12 @@ func accessUpsertGrantsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access upsert-grants --body '{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
-func accessRemoveGrantsUsage() {
+func accessUpdateRoleUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access remove-grants", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-role", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -2452,7 +2542,7 @@ func accessRemoveGrantsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke specific permissions from users or roles. Each entry must exactly match an existing grant (who, what action, which resource).`)
+	fmt.Fprintln(os.Stderr, `Update an existing custom role.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -2461,12 +2551,74 @@ func accessRemoveGrantsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-grants --body '{\n      \"grants\": [\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         },\n         {\n            \"principal_urn\": \"abc123\",\n            \"resource\": \"aaa\",\n            \"scope\": \"aaa\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
-func accessRemovePrincipalGrantsUsage() {
+func accessDeleteRoleUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access remove-principal-grants", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] access delete-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a custom role (system roles cannot be deleted).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-role --id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListScopesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-scopes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all available scopes and their resource types.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-scopes --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListMembersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-members", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all team members with their role assignments.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-members --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessUpdateMemberRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-member-role", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -2474,7 +2626,7 @@ func accessRemovePrincipalGrantsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke all permissions for a specific user or role.`)
+	fmt.Fprintln(os.Stderr, `Change a team member's role assignment.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -2483,7 +2635,7 @@ func accessRemovePrincipalGrantsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access remove-principal-grants --body '{\n      \"principal_urn\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-role --body '{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // agentworkflowsUsage displays the usage of the agentworkflows command and its
@@ -2983,7 +3135,6 @@ func authLoginUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth login", os.Args[0])
 	fmt.Fprint(os.Stderr, " -redirect STRING")
-	fmt.Fprint(os.Stderr, " -invite-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -2992,11 +3143,10 @@ func authLoginUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
-	fmt.Fprintln(os.Stderr, `    -invite-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --invite-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\"")
 }
 
 func authSwitchScopesUsage() {
@@ -4056,10 +4206,11 @@ func hooksServerNamesDeleteUsage() {
 
 // hooksUsage displays the usage of the hooks command and its subcommands.
 func hooksUsage() {
-	fmt.Fprintln(os.Stderr, `Receives Claude Code hook events for tool usage observability.`)
+	fmt.Fprintln(os.Stderr, `Receives hook events from coding assistants for tool usage observability.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] hooks COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    claude: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
+	fmt.Fprintln(os.Stderr, `    cursor: Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -4080,7 +4231,29 @@ func hooksClaudeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }'")
+}
+
+func hooksCursorUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks cursor", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks cursor --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"is_interrupt\": false,\n      \"model\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksLogsUsage() {
@@ -4374,6 +4547,136 @@ func mcpMetadataExportMcpMetadataUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+// organizationsUsage displays the usage of the organizations command and its
+// subcommands.
+func organizationsUsage() {
+	fmt.Fprintln(os.Stderr, `Organization membership, invitations, and directory.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organizations COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation for the active organization.`)
+	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
+	fmt.Fprintln(os.Stderr, `    list-invites: List pending WorkOS invitations for the active organization.`)
+	fmt.Fprintln(os.Stderr, `    get-invite-by-token: Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
+	fmt.Fprintln(os.Stderr, `    list-users: List users in the active organization from Gram organization_user_relationships.`)
+	fmt.Fprintln(os.Stderr, `    remove-user: Remove a user from the active organization in Gram and delete their WorkOS organization membership.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s organizations COMMAND --help\n", os.Args[0])
+}
+func organizationsSendInviteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations send-invite", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Send a WorkOS invitation for the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations send-invite --body '{\n      \"email\": \"abc123\",\n      \"role_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func organizationsRevokeInviteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations revoke-invite", os.Args[0])
+	fmt.Fprint(os.Stderr, " -invitation-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a pending WorkOS invitation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -invitation-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations revoke-invite --invitation-id \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsListInvitesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations list-invites", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List pending WorkOS invitations for the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-invites --session-token \"abc123\"")
+}
+
+func organizationsGetInviteByTokenUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations get-invite-by-token", os.Args[0])
+	fmt.Fprint(os.Stderr, " -token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-invite-by-token --token \"abc123\"")
+}
+
+func organizationsListUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations list-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List users in the active organization from Gram organization_user_relationships.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-users --session-token \"abc123\"")
+}
+
+func organizationsRemoveUserUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations remove-user", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a user from the active organization in Gram and delete their WorkOS organization membership.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations remove-user --user-id \"abc123\" --session-token \"abc123\"")
+}
+
 // packagesUsage displays the usage of the packages command and its subcommands.
 func packagesUsage() {
 	fmt.Fprintln(os.Stderr, `Manages packages in Gram.`)
@@ -4567,6 +4870,7 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-allowed-origins: List allowed origins for a project.`)
 	fmt.Fprintln(os.Stderr, `    upsert-allowed-origin: Upsert an allowed origin for a project.`)
 	fmt.Fprintln(os.Stderr, `    delete-project: Delete a project by its ID`)
+	fmt.Fprintln(os.Stderr, `    set-organization-whitelist: Set organization whitelist status (admin only - requires speakeasy-team API key)`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s projects COMMAND --help\n", os.Args[0])
@@ -4727,6 +5031,26 @@ func projectsDeleteProjectUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects delete-project --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func projectsSetOrganizationWhitelistUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] projects set-organization-whitelist", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set organization whitelist status (admin only - requires speakeasy-team API key)`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects set-organization-whitelist --body '{\n      \"organization_id\": \"abc123\",\n      \"whitelisted\": false\n   }' --apikey-token \"abc123\"")
 }
 
 // resourcesUsage displays the usage of the resources command and its
@@ -4911,162 +5235,6 @@ func slackDeleteSlackAppUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack delete-slack-app --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-// teamsUsage displays the usage of the teams command and its subcommands.
-func teamsUsage() {
-	fmt.Fprintln(os.Stderr, `Manages team members and invites for organizations in Gram.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] teams COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-members: List all members of an organization.`)
-	fmt.Fprintln(os.Stderr, `    invite-member: Invite a new member to the organization.`)
-	fmt.Fprintln(os.Stderr, `    list-invites: List pending invites for an organization.`)
-	fmt.Fprintln(os.Stderr, `    cancel-invite: Cancel a pending invite.`)
-	fmt.Fprintln(os.Stderr, `    resend-invite: Resend an invite email.`)
-	fmt.Fprintln(os.Stderr, `    get-invite-info: Get information about a team invite by its token. Used to display invite details before accepting.`)
-	fmt.Fprintln(os.Stderr, `    remove-member: Remove a member from the organization.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s teams COMMAND --help\n", os.Args[0])
-}
-func teamsListMembersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] teams list-members", os.Args[0])
-	fmt.Fprint(os.Stderr, " -organization-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all members of an organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams list-members --organization-id \"abc123\" --session-token \"abc123\"")
-}
-
-func teamsInviteMemberUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] teams invite-member", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Invite a new member to the organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams invite-member --body '{\n      \"email\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func teamsListInvitesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] teams list-invites", os.Args[0])
-	fmt.Fprint(os.Stderr, " -organization-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List pending invites for an organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams list-invites --organization-id \"abc123\" --session-token \"abc123\"")
-}
-
-func teamsCancelInviteUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] teams cancel-invite", os.Args[0])
-	fmt.Fprint(os.Stderr, " -invite-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Cancel a pending invite.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -invite-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams cancel-invite --invite-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
-}
-
-func teamsResendInviteUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] teams resend-invite", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Resend an invite email.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams resend-invite --body '{\n      \"invite_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
-}
-
-func teamsGetInviteInfoUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] teams get-invite-info", os.Args[0])
-	fmt.Fprint(os.Stderr, " -token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get information about a team invite by its token. Used to display invite details before accepting.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams get-invite-info --token \"abc123\"")
-}
-
-func teamsRemoveMemberUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] teams remove-member", os.Args[0])
-	fmt.Fprint(os.Stderr, " -organization-id STRING")
-	fmt.Fprint(os.Stderr, " -user-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a member from the organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams remove-member --organization-id \"abc123\" --user-id \"abc123\" --session-token \"abc123\"")
-}
-
 // telemetryUsage displays the usage of the telemetry command and its
 // subcommands.
 func telemetryUsage() {
@@ -5084,6 +5252,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    list-filter-options: List available filter options (API keys or users) for the observability overview`)
 	fmt.Fprintln(os.Stderr, `    list-attribute-keys: List distinct attribute keys available for filtering`)
 	fmt.Fprintln(os.Stderr, `    get-hooks-summary: Get aggregated hooks metrics grouped by server`)
+	fmt.Fprintln(os.Stderr, `    list-hooks-traces: List hook traces aggregated by trace_id with user information`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s telemetry COMMAND --help\n", os.Args[0])
@@ -5352,6 +5521,30 @@ func telemetryGetHooksSummaryUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-hooks-summary --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryListHooksTracesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry list-hooks-traces", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List hook traces aggregated by trace_id with user information`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-hooks-traces --body '{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"types_to_include\": [\n         \"mcp\",\n         \"skill\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // templatesUsage displays the usage of the templates command and its

@@ -138,6 +138,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID:  apiKey.OrganizationID,
 		HasActiveSubscription: org.HasActiveSubscription,
+		Whitelisted:           org.Whitelisted,
 		UserID:                apiKey.CreatedByUserID,
 		Email:                 &apiKey.Email,
 		APIKeyID:              apiKey.ID.String(),

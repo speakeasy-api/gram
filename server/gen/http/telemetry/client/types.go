@@ -154,6 +154,26 @@ type GetHooksSummaryRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 }
 
+// ListHooksTracesRequestBody is the type of the "telemetry" service
+// "listHooksTraces" endpoint HTTP request body.
+type ListHooksTracesRequestBody struct {
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To string `form:"to" json:"to" xml:"to"`
+	// Filter conditions for the search query
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Hook types to include (mcp, local, skill). If empty or not provided,
+	// includes all types.
+	TypesToInclude []string `form:"types_to_include,omitempty" json:"types_to_include,omitempty" xml:"types_to_include,omitempty"`
+	// Cursor for pagination (trace_id)
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort string `form:"sort" json:"sort" xml:"sort"`
+	// Number of items to return (1-1000)
+	Limit int `form:"limit" json:"limit" xml:"limit"`
+}
+
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
 // endpoint HTTP response body.
 type SearchLogsResponseBody struct {
@@ -249,10 +269,21 @@ type GetHooksSummaryResponseBody struct {
 	Servers []*HooksServerSummaryResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Aggregated metrics grouped by user
 	Users []*HooksUserSummaryResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+	// Aggregated metrics grouped by skill
+	Skills []*SkillSummaryResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
 	// Total number of hook events
 	TotalEvents *int64 `form:"total_events,omitempty" json:"total_events,omitempty" xml:"total_events,omitempty"`
 	// Total number of unique sessions
 	TotalSessions *int64 `form:"total_sessions,omitempty" json:"total_sessions,omitempty" xml:"total_sessions,omitempty"`
+}
+
+// ListHooksTracesResponseBody is the type of the "telemetry" service
+// "listHooksTraces" endpoint HTTP response body.
+type ListHooksTracesResponseBody struct {
+	// List of hook trace summaries
+	Traces []*HookTraceSummaryResponseBody `form:"traces,omitempty" json:"traces,omitempty" xml:"traces,omitempty"`
+	// Cursor for next page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -2295,6 +2326,190 @@ type GetHooksSummaryGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListHooksTracesUnauthorizedResponseBody is the type of the "telemetry"
+// service "listHooksTraces" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListHooksTracesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesForbiddenResponseBody is the type of the "telemetry" service
+// "listHooksTraces" endpoint HTTP response body for the "forbidden" error.
+type ListHooksTracesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesBadRequestResponseBody is the type of the "telemetry" service
+// "listHooksTraces" endpoint HTTP response body for the "bad_request" error.
+type ListHooksTracesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesNotFoundResponseBody is the type of the "telemetry" service
+// "listHooksTraces" endpoint HTTP response body for the "not_found" error.
+type ListHooksTracesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesConflictResponseBody is the type of the "telemetry" service
+// "listHooksTraces" endpoint HTTP response body for the "conflict" error.
+type ListHooksTracesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesUnsupportedMediaResponseBody is the type of the "telemetry"
+// service "listHooksTraces" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListHooksTracesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesInvalidResponseBody is the type of the "telemetry" service
+// "listHooksTraces" endpoint HTTP response body for the "invalid" error.
+type ListHooksTracesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesInvariantViolationResponseBody is the type of the "telemetry"
+// service "listHooksTraces" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListHooksTracesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesUnexpectedResponseBody is the type of the "telemetry" service
+// "listHooksTraces" endpoint HTTP response body for the "unexpected" error.
+type ListHooksTracesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListHooksTracesGatewayErrorResponseBody is the type of the "telemetry"
+// service "listHooksTraces" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListHooksTracesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // LogFilterRequestBody is used to define fields on request body types.
 type LogFilterRequestBody struct {
 	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
@@ -2677,6 +2892,42 @@ type HooksUserSummaryResponseBody struct {
 	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
 }
 
+// SkillSummaryResponseBody is used to define fields on response body types.
+type SkillSummaryResponseBody struct {
+	// Skill name (extracted from tool name)
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// Total number of times this skill was used
+	UseCount *int64 `form:"use_count,omitempty" json:"use_count,omitempty" xml:"use_count,omitempty"`
+	// Number of unique users who used this skill
+	UniqueUsers *int64 `form:"unique_users,omitempty" json:"unique_users,omitempty" xml:"unique_users,omitempty"`
+}
+
+// HookTraceSummaryResponseBody is used to define fields on response body types.
+type HookTraceSummaryResponseBody struct {
+	// Trace ID (32 hex characters)
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
+	// Total number of logs in this trace
+	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
+	// Hook execution status
+	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
+	// Gram URN associated with this hook trace
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+	// Tool name (from materialized column)
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Tool call source (from materialized column)
+	ToolSource *string `form:"tool_source,omitempty" json:"tool_source,omitempty" xml:"tool_source,omitempty"`
+	// Event source (from materialized column)
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
+	// User email (from attributes.user.email)
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Hook source (from attributes.gram.hook.source)
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Skill name (from materialized column, only for Skill tool)
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+}
+
 // NewSearchLogsRequestBody builds the HTTP request body from the payload of
 // the "searchLogs" endpoint of the "telemetry" service.
 func NewSearchLogsRequestBody(p *telemetry.SearchLogsPayload) *SearchLogsRequestBody {
@@ -2883,6 +3134,47 @@ func NewGetHooksSummaryRequestBody(p *telemetry.GetHooksSummaryPayload) *GetHook
 	body := &GetHooksSummaryRequestBody{
 		From: p.From,
 		To:   p.To,
+	}
+	return body
+}
+
+// NewListHooksTracesRequestBody builds the HTTP request body from the payload
+// of the "listHooksTraces" endpoint of the "telemetry" service.
+func NewListHooksTracesRequestBody(p *telemetry.ListHooksTracesPayload) *ListHooksTracesRequestBody {
+	body := &ListHooksTracesRequestBody{
+		From:   p.From,
+		To:     p.To,
+		Cursor: p.Cursor,
+		Sort:   p.Sort,
+		Limit:  p.Limit,
+	}
+	if p.Filters != nil {
+		body.Filters = make([]*LogFilterRequestBody, len(p.Filters))
+		for i, val := range p.Filters {
+			if val == nil {
+				body.Filters[i] = nil
+				continue
+			}
+			body.Filters[i] = marshalTelemetryLogFilterToLogFilterRequestBody(val)
+		}
+	}
+	if p.TypesToInclude != nil {
+		body.TypesToInclude = make([]string, len(p.TypesToInclude))
+		for i, val := range p.TypesToInclude {
+			body.TypesToInclude[i] = val
+		}
+	}
+	{
+		var zero string
+		if body.Sort == zero {
+			body.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if body.Limit == zero {
+			body.Limit = 50
+		}
 	}
 	return body
 }
@@ -4574,6 +4866,14 @@ func NewGetHooksSummaryResultOK(body *GetHooksSummaryResponseBody) *telemetry.Ge
 		}
 		v.Users[i] = unmarshalHooksUserSummaryResponseBodyToTelemetryHooksUserSummary(val)
 	}
+	v.Skills = make([]*telemetry.SkillSummary, len(body.Skills))
+	for i, val := range body.Skills {
+		if val == nil {
+			v.Skills[i] = nil
+			continue
+		}
+		v.Skills[i] = unmarshalSkillSummaryResponseBodyToTelemetrySkillSummary(val)
+	}
 
 	return v
 }
@@ -4716,6 +5016,174 @@ func NewGetHooksSummaryUnexpected(body *GetHooksSummaryUnexpectedResponseBody) *
 // NewGetHooksSummaryGatewayError builds a telemetry service getHooksSummary
 // endpoint gateway_error error.
 func NewGetHooksSummaryGatewayError(body *GetHooksSummaryGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesResultOK builds a "telemetry" service "listHooksTraces"
+// endpoint result from a HTTP "OK" response.
+func NewListHooksTracesResultOK(body *ListHooksTracesResponseBody) *telemetry.ListHooksTracesResult {
+	v := &telemetry.ListHooksTracesResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Traces = make([]*telemetry.HookTraceSummary, len(body.Traces))
+	for i, val := range body.Traces {
+		if val == nil {
+			v.Traces[i] = nil
+			continue
+		}
+		v.Traces[i] = unmarshalHookTraceSummaryResponseBodyToTelemetryHookTraceSummary(val)
+	}
+
+	return v
+}
+
+// NewListHooksTracesUnauthorized builds a telemetry service listHooksTraces
+// endpoint unauthorized error.
+func NewListHooksTracesUnauthorized(body *ListHooksTracesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesForbidden builds a telemetry service listHooksTraces
+// endpoint forbidden error.
+func NewListHooksTracesForbidden(body *ListHooksTracesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesBadRequest builds a telemetry service listHooksTraces
+// endpoint bad_request error.
+func NewListHooksTracesBadRequest(body *ListHooksTracesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesNotFound builds a telemetry service listHooksTraces
+// endpoint not_found error.
+func NewListHooksTracesNotFound(body *ListHooksTracesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesConflict builds a telemetry service listHooksTraces
+// endpoint conflict error.
+func NewListHooksTracesConflict(body *ListHooksTracesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesUnsupportedMedia builds a telemetry service
+// listHooksTraces endpoint unsupported_media error.
+func NewListHooksTracesUnsupportedMedia(body *ListHooksTracesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesInvalid builds a telemetry service listHooksTraces
+// endpoint invalid error.
+func NewListHooksTracesInvalid(body *ListHooksTracesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesInvariantViolation builds a telemetry service
+// listHooksTraces endpoint invariant_violation error.
+func NewListHooksTracesInvariantViolation(body *ListHooksTracesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesUnexpected builds a telemetry service listHooksTraces
+// endpoint unexpected error.
+func NewListHooksTracesUnexpected(body *ListHooksTracesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListHooksTracesGatewayError builds a telemetry service listHooksTraces
+// endpoint gateway_error error.
+func NewListHooksTracesGatewayError(body *ListHooksTracesGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4918,6 +5386,9 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	if body.Users == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
 	}
+	if body.Skills == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skills", "body"))
+	}
 	if body.TotalEvents == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_events", "body"))
 	}
@@ -4934,6 +5405,29 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	for _, e := range body.Users {
 		if e != nil {
 			if err2 := ValidateHooksUserSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Skills {
+		if e != nil {
+			if err2 := ValidateSkillSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListHooksTracesResponseBody runs the validations defined on
+// ListHooksTracesResponseBody
+func ValidateListHooksTracesResponseBody(body *ListHooksTracesResponseBody) (err error) {
+	if body.Traces == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("traces", "body"))
+	}
+	for _, e := range body.Traces {
+		if e != nil {
+			if err2 := ValidateHookTraceSummaryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -7586,6 +8080,246 @@ func ValidateGetHooksSummaryGatewayErrorResponseBody(body *GetHooksSummaryGatewa
 	return
 }
 
+// ValidateListHooksTracesUnauthorizedResponseBody runs the validations defined
+// on listHooksTraces_unauthorized_response_body
+func ValidateListHooksTracesUnauthorizedResponseBody(body *ListHooksTracesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesForbiddenResponseBody runs the validations defined on
+// listHooksTraces_forbidden_response_body
+func ValidateListHooksTracesForbiddenResponseBody(body *ListHooksTracesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesBadRequestResponseBody runs the validations defined
+// on listHooksTraces_bad_request_response_body
+func ValidateListHooksTracesBadRequestResponseBody(body *ListHooksTracesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesNotFoundResponseBody runs the validations defined on
+// listHooksTraces_not_found_response_body
+func ValidateListHooksTracesNotFoundResponseBody(body *ListHooksTracesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesConflictResponseBody runs the validations defined on
+// listHooksTraces_conflict_response_body
+func ValidateListHooksTracesConflictResponseBody(body *ListHooksTracesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesUnsupportedMediaResponseBody runs the validations
+// defined on listHooksTraces_unsupported_media_response_body
+func ValidateListHooksTracesUnsupportedMediaResponseBody(body *ListHooksTracesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesInvalidResponseBody runs the validations defined on
+// listHooksTraces_invalid_response_body
+func ValidateListHooksTracesInvalidResponseBody(body *ListHooksTracesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesInvariantViolationResponseBody runs the validations
+// defined on listHooksTraces_invariant_violation_response_body
+func ValidateListHooksTracesInvariantViolationResponseBody(body *ListHooksTracesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesUnexpectedResponseBody runs the validations defined
+// on listHooksTraces_unexpected_response_body
+func ValidateListHooksTracesUnexpectedResponseBody(body *ListHooksTracesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListHooksTracesGatewayErrorResponseBody runs the validations defined
+// on listHooksTraces_gateway_error_response_body
+func ValidateListHooksTracesGatewayErrorResponseBody(body *ListHooksTracesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateLogFilterRequestBody runs the validations defined on
 // LogFilterRequestBody
 func ValidateLogFilterRequestBody(body *LogFilterRequestBody) (err error) {
@@ -8112,6 +8846,47 @@ func ValidateHooksUserSummaryResponseBody(body *HooksUserSummaryResponseBody) (e
 	}
 	if body.FailureRate == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failure_rate", "body"))
+	}
+	return
+}
+
+// ValidateSkillSummaryResponseBody runs the validations defined on
+// SkillSummaryResponseBody
+func ValidateSkillSummaryResponseBody(body *SkillSummaryResponseBody) (err error) {
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.UseCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_count", "body"))
+	}
+	if body.UniqueUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unique_users", "body"))
+	}
+	return
+}
+
+// ValidateHookTraceSummaryResponseBody runs the validations defined on
+// HookTraceSummaryResponseBody
+func ValidateHookTraceSummaryResponseBody(body *HookTraceSummaryResponseBody) (err error) {
+	if body.TraceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trace_id", "body"))
+	}
+	if body.StartTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("start_time_unix_nano", "body"))
+	}
+	if body.LogCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("log_count", "body"))
+	}
+	if body.GramUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gram_urn", "body"))
+	}
+	if body.TraceID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
+	}
+	if body.HookStatus != nil {
+		if !(*body.HookStatus == "success" || *body.HookStatus == "failure" || *body.HookStatus == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_status", *body.HookStatus, []any{"success", "failure", "pending"}))
+		}
 	}
 	return
 }

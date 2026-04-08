@@ -304,7 +304,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		Environment:            "test",
 	}
 
-	svc := auth.NewService(logger, conn, sessionManager, authConfigs)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs)
 
 	return ctx, &testInstance{
 		service:        svc,

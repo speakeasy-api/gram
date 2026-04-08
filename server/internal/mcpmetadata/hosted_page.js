@@ -62,15 +62,40 @@ function openInstallTargetModal(e) {
   openModal(modalContent);
 }
 
-function toggleToolVisibility() {
-  const hiddenTools = document.querySelectorAll(".tool-name.hidden");
-  if (hiddenTools.length > 0) {
-    hiddenTools.forEach((el) => el.classList.remove("hidden"));
-  } else {
-    document
-      .querySelectorAll(".tool-name:nth-child(n + 11)")
-      .forEach((el) => el.classList.add("hidden"));
+function toggleToolDetail(row) {
+  const detail = row.nextElementSibling;
+  if (detail && detail.classList.contains("tool-detail")) {
+    row.classList.toggle("expanded");
+    detail.classList.toggle("visible");
   }
+}
+
+function filterTools(query) {
+  const table = document.querySelector(".tools-table");
+  if (!table) return;
+  const rows = table.querySelectorAll(".tool-row");
+  const q = query.toLowerCase();
+  let visibleCount = 0;
+  for (const row of rows) {
+    const name = row.getAttribute("data-tool-name") || "";
+    const desc = row.querySelector(".tool-desc");
+    const descText = desc ? desc.textContent : "";
+    const match =
+      name.toLowerCase().includes(q) || descText.toLowerCase().includes(q);
+    row.classList.toggle("filtered-out", !match);
+    const detail = row.nextElementSibling;
+    if (detail && detail.classList.contains("tool-detail")) {
+      detail.classList.toggle("filtered-out", !match);
+      if (!match) {
+        row.classList.remove("expanded");
+        detail.classList.remove("visible");
+      }
+    }
+    if (match) visibleCount++;
+  }
+  const noResults = table.querySelector(".tools-no-results");
+  if (noResults)
+    noResults.style.display = visibleCount === 0 ? "block" : "none";
 }
 
 function copyContainerSnippet(e) {
@@ -146,6 +171,15 @@ function initializeHandlers() {
   document.querySelectorAll(".code-container").forEach((el) => {
     el.addEventListener("click", copyContainerSnippet);
   });
+
+  document.querySelectorAll(".tool-row").forEach((el) => {
+    el.addEventListener("click", () => toggleToolDetail(el));
+  });
+
+  const toolsSearch = document.querySelector(".tools-search");
+  if (toolsSearch) {
+    toolsSearch.addEventListener("input", (e) => filterTools(e.target.value));
+  }
 
   registerCenterOffsetUpdaters(document.querySelector(".gram-brand-badge"));
 

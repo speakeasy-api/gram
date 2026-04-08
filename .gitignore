@@ -26,6 +26,7 @@ scratch/
 /local/cache
 /local/ssl
 /local/keys
+/local/functions
 .speakeasy/temp
 mprocs.log
 .madprocs.port

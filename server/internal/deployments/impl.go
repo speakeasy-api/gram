@@ -71,6 +71,7 @@ func NewService(
 	posthog *posthog.Posthog,
 	siteURL *url.URL,
 	mcpRegistryClient *externalmcp.RegistryClient,
+	accessLoader auth.AccessLoader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
@@ -81,7 +82,7 @@ func NewService(
 		db:             db,
 		repo:           repo.New(db),
 		externalmcp:    externalmcpRepo.New(db),
-		auth:           auth.New(logger, db, sessions),
+		auth:           auth.New(logger, db, sessions, accessLoader),
 		assets:         assetsRepo.New(db),
 		packages:       packagesRepo.New(db),
 		assetStorage:   assetStorage,

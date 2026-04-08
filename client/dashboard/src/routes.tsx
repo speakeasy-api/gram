@@ -5,11 +5,12 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import Billing from "./pages/billing/Billing";
-import CLIs from "./pages/CLIs";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
+import ChatSessions from "./pages/chatLogs/ChatLogs";
+import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import Elements from "./pages/elements/Elements";
@@ -18,30 +19,30 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
+import Hooks from "./pages/hooks/Hooks";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import ChatSessions from "./pages/chatLogs/ChatLogs";
 import Logs from "./pages/logs/Logs";
-import Hooks from "./pages/hooks/Hooks";
-import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
-import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
+import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
+import OrgAdminSettings from "./pages/org/OrgAdminSettings";
+import OrgApiKeys from "./pages/org/OrgApiKeys";
+import OrgAuditLogs from "./pages/org/OrgAuditLogs";
+import OrgDomains from "./pages/org/OrgDomains";
+import OrgHome from "./pages/org/OrgHome";
+import OrgLogs from "./pages/org/OrgLogs";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
-import OrgAuditLogs from "./pages/org/OrgAuditLogs";
-import OrgApiKeys from "./pages/org/OrgApiKeys";
-import OrgDomains from "./pages/org/OrgDomains";
-import OrgLogs from "./pages/org/OrgLogs";
-import OrgHome from "./pages/org/OrgHome";
-import OrgAdminSettings from "./pages/org/OrgAdminSettings";
+import Access from "./pages/access/Access";
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
@@ -247,21 +248,21 @@ const ROUTE_STRUCTURE = {
     },
   },
   slackApps: {
-    title: "Slack",
+    title: "Assistants",
     url: "slack",
-    icon: "slack",
+    icon: "bot",
     component: SlackAppsRoot,
     indexComponent: SlackAppsIndex,
     subPages: {
       detail: {
-        title: "Slack App",
+        title: "Assistant",
         url: ":slackAppId",
         component: SlackAppDetailPage,
       },
     },
   },
   clis: {
-    title: "CLIs",
+    title: "Skills",
     url: "clis",
     icon: "terminal",
     component: CLIs,
@@ -271,7 +272,7 @@ const ROUTE_STRUCTURE = {
     url: "mcp",
     icon: "network",
     component: MCPRoot,
-    indexComponent: MCPOverview,
+    indexComponent: MCPPage,
     subPages: {
       builtIn: {
         title: "Built-in MCP",
@@ -300,8 +301,8 @@ const ROUTE_STRUCTURE = {
     },
   },
   chatSessions: {
-    title: "Chat Sessions",
-    url: "chat-sessions",
+    title: "Agent Sessions",
+    url: "agent-sessions",
     icon: "messages-square",
     component: ChatSessions,
   },
@@ -573,6 +574,24 @@ const ORG_ROUTE_STRUCTURE = {
     url: "audit-logs",
     icon: "history",
     component: OrgAuditLogs,
+  },
+  access: {
+    title: "Roles & Permissions",
+    url: "access",
+    icon: "shield",
+    component: Access,
+    subPages: {
+      roles: {
+        title: "Roles & Permissions",
+        url: "roles",
+        component: Access,
+      },
+      members: {
+        title: "Roles & Permissions",
+        url: "members",
+        component: Access,
+      },
+    },
   },
   adminSettings: {
     title: "Super Admin",

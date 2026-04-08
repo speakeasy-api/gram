@@ -28,7 +28,7 @@ func NewFSBlobStore(logger *slog.Logger, root *os.Root) *FSBlobStore {
 	return &FSBlobStore{
 		mut:    sync.Mutex{},
 		Root:   root,
-		Logger: logger.With(attr.SlogComponent("blob-store-fs")),
+		Logger: logger.With(attr.SlogComponent("blob_store_fs")),
 	}
 }
 

@@ -3,6 +3,7 @@
  */
 
 import { hooksHooksNumberClaude } from "../funcs/hooksHooksNumberClaude.js";
+import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -23,6 +24,25 @@ export class Hooks extends ClientSDK {
     return unwrapAsync(hooksHooksNumberClaude(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * cursor hooks
+   *
+   * @remarks
+   * Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.
+   */
+  async hooksNumberCursor(
+    request: operations.HooksNumberCursorRequest,
+    security?: operations.HooksNumberCursorSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CursorHookResult> {
+    return unwrapAsync(hooksHooksNumberCursor(
+      this,
+      request,
+      security,
       options,
     ));
   }

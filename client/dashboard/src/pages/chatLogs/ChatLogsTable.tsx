@@ -1,14 +1,15 @@
-import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
-import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   resolutionBgColors,
   resolutionStrokeColors,
   resolutionStrokeMutedColors,
 } from "@/lib/resolution-colors";
+import { cn } from "@/lib/utils";
+import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
 import { Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 
 interface ChatLogsTableProps {
   chats: ChatOverviewWithResolutions[];
@@ -250,6 +251,7 @@ export function ChatLogsTable({
         const averageScore = getAverageScore(chat.resolutions);
         const isSelected = selectedChatId === chat.id;
         const hasResolutions = chat.resolutions.length > 0;
+        const source = chat.source;
 
         return (
           <button
@@ -310,10 +312,13 @@ export function ChatLogsTable({
                     <span className="truncate max-w-[120px]">
                       {chat.externalUserId || "anonymous"}
                     </span>
-                    {chat.externalUserId && (
-                      <CopyButton value={chat.externalUserId} label="User ID" />
-                    )}
                   </span>
+                  {source && (
+                    <span className="flex items-center gap-1.5">
+                      <HookSourceIcon source={source} className="size-4" />
+                      {source}
+                    </span>
+                  )}
                   <span className="flex items-center gap-1.5">
                     <Icon name="timer" className="size-4 opacity-60" />
                     {formatDuration(chat)}

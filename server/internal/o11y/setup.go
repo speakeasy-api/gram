@@ -37,6 +37,7 @@ type SetupOTelSDKOptions struct {
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDKOptions) (shutdown func(context.Context) error, err error) {
+	logger = logger.With(attr.SlogComponent("otel"))
 	var shutdownFuncs []func(context.Context) error
 
 	var metricExporter sdkmetric.Exporter

@@ -2,14 +2,29 @@
 
 //MISE description="Setup WorkOS AuthKit OIDC credentials for the mock IDP"
 //MISE hide=true
+//USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
 import { $, question } from "zx";
 
 const WORKOS_ISSUER = "https://convenient-daydream-57-development.authkit.app/";
 
 async function run() {
+  if (
+    process.env["OIDC_SKIPPED"] === "true" &&
+    process.env["usage_restart"] !== "true"
+  ) {
+    console.log(
+      "⏭️  WorkOS OIDC setup previously skipped. Mock IDP will run in mock mode. Run with `mise run zero:workos --restart` to restart the onboarding process.",
+    );
+    process.exit(0);
+  }
+
   const issuer = process.env["OIDC_ISSUER"];
-  if (typeof issuer === "string" && issuer !== "unset") {
+  if (
+    typeof issuer === "string" &&
+    issuer !== "unset" &&
+    process.env["usage_restart"] !== "true"
+  ) {
     console.log("✅ WorkOS OIDC credentials are already configured.");
     process.exit(0);
   }
@@ -25,6 +40,7 @@ async function run() {
     "💬 Paste your WorkOS Client ID or press enter to skip: ",
   );
   if (!clientId) {
+    await $`mise set --file mise.local.toml OIDC_SKIPPED=true`;
     console.log("⏭️  Skipping WorkOS setup. Mock IDP will run in mock mode.");
     process.exit(0);
   }
@@ -44,6 +60,7 @@ async function run() {
   }
 
   await $`touch mise.local.toml`;
+  await $`mise unset --file mise.local.toml OIDC_SKIPPED`;
   await $`mise set --file mise.local.toml OIDC_ISSUER=${WORKOS_ISSUER}`;
   await $`mise set --file mise.local.toml OIDC_CLIENT_ID=${clientId}`;
   await $`mise set --file mise.local.toml OIDC_CLIENT_SECRET=${clientSecret}`;

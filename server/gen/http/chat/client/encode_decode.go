@@ -1481,6 +1481,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		NumMessages:    *v.NumMessages,
+		Source:         v.Source,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
@@ -1517,6 +1518,7 @@ func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResol
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		NumMessages:    *v.NumMessages,
+		Source:         v.Source,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}

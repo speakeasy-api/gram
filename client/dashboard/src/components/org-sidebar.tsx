@@ -6,13 +6,16 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
 import * as React from "react";
 
 export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const orgRoutes = useOrgRoutes();
   const isAdmin = useIsAdmin();
+  const telemetry = useTelemetry();
+  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -34,6 +37,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 orgRoutes.domains,
                 orgRoutes.logs,
                 orgRoutes.auditLogs,
+                ...(isRbacEnabled ? [orgRoutes.access] : []),
                 ...(isAdmin ? [orgRoutes.adminSettings] : []),
               ]}
             />

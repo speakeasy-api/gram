@@ -32,8 +32,10 @@ func TestDeriveOrgs_WorkOSClaims(t *testing.T) {
 	require.Len(t, orgs, 1)
 	assert.Equal(t, "My Company", orgs[0].Name)
 	assert.Equal(t, "my-company", orgs[0].Slug)
-	assert.Equal(t, deterministicUUID("org:org_123"), orgs[0].ID)
+	assert.Equal(t, "org_123", orgs[0].ID, "Gram org ID should be the real WorkOS org ID")
 	assert.Equal(t, "free", orgs[0].AccountType)
+	require.NotNil(t, orgs[0].SSOConnectionID)
+	assert.Equal(t, "org_123", *orgs[0].SSOConnectionID)
 }
 
 func TestDeriveOrgs_GroupsClaims(t *testing.T) {

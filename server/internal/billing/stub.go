@@ -32,7 +32,7 @@ func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *St
 
 	return &StubClient{
 		mut:    sync.Mutex{},
-		logger: logger.With(attr.SlogComponent("billing-stub")),
+		logger: logger.With(attr.SlogComponent("billing_stub")),
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
 	}
 }

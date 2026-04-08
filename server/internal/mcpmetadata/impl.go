@@ -22,7 +22,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -40,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -60,6 +60,8 @@ var hostedPageTmplData string
 
 //go:embed hosted_page.js
 var hostedPageScriptData []byte
+
+var errToolsetNotFound = errors.New("toolset not found")
 
 type securityMode string
 
@@ -86,13 +88,44 @@ type IDEInstallLinkConfig struct {
 	Type *string `json:"type,omitempty"`
 }
 
+type toolInfo struct {
+	Name            string
+	Description     string
+	Title           string
+	ReadOnlyHint    bool
+	DestructiveHint bool
+	IdempotentHint  bool
+	OpenWorldHint   bool
+}
+
+func applyAnnotations(info *toolInfo, a *types.ToolAnnotations) {
+	if a == nil {
+		return
+	}
+	if a.Title != nil {
+		info.Title = *a.Title
+	}
+	if a.ReadOnlyHint != nil {
+		info.ReadOnlyHint = *a.ReadOnlyHint
+	}
+	if a.DestructiveHint != nil {
+		info.DestructiveHint = *a.DestructiveHint
+	}
+	if a.IdempotentHint != nil {
+		info.IdempotentHint = *a.IdempotentHint
+	}
+	if a.OpenWorldHint != nil {
+		info.OpenWorldHint = *a.OpenWorldHint
+	}
+}
+
 type jsonSnippetData struct {
 	MCPName        string
 	MCPSlug        string
 	MCPDescription string
 	SecurityInputs []securityInput
 	MCPURL         string
-	ToolNames      []string
+	Tools          []toolInfo
 }
 
 type hostedPageData struct {
@@ -131,22 +164,22 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache) *Service {
-	logger = logger.With(attr.SlogComponent("mcp_install_page"))
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache, accessLoader auth.AccessLoader) *Service {
+	logger = logger.With(attr.SlogComponent("mcp_metadata"))
 
 	// Calculate content hash for install page script (for cache busting)
 	scriptHash := sha256.Sum256(hostedPageScriptData)
 	scriptHashStr := hex.EncodeToString(scriptHash[:])[:8]
 
 	return &Service{
-		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/mcpinstallpage"),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpmetadata"),
 		logger:       logger,
 		db:           db,
 		repo:         repo.New(db),
 		toolsetRepo:  toolsets_repo.New(db),
 		orgsRepo:     organizations_repo.New(db),
 		domainsRepo:  customdomains_repo.New(db),
-		auth:         auth.New(logger, db, sessions),
+		auth:         auth.New(logger, db, sessions, accessLoader),
 		serverURL:    serverURL,
 		siteURL:      siteURL,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
@@ -285,6 +318,19 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, logger)
 		}
+
+		envr := environments_repo.New(dbtx)
+		_, err = envr.GetEnvironmentByID(ctx, environments_repo.GetEnvironmentByIDParams{
+			ID:        parsedDefaultEnvironmentID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeBadRequest, err, "default environment not found in this project").Log(ctx, logger)
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "validate default environment ID").Log(ctx, logger)
+		}
+
 		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
 	}
 
@@ -376,9 +422,9 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
+		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
 	}
 
 	if !toolset.McpEnabled {
@@ -689,8 +735,11 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	authCtx, authOk := contextvalues.GetAuthContext(ctx)
 
 	toolset, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(err, errToolsetNotFound):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load mcp server").Log(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
 	}
 
 	// Load organization information
@@ -777,12 +826,22 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	securityMode := s.resolveSecurityMode(toolset)
 	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, variableProvidedBy)
 
-	toolNames := []string{}
+	tools := []toolInfo{}
 
 	for _, toolDesc := range toolsetDetails.Tools {
-		// Handle proxy tools (external MCP) separately - they show as a single proxy entry
+		// Handle proxy tools (external MCP) separately
 		if conv.IsProxyTool(toolDesc) {
-			toolNames = append(toolNames, toolDesc.ExternalMcpToolDefinition.Name)
+			info := toolInfo{
+				Name:            toolDesc.ExternalMcpToolDefinition.Name,
+				Description:     toolDesc.ExternalMcpToolDefinition.Description,
+				Title:           "",
+				ReadOnlyHint:    false,
+				DestructiveHint: false,
+				IdempotentHint:  false,
+				OpenWorldHint:   false,
+			}
+			applyAnnotations(&info, toolDesc.ExternalMcpToolDefinition.Annotations)
+			tools = append(tools, info)
 			continue
 		}
 
@@ -791,7 +850,17 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			s.logger.WarnContext(ctx, "failed to convert tool to base tool", attr.SlogError(err))
 			continue
 		}
-		toolNames = append(toolNames, baseTool.Name)
+		info := toolInfo{
+			Name:            baseTool.Name,
+			Description:     baseTool.Description,
+			Title:           "",
+			ReadOnlyHint:    false,
+			DestructiveHint: false,
+			IdempotentHint:  false,
+			OpenWorldHint:   false,
+		}
+		applyAnnotations(&info, baseTool.Annotations)
+		tools = append(tools, info)
 	}
 
 	MCPURL, err := s.resolveMCPURLFromContext(ctx, *toolset, s.serverURL.String())
@@ -805,7 +874,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		MCPDescription: toolset.Description.String,
 		MCPURL:         MCPURL,
 		SecurityInputs: securityInputs,
-		ToolNames:      toolNames,
+		Tools:          tools,
 	}
 
 	configSnippetTmpl, err := template.New("config_snippet").Funcs(templatefuncs.FuncMap()).Parse(configSnippetTmplData)
@@ -997,8 +1066,11 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
 
-	if toolsetErr != nil {
-		return nil, oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
+	switch {
+	case errors.Is(toolsetErr, pgx.ErrNoRows):
+		return nil, fmt.Errorf("%w: %w", errToolsetNotFound, toolsetErr)
+	case toolsetErr != nil:
+		return nil, fmt.Errorf("lookup toolset: %w", toolsetErr)
 	}
 
 	return &toolset, nil

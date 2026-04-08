@@ -40,6 +40,8 @@ type Service interface {
 	ListAttributeKeys(context.Context, *ListAttributeKeysPayload) (res *ListAttributeKeysResult, err error)
 	// Get aggregated hooks metrics grouped by server
 	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
+	// List hook traces aggregated by trace_id with user information
+	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -64,7 +66,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary"}
+var MethodNames = [12]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -148,6 +150,8 @@ type GetHooksSummaryResult struct {
 	Servers []*HooksServerSummary
 	// Aggregated metrics grouped by user
 	Users []*HooksUserSummary
+	// Aggregated metrics grouped by skill
+	Skills []*SkillSummary
 	// Total number of hook events
 	TotalEvents int64
 	// Total number of unique sessions
@@ -233,6 +237,32 @@ type GetUserMetricsSummaryResult struct {
 	Metrics *ProjectSummary
 }
 
+// Summary information for a hook trace
+type HookTraceSummary struct {
+	// Trace ID (32 hex characters)
+	TraceID string
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
+	// Total number of logs in this trace
+	LogCount uint64
+	// Hook execution status
+	HookStatus *string
+	// Gram URN associated with this hook trace
+	GramUrn string
+	// Tool name (from materialized column)
+	ToolName *string
+	// Tool call source (from materialized column)
+	ToolSource *string
+	// Event source (from materialized column)
+	EventSource *string
+	// User email (from attributes.user.email)
+	UserEmail *string
+	// Hook source (from attributes.gram.hook.source)
+	HookSource *string
+	// Skill name (from materialized column, only for Skill tool)
+	SkillName *string
+}
+
 // Aggregated hooks metrics for a single server
 type HooksServerSummary struct {
 	// Server name (extracted from tool name, or 'local' for non-MCP tools)
@@ -303,6 +333,38 @@ type ListFilterOptionsPayload struct {
 type ListFilterOptionsResult struct {
 	// List of filter options
 	Options []*FilterOption
+}
+
+// ListHooksTracesPayload is the payload type of the telemetry service
+// listHooksTraces method.
+type ListHooksTracesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From string
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To string
+	// Filter conditions for the search query
+	Filters []*LogFilter
+	// Hook types to include (mcp, local, skill). If empty or not provided,
+	// includes all types.
+	TypesToInclude []string
+	// Cursor for pagination (trace_id)
+	Cursor *string
+	// Sort order
+	Sort string
+	// Number of items to return (1-1000)
+	Limit int
+}
+
+// ListHooksTracesResult is the result type of the telemetry service
+// listHooksTraces method.
+type ListHooksTracesResult struct {
+	// List of hook trace summaries
+	Traces []*HookTraceSummary
+	// Cursor for next page
+	NextCursor *string
 }
 
 // A single filter condition for a log search query.
@@ -590,6 +652,16 @@ type ServiceInfo struct {
 	Name string
 	// Service version
 	Version *string
+}
+
+// Aggregated skills metrics for a single skill
+type SkillSummary struct {
+	// Skill name (extracted from tool name)
+	SkillName string
+	// Total number of times this skill was used
+	UseCount int64
+	// Number of unique users who used this skill
+	UniqueUsers int64
 }
 
 // OpenTelemetry log record

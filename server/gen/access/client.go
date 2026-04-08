@@ -15,24 +15,32 @@ import (
 
 // Client is the "access" service client.
 type Client struct {
-	ListGrantsEndpoint            goa.Endpoint
-	UpsertGrantsEndpoint          goa.Endpoint
-	RemoveGrantsEndpoint          goa.Endpoint
-	RemovePrincipalGrantsEndpoint goa.Endpoint
+	ListRolesEndpoint        goa.Endpoint
+	GetRoleEndpoint          goa.Endpoint
+	CreateRoleEndpoint       goa.Endpoint
+	UpdateRoleEndpoint       goa.Endpoint
+	DeleteRoleEndpoint       goa.Endpoint
+	ListScopesEndpoint       goa.Endpoint
+	ListMembersEndpoint      goa.Endpoint
+	UpdateMemberRoleEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listGrants, upsertGrants, removeGrants, removePrincipalGrants goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, updateMemberRole goa.Endpoint) *Client {
 	return &Client{
-		ListGrantsEndpoint:            listGrants,
-		UpsertGrantsEndpoint:          upsertGrants,
-		RemoveGrantsEndpoint:          removeGrants,
-		RemovePrincipalGrantsEndpoint: removePrincipalGrants,
+		ListRolesEndpoint:        listRoles,
+		GetRoleEndpoint:          getRole,
+		CreateRoleEndpoint:       createRole,
+		UpdateRoleEndpoint:       updateRole,
+		DeleteRoleEndpoint:       deleteRole,
+		ListScopesEndpoint:       listScopes,
+		ListMembersEndpoint:      listMembers,
+		UpdateMemberRoleEndpoint: updateMemberRole,
 	}
 }
 
-// ListGrants calls the "listGrants" endpoint of the "access" service.
-// ListGrants may return the following errors:
+// ListRoles calls the "listRoles" endpoint of the "access" service.
+// ListRoles may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -44,17 +52,17 @@ func NewClient(listGrants, upsertGrants, removeGrants, removePrincipalGrants goa
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListGrants(ctx context.Context, p *ListGrantsPayload) (res *ListGrantsResult, err error) {
+func (c *Client) ListRoles(ctx context.Context, p *ListRolesPayload) (res *ListRolesResult, err error) {
 	var ires any
-	ires, err = c.ListGrantsEndpoint(ctx, p)
+	ires, err = c.ListRolesEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListGrantsResult), nil
+	return ires.(*ListRolesResult), nil
 }
 
-// UpsertGrants calls the "upsertGrants" endpoint of the "access" service.
-// UpsertGrants may return the following errors:
+// GetRole calls the "getRole" endpoint of the "access" service.
+// GetRole may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -66,17 +74,17 @@ func (c *Client) ListGrants(ctx context.Context, p *ListGrantsPayload) (res *Lis
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpsertGrants(ctx context.Context, p *UpsertGrantsPayload) (res *UpsertGrantsResult, err error) {
+func (c *Client) GetRole(ctx context.Context, p *GetRolePayload) (res *Role, err error) {
 	var ires any
-	ires, err = c.UpsertGrantsEndpoint(ctx, p)
+	ires, err = c.GetRoleEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*UpsertGrantsResult), nil
+	return ires.(*Role), nil
 }
 
-// RemoveGrants calls the "removeGrants" endpoint of the "access" service.
-// RemoveGrants may return the following errors:
+// CreateRole calls the "createRole" endpoint of the "access" service.
+// CreateRole may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -88,14 +96,17 @@ func (c *Client) UpsertGrants(ctx context.Context, p *UpsertGrantsPayload) (res 
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) RemoveGrants(ctx context.Context, p *RemoveGrantsPayload) (err error) {
-	_, err = c.RemoveGrantsEndpoint(ctx, p)
-	return
+func (c *Client) CreateRole(ctx context.Context, p *CreateRolePayload) (res *Role, err error) {
+	var ires any
+	ires, err = c.CreateRoleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*Role), nil
 }
 
-// RemovePrincipalGrants calls the "removePrincipalGrants" endpoint of the
-// "access" service.
-// RemovePrincipalGrants may return the following errors:
+// UpdateRole calls the "updateRole" endpoint of the "access" service.
+// UpdateRole may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -107,7 +118,96 @@ func (c *Client) RemoveGrants(ctx context.Context, p *RemoveGrantsPayload) (err 
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) RemovePrincipalGrants(ctx context.Context, p *RemovePrincipalGrantsPayload) (err error) {
-	_, err = c.RemovePrincipalGrantsEndpoint(ctx, p)
+func (c *Client) UpdateRole(ctx context.Context, p *UpdateRolePayload) (res *Role, err error) {
+	var ires any
+	ires, err = c.UpdateRoleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*Role), nil
+}
+
+// DeleteRole calls the "deleteRole" endpoint of the "access" service.
+// DeleteRole may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteRole(ctx context.Context, p *DeleteRolePayload) (err error) {
+	_, err = c.DeleteRoleEndpoint(ctx, p)
 	return
+}
+
+// ListScopes calls the "listScopes" endpoint of the "access" service.
+// ListScopes may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListScopes(ctx context.Context, p *ListScopesPayload) (res *ListScopesResult, err error) {
+	var ires any
+	ires, err = c.ListScopesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListScopesResult), nil
+}
+
+// ListMembers calls the "listMembers" endpoint of the "access" service.
+// ListMembers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListMembers(ctx context.Context, p *ListMembersPayload) (res *ListMembersResult, err error) {
+	var ires any
+	ires, err = c.ListMembersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListMembersResult), nil
+}
+
+// UpdateMemberRole calls the "updateMemberRole" endpoint of the "access"
+// service.
+// UpdateMemberRole may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateMemberRole(ctx context.Context, p *UpdateMemberRolePayload) (res *AccessMember, err error) {
+	var ires any
+	ires, err = c.UpdateMemberRoleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AccessMember), nil
 }
