@@ -1,4 +1,4 @@
-import type { Tool } from "@/lib/toolTypes";
+import { toolSupportsAnnotations, type Tool } from "@/lib/toolTypes";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Shield, AlertTriangle, Repeat, Globe } from "lucide-react";
 
@@ -17,7 +17,7 @@ interface ResolvedToolAnnotations {
  * Returns null for tool types that don't carry annotations (prompt, external-mcp).
  */
 function resolveToolAnnotations(tool: Tool): ResolvedToolAnnotations | null {
-  if (tool.type !== "http" && tool.type !== "function") return null;
+  if (!toolSupportsAnnotations(tool)) return null;
 
   const base = tool.annotations;
   const override = tool.variation;

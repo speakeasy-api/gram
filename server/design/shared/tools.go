@@ -155,6 +155,20 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 	Required("deployment_external_mcp_id", "deployment_id", "registry_specifier", "registry_server_name", "registry_id", "slug", "remote_url", "transport_type", "requires_oauth", "oauth_version", "created_at", "updated_at")
 })
 
+var PlatformToolDefinition = Type("PlatformToolDefinition", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A platform-owned tool served directly by the platform")
+
+	Extend(BaseToolAttributes)
+
+	Attribute("source_slug", String, "The backing platform tool source (for example: logs)")
+	Attribute("owner_kind", String, "The entity kind that owns this tool's lifecycle")
+	Attribute("owner_id", String, "Optional owning entity ID")
+
+	Required("source_slug")
+})
+
 // Tool is a discriminated union of HTTP tools and prompt templates.
 // Custom JSON marshaling provided in goaext.
 var Tool = Type("Tool", func() {
@@ -164,12 +178,13 @@ var Tool = Type("Tool", func() {
 	Attribute("http_tool_definition", HTTPToolDefinition, "The HTTP tool definition")
 	Attribute("function_tool_definition", FunctionToolDefinition, "The function tool definition")
 	Attribute("prompt_template", PromptTemplate, "The prompt template")
+	Attribute("platform_tool_definition", PlatformToolDefinition, "The Platform tool definition")
 	Attribute("external_mcp_tool_definition", ExternalMCPToolDefinition, "The external MCP tool definition")
 })
 
 var ToolEntry = Type("ToolEntry", func() {
 	Attribute("type", String, func() {
-		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction), string(urn.ToolKindExternalMCP))
+		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction), string(urn.ToolKindPlatform), string(urn.ToolKindExternalMCP))
 	})
 
 	Attribute("id", String, "The ID of the tool")

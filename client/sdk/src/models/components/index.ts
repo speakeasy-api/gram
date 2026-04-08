@@ -170,6 +170,7 @@ export * from "./otelscopelog.js";
 export * from "./package.js";
 export * from "./packageversion.js";
 export * from "./periodusage.js";
+export * from "./platformtooldefinition.js";
 export * from "./project.js";
 export * from "./projectentry.js";
 export * from "./projectsummary.js";

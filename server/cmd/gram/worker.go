@@ -36,6 +36,7 @@ import (
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -531,6 +532,8 @@ func newWorkerCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 
+			platformSvc := platformtoolsruntime.NewService(logger, db, telemetryService)
+
 			// Create agents service for the worker
 			agentsService := agents.NewService(
 				logger,
@@ -542,6 +545,7 @@ func newWorkerCommand() *cli.Command {
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
 				functionsOrchestrator,
+				platformSvc,
 				openRouter,
 				chatClient,
 			)
