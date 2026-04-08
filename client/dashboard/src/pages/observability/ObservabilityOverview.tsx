@@ -24,6 +24,7 @@ import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Icon } from "@speakeasy-api/moonshine";
 import { MetricCard } from "@/components/chart/MetricCard";
+import { smoothData, formatChartLabel } from "@/components/chart/chartUtils";
 import {
   Popover,
   PopoverContent,
@@ -472,39 +473,6 @@ function MCPServerFilter({
       </div>
     </div>
   );
-}
-
-/**
- * Apply a centered moving average to smooth data (like Datadog).
- * Adapts window size based on data length for consistent visual smoothing.
- */
-function smoothData(data: number[], windowSize?: number): number[] {
-  if (data.length < 3) return data;
-
-  // Scale window size with data length for consistent visual smoothing
-  // Fewer points = larger window percentage to maintain smoothness
-  let window: number;
-  if (windowSize !== undefined) {
-    window = windowSize;
-  } else if (data.length < 20) {
-    // Very zoomed in: use 25-30% of data points
-    window = Math.max(3, Math.floor(data.length * 0.3));
-  } else if (data.length < 50) {
-    // Moderate zoom: use ~15% of data points
-    window = Math.max(5, Math.floor(data.length * 0.15));
-  } else {
-    // Full view: use ~8% of data points, max 21
-    window = Math.max(5, Math.min(21, Math.floor(data.length * 0.08)));
-  }
-
-  const halfWindow = Math.floor(window / 2);
-
-  return data.map((_, i) => {
-    const start = Math.max(0, i - halfWindow);
-    const end = Math.min(data.length, i + halfWindow + 1);
-    const slice = data.slice(start, end);
-    return slice.reduce((a, b) => a + b, 0) / slice.length;
-  });
 }
 
 // Valid date range presets
@@ -1471,30 +1439,6 @@ function getValueColor(value: number, thresholds?: ThresholdConfig): string {
     if (value < thresholds.red) return "text-red-500";
     if (value < thresholds.amber) return "text-amber-500";
     return "text-emerald-600";
-  }
-}
-
-function formatChartLabel(date: Date, timeRangeMs: number): string {
-  const hours = timeRangeMs / (1000 * 60 * 60);
-  const days = hours / 24;
-
-  if (hours <= 24) {
-    // ≤24 hours: Show time only "14:00"
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } else if (days <= 2) {
-    // ≤2 days: Show date + time "Jan 5, 14:00"
-    return date.toLocaleDateString([], {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } else {
-    // >2 days: Show date only "Jan 5"
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
   }
 }
 
