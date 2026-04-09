@@ -1,6 +1,7 @@
 package access
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -96,4 +97,31 @@ func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 
 	g := &Grants{rows: []Grant{{Scope: ScopeOrgAdmin, Resource: "org_123"}}}
 	require.False(t, g.satisfies(Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.expand()))
+}
+
+func TestScopeExpansions_isDAG(t *testing.T) {
+	t.Parallel()
+
+	// DFS from every scope; assert no scope is reachable from itself.
+	for start := range scopeExpansions {
+		inStack := map[Scope]bool{}
+		visited := map[Scope]bool{}
+		var hasCycle func(s Scope) bool
+		hasCycle = func(s Scope) bool {
+			if inStack[s] {
+				return true
+			}
+			if visited[s] {
+				return false
+			}
+			visited[s] = true
+			inStack[s] = true
+			if slices.ContainsFunc(scopeExpansions[s], hasCycle) {
+				return true
+			}
+			inStack[s] = false
+			return false
+		}
+		require.False(t, hasCycle(start), "cycle detected in scopeExpansions from scope %q", start)
+	}
 }

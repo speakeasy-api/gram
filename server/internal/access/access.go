@@ -6,8 +6,8 @@ type Check struct {
 	ResourceID string
 }
 
-// Expand returns all grants that would satisfy this check: the check itself
-// (exact resource and wildcard), any higher-privilege scopes that imply it
+// expand returns all grants that would satisfy this check: the check itself
+// (exact resource and wildcard), any higher-privilege scopes that also satisfy it
 // (exact and wildcard), and always a ScopeRoot wildcard grant.
 func (c Check) expand() []Check {
 	checks := []Check{
