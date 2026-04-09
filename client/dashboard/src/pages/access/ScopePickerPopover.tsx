@@ -358,8 +358,9 @@ function ToolSelectionPanel({
     <div className="flex">
       {/* Left column — server list */}
       <div className="w-[160px] shrink-0 border-r border-border overflow-y-auto">
-        <div className="flex items-center px-3 h-10 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
-          Servers
+        <div className="flex items-center gap-1.5 px-3 h-10 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+          <Globe className="h-3 w-3" />
+          Server List
         </div>
         {allServers.map((server) => {
           const isActive = selectedServerId === server.id;
