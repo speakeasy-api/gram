@@ -20,6 +20,10 @@ import {
   HTTPToolDefinition$inboundSchema,
 } from "./httptooldefinition.js";
 import {
+  PlatformToolDefinition,
+  PlatformToolDefinition$inboundSchema,
+} from "./platformtooldefinition.js";
+import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
 } from "./prompttemplate.js";
@@ -41,6 +45,10 @@ export type Tool = {
    */
   httpToolDefinition?: HTTPToolDefinition | undefined;
   /**
+   * A platform-owned tool served directly by the platform
+   */
+  platformToolDefinition?: PlatformToolDefinition | undefined;
+  /**
    * A prompt template
    */
   promptTemplate?: PromptTemplate | undefined;
@@ -54,6 +62,7 @@ export const Tool$inboundSchema: z.ZodMiniType<Tool, unknown> = z.pipe(
     ),
     function_tool_definition: z.optional(FunctionToolDefinition$inboundSchema),
     http_tool_definition: z.optional(HTTPToolDefinition$inboundSchema),
+    platform_tool_definition: z.optional(PlatformToolDefinition$inboundSchema),
     prompt_template: z.optional(PromptTemplate$inboundSchema),
   }),
   z.transform((v) => {
@@ -61,6 +70,7 @@ export const Tool$inboundSchema: z.ZodMiniType<Tool, unknown> = z.pipe(
       "external_mcp_tool_definition": "externalMcpToolDefinition",
       "function_tool_definition": "functionToolDefinition",
       "http_tool_definition": "httpToolDefinition",
+      "platform_tool_definition": "platformToolDefinition",
       "prompt_template": "promptTemplate",
     });
   }),

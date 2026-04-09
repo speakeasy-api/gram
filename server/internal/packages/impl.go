@@ -15,6 +15,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/packages/server"
 	gen "github.com/speakeasy-api/gram/server/gen/packages"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -36,12 +37,13 @@ type Service struct {
 	db     *pgxpool.Pool
 	repo   *repo.Queries
 	auth   *auth.Auth
+	access *access.Manager
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("packages"))
 
 	return &Service{
@@ -49,7 +51,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger: logger,
 		db:     db,
 		repo:   repo.New(db),
-		auth:   auth.New(logger, db, sessions, accessLoader),
+		auth:   auth.New(logger, db, sessions, accessManager),
+		access: accessManager,
 	}
 }
 
@@ -71,6 +74,10 @@ func (s *Service) ListPackages(ctx context.Context, form *gen.ListPackagesPayloa
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -121,6 +128,10 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -199,6 +210,10 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	pkgID, err := uuid.Parse(form.ID)
@@ -275,6 +290,10 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
@@ -334,6 +353,10 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))

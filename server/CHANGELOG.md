@@ -1,5 +1,16 @@
 # server
 
+## 0.36.0
+
+### Minor Changes
+
+- 58d44eb: Add team management endpoints (invites & members)
+
+### Patch Changes
+
+- 252cbca: fix: allow platform domain to serve MCPs with custom domains
+- 494f76c: Adds support for tracking skills in hooks dashboard
+
 ## 0.35.0
 
 ### Minor Changes

@@ -270,6 +270,9 @@ func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
 	if v.PromptTemplate != nil {
 		res.PromptTemplate = marshalTypesPromptTemplateToPromptTemplateResponseBody(v.PromptTemplate)
 	}
+	if v.PlatformToolDefinition != nil {
+		res.PlatformToolDefinition = marshalTypesPlatformToolDefinitionToPlatformToolDefinitionResponseBody(v.PlatformToolDefinition)
+	}
 	if v.ExternalMcpToolDefinition != nil {
 		res.ExternalMcpToolDefinition = marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody(v.ExternalMcpToolDefinition)
 	}
@@ -514,6 +517,44 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 		for i, val := range v.ToolUrnsHint {
 			res.ToolUrnsHint[i] = val
 		}
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
+	}
+
+	return res
+}
+
+// marshalTypesPlatformToolDefinitionToPlatformToolDefinitionResponseBody
+// builds a value of type *PlatformToolDefinitionResponseBody from a value of
+// type *types.PlatformToolDefinition.
+func marshalTypesPlatformToolDefinitionToPlatformToolDefinitionResponseBody(v *types.PlatformToolDefinition) *PlatformToolDefinitionResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &PlatformToolDefinitionResponseBody{
+		SourceSlug:    v.SourceSlug,
+		OwnerKind:     v.OwnerKind,
+		OwnerID:       v.OwnerID,
+		ID:            v.ID,
+		ToolUrn:       v.ToolUrn,
+		ProjectID:     v.ProjectID,
+		Name:          v.Name,
+		CanonicalName: v.CanonicalName,
+		Description:   v.Description,
+		SchemaVersion: v.SchemaVersion,
+		Schema:        v.Schema,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
 	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)

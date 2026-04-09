@@ -571,3 +571,66 @@ func BuildAddOAuthProxyServerPayload(toolsetsAddOAuthProxyServerBody string, too
 
 	return v, nil
 }
+
+// BuildUpdateOAuthProxyServerPayload builds the payload for the toolsets
+// updateOAuthProxyServer endpoint from CLI flags.
+func BuildUpdateOAuthProxyServerPayload(toolsetsUpdateOAuthProxyServerBody string, toolsetsUpdateOAuthProxyServerSlug string, toolsetsUpdateOAuthProxyServerSessionToken string, toolsetsUpdateOAuthProxyServerApikeyToken string, toolsetsUpdateOAuthProxyServerProjectSlugInput string) (*toolsets.UpdateOAuthProxyServerPayload, error) {
+	var err error
+	var body UpdateOAuthProxyServerRequestBody
+	{
+		err = json.Unmarshal([]byte(toolsetsUpdateOAuthProxyServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"oauth_proxy_server\": {\n         \"audience\": \"abc123\",\n         \"authorization_endpoint\": \"abc123\",\n         \"environment_slug\": \"aaa\",\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ]\n      }\n   }'")
+		}
+		if body.OauthProxyServer == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("oauth_proxy_server", "body"))
+		}
+		if body.OauthProxyServer != nil {
+			if err2 := ValidateOAuthProxyServerUpdateFormRequestBody(body.OauthProxyServer); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var slug string
+	{
+		slug = toolsetsUpdateOAuthProxyServerSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsUpdateOAuthProxyServerSessionToken != "" {
+			sessionToken = &toolsetsUpdateOAuthProxyServerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsUpdateOAuthProxyServerApikeyToken != "" {
+			apikeyToken = &toolsetsUpdateOAuthProxyServerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsUpdateOAuthProxyServerProjectSlugInput != "" {
+			projectSlugInput = &toolsetsUpdateOAuthProxyServerProjectSlugInput
+		}
+	}
+	v := &toolsets.UpdateOAuthProxyServerPayload{}
+	if body.OauthProxyServer != nil {
+		v.OauthProxyServer = marshalOAuthProxyServerUpdateFormRequestBodyToTypesOAuthProxyServerUpdateForm(body.OauthProxyServer)
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

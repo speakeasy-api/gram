@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -82,11 +83,11 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 	}
 
 	for _, check := range checks {
-		if err := validateCheck(check); err != nil {
+		if err := validateInput(check); err != nil {
 			return m.mapError(ctx, err)
 		}
 
-		if !grants.hasAccess(check.Scope, check.ResourceID) {
+		if !grants.satisfies(check.expand()) {
 			return m.mapError(ctx, Denied(check.Scope, check.ResourceID))
 		}
 	}
@@ -112,15 +113,13 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	for _, check := range checks {
-		if err := validateCheck(check); err != nil {
+		if err := validateInput(check); err != nil {
 			return m.mapError(ctx, err)
 		}
 	}
 
-	for _, check := range checks {
-		if grants.hasAccess(check.Scope, check.ResourceID) {
-			return nil
-		}
+	if slices.ContainsFunc(checks, func(c Check) bool { return grants.satisfies(c.expand()) }) {
+		return nil
 	}
 
 	return m.mapError(ctx, Denied(checks[0].Scope, checks[0].ResourceID))
@@ -142,11 +141,11 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 
 	allowed := make([]string, 0, len(resourceIDs))
 	for _, resourceID := range resourceIDs {
-		if err := validateCheck(Check{Scope: scope, ResourceID: resourceID}); err != nil {
+		if err := validateInput(Check{Scope: scope, ResourceID: resourceID}); err != nil {
 			return nil, m.mapError(ctx, err)
 		}
 
-		if grants.hasAccess(scope, resourceID) {
+		if grants.satisfies(Check{Scope: scope, ResourceID: resourceID}.expand()) {
 			allowed = append(allowed, resourceID)
 		}
 	}
@@ -170,6 +169,17 @@ func (m *Manager) shouldEnforce(ctx context.Context) (bool, error) {
 	}
 
 	return enabled, nil
+}
+
+func validateInput(c Check) error {
+	switch c.ResourceID {
+	case "":
+		return InvalidCheck(c.Scope, c.ResourceID)
+	case WildcardResource:
+		return InvalidCheck(c.Scope, c.ResourceID)
+	default:
+		return nil
+	}
 }
 
 func (m *Manager) mapError(ctx context.Context, err error) error {

@@ -13863,6 +13863,121 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateToolset
+  /rpc/toolsets.updateOAuthProxyServer:
+    post:
+      description: Update an existing OAuth proxy server associated with a toolset
+      operationId: updateOAuthProxyServer
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset whose OAuth proxy server to update
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOAuthProxyServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateOAuthProxyServer toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: updateOAuthProxyServer
+      x-speakeasy-react-hook:
+        name: UpdateOAuthProxyServer
   /rpc/usage.createCheckout:
     post:
       description: Create a checkout link for upgrading to the business plan
@@ -18929,6 +19044,33 @@ components:
       required:
         - slug
         - provider_type
+    OAuthProxyServerUpdateForm:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: The audience parameter to send to the upstream OAuth provider
+        authorization_endpoint:
+          type: string
+          description: The authorization endpoint URL
+        environment_slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        scopes_supported:
+          type: array
+          items:
+            type: string
+          description: OAuth scopes to request (omit = no change, empty array = clear)
+        token_endpoint:
+          type: string
+          description: The token endpoint URL
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Auth methods (omit = no change, empty array = clear)
     OTELAttribute:
       type: object
       properties:
@@ -19376,6 +19518,77 @@ components:
         - credits
         - included_credits
         - has_active_subscription
+    PlatformToolDefinition:
+      type: object
+      properties:
+        annotations:
+          $ref: '#/components/schemas/ToolAnnotations'
+        canonical:
+          $ref: '#/components/schemas/CanonicalToolAttributes'
+        canonical_name:
+          type: string
+          description: The canonical name of the tool. Will be the same as the name if there is no variation.
+        confirm:
+          type: string
+          description: Confirmation mode for the tool
+        confirm_prompt:
+          type: string
+          description: Prompt for the confirmation
+        created_at:
+          type: string
+          description: The creation date of the tool.
+          format: date-time
+        description:
+          type: string
+          description: Description of the tool
+        id:
+          type: string
+          description: The ID of the tool
+        name:
+          type: string
+          description: The name of the tool
+        owner_id:
+          type: string
+          description: Optional owning entity ID
+        owner_kind:
+          type: string
+          description: The entity kind that owns this tool's lifecycle
+        project_id:
+          type: string
+          description: The ID of the project
+        schema:
+          type: string
+          description: JSON schema for the request
+        schema_version:
+          type: string
+          description: Version of the schema
+        source_slug:
+          type: string
+          description: 'The backing platform tool source (for example: logs)'
+        summarizer:
+          type: string
+          description: Summarizer for the tool
+        tool_urn:
+          type: string
+          description: The URN of this tool
+        updated_at:
+          type: string
+          description: The last update date of the tool.
+          format: date-time
+        variation:
+          $ref: '#/components/schemas/ToolVariation'
+      description: A platform-owned tool served directly by the platform
+      required:
+        - source_slug
+        - id
+        - project_id
+        - name
+        - canonical_name
+        - description
+        - schema
+        - tool_urn
+        - created_at
+        - updated_at
     Project:
       type: object
       properties:
@@ -20872,6 +21085,8 @@ components:
           $ref: '#/components/schemas/FunctionToolDefinition'
         http_tool_definition:
           $ref: '#/components/schemas/HTTPToolDefinition'
+        platform_tool_definition:
+          $ref: '#/components/schemas/PlatformToolDefinition'
         prompt_template:
           $ref: '#/components/schemas/PromptTemplate'
       description: A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy
@@ -20948,6 +21163,7 @@ components:
             - http
             - prompt
             - function
+            - platform
             - externalmcp
       required:
         - type
@@ -21393,6 +21609,28 @@ components:
       required:
         - user_id
         - role_id
+    UpdateOAuthProxyServerForm:
+      type: object
+      properties:
+        oauth_proxy_server:
+          $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
+        project_slug_input:
+          type: string
+        slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+      required:
+        - slug
+        - oauth_proxy_server
+    UpdateOAuthProxyServerRequestBody:
+      type: object
+      properties:
+        oauth_proxy_server:
+          $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
+      required:
+        - oauth_proxy_server
     UpdatePackageForm:
       type: object
       properties:

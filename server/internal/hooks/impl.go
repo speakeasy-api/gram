@@ -12,6 +12,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -33,6 +34,7 @@ type Service struct {
 	db                 *pgxpool.Pool
 	telemetryService   *telemetry.Service
 	auth               *auth.Auth
+	access             *access.Manager
 	cache              cache.Cache
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
@@ -80,7 +82,7 @@ func NewService(
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
-	accessLoader auth.AccessLoader,
+	accessManager *access.Manager,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 ) *Service {
@@ -89,7 +91,8 @@ func NewService(
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryService:   telemetryService,
-		auth:               auth.New(logger, db, sessionsMgr, accessLoader),
+		auth:               auth.New(logger, db, sessionsMgr, accessManager),
+		access:             accessManager,
 		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),

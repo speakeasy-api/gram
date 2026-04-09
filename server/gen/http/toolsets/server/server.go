@@ -30,6 +30,7 @@ type Server struct {
 	AddExternalOAuthServer   http.Handler
 	RemoveOAuthServer        http.Handler
 	AddOAuthProxyServer      http.Handler
+	UpdateOAuthProxyServer   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -70,6 +71,7 @@ func New(
 			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
 			{"RemoveOAuthServer", "POST", "/rpc/toolsets.removeOAuthServer"},
 			{"AddOAuthProxyServer", "POST", "/rpc/toolsets.addOAuthProxyServer"},
+			{"UpdateOAuthProxyServer", "POST", "/rpc/toolsets.updateOAuthProxyServer"},
 		},
 		CreateToolset:            NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:             NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
@@ -82,6 +84,7 @@ func New(
 		AddExternalOAuthServer:   NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		RemoveOAuthServer:        NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		AddOAuthProxyServer:      NewAddOAuthProxyServerHandler(e.AddOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
+		UpdateOAuthProxyServer:   NewUpdateOAuthProxyServerHandler(e.UpdateOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -101,6 +104,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
 	s.RemoveOAuthServer = m(s.RemoveOAuthServer)
 	s.AddOAuthProxyServer = m(s.AddOAuthProxyServer)
+	s.UpdateOAuthProxyServer = m(s.UpdateOAuthProxyServer)
 }
 
 // MethodNames returns the methods served.
@@ -119,6 +123,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
 	MountRemoveOAuthServerHandler(mux, h.RemoveOAuthServer)
 	MountAddOAuthProxyServerHandler(mux, h.AddOAuthProxyServer)
+	MountUpdateOAuthProxyServerHandler(mux, h.UpdateOAuthProxyServer)
 }
 
 // Mount configures the mux to serve the toolsets endpoints.
@@ -687,6 +692,59 @@ func NewAddOAuthProxyServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "addOAuthProxyServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateOAuthProxyServerHandler configures the mux to serve the
+// "toolsets" service "updateOAuthProxyServer" endpoint.
+func MountUpdateOAuthProxyServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.updateOAuthProxyServer", f)
+}
+
+// NewUpdateOAuthProxyServerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "updateOAuthProxyServer" endpoint.
+func NewUpdateOAuthProxyServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateOAuthProxyServerRequest(mux, decoder)
+		encodeResponse = EncodeUpdateOAuthProxyServerResponse(encoder)
+		encodeError    = EncodeUpdateOAuthProxyServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateOAuthProxyServer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {
