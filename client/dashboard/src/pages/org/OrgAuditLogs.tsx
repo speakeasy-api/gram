@@ -21,6 +21,7 @@ import {
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -554,9 +555,11 @@ export default function OrgAuditLogs() {
     return `${actor} ${action} ${verb} ${subject}`;
   }, []);
 
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const searchMatchIndices = useMemo(() => {
-    if (!searchQuery) return [];
-    const query = searchQuery.toLowerCase();
+    if (!deferredSearchQuery) return [];
+    const query = deferredSearchQuery.toLowerCase();
     const indices: number[] = [];
     logs.forEach((log, index) => {
       if (getSearchableText(log).toLowerCase().includes(query)) {
@@ -564,7 +567,7 @@ export default function OrgAuditLogs() {
       }
     });
     return indices;
-  }, [searchQuery, logs, getSearchableText]);
+  }, [deferredSearchQuery, logs, getSearchableText]);
 
   const scrollToLog = useCallback((index: number) => {
     const element = logRefs.current.get(index);
