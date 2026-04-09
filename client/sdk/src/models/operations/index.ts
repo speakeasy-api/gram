@@ -141,6 +141,7 @@ export * from "./switchauthscopes.js";
 export * from "./updateenvironment.js";
 export * from "./updatemcpcollection.js";
 export * from "./updatememberrole.js";
+export * from "./updateoauthproxyserver.js";
 export * from "./updatepackage.js";
 export * from "./updaterole.js";
 export * from "./updateslackapp.js";

@@ -16,6 +16,8 @@ type Tool struct {
 	FunctionToolDefinition *FunctionToolDefinition
 	// The prompt template
 	PromptTemplate *PromptTemplate
+	// The Platform tool definition
+	PlatformToolDefinition *PlatformToolDefinition
 	// The external MCP tool definition
 	ExternalMcpToolDefinition *ExternalMCPToolDefinition
 }

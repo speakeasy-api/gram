@@ -52,6 +52,7 @@ import {
   invalidateTemplate,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
+  useUpdateOAuthProxyServerMutation,
   useExportMcpMetadataMutation,
   useGetMcpMetadata,
   useLatestDeployment,
@@ -67,12 +68,19 @@ import {
   Download,
   Globe,
   LockIcon,
+  Pencil,
   Play,
   Trash2,
   XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
@@ -936,6 +944,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+  const [isOAuthEditModalOpen, setIsOAuthEditModalOpen] = useState(false);
 
   // Delete mcp server state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -1436,6 +1445,17 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         toolsetSlug={toolset.slug}
         toolset={toolset}
       />
+      <ConnectOAuthModal
+        isOpen={isOAuthEditModalOpen}
+        onClose={() => setIsOAuthEditModalOpen(false)}
+        toolsetSlug={toolset.slug}
+        toolset={toolset}
+        editMode={
+          toolset.oauthProxyServer
+            ? { proxyServer: toolset.oauthProxyServer }
+            : undefined
+        }
+      />
       <GramOAuthProxyModal
         isOpen={isGramOAuthModalOpen}
         onClose={() => setIsGramOAuthModalOpen(false)}
@@ -1445,6 +1465,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
+        onEditRequest={() => setIsOAuthEditModalOpen(true)}
       />
     </Stack>
   );
@@ -1850,10 +1871,12 @@ function OAuthDetailsModal({
   isOpen,
   onClose,
   toolset,
+  onEditRequest,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolset: Toolset;
+  onEditRequest: () => void;
 }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const queryClient = useQueryClient();
@@ -1913,19 +1936,32 @@ function OAuthDetailsModal({
               <>
                 <div className="flex items-center justify-between">
                   <Type className="font-medium">OAuth Proxy Server</Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="hover:bg-destructive hover:text-white border-none"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Unlink
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      onClick={() => {
+                        onClose();
+                        onEditRequest();
+                      }}
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      className="hover:bg-destructive hover:text-white border-none"
+                      onClick={() =>
+                        removeOAuthMutation.mutate({
+                          request: { slug: toolset.slug },
+                        })
+                      }
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Unlink
+                    </Button>
+                  </div>
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>
@@ -2189,11 +2225,13 @@ function ConnectOAuthModal({
   onClose,
   toolsetSlug,
   toolset,
+  editMode,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
+  editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
 }) {
   const productTier = useProductTier();
   const queryClient = useQueryClient();
@@ -2222,9 +2260,14 @@ function ConnectOAuthModal({
       onClose={onClose}
       toolsetSlug={toolsetSlug}
       toolset={toolset}
+      editMode={editMode}
       onSuccess={() => {
         invalidateAllToolset(queryClient);
-        toast.success("External OAuth server configured successfully");
+        toast.success(
+          editMode
+            ? "OAuth proxy server updated successfully"
+            : "External OAuth server configured successfully",
+        );
         onClose();
       }}
     />
@@ -2237,12 +2280,14 @@ function OAuthTabModal({
   toolsetSlug,
   toolset,
   onSuccess,
+  editMode,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
   onSuccess: () => void;
+  editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
 }) {
   // Extract discovered OAuth metadata from external MCP tools.
   // Uses rawTools because proxy-type tools are filtered out of toolset.tools.
@@ -2303,6 +2348,38 @@ function OAuthTabModal({
   );
   const [proxyAudience, setProxyAudience] = useState("");
   const [proxyError, setProxyError] = useState<string | null>(null);
+  // Snapshot the prefilled audience so we can detect whether the user actually
+  // changed it on submit. Without this, opening the edit modal on a proxy
+  // whose audience is NULL would silently submit `audience: ""` (because the
+  // form prefills empty-string for null DB values), mutating NULL → "" on the
+  // server. Empty audience and absent audience are NOT equivalent in OAuth
+  // authorization URL handling.
+  const proxyAudiencePrefilledRef = useRef<string>("");
+
+  // Pre-fill from editMode whenever the underlying proxy server data changes.
+  // Dep array depends on editMode?.proxyServer (the stable inner ref preserved
+  // by react-query's structural sharing) rather than editMode (the inline
+  // wrapper object that gets recreated on every parent re-render). This way
+  // the effect only fires when the actual proxy server data changes — not on
+  // every parent re-render (which would wipe user-typed form input).
+  const editProxyServer = editMode?.proxyServer;
+  useEffect(() => {
+    if (!editProxyServer) return;
+    const provider = editProxyServer.oauthProxyProviders?.[0];
+    setProxySlug(editProxyServer.slug ?? "");
+    const initialAudience = editProxyServer.audience ?? "";
+    setProxyAudience(initialAudience);
+    proxyAudiencePrefilledRef.current = initialAudience;
+    setProxyAuthorizationEndpoint(provider?.authorizationEndpoint ?? "");
+    setProxyTokenEndpoint(provider?.tokenEndpoint ?? "");
+    setProxyScopes((provider?.scopesSupported ?? []).join(", "));
+    setProxyTokenAuthMethod(
+      provider?.tokenEndpointAuthMethodsSupported?.[0] ?? "client_secret_post",
+    );
+    setProxyEnvironmentSlug(provider?.environmentSlug ?? "");
+    // When editing, force the proxy tab to be active.
+    setActiveTab("proxy");
+  }, [editProxyServer]);
 
   const applyDiscoveredOAuth = useCallback(
     (tab: "external" | "proxy") => {
@@ -2366,6 +2443,25 @@ function OAuthTabModal({
         error instanceof Error
           ? error.message
           : "Failed to configure OAuth proxy",
+      );
+    },
+  });
+
+  const updateOAuthProxyMutation = useUpdateOAuthProxyServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+
+      telemetry.capture("mcp_event", {
+        action: "oauth_proxy_updated",
+        slug: toolsetSlug,
+      });
+
+      onSuccess();
+    },
+    onError: (error) => {
+      console.error("Failed to update OAuth proxy:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update OAuth proxy",
       );
     },
   });
@@ -2434,7 +2530,7 @@ function OAuthTabModal({
       return;
     }
 
-    if (!proxyEnvironmentSlug.trim()) {
+    if (!editMode && !proxyEnvironmentSlug.trim()) {
       setProxyError("Environment slug is required");
       return;
     }
@@ -2446,6 +2542,33 @@ function OAuthTabModal({
 
     if (scopesArray.length === 0) {
       setProxyError("At least one scope is required");
+      return;
+    }
+
+    if (editMode) {
+      // Only send audience when the user actually changed it. Comparing the
+      // current form value to the prefilled snapshot avoids the silent
+      // NULL → "" mutation that happens when the user opens the modal on a
+      // proxy whose audience was NULL (the form prefills "") and saves
+      // without touching the field. The server treats absent vs empty
+      // differently in OAuth URL construction.
+      const audienceChanged =
+        proxyAudience !== proxyAudiencePrefilledRef.current;
+      updateOAuthProxyMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+          updateOAuthProxyServerRequestBody: {
+            oauthProxyServer: {
+              audience: audienceChanged ? proxyAudience : undefined,
+              authorizationEndpoint: proxyAuthorizationEndpoint,
+              tokenEndpoint: proxyTokenEndpoint,
+              scopesSupported: scopesArray,
+              tokenEndpointAuthMethodsSupported: [proxyTokenAuthMethod],
+              environmentSlug: proxyEnvironmentSlug || undefined,
+            },
+          },
+        },
+      });
       return;
     }
 
@@ -2473,7 +2596,9 @@ function OAuthTabModal({
       <Dialog open={isOpen} onOpenChange={onClose}>
         <Dialog.Content className="max-w-6xl max-h-[90vh] overflow-hidden">
           <Dialog.Header>
-            <Dialog.Title>Connect OAuth</Dialog.Title>
+            <Dialog.Title>
+              {editMode ? "Edit OAuth Proxy" : "Connect OAuth"}
+            </Dialog.Title>
           </Dialog.Header>
 
           <Tabs
@@ -2645,6 +2770,7 @@ function OAuthTabModal({
                       value={proxySlug}
                       onChange={setProxySlug}
                       maxLength={40}
+                      disabled={!!editMode}
                     />
                   </div>
 
@@ -2753,15 +2879,19 @@ function OAuthTabModal({
                 onClick={handleProxySubmit}
                 disabled={
                   addOAuthProxyMutation.isPending ||
+                  updateOAuthProxyMutation.isPending ||
                   !proxySlug.trim() ||
                   !proxyAuthorizationEndpoint.trim() ||
                   !proxyTokenEndpoint.trim() ||
-                  !proxyEnvironmentSlug.trim()
+                  (!editMode && !proxyEnvironmentSlug.trim())
                 }
               >
-                {addOAuthProxyMutation.isPending
-                  ? "Configuring..."
-                  : "Configure OAuth Proxy"}
+                {addOAuthProxyMutation.isPending ||
+                updateOAuthProxyMutation.isPending
+                  ? "Saving..."
+                  : editMode
+                    ? "Save changes"
+                    : "Configure OAuth Proxy"}
               </Button>
             )}
           </Dialog.Footer>

@@ -15,6 +15,7 @@ import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import { toast } from "sonner";
 import {
   environmentHasValue,
@@ -32,7 +33,7 @@ export { getToolsetOAuthMode, type OAuthMode } from "./playgroundOAuthMode";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
-  onUserProvidedHeadersChange?: (headers: Record<string, string>) => void;
+  onPlaygroundEnvironmentSlug?: (slug: string | undefined) => void;
 }
 
 const PASSWORD_MASK = "••••••••";
@@ -333,7 +334,7 @@ function ExternalMcpOAuthConnection({
 
 export function PlaygroundAuth({
   toolset,
-  onUserProvidedHeadersChange,
+  onPlaygroundEnvironmentSlug,
 }: PlaygroundAuthProps) {
   const routes = useRoutes();
 
@@ -358,9 +359,11 @@ export function PlaygroundAuth({
     },
   );
   const mcpMetadata = mcpMetadataData?.metadata;
-  const defaultEnvironmentSlug =
-    environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)
-      ?.slug ?? "default";
+  const defaultEnvironment = environments.find(
+    (env) => env.id === mcpMetadata?.defaultEnvironmentId,
+  );
+  const defaultEnvironmentSlug = defaultEnvironment?.slug ?? "default";
+  const defaultEnvironmentName = defaultEnvironment?.name;
 
   // Load environment variables using the same hook as MCPAuthenticationTab
   const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);
@@ -369,6 +372,8 @@ export function PlaygroundAuth({
   const [userProvidedValues, setUserProvidedValues] = useState<
     Record<string, string>
   >({});
+  const [editedKeys, setEditedKeys] = useState<Set<string>>(new Set());
+  const playgroundEnv = usePlaygroundEnvironment(toolset);
 
   // Calculate missing required variables using the same hook as MCPAuthenticationTab
   const missingRequiredCount = useMissingRequiredEnvVars(
@@ -378,21 +383,56 @@ export function PlaygroundAuth({
     mcpMetadata,
   );
 
-  // Notify parent component when user-provided values change
+  // Notify parent component of the playground environment slug.
+  // The cleanup clears the slug on unmount so the parent never holds
+  // a stale value while remounting (e.g. on toolset switch via the
+  // key={toolset.slug} prop).
   useEffect(() => {
-    if (onUserProvidedHeadersChange) {
-      // Build headers object with MCP- prefix and proper header names
-      const headers: Record<string, string> = {};
-      Object.entries(userProvidedValues).forEach(([varKey, value]) => {
-        if (value.trim()) {
-          // Use MCP- prefix with the header name
-          const headerKey = `MCP-${varKey.replace(/\s+/g, "-").replace(/_/g, "-")}`;
-          headers[headerKey] = value;
-        }
-      });
-      onUserProvidedHeadersChange(headers);
+    onPlaygroundEnvironmentSlug?.(
+      playgroundEnv.exists ? playgroundEnv.slug : undefined,
+    );
+    return () => {
+      onPlaygroundEnvironmentSlug?.(undefined);
+    };
+  }, [playgroundEnv.exists, playgroundEnv.slug, onPlaygroundEnvironmentSlug]);
+
+  const handleSave = async () => {
+    const entriesToUpdate = Object.entries(userProvidedValues)
+      .filter(([key, value]) => value.trim() && editedKeys.has(key))
+      .map(([name, value]) => ({ name, value }));
+    // Only request removal of keys that actually have a stored value
+    // on the server. This avoids sending phantom deletes when a user
+    // typed then cleared a field that was never persisted.
+    const storedKeys = new Set(
+      playgroundEnv.storedEntries
+        .filter((e) => e.hasStoredValue)
+        .map((e) => e.name),
+    );
+    const entriesToRemove = Array.from(editedKeys).filter(
+      (key) => !userProvidedValues[key]?.trim() && storedKeys.has(key),
+    );
+    if (entriesToUpdate.length === 0 && entriesToRemove.length === 0) {
+      // Nothing meaningful to persist — just clear local edit state.
+      setEditedKeys(new Set());
+      setUserProvidedValues({});
+      return;
     }
-  }, [userProvidedValues, onUserProvidedHeadersChange, mcpMetadata]);
+    try {
+      const result = await playgroundEnv.save(entriesToUpdate, entriesToRemove);
+      // On first-time create, propagate the slug to the parent
+      // immediately so chat requests fired before the environments
+      // list refetches still use the new playground environment.
+      if (result.created) {
+        onPlaygroundEnvironmentSlug?.(playgroundEnv.slug);
+      }
+      // Only clear edited state on success — on failure, keep the typed
+      // values so the user can retry without retyping.
+      setEditedKeys(new Set());
+      setUserProvidedValues({});
+    } catch {
+      // Error toast is already shown by usePlaygroundEnvironment.
+    }
+  };
 
   // Show "no auth required" only if there are no env vars AND no OAuth
   if (envVars.length === 0 && !hasOAuth) {
@@ -407,6 +447,16 @@ export function PlaygroundAuth({
 
   return (
     <div className="space-y-3">
+      {/* Environment indicator */}
+      {defaultEnvironmentName && (
+        <div className="flex items-center gap-1.5">
+          <Type variant="small" className="text-muted-foreground">
+            Environment:
+          </Type>
+          <Badge variant="neutral">{defaultEnvironmentName}</Badge>
+        </div>
+      )}
+
       {/* Toolset-level OAuth Connection UI */}
       {hasOAuth &&
         (oauthMode === "custom-proxy" || oauthMode === "external") && (
@@ -435,7 +485,17 @@ export function PlaygroundAuth({
         let isEditable = false;
 
         if (envVar.state === "user-provided") {
-          displayValue = userProvidedValues[envVar.key] || "";
+          const storedEntry = playgroundEnv.storedEntries.find(
+            (e) => e.name === envVar.key,
+          );
+          const isEdited = editedKeys.has(envVar.key);
+          if (isEdited) {
+            displayValue = userProvidedValues[envVar.key] || "";
+          } else if (storedEntry?.hasStoredValue) {
+            displayValue = PASSWORD_MASK;
+          } else {
+            displayValue = "";
+          }
           placeholder = "Enter value here";
           isEditable = true;
         } else if (envVar.state === "omitted") {
@@ -460,12 +520,20 @@ export function PlaygroundAuth({
               id={`auth-${envVar.id}`}
               value={displayValue}
               onChange={(newValue) => {
-                if (isEditable) {
-                  setUserProvidedValues((prev) => ({
-                    ...prev,
-                    [envVar.key]: newValue,
-                  }));
+                if (!isEditable) return;
+                // If this is the first edit of a previously-masked field,
+                // strip the PASSWORD_MASK prefix so it doesn't contaminate
+                // the credential the user is typing.
+                const wasEditedBefore = editedKeys.has(envVar.key);
+                let cleanValue = newValue;
+                if (!wasEditedBefore && newValue.startsWith(PASSWORD_MASK)) {
+                  cleanValue = newValue.slice(PASSWORD_MASK.length);
                 }
+                setEditedKeys((prev) => new Set(prev).add(envVar.key));
+                setUserProvidedValues((prev) => ({
+                  ...prev,
+                  [envVar.key]: cleanValue,
+                }));
               }}
               placeholder={placeholder}
               className="font-mono text-xs h-7"
@@ -475,6 +543,20 @@ export function PlaygroundAuth({
           </div>
         );
       })}
+      {envVars.some((v) => v.state === "user-provided") && (
+        <Button
+          size="sm"
+          variant="default"
+          className="w-full"
+          onClick={handleSave}
+          disabled={editedKeys.size === 0 || playgroundEnv.isSaving}
+        >
+          {playgroundEnv.isSaving ? (
+            <Loader2 className="size-3 mr-2 animate-spin" />
+          ) : null}
+          Save
+        </Button>
+      )}
       {missingRequiredCount > 0 && (
         <Type variant="small" className="text-warning pt-2">
           {missingRequiredCount} required variable

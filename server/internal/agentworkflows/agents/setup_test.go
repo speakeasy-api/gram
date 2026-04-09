@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -116,6 +117,7 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 
 	// Create cache
 	cacheImpl := cache.NewRedisCacheAdapter(redisClient)
+	platformToolsSvc := platformtoolsruntime.NewService(logger, conn, nil)
 
 	// Create agents service
 	agentsService := agents.NewService(
@@ -128,6 +130,7 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 		cacheImpl,
 		nil, // guardian policy
 		funcs,
+		platformToolsSvc,
 		nil, // openrouter provisioner
 		nil, // chat client
 	)
