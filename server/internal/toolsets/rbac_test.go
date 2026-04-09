@@ -12,21 +12,80 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func TestToolsets_RBAC_ReadOps_DeniedWithNoGrants(t *testing.T) {
+func TestToolsets_RBAC_List_ReturnsEmptyWithNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	_ = createMinimalPrivateToolset(t, ctx, ti, "rbac-list-empty-test")
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Toolsets)
+}
+
+func TestToolsets_RBAC_List_FiltersToGrantedToolsets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-filter-test")
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPRead, Resource: toolset.ID})
+
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Toolsets, 1)
+	require.Equal(t, toolset.ID, result.Toolsets[0].ID)
+}
+
+func TestToolsets_RBAC_List_ReturnsEmptyWithWrongResourceGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	_ = createMinimalPrivateToolset(t, ctx, ti, "rbac-excluded-test")
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPRead, Resource: uuid.NewString()})
+
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Toolsets)
+}
+
+func TestToolsets_RBAC_Create_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
-	_, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "rbac-test-toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           []string{},
+		DefaultEnvironmentSlug: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestToolsets_RBAC_ReadOps_AllowedWithMCPReadGrant(t *testing.T) {
+func TestToolsets_RBAC_Create_DeniedWithReadOnlyGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
@@ -37,15 +96,22 @@ func TestToolsets_RBAC_ReadOps_AllowedWithMCPReadGrant(t *testing.T) {
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPRead, Resource: authCtx.ProjectID.String()})
 
-	_, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "rbac-test-toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           []string{},
+		DefaultEnvironmentSlug: nil,
 	})
-	require.NoError(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestToolsets_RBAC_ReadOps_AllowedWithMCPWriteGrant(t *testing.T) {
+func TestToolsets_RBAC_Create_AllowedWithProjectWriteGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
@@ -56,91 +122,101 @@ func TestToolsets_RBAC_ReadOps_AllowedWithMCPWriteGrant(t *testing.T) {
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
 
-	_, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "rbac-test-toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           []string{},
+		DefaultEnvironmentSlug: nil,
 	})
 	require.NoError(t, err)
-}
-
-func TestToolsets_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestToolsetsService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPRead, Resource: uuid.NewString()})
-
-	_, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-	})
-	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestToolsets_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-write-denied-test")
+
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
-	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		ApikeyToken:            nil,
 		ProjectSlugInput:       nil,
-		Name:                   "rbac-test-toolset",
+		Slug:                   toolset.Slug,
+		Name:                   nil,
 		Description:            nil,
-		ToolUrns:               []string{},
-		ResourceUrns:           []string{},
 		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            nil,
+		CustomDomainID:         nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestToolsets_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-write-readonly-test")
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPRead, Resource: toolset.ID})
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPRead, Resource: authCtx.ProjectID.String()})
-
-	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		ApikeyToken:            nil,
 		ProjectSlugInput:       nil,
-		Name:                   "rbac-test-toolset",
+		Slug:                   toolset.Slug,
+		Name:                   nil,
 		Description:            nil,
-		ToolUrns:               []string{},
-		ResourceUrns:           []string{},
 		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            nil,
+		CustomDomainID:         nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestToolsets_RBAC_WriteOps_AllowedWithMCPWriteGrant(t *testing.T) {
+func TestToolsets_RBAC_WriteOps_AllowedWithToolsetWriteGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-write-allowed-test")
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPWrite, Resource: toolset.ID})
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
-
-	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	name := "updated-name"
+	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		ApikeyToken:            nil,
 		ProjectSlugInput:       nil,
-		Name:                   "rbac-test-toolset",
+		Slug:                   toolset.Slug,
+		Name:                   &name,
 		Description:            nil,
-		ToolUrns:               []string{},
-		ResourceUrns:           []string{},
 		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            nil,
+		CustomDomainID:         nil,
 	})
 	require.NoError(t, err)
 }
