@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5db12dc8821a98512e415fde61e2ef9c
+  docChecksum: f74b622139df94de1184afacae4c0827
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.38
-  configChecksum: bbf73bf1ddcfdebd598a97316d9d002c
+  releaseVersion: 0.32.39
+  configChecksum: 9d96e31256f5f868b7e6043cbe2b15d6
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -168,7 +168,7 @@ trackedFiles:
   docs/models/components/creditusageresponsebody.md:
     last_write_checksum: sha1:34bbdfb51d51d5942a0c7f19f4d3fd408867dc64
   docs/models/components/cursorhookpayload.md:
-    last_write_checksum: sha1:d9000c79d6e8c89d04dc1a5fde3b505a56df70c8
+    last_write_checksum: sha1:46d83cda99cfd69883c9f82faaf63aeea4354d8c
   docs/models/components/cursorhookresult.md:
     last_write_checksum: sha1:e1e5df116f30a73a8c2055353de5324971ba53b1
   docs/models/components/customdomain.md:
@@ -1606,7 +1606,7 @@ trackedFiles:
   docs/sdks/features/README.md:
     last_write_checksum: sha1:79ab0259791f46a8d2ecd959a4ee69dd4551bea5
   docs/sdks/hooks/README.md:
-    last_write_checksum: sha1:0e5e50cd8f2d4ccaee82b487f596afcac7b2251b
+    last_write_checksum: sha1:622265216f7511f0466586949baaa2cd91c4bf1c
   docs/sdks/hooksservernames/README.md:
     last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
@@ -1661,11 +1661,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:f9cd35df95620c72c01ebce396dd883c4547cd88
+    last_write_checksum: sha1:176d260a00a93f59704ce919e4f7592200fad844
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:f9e5842fcd4fcd5872e793a8f899e8f023acc2c0
+    last_write_checksum: sha1:24370869d30fadd2b7022cbd1a1f73915e8b4794
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1892,7 +1892,7 @@ trackedFiles:
   src/funcs/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:d2a72cb590c74f9878eee245be17ec020f991dd2
   src/funcs/hooksHooksNumberCursor.ts:
-    last_write_checksum: sha1:4e6c5673215f29f5ff372133d0daaa72ed4f37d9
+    last_write_checksum: sha1:96e2de0546a3770c2323659cf4e4d79d75d85897
   src/funcs/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
   src/funcs/hooksServerNamesDeleteServerNameOverride.ts:
@@ -2181,7 +2181,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:1c70b3c65d938176805185bcd15e88b13e5ff701
+    last_write_checksum: sha1:831f94827afd99b5d19d24f7c9fc13e0d6fd44df
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2392,7 +2392,7 @@ trackedFiles:
     last_write_checksum: sha1:4dadf315b4b01174dc91b836b05d74186fbe65e0
     pristine_git_object: 087b1ed2f1f241f72f016744c7abdf7f0d647852
   src/models/components/cursorhookpayload.ts:
-    last_write_checksum: sha1:569b680795db9230ff789d0f6140912fb01f3f23
+    last_write_checksum: sha1:e021e4edc758c0c04170813057e478fe176000dd
   src/models/components/cursorhookresult.ts:
     last_write_checksum: sha1:e19dfcfc5a734e842ebae2b852c4298ef7000090
   src/models/components/customdomain.ts:
@@ -3860,7 +3860,7 @@ trackedFiles:
   src/react-query/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:65daa7cbd33c503edad39c7ca638137b35727049
   src/react-query/hooksHooksNumberCursor.ts:
-    last_write_checksum: sha1:f2d80ba4df9aae6db6cb95b7898949892d85dffa
+    last_write_checksum: sha1:f9b1788f8eb828d710044492913d0bf711b8b128
   src/react-query/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:71f93fe368921c0b23f8da768c8d6b424852bb96
   src/react-query/hooksServerNamesDeleteServerNameOverride.ts:
@@ -4342,7 +4342,7 @@ trackedFiles:
     last_write_checksum: sha1:f9453df020a022530a0fb97a2e7099343c930b13
     pristine_git_object: 3b4e49a565f809818b5f48673f81835a7d83f884
   src/sdk/hooks.ts:
-    last_write_checksum: sha1:a71276d6f8cfc1e951c4283e8683556ca6eff7cc
+    last_write_checksum: sha1:c23acd54e98cc2ad177fa04c7d7ef891b4eb5f1a
   src/sdk/hooksservernames.ts:
     last_write_checksum: sha1:46e1603a1bda6de118b0cfbf7ce1590e01a38c42
   src/sdk/index.ts:

@@ -441,19 +441,81 @@ func (s *Service) persistCursorEventToPG(ctx context.Context, payload *gen.Curso
 	switch payload.HookEventName {
 	case "beforeSubmitPrompt":
 		err = s.persistCursorConversationEvent(ctx, payload, orgID, projectID)
+	case "afterAgentResponse":
+		err = s.persistCursorAgentResponse(ctx, payload, metadata)
 	case "preToolUse":
 		err = s.writeCursorToolCallRequestToPG(ctx, payload, metadata)
 	case "postToolUse", "postToolUseFailure":
 		err = s.writeCursorToolCallResultToPG(ctx, payload, metadata)
 	default:
 		// stop events only carry token metrics (no message content), so they are
-		// written to ClickHouse for telemetry but not persisted to PostgreSQL.
+		// not persisted to PostgreSQL.
 		return
 	}
 
 	if err != nil {
 		s.logger.ErrorContext(ctx, "Failed to persist Cursor event to PG", attr.SlogError(err))
 	}
+}
+
+// persistCursorAgentResponse writes the assistant's response text to PostgreSQL as a chat message.
+func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) error {
+	if payload.ConversationID == nil || *payload.ConversationID == "" {
+		return nil
+	}
+
+	content := conv.PtrValOr(payload.Text, "")
+	if content == "" {
+		return nil
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	chatID := sessionIDToUUID(*payload.ConversationID)
+
+	msgParams := chatRepo.CreateChatMessageParams{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             "assistant",
+		Content:          content,
+		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
+		UserID:           conv.ToPGTextEmpty(""),
+		Source:           conv.ToPGText("Cursor"),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+	}
+
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle); err != nil {
+		return err
+	}
+
+	if s.chatTitleGenerator != nil {
+		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+			context.WithoutCancel(ctx),
+			chatID.String(),
+			metadata.GramOrgID,
+			metadata.ProjectID,
+		); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule chat title generation for Cursor", attr.SlogError(err))
+		}
+	}
+
+	return nil
 }
 
 // persistCursorConversationEvent writes a Cursor conversation event (user prompt) to PostgreSQL.

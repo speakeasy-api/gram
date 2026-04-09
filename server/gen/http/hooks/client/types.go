@@ -61,8 +61,8 @@ type ClaudeRequestBody struct {
 // CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
 // request body.
 type CursorRequestBody struct {
-	// The type of hook event (e.g. beforeSubmitPrompt, stop, preToolUse,
-	// postToolUse, postToolUseFailure)
+	// The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse,
+	// afterAgentThought, preToolUse, postToolUse, postToolUseFailure)
 	HookEventName string `form:"hook_event_name" json:"hook_event_name" xml:"hook_event_name"`
 	// The Cursor conversation ID
 	ConversationID *string `form:"conversation_id,omitempty" json:"conversation_id,omitempty" xml:"conversation_id,omitempty"`
@@ -108,6 +108,11 @@ type CursorRequestBody struct {
 	CacheReadTokens *int `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
 	// Tokens written to cache (stop only)
 	CacheWriteTokens *int `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
+	// The assistant's response text (afterAgentResponse) or thinking text
+	// (afterAgentThought)
+	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
+	// Duration in milliseconds for the thinking block (afterAgentThought only)
+	DurationMs *int `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -819,6 +824,8 @@ func NewCursorRequestBody(p *hooks.CursorPayload) *CursorRequestBody {
 		OutputTokens:     p.OutputTokens,
 		CacheReadTokens:  p.CacheReadTokens,
 		CacheWriteTokens: p.CacheWriteTokens,
+		Text:             p.Text,
+		DurationMs:       p.DurationMs,
 	}
 	if p.AdditionalData != nil {
 		body.AdditionalData = make(map[string]any, len(p.AdditionalData))

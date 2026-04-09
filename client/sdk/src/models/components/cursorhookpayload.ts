@@ -34,6 +34,10 @@ export type CursorHookPayload = {
    */
   cursorVersion?: string | undefined;
   /**
+   * Duration in milliseconds for the thinking block (afterAgentThought only)
+   */
+  durationMs?: number | undefined;
+  /**
    * The error from the tool (postToolUseFailure only)
    */
   error?: any | undefined;
@@ -42,7 +46,7 @@ export type CursorHookPayload = {
    */
   generationId?: string | undefined;
   /**
-   * The type of hook event (e.g. beforeSubmitPrompt, stop, preToolUse, postToolUse, postToolUseFailure)
+   * The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure)
    */
   hookEventName: string;
   /**
@@ -78,6 +82,10 @@ export type CursorHookPayload = {
    */
   status?: string | undefined;
   /**
+   * The assistant's response text (afterAgentResponse) or thinking text (afterAgentThought)
+   */
+  text?: string | undefined;
+  /**
    * The input to the tool
    */
   toolInput?: any | undefined;
@@ -111,6 +119,7 @@ export type CursorHookPayload$Outbound = {
   composer_mode?: string | undefined;
   conversation_id?: string | undefined;
   cursor_version?: string | undefined;
+  duration_ms?: number | undefined;
   error?: any | undefined;
   generation_id?: string | undefined;
   hook_event_name: string;
@@ -122,6 +131,7 @@ export type CursorHookPayload$Outbound = {
   prompt?: string | undefined;
   session_id?: string | undefined;
   status?: string | undefined;
+  text?: string | undefined;
   tool_input?: any | undefined;
   tool_name?: string | undefined;
   tool_response?: any | undefined;
@@ -142,6 +152,7 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
     composerMode: z.optional(z.string()),
     conversationId: z.optional(z.string()),
     cursorVersion: z.optional(z.string()),
+    durationMs: z.optional(z.int()),
     error: z.optional(z.any()),
     generationId: z.optional(z.string()),
     hookEventName: z.string(),
@@ -153,6 +164,7 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
     prompt: z.optional(z.string()),
     sessionId: z.optional(z.string()),
     status: z.optional(z.string()),
+    text: z.optional(z.string()),
     toolInput: z.optional(z.any()),
     toolName: z.optional(z.string()),
     toolResponse: z.optional(z.any()),
@@ -168,6 +180,7 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
       composerMode: "composer_mode",
       conversationId: "conversation_id",
       cursorVersion: "cursor_version",
+      durationMs: "duration_ms",
       generationId: "generation_id",
       hookEventName: "hook_event_name",
       inputTokens: "input_tokens",

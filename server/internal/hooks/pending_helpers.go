@@ -213,6 +213,8 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		hookEvent = "PostToolUseFailure"
 	case "beforeSubmitPrompt":
 		hookEvent = "BeforeSubmitPrompt"
+	case "afterAgentResponse":
+		hookEvent = "AfterAgentResponse"
 	case "stop":
 		hookEvent = "Stop"
 	}

@@ -1,38 +1,32 @@
 {
   "hooks": {
-    "sessionStart": [
-      {
-        "command": "echo '{\"env\":{\"GRAM_PLUGIN_DIR\":\"'\"$(pwd)\"'\"}}'",
-        "timeout": 5
-      }
-    ],
     "beforeSubmitPrompt": [
       {
-        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
+        "command": "./hooks/send_hook.sh",
         "timeout": 10
       }
     ],
-    "stop": [
+    "afterAgentResponse": [
       {
-        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
+        "command": "./hooks/send_hook.sh",
         "timeout": 10
       }
     ],
     "preToolUse": [
       {
-        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
+        "command": "./hooks/send_hook.sh",
         "timeout": 10
       }
     ],
     "postToolUse": [
       {
-        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
+        "command": "./hooks/send_hook.sh",
         "timeout": 10
       }
     ],
     "postToolUseFailure": [
       {
-        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
+        "command": "./hooks/send_hook.sh",
         "timeout": 10
       }
     ]

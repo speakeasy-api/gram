@@ -273,9 +273,6 @@ func TestCursor_PersistEventRouting_AllEventTypes(t *testing.T) {
 	}
 }
 
-//go:fix inline
-func strPtr(s string) *string { return new(s) }
-
 func TestBuildCursorTelemetryAttributes_BeforeSubmitPromptNormalization(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -293,7 +290,7 @@ func TestBuildCursorTelemetryAttributes_BeforeSubmitPromptNormalization(t *testi
 	// Prompt should be stored as LogBody for beforeSubmitPrompt
 	require.Equal(t, "Fix the bug", attrs[attr.LogBodyKey])
 	// ToolNameKey should be empty for conversation events
-	require.Equal(t, "", attrs[attr.ToolNameKey])
+	require.Empty(t, attrs[attr.ToolNameKey])
 }
 
 func TestBuildCursorTelemetryAttributes_StopNormalization(t *testing.T) {
@@ -318,7 +315,7 @@ func TestBuildCursorTelemetryAttributes_StopNormalization(t *testing.T) {
 	require.Equal(t, 38950, attrs[attr.GenAIUsageInputTokensKey])
 	require.Equal(t, 500, attrs[attr.GenAIUsageOutputTokensKey])
 	// ToolNameKey should be empty for non-tool events
-	require.Equal(t, "", attrs[attr.ToolNameKey])
+	require.Empty(t, attrs[attr.ToolNameKey])
 	// LogBody should NOT contain prompt text (stop has no prompt)
 	require.Equal(t, "Hook: Stop", attrs[attr.LogBodyKey])
 }

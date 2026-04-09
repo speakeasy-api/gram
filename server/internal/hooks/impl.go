@@ -384,7 +384,14 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 
-	s.writeCursorHookToClickHouse(ctx, payload, orgID, projectID)
+	// Match Claude's pattern: tool events go to ClickHouse + PG chat history,
+	// conversation events go to PG chat history only.
+	switch payload.HookEventName {
+	case "beforeSubmitPrompt", "afterAgentResponse":
+		// Conversation events: PG only
+	default:
+		s.writeCursorHookToClickHouse(ctx, payload, orgID, projectID)
+	}
 	s.persistCursorEventToPG(ctx, payload, orgID, projectID)
 
 	result := &gen.CursorHookResult{
