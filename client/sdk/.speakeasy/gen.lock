@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: f74b622139df94de1184afacae4c0827
+  docChecksum: b84e171718b422c01908dadd9e27a441
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.39
-  configChecksum: 9d96e31256f5f868b7e6043cbe2b15d6
+  releaseVersion: 0.32.40
+  configChecksum: 7c3e169c9b37e5db49d9f063db598e7b
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -102,13 +102,13 @@ trackedFiles:
   docs/models/components/captureeventresult.md:
     last_write_checksum: sha1:832ac883ea96cdb0e257df7e20eb79f6252b81bf
   docs/models/components/chat.md:
-    last_write_checksum: sha1:05cec6b86f389d8b2309a02dfa650e4e25340795
+    last_write_checksum: sha1:6304eda975d4d8f3c79002dbbf188a8e39503d66
   docs/models/components/chatmessage.md:
     last_write_checksum: sha1:3e557f117bcc3c5dd1156ed113d3f49ddcb452c0
   docs/models/components/chatoverview.md:
-    last_write_checksum: sha1:21c26d2ed7b4b369067a1f03e421f09817576f96
+    last_write_checksum: sha1:0d494e6849f1cde41a1f5cbd6891f05407a3ca07
   docs/models/components/chatoverviewwithresolutions.md:
-    last_write_checksum: sha1:ed69a1f9a2c7a4278ca4f6c137ada3dc658f8144
+    last_write_checksum: sha1:d3ba00c406367218fd6d790c3308a1afac4a76c5
   docs/models/components/chatresolution.md:
     last_write_checksum: sha1:f056a2c0377fd38d04bc53c8a3ebe45ede6abff2
   docs/models/components/chatsummary.md:
@@ -314,9 +314,9 @@ trackedFiles:
   docs/models/components/listcatalogresponsebody.md:
     last_write_checksum: sha1:c72b7daebcaec401a59c137e89ab02f377a52910
   docs/models/components/listchatsresult.md:
-    last_write_checksum: sha1:5c4c74b4fc53fff8bf475f0abbb3f72971158dce
+    last_write_checksum: sha1:3b302bfbd5a1a3a56e02091da748dcf7d5b90522
   docs/models/components/listchatswithresolutionsresult.md:
-    last_write_checksum: sha1:39a311585ebeaa9c8ce51dc3b3ea47749de595ea
+    last_write_checksum: sha1:b40cd5b165fd356bfa92708332fd97ba46038b5b
   docs/models/components/listdeploymentresult.md:
     last_write_checksum: sha1:e81f46e1358dfcee125fcfb93dfb636b707be998
   docs/models/components/listenvironmentsresult.md:
@@ -1661,11 +1661,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:176d260a00a93f59704ce919e4f7592200fad844
+    last_write_checksum: sha1:7393f94d5adcc81a805102e7ff0cd45731d37537
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:24370869d30fadd2b7022cbd1a1f73915e8b4794
+    last_write_checksum: sha1:b31fafeab09ec81f91120710211a419e8a4adbb6
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2181,7 +2181,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:831f94827afd99b5d19d24f7c9fc13e0d6fd44df
+    last_write_checksum: sha1:495215f7935c87dffae27816b628a131086e512e
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2295,7 +2295,7 @@ trackedFiles:
     pristine_git_object: b3f51a2a16660622475c230ee52c6a4be4beef00
   src/models/components/chat.ts:
     id: 9ced5127d17b
-    last_write_checksum: sha1:5c0aef2e394dff8349590192dc910f298cea4dc9
+    last_write_checksum: sha1:27106439a0ad3abf8a897e141c21e86b81deb9ed
     pristine_git_object: d74d2ff627fec7af63710786888c09ce919dbf87
   src/models/components/chatmessage.ts:
     id: 64060926ed56
@@ -2303,10 +2303,10 @@ trackedFiles:
     pristine_git_object: 9bdc3bfc1f7458c0044bb61b2382f8301c0828bf
   src/models/components/chatoverview.ts:
     id: b060f6650726
-    last_write_checksum: sha1:092ecca9f452ee43e160a0731c11eedccc27e2e7
+    last_write_checksum: sha1:2a3da2abc29f29e2c66908965210ecec69f4fbd5
     pristine_git_object: 60c3257be0907ff0b08bb4ee07a7dd6e300350be
   src/models/components/chatoverviewwithresolutions.ts:
-    last_write_checksum: sha1:a7dacb47c26e654d36b89b5dc6bf7583339b7d60
+    last_write_checksum: sha1:76fd66e8ac0710a44dad7dcdd512f528cde6978e
   src/models/components/chatresolution.ts:
     last_write_checksum: sha1:9084f3031124e2ab8ef5698a96e7a5a5f43bf71b
   src/models/components/chatsummary.ts:
@@ -4593,7 +4593,7 @@ examples:
     speakeasy-default-list-chats:
       responses:
         "200":
-          application/json: {"chats": [{"created_at": "2024-09-09T21:12:11.561Z", "id": "<id>", "num_messages": 448273, "title": "<value>", "updated_at": "2023-02-28T09:13:49.707Z", "user_id": "<id>"}]}
+          application/json: {"chats": [{"created_at": "2024-09-09T21:12:11.561Z", "id": "<id>", "last_message_timestamp": "2026-08-06T02:21:11.404Z", "num_messages": 448273, "title": "<value>", "updated_at": "2023-02-28T09:13:49.707Z", "user_id": "<id>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4605,7 +4605,7 @@ examples:
           id: "<id>"
       responses:
         "200":
-          application/json: {"created_at": "2024-04-09T14:22:10.370Z", "id": "<id>", "messages": [{"created_at": "2025-11-05T12:22:55.772Z", "id": "<id>", "model": "Aventador", "role": "<value>"}], "num_messages": 795032, "title": "<value>", "updated_at": "2024-03-05T16:47:00.180Z"}
+          application/json: {"created_at": "2024-04-09T14:22:10.370Z", "id": "<id>", "last_message_timestamp": "2025-04-09T14:22:10.370Z", "messages": [{"created_at": "2025-11-05T12:22:55.772Z", "id": "<id>", "model": "Aventador", "role": "<value>"}], "num_messages": 795032, "title": "<value>", "updated_at": "2024-03-05T16:47:00.180Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5733,7 +5733,7 @@ examples:
           sort_order: "desc"
       responses:
         "200":
-          application/json: {"chats": [{"created_at": "2024-03-12T14:08:15.680Z", "id": "<id>", "num_messages": 236956, "resolutions": [{"created_at": "2024-12-29T23:05:18.944Z", "id": "7388f705-63e1-45b3-9e77-6296c7937c05", "message_ids": ["abc-123", "def-456"], "resolution": "failure", "resolution_notes": "<value>", "score": 789128, "user_goal": "<value>"}], "title": "<value>", "updated_at": "2026-08-30T11:51:39.615Z"}], "total": 52256}
+          application/json: {"chats": [{"created_at": "2024-03-12T14:08:15.680Z", "id": "<id>", "last_message_timestamp": "2026-08-25T16:34:39.162Z", "num_messages": 236956, "resolutions": [{"created_at": "2024-12-29T23:05:18.944Z", "id": "7388f705-63e1-45b3-9e77-6296c7937c05", "message_ids": ["abc-123", "def-456"], "resolution": "failure", "resolution_notes": "<value>", "score": 789128, "user_goal": "<value>"}], "title": "<value>", "updated_at": "2026-08-30T11:51:39.615Z"}], "total": 52256}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

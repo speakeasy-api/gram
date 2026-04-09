@@ -125,7 +125,7 @@ function TelemetryLogsTab({
               {log.severityText || "INFO"}
             </Badge>
             <div className="flex-1 min-w-0 space-y-1">
-              <div className="text-sm font-medium break-words">{log.body}</div>
+              <div className="text-sm font-medium break-words">{log.body.trim()}</div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>{formatTimestamp(log.timeUnixNano)}</span>
                 {log.service?.name && (
@@ -254,7 +254,7 @@ function ToolCallsTab({
                 </div>
                 {log.body && (
                   <div className="text-sm text-muted-foreground mt-1">
-                    {log.body}
+                    {log.body.trim()}
                   </div>
                 )}
               </div>
@@ -313,9 +313,10 @@ export function ChatDetailPanel({
   const status = getOverallResolutionStatus(resolutions);
   const averageScore = getAverageScore(resolutions);
   const contextQuality = getContextQuality(averageScore);
+  // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
+  const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
-    (new Date(chat.updatedAt).getTime() - new Date(chat.createdAt).getTime()) /
-      1000,
+    (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
 
   // Filter out system messages for display count
@@ -667,7 +668,7 @@ export function ChatDetailPanel({
                             ) : (
                               <div className="whitespace-pre-wrap">
                                 {typeof message.content === "string"
-                                  ? message.content
+                                  ? message.content.trim()
                                   : JSON.stringify(message.content)}
                               </div>
                             )}
@@ -732,7 +733,7 @@ export function ChatDetailPanel({
                     <div className="p-4 rounded-lg bg-muted/30 border">
                       <pre className="text-sm whitespace-pre-wrap font-mono">
                         {typeof message.content === "string"
-                          ? message.content
+                          ? message.content.trim()
                           : JSON.stringify(message.content, null, 2)}
                       </pre>
                     </div>

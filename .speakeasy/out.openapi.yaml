@@ -15273,6 +15273,10 @@ components:
         id:
           type: string
           description: The ID of the chat
+        last_message_timestamp:
+          type: string
+          description: When the last message in the chat was created.
+          format: date-time
         messages:
           type: array
           items:
@@ -15302,6 +15306,7 @@ components:
         - num_messages
         - created_at
         - updated_at
+        - last_message_timestamp
     ChatMessage:
       type: object
       properties:
@@ -15354,6 +15359,10 @@ components:
         id:
           type: string
           description: The ID of the chat
+        last_message_timestamp:
+          type: string
+          description: When the last message in the chat was created.
+          format: date-time
         num_messages:
           type: integer
           description: The number of messages in the chat
@@ -15377,6 +15386,7 @@ components:
         - num_messages
         - created_at
         - updated_at
+        - last_message_timestamp
     ChatOverviewWithResolutions:
       type: object
       properties:
@@ -15390,6 +15400,10 @@ components:
         id:
           type: string
           description: The ID of the chat
+        last_message_timestamp:
+          type: string
+          description: When the last message in the chat was created.
+          format: date-time
         num_messages:
           type: integer
           description: The number of messages in the chat
@@ -15420,6 +15434,7 @@ components:
         - num_messages
         - created_at
         - updated_at
+        - last_message_timestamp
     ChatResolution:
       type: object
       properties:

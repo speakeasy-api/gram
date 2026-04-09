@@ -59,6 +59,8 @@ type LoadChatResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When the last message in the chat was created.
+	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -1207,6 +1209,8 @@ type ChatOverviewResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When the last message in the chat was created.
+	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1255,6 +1259,8 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When the last message in the chat was created.
+	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
 }
 
 // ChatResolutionResponseBody is used to define fields on response body types.
@@ -1298,14 +1304,15 @@ func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody 
 // "loadChat" endpoint of the "chat" service.
 func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	body := &LoadChatResponseBody{
-		ID:             res.ID,
-		Title:          res.Title,
-		UserID:         res.UserID,
-		ExternalUserID: res.ExternalUserID,
-		NumMessages:    res.NumMessages,
-		Source:         res.Source,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                   res.ID,
+		Title:                res.Title,
+		UserID:               res.UserID,
+		ExternalUserID:       res.ExternalUserID,
+		NumMessages:          res.NumMessages,
+		Source:               res.Source,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
+		LastMessageTimestamp: res.LastMessageTimestamp,
 	}
 	if res.Messages != nil {
 		body.Messages = make([]*ChatMessageResponseBody, len(res.Messages))
