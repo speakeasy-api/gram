@@ -260,7 +260,7 @@ async function seed() {
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO mcp_registries (name, url) VALUES ('Gram Recommended', 'https://api.pulsemcp.com') ON CONFLICT (url) DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO mcp_registries (name, url) VALUES ('Gram Recommended', 'https://api.pulsemcp.com') ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
     log.info("Seeded MCP registry 'Gram Recommended'");
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
