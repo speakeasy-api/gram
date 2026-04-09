@@ -233,16 +233,6 @@ func TestBuildCursorTelemetryAttributes_StopNormalization(t *testing.T) {
 	require.Equal(t, "Stop", attrs[attr.HookEventKey])
 }
 
-func TestIsCursorConversationEvent(t *testing.T) {
-	t.Parallel()
-	require.True(t, isCursorConversationEvent("beforeSubmitPrompt"))
-	require.False(t, isCursorConversationEvent("stop"))
-	require.False(t, isCursorConversationEvent("preToolUse"))
-	require.False(t, isCursorConversationEvent("postToolUse"))
-	require.False(t, isCursorConversationEvent("postToolUseFailure"))
-	require.False(t, isCursorConversationEvent("someNewEvent"))
-}
-
 func TestBuildCursorTelemetryAttributes_ToolInputStringified(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

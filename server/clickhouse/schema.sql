@@ -138,7 +138,7 @@ SELECT
         toInt32OrNull(toString(attributes.http.response.status_code)),
         toString(attributes.http.response.status_code) != ''
     ) AS http_status_code,
-    max(if(toString(attributes.gram.hook.event) IN ('PostToolUse', 'BeforeSubmitPrompt', 'Stop'), 1, 0)) AS hook_has_success,
+    max(if(toString(attributes.gram.hook.event) IN ('PreToolUse', 'PostToolUse', 'BeforeSubmitPrompt', 'Stop'), 1, 0)) AS hook_has_success,
     max(if(toString(attributes.gram.hook.event) = 'PostToolUseFailure', 1, 0)) AS hook_has_failure
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')

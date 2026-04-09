@@ -381,13 +381,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		}),
 	)
 
-	s.writeCursorHookToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	orgID := authCtx.ActiveOrganizationID
+	projectID := authCtx.ProjectID.String()
 
-	if isCursorConversationEvent(payload.HookEventName) {
-		if err := s.persistCursorConversationEvent(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String()); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
-		}
-	}
+	s.writeCursorHookToClickHouse(ctx, payload, orgID, projectID)
+	s.persistCursorEventToPG(ctx, payload, orgID, projectID)
 
 	result := &gen.CursorHookResult{
 		Permission:        nil,

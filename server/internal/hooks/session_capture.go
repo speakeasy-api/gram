@@ -323,12 +323,138 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
 }
 
-// isCursorConversationEvent returns true if the Cursor event is a conversation capture event (not a tool call).
-func isCursorConversationEvent(eventName string) bool {
-	return eventName == "beforeSubmitPrompt"
+// writeCursorToolCallRequestToPG writes a Cursor tool call request (preToolUse) to PostgreSQL.
+func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) error {
+	if payload.ConversationID == nil || *payload.ConversationID == "" {
+		return nil
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	chatID := sessionIDToUUID(*payload.ConversationID)
+
+	toolCalls := []map[string]any{{
+		"id":   conv.PtrValOr(payload.ToolUseID, ""),
+		"type": "function",
+		"function": map[string]any{
+			"name":      conv.PtrValOr(payload.ToolName, ""),
+			"arguments": marshalToJSON(payload.ToolInput),
+		},
+	}}
+
+	toolCallsJSON, err := json.Marshal(toolCalls)
+	if err != nil {
+		return fmt.Errorf("marshal tool_calls: %w", err)
+	}
+
+	msgParams := chatRepo.CreateChatMessageParams{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             "assistant",
+		Content:          "",
+		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
+		UserID:           conv.ToPGTextEmpty(""),
+		Source:           conv.ToPGText("Cursor"),
+		ToolCalls:        toolCallsJSON,
+		FinishReason:     conv.ToPGText("tool_calls"),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+	}
+
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
 }
 
-// persistCursorConversationEvent writes a Cursor conversation event (user prompt or assistant response) to PostgreSQL.
+// writeCursorToolCallResultToPG writes a Cursor tool call result (postToolUse/postToolUseFailure) to PostgreSQL.
+func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) error {
+	if payload.ConversationID == nil || *payload.ConversationID == "" {
+		return nil
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	chatID := sessionIDToUUID(*payload.ConversationID)
+
+	var content string
+	if payload.HookEventName == "postToolUse" && payload.ToolResponse != nil {
+		content = marshalToJSON(payload.ToolResponse)
+	} else if payload.HookEventName == "postToolUseFailure" && payload.Error != nil {
+		content = marshalToJSON(payload.Error)
+	} else {
+		return nil
+	}
+
+	msgParams := chatRepo.CreateChatMessageParams{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             "tool",
+		Content:          content,
+		UserID:           conv.ToPGTextEmpty(""),
+		Source:           conv.ToPGText("Cursor"),
+		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolUseID, "")),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		Model:            conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+	}
+
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
+}
+
+// persistCursorEventToPG routes a Cursor hook event to the appropriate PostgreSQL persistence function.
+func (s *Service) persistCursorEventToPG(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) {
+	metadata := &SessionMetadata{
+		SessionID:   conv.PtrValOr(payload.ConversationID, ""),
+		ServiceName: "Cursor",
+		UserEmail:   conv.PtrValOr(payload.UserEmail, ""),
+		ClaudeOrgID: "",
+		GramOrgID:   orgID,
+		ProjectID:   projectID,
+	}
+
+	var err error
+	switch payload.HookEventName {
+	case "beforeSubmitPrompt":
+		err = s.persistCursorConversationEvent(ctx, payload, orgID, projectID)
+	case "preToolUse":
+		err = s.writeCursorToolCallRequestToPG(ctx, payload, metadata)
+	case "postToolUse", "postToolUseFailure":
+		err = s.writeCursorToolCallResultToPG(ctx, payload, metadata)
+	default:
+		return
+	}
+
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Failed to persist Cursor event to PG", attr.SlogError(err))
+	}
+}
+
+// persistCursorConversationEvent writes a Cursor conversation event (user prompt) to PostgreSQL.
 func (s *Service) persistCursorConversationEvent(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) error {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
 		s.logger.WarnContext(ctx, "Cursor conversation event missing conversation_id")
