@@ -1831,53 +1831,161 @@ function ServerActivityChart({
   );
 }
 
-function SourceVolumeChart({ traces }: { traces: HookTrace[] }) {
-  const items = useMemo(() => {
-    const map = new Map<string, { total: number; success: number }>();
+function SourceVolumeChart({
+  traces,
+  serverNameMappings,
+  handleFilter,
+}: {
+  traces: HookTrace[];
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  handleFilter?: (serverName: string, source: string) => void;
+}) {
+  const { labels, datasets } = useMemo(() => {
+    // Build toolSource (display name) → hookSource → count
+    const serverMap = new Map<string, Map<string, number>>();
+    const sourceSet = new Set<string>();
     for (const t of traces) {
-      const source = t.hookSource ?? "unknown";
-      const entry = map.get(source) ?? { total: 0, success: 0 };
-      entry.total += 1;
-      if (t.hookStatus === "success") entry.success += 1;
-      map.set(source, entry);
+      const raw = t.toolSource ?? "";
+      const displayName = !raw
+        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+        : (serverNameMappings.rawToDisplay.get(raw) ?? raw);
+      const source = t.hookSource || "unknown";
+      sourceSet.add(source);
+      const inner = serverMap.get(displayName) ?? new Map<string, number>();
+      inner.set(source, (inner.get(source) ?? 0) + 1);
+      serverMap.set(displayName, inner);
     }
-    return Array.from(map.entries())
-      .map(([source, { total, success }]) => ({
-        key: source,
-        value: total,
-        successRate: total > 0 ? (success / total) * 100 : 0,
+
+    // Sort servers by total count desc
+    const sortedServers = Array.from(serverMap.entries())
+      .map(([displayName, sourceCounts]) => ({
+        displayName,
+        total: Array.from(sourceCounts.values()).reduce((a, b) => a + b, 0),
+        sourceCounts,
       }))
-      .sort((a, b) => {
-        if (a.key === "unknown") return 1;
-        if (b.key === "unknown") return -1;
-        return b.value - a.value;
+      .sort((a, b) => b.total - a.total);
+
+    // Sort sources by total usage desc, unknown last, for consistent legend ordering
+    const sortedSources = Array.from(sourceSet).sort((a, b) => {
+      if (a === "unknown") return 1;
+      if (b === "unknown") return -1;
+      const aTotal = sortedServers.reduce(
+        (s, srv) => s + (srv.sourceCounts.get(a) ?? 0),
+        0,
+      );
+      const bTotal = sortedServers.reduce(
+        (s, srv) => s + (srv.sourceCounts.get(b) ?? 0),
+        0,
+      );
+      return bTotal - aTotal;
+    });
+
+    const chartLabels = sortedServers.map((s) => s.displayName);
+    const chartDatasets = sortedSources.map((source, i) => ({
+      label: source,
+      barThickness: 24,
+      data: sortedServers.map((s) => s.sourceCounts.get(source) ?? 0),
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      borderWidth: 0,
+    }));
+
+    return { labels: chartLabels, datasets: chartDatasets };
+  }, [traces, serverNameMappings.rawToDisplay]);
+
+  if (labels.length === 0) return null;
+
+  const barHeight = 24;
+  const spacerHeight = 8;
+  const containerHeight = Math.max(
+    120,
+    labels.length * (barHeight + spacerHeight) + 60,
+  );
+
+  const stackTotalPlugin = {
+    id: "stackTotal",
+    afterDatasetsDraw(chart: ChartJS) {
+      const { ctx, data } = chart;
+      const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
+      ctx.save();
+      ctx.font = "12px";
+      ctx.fillStyle = CHART_COLORS.tickLabel;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      lastMeta.data.forEach((bar, i) => {
+        const total = data.datasets.reduce(
+          (sum, ds) => sum + ((ds.data[i] as number) || 0),
+          0,
+        );
+        ctx.fillText(String(total), bar.x + 4, bar.y);
       });
-  }, [traces]);
+      ctx.restore();
+    },
+  };
+
+  const options: ChartOptions<"bar"> = {
+    indexAxis: "y",
+    responsive: true,
+    maintainAspectRatio: false,
+    onClick(_, elements) {
+      if (!elements.length || !handleFilter) return;
+      const { datasetIndex, index } = elements[0];
+      const serverName = datasets[datasetIndex]?.label;
+      const source = labels[index];
+      if (serverName && source) handleFilter(serverName, source);
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: CHART_COLORS.gridLine },
+        ticks: { color: CHART_COLORS.tickLabel, precision: 0 },
+        afterFit(scale) {
+          scale.paddingRight = 30;
+        },
+      },
+      y: {
+        stacked: true,
+        ticks: { color: CHART_COLORS.tickLabel, crossAlign: "far", padding: 2 },
+        grid: { display: false },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "bottom",
+        align: "end",
+        labels: {
+          color: CHART_COLORS.tickLabel,
+          boxWidth: 12,
+          padding: 8,
+        },
+      },
+      tooltip: {
+        backgroundColor: CHART_COLORS.tooltipBg,
+        titleColor: CHART_COLORS.tooltipTitle,
+        bodyColor: CHART_COLORS.tooltipBody,
+        borderColor: CHART_COLORS.tooltipBorder,
+        borderWidth: 1,
+        callbacks: {
+          label: (item: TooltipItem<"bar">) =>
+            ` ${item.dataset.label}: ${item.parsed.x}`,
+        },
+      },
+    },
+  };
 
   return (
-    <BarList
-      items={items}
-      barClassName="bg-[hsl(280,40%,50%)]"
-      renderLabel={(item) => (
-        <>
-          <span className="truncate">{item.key}</span>
-          <HookSourceIcon
-            source={item.key}
-            className="text-muted-foreground size-3.5 shrink-0"
-          />
-        </>
-      )}
-      renderRight={(item) => (
-        <span
-          className={cn(
-            "w-10 text-right text-xs font-medium tabular-nums",
-            successRateClass(item.successRate),
-          )}
-        >
-          {item.successRate.toFixed(0)}%
-        </span>
-      )}
-    />
+    <div style={{ height: containerHeight }}>
+      <Bar
+        plugins={[stackTotalPlugin]}
+        data={{ labels, datasets }}
+        options={{
+          ...options,
+          onHover(event, elements) {
+            const el = event.native?.target as HTMLElement | null;
+            if (el) el.style.cursor = elements.length ? "pointer" : "default";
+          },
+        }}
+      />
+    </div>
   );
 }
 
@@ -2469,23 +2577,26 @@ function HooksAnalytics({
 
       {/* Bar Charts */}
       {hasServers && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Source Usage per User</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            <h3 className="text font-semibold">Source usage per User</h3>
             <UserVolumeList traces={groupedTraces} />
           </div>
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">MCP Server Usage per User</h3>
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            <h3 className="text font-semibold">MCP Server usage per User</h3>
             <ServerActivityChart
               traces={groupedTraces}
               serverNameMappings={serverNameMappings}
             />
           </div>
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text space-x-2 align-baseline font-semibold">
-              Activity by Source
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            <h3 className="text font-semibold align-baseline space-x-2">
+              Source usage per MCP Server
             </h3>
-            <SourceVolumeChart traces={groupedTraces} />
+            <SourceVolumeChart
+              traces={groupedTraces}
+              serverNameMappings={serverNameMappings}
+            />
           </div>
         </div>
       )}
