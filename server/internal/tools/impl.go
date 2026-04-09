@@ -17,6 +17,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/tools/server"
 	gen "github.com/speakeasy-api/gram/server/gen/tools"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -38,11 +39,12 @@ type Service struct {
 	repo           *repo.Queries
 	variationsRepo *vr.Queries
 	auth           *auth.Auth
+	access         *access.Manager
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("tools"))
 
 	return &Service{
@@ -51,7 +53,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:             db,
 		repo:           repo.New(db),
 		variationsRepo: vr.New(db),
-		auth:           auth.New(logger, db, sessions, accessLoader),
+		auth:           auth.New(logger, db, sessions, accessManager),
+		access:         accessManager,
 	}
 }
 
@@ -69,6 +72,10 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	// TODO: for now setting a sufficiently large limit that is still safe
