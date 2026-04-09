@@ -30,16 +30,16 @@ function ChangedFieldRow({
   newValue: unknown;
 }) {
   return (
-    <div className="flex items-center gap-3 border-b border-border/50 px-3 py-2 last:border-b-0">
-      <span className="w-[140px] shrink-0 font-mono text-xs font-medium text-muted-foreground">
+    <div className="flex items-start gap-3 border-b border-border/50 px-3 py-2 last:border-b-0">
+      <span className="w-[140px] shrink-0 pt-0.5 font-mono text-xs font-medium text-muted-foreground">
         {field}
       </span>
-      <div className="flex items-center gap-2">
-        <span className="rounded bg-red-50 px-2 py-0.5 font-mono text-xs text-red-700 line-through dark:bg-red-950 dark:text-red-400">
+      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+        <span className="max-w-full break-all rounded bg-red-50 px-2 py-0.5 font-mono text-xs text-red-700 line-through dark:bg-red-950 dark:text-red-400">
           {formatValue(oldValue)}
         </span>
-        <span className="text-xs text-muted-foreground">→</span>
-        <span className="rounded bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+        <span className="pt-0.5 text-xs text-muted-foreground">→</span>
+        <span className="max-w-full break-all rounded bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
           {formatValue(newValue)}
         </span>
       </div>
