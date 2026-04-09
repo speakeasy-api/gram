@@ -267,6 +267,7 @@ type ExternalMcpAttachment struct {
 	ID                      uuid.UUID
 	DeploymentID            uuid.UUID
 	RegistryID              uuid.UUID
+	RegistryType            string
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
