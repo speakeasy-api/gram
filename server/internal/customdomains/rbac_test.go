@@ -38,6 +38,35 @@ func TestCustomDomainsService_GetDomain_AllowsOrgReadGrant(t *testing.T) {
 	require.Equal(t, "docs.example.com", domain.Domain)
 }
 
+func TestCustomDomainsService_GetDomain_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: authCtx.ActiveOrganizationID, Domain: "hierarchy.example.com"})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+
+	domain, err := ti.service.GetDomain(ctx, &gen.GetDomainPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "hierarchy.example.com", domain.Domain)
+}
+
+func TestCustomDomainsService_GetDomain_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: authCtx.ActiveOrganizationID, Domain: "docs.example.com"})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	_, err = ti.service.GetDomain(ctx, &gen.GetDomainPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestCustomDomainsService_CreateDomain_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
@@ -59,6 +88,16 @@ func TestCustomDomainsService_CreateDomain_AllowsOrgAdminGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, ti.temporal.registrationCalls)
 	require.Equal(t, "create.example.com", ti.temporal.lastDomain)
+}
+
+func TestCustomDomainsService_CreateDomain_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestCustomDomainsService_DeleteDomain_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
@@ -85,6 +124,19 @@ func TestCustomDomainsService_DeleteDomain_AllowsOrgAdminGrant(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 	err = ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{})
 	require.NoError(t, err)
+}
+
+func TestCustomDomainsService_DeleteDomain_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: authCtx.ActiveOrganizationID, Domain: "delete.example.com"})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+	err = ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestCustomDomainsService_GetDomain_UnauthorizedWithEmptyOrgID(t *testing.T) {
