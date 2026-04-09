@@ -140,6 +140,16 @@ func TestService_SendInvite_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestService_SendInvite_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestService_SendInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	t.Parallel()
 

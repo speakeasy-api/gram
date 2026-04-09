@@ -66,11 +66,43 @@ func TestService_ListUsers_AllowsOrgReadGrant(t *testing.T) {
 	require.NotNil(t, res)
 }
 
+func TestService_ListUsers_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+
+	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+}
+
 func TestService_ListUsers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Nil(t, res)
+}
+
+func TestService_ListUsers_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	requireOopsCode(t, err, oops.CodeForbidden)

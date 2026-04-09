@@ -124,6 +124,16 @@ func TestService_RevokeInvite_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestService_RevokeInvite_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "any-invitation-id"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestService_RevokeInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	t.Parallel()
 

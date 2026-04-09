@@ -93,11 +93,39 @@ func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {
 	require.NotNil(t, res)
 }
 
+func TestService_ListInvites_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+
+	ti.orgs.On("ListInvitations", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Invitation{}, nil).Once()
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+}
+
 func TestService_ListInvites_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Nil(t, res)
+}
+
+func TestService_ListInvites_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	requireOopsCode(t, err, oops.CodeForbidden)

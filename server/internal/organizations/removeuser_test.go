@@ -178,6 +178,16 @@ func TestService_RemoveUser_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestService_RemoveUser_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestService_RemoveUser_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	t.Parallel()
 
