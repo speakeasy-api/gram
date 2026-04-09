@@ -387,6 +387,74 @@ func TestToolsetsService_UpdateOAuthProxyServer_EmptyEnvironmentSlugRejected(t *
 	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
 }
 
+func TestToolsetsService_UpdateOAuthProxyServer_EmptyAuthorizationEndpointRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withProAccount(t, ctx)
+
+	attached := createPublicToolsetWithCustomOAuthProxy(
+		t, ctx, ti,
+		"Empty Auth Endpoint Toolset",
+		"empty-auth-endpoint-env",
+		"empty-auth-endpoint-proxy",
+	)
+
+	beforeCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, auditErr)
+
+	emptyEndpoint := ""
+	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		Slug:         attached.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
+			AuthorizationEndpoint: &emptyEndpoint,
+		},
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "authorization_endpoint cannot be empty")
+
+	afterCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, auditErr)
+	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
+}
+
+func TestToolsetsService_UpdateOAuthProxyServer_EmptyTokenEndpointRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withProAccount(t, ctx)
+
+	attached := createPublicToolsetWithCustomOAuthProxy(
+		t, ctx, ti,
+		"Empty Token Endpoint Toolset",
+		"empty-token-endpoint-env",
+		"empty-token-endpoint-proxy",
+	)
+
+	beforeCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, auditErr)
+
+	emptyEndpoint := ""
+	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		Slug:         attached.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
+			TokenEndpoint: &emptyEndpoint,
+		},
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "token_endpoint cannot be empty")
+
+	afterCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, auditErr)
+	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
+}
+
 func TestToolsetsService_UpdateOAuthProxyServer_EnvironmentSlugNotFound(t *testing.T) {
 	t.Parallel()
 

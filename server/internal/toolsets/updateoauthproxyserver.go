@@ -51,6 +51,19 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		}
 	}
 
+	// Reject empty-string endpoints. Without this guard an API caller could
+	// send authorization_endpoint: "" or token_endpoint: "" which would flow
+	// through conv.PtrToPGText as pgtype.Text{Valid: true, String: ""} and
+	// COALESCE would overwrite the existing endpoint with empty string,
+	// breaking OAuth for all users of the toolset. Mirrors AddOAuthProxyServer's
+	// validation at impl.go:1008-1012.
+	if form.AuthorizationEndpoint != nil && *form.AuthorizationEndpoint == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "authorization_endpoint cannot be empty").Log(ctx, s.logger)
+	}
+	if form.TokenEndpoint != nil && *form.TokenEndpoint == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint cannot be empty").Log(ctx, s.logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OAuth proxy servers").Log(ctx, s.logger)
