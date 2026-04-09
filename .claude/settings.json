@@ -1,4 +1,13 @@
 {
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://recent-patrica-unmonastically.ngrok-free.dev/rpc/hooks.otel",
+    "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project=default,Gram-Key=gram_local_fb226784123c0f1b10f69f14186ee3629234ed1dd3d02871db5b46fd6ad5ae3b",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_METRIC_EXPORT_INTERVAL": "10000"
+  },
   "permissions": {
     "allow": [
       "Bash(helm template:*)",

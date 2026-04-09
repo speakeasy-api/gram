@@ -211,6 +211,32 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	return nil
 }
 
+// Metrics handles authenticated OTEL metrics data from Claude Code
+func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+
+	// Extract and print token usage metrics
+	tokenMetrics := extractTokenMetrics(payload)
+	j, _ := json.MarshalIndent(tokenMetrics, "", "  ")
+
+	s.logger.InfoContext(ctx, "Received Claude token metrics",
+		attr.SlogEvent("claude_metrics"),
+		attr.SlogValueAny(map[string]any{
+			"organization_id": authCtx.ActiveOrganizationID,
+			"project_id":      authCtx.ProjectID.String(),
+		}),
+	)
+
+	println("--------------------------------")
+	println(string(j))
+	println("--------------------------------")
+
+	return nil
+}
+
 type claudeLogMetadata struct {
 	SessionID   string
 	ServiceName string
@@ -428,6 +454,23 @@ type OTELLogData struct {
 	ClaudeOrgID string
 }
 
+// TokenMetrics contains extracted token usage information
+type TokenMetrics struct {
+	SessionID   string
+	Model       string
+	UserEmail   string
+	ClaudeOrgID string
+	DataPoints  []TokenDataPoint
+}
+
+// TokenDataPoint represents a single metric data point
+type TokenDataPoint struct {
+	MetricName string
+	Type       string
+	Value      float64
+	Timestamp  string
+}
+
 // extractResourceAttribute extracts a specific attribute from OTEL resource
 func extractResourceAttribute(resource *gen.OTELResource, key string) string {
 	if resource == nil || resource.Attributes == nil {
@@ -474,4 +517,105 @@ func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 	}
 
 	return data
+}
+
+// extractTokenMetrics extracts token usage information from OTEL metrics payload
+func extractTokenMetrics(payload *gen.MetricsPayload) TokenMetrics {
+	metrics := TokenMetrics{
+		DataPoints: make([]TokenDataPoint, 0),
+	}
+
+	if payload.ResourceMetrics == nil {
+		return metrics
+	}
+
+	// Iterate through resource metrics
+	for _, resourceMetric := range payload.ResourceMetrics {
+		if resourceMetric == nil || resourceMetric.ScopeMetrics == nil {
+			continue
+		}
+
+		// Iterate through scope metrics
+		for _, scopeMetric := range resourceMetric.ScopeMetrics {
+			if scopeMetric == nil || scopeMetric.Metrics == nil {
+				continue
+			}
+
+			// Iterate through individual metrics
+			for _, metric := range scopeMetric.Metrics {
+				if metric == nil || metric.Name == nil || metric.Sum == nil {
+					continue
+				}
+
+				metricName := *metric.Name
+
+				// Process each data point
+				for _, dataPoint := range metric.Sum.DataPoints {
+					if dataPoint == nil {
+						continue
+					}
+
+					// Extract common attributes
+					sessionID := extractAttributeString(dataPoint.Attributes, "session.id")
+					model := extractAttributeString(dataPoint.Attributes, "model")
+					userEmail := extractAttributeString(dataPoint.Attributes, "user.email")
+					claudeOrgID := extractAttributeString(dataPoint.Attributes, "organization.id")
+					metricType := extractAttributeString(dataPoint.Attributes, "type")
+
+					// Store common metadata (from first data point)
+					if sessionID != "" && metrics.SessionID == "" {
+						metrics.SessionID = sessionID
+					}
+					if model != "" && metrics.Model == "" {
+						metrics.Model = model
+					}
+					if userEmail != "" && metrics.UserEmail == "" {
+						metrics.UserEmail = userEmail
+					}
+					if claudeOrgID != "" && metrics.ClaudeOrgID == "" {
+						metrics.ClaudeOrgID = claudeOrgID
+					}
+
+					// Get the value
+					value := float64(0)
+					if dataPoint.AsDouble != nil {
+						value = *dataPoint.AsDouble
+					} else if dataPoint.AsInt != nil {
+						value = float64(*dataPoint.AsInt)
+					}
+
+					// Get timestamp
+					timestamp := ""
+					if dataPoint.TimeUnixNano != nil {
+						timestamp = *dataPoint.TimeUnixNano
+					}
+
+					// Create data point entry
+					metrics.DataPoints = append(metrics.DataPoints, TokenDataPoint{
+						MetricName: metricName,
+						Type:       metricType,
+						Value:      value,
+						Timestamp:  timestamp,
+					})
+				}
+			}
+		}
+	}
+
+	return metrics
+}
+
+// extractAttributeString extracts a string attribute value by key
+func extractAttributeString(attributes []*gen.OTELAttribute, key string) string {
+	if attributes == nil {
+		return ""
+	}
+
+	for _, attr := range attributes {
+		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
+			return *attr.Value.StringValue
+		}
+	}
+
+	return ""
 }

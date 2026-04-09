@@ -147,6 +147,29 @@ var _ = Service("hooks", func() {
 			Response(StatusAccepted)
 		})
 	})
+
+	Method("metrics", func() {
+		Description("Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(OTELMetricsPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/hooks.otel/v1/metrics")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusAccepted)
+		})
+	})
 })
 
 var _ = Service("hooksServerNames", func() {
