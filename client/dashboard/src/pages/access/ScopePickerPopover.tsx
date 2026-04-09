@@ -113,14 +113,14 @@ export function ScopePickerPopover({
       <PopoverContent
         align="end"
         className={cn(
-          "p-1 transition-[min-width] duration-200 ease-out w-56 min-w-56",
+          "p-1.5 transition-[min-width] duration-200 ease-out w-56 min-w-56",
           customMode
-            ? "min-w-[400px] overflow-hidden"
+            ? "min-w-[550px] overflow-hidden"
             : "max-h-[300px] overflow-y-auto",
         )}
       >
         {/* Scope mode options */}
-        <div className="pb-1">
+        <div className="pb-1.5">
           <ScopeOption
             label={resourceType === "project" ? "All projects" : "All servers"}
             selected={isUnrestricted && !customMode}
@@ -171,7 +171,7 @@ export function ScopePickerPopover({
                 ))
               : mcpServers.map((group) => (
                   <div key={group.projectId}>
-                    <div className="px-2 py-1 text-xs text-muted-foreground font-medium">
+                    <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium">
                       {group.projectName}
                     </div>
                     {group.servers.map((server) => (
@@ -191,17 +191,17 @@ export function ScopePickerPopover({
         {/* Custom mode — tabbed fine-grained picker */}
         {customMode && (
           <>
-            <Tabs defaultValue="select" className="gap-0 -mx-1 -mb-1">
-              <TabsList className="w-full rounded-none bg-transparent p-1 gap-1 border-y border-border">
+            <Tabs defaultValue="select" className="gap-0 -mx-1.5 -mb-1.5">
+              <TabsList className="w-full h-auto rounded-none bg-transparent px-1.5 py-2 gap-1 border-y border-border">
                 <TabsTrigger
                   value="select"
-                  className="flex-1 rounded-sm border-none shadow-none py-1.5 text-xs hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                  className="flex-1 h-auto rounded-sm border-none shadow-none py-2 text-xs hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:shadow-none"
                 >
                   Manual selection
                 </TabsTrigger>
                 <TabsTrigger
                   value="auto-groups"
-                  className="flex-1 rounded-sm border-none shadow-none py-1.5 text-xs hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                  className="flex-1 h-auto rounded-sm border-none shadow-none py-2 text-xs hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:shadow-none"
                 >
                   Auto Groups
                 </TabsTrigger>
@@ -213,7 +213,7 @@ export function ScopePickerPopover({
                   onToggle={toggleResource}
                 />
               </TabsContent>
-              <TabsContent value="auto-groups" className="px-2 py-2">
+              <TabsContent value="auto-groups" className="px-3 py-3">
                 <div className="text-xs text-muted-foreground">
                   No auto groups configured
                 </div>
@@ -265,8 +265,8 @@ function ToolSelectionPanel({
   return (
     <div className="flex">
       {/* Left column — server list */}
-      <div className="w-[120px] shrink-0 border-r border-border overflow-y-auto">
-        <div className="flex items-center px-2 h-9 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+      <div className="w-[160px] shrink-0 border-r border-border overflow-y-auto">
+        <div className="flex items-center px-3 h-10 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
           Servers
         </div>
         {allServers.map((server) => {
@@ -280,7 +280,7 @@ function ToolSelectionPanel({
                 setSearch("");
               }}
               className={cn(
-                "flex w-full items-center justify-between px-2 py-1.5 text-xs cursor-pointer hover:bg-muted/50 truncate",
+                "flex w-full items-center justify-between px-3 py-2 text-xs cursor-pointer hover:bg-muted/50 truncate",
                 isActive && "bg-muted font-medium",
               )}
             >
@@ -295,7 +295,7 @@ function ToolSelectionPanel({
 
       {/* Right column — tools for selected server */}
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
-        <div className="flex items-center gap-1 px-2 h-9 border-b border-border">
+        <div className="flex items-center gap-1 px-3 h-10 border-b border-border">
           <input
             type="text"
             placeholder="Search tools…"
@@ -319,7 +319,7 @@ function ToolSelectionPanel({
           className="min-h-[300px] max-h-[300px] overflow-y-auto pb-2"
         >
           {filteredTools.length === 0 ? (
-            <div className="px-2 py-3 text-xs text-muted-foreground">
+            <div className="px-3 py-3 text-xs text-muted-foreground">
               {tools.length === 0 ? "No tools found" : "No matching tools"}
             </div>
           ) : (
@@ -361,8 +361,8 @@ function ResourceCheckbox({
       type="button"
       onClick={() => onToggle(id)}
       className={cn(
-        "flex w-full items-center gap-2 px-2 hover:bg-accent cursor-pointer",
-        compact ? "text-xs rounded-none py-1.5" : "text-sm rounded-sm py-1.5",
+        "flex w-full items-center gap-2 px-3 hover:bg-accent cursor-pointer",
+        compact ? "text-xs rounded-none py-2" : "text-sm rounded-sm py-2",
         checked && "font-medium",
       )}
     >
@@ -390,7 +390,7 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
+        "flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm hover:bg-accent cursor-pointer",
         selected && "font-medium",
       )}
     >
