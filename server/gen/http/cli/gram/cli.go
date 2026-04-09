@@ -35,6 +35,7 @@ import (
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
+	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
@@ -74,6 +75,7 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|connect-git-hub|disconnect-git-hub|get-git-hub-connection|publish-plugins|download-plugin-package)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
@@ -640,6 +642,61 @@ func ParseEndpoint(
 		packagesPublishSessionTokenFlag     = packagesPublishFlags.String("session-token", "", "")
 		packagesPublishProjectSlugInputFlag = packagesPublishFlags.String("project-slug-input", "", "")
 
+		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
+
+		pluginsListPluginsFlags            = flag.NewFlagSet("list-plugins", flag.ExitOnError)
+		pluginsListPluginsSessionTokenFlag = pluginsListPluginsFlags.String("session-token", "", "")
+
+		pluginsGetPluginFlags            = flag.NewFlagSet("get-plugin", flag.ExitOnError)
+		pluginsGetPluginIDFlag           = pluginsGetPluginFlags.String("id", "REQUIRED", "")
+		pluginsGetPluginSessionTokenFlag = pluginsGetPluginFlags.String("session-token", "", "")
+
+		pluginsCreatePluginFlags            = flag.NewFlagSet("create-plugin", flag.ExitOnError)
+		pluginsCreatePluginBodyFlag         = pluginsCreatePluginFlags.String("body", "REQUIRED", "")
+		pluginsCreatePluginSessionTokenFlag = pluginsCreatePluginFlags.String("session-token", "", "")
+
+		pluginsUpdatePluginFlags            = flag.NewFlagSet("update-plugin", flag.ExitOnError)
+		pluginsUpdatePluginBodyFlag         = pluginsUpdatePluginFlags.String("body", "REQUIRED", "")
+		pluginsUpdatePluginSessionTokenFlag = pluginsUpdatePluginFlags.String("session-token", "", "")
+
+		pluginsDeletePluginFlags            = flag.NewFlagSet("delete-plugin", flag.ExitOnError)
+		pluginsDeletePluginIDFlag           = pluginsDeletePluginFlags.String("id", "REQUIRED", "")
+		pluginsDeletePluginSessionTokenFlag = pluginsDeletePluginFlags.String("session-token", "", "")
+
+		pluginsAddPluginServerFlags            = flag.NewFlagSet("add-plugin-server", flag.ExitOnError)
+		pluginsAddPluginServerBodyFlag         = pluginsAddPluginServerFlags.String("body", "REQUIRED", "")
+		pluginsAddPluginServerSessionTokenFlag = pluginsAddPluginServerFlags.String("session-token", "", "")
+
+		pluginsUpdatePluginServerFlags            = flag.NewFlagSet("update-plugin-server", flag.ExitOnError)
+		pluginsUpdatePluginServerBodyFlag         = pluginsUpdatePluginServerFlags.String("body", "REQUIRED", "")
+		pluginsUpdatePluginServerSessionTokenFlag = pluginsUpdatePluginServerFlags.String("session-token", "", "")
+
+		pluginsRemovePluginServerFlags            = flag.NewFlagSet("remove-plugin-server", flag.ExitOnError)
+		pluginsRemovePluginServerIDFlag           = pluginsRemovePluginServerFlags.String("id", "REQUIRED", "")
+		pluginsRemovePluginServerPluginIDFlag     = pluginsRemovePluginServerFlags.String("plugin-id", "REQUIRED", "")
+		pluginsRemovePluginServerSessionTokenFlag = pluginsRemovePluginServerFlags.String("session-token", "", "")
+
+		pluginsSetPluginAssignmentsFlags            = flag.NewFlagSet("set-plugin-assignments", flag.ExitOnError)
+		pluginsSetPluginAssignmentsBodyFlag         = pluginsSetPluginAssignmentsFlags.String("body", "REQUIRED", "")
+		pluginsSetPluginAssignmentsSessionTokenFlag = pluginsSetPluginAssignmentsFlags.String("session-token", "", "")
+
+		pluginsConnectGitHubFlags            = flag.NewFlagSet("connect-git-hub", flag.ExitOnError)
+		pluginsConnectGitHubBodyFlag         = pluginsConnectGitHubFlags.String("body", "REQUIRED", "")
+		pluginsConnectGitHubSessionTokenFlag = pluginsConnectGitHubFlags.String("session-token", "", "")
+
+		pluginsDisconnectGitHubFlags            = flag.NewFlagSet("disconnect-git-hub", flag.ExitOnError)
+		pluginsDisconnectGitHubSessionTokenFlag = pluginsDisconnectGitHubFlags.String("session-token", "", "")
+
+		pluginsGetGitHubConnectionFlags            = flag.NewFlagSet("get-git-hub-connection", flag.ExitOnError)
+		pluginsGetGitHubConnectionSessionTokenFlag = pluginsGetGitHubConnectionFlags.String("session-token", "", "")
+
+		pluginsPublishPluginsFlags            = flag.NewFlagSet("publish-plugins", flag.ExitOnError)
+		pluginsPublishPluginsSessionTokenFlag = pluginsPublishPluginsFlags.String("session-token", "", "")
+
+		pluginsDownloadPluginPackageFlags            = flag.NewFlagSet("download-plugin-package", flag.ExitOnError)
+		pluginsDownloadPluginPackagePlatformFlag     = pluginsDownloadPluginPackageFlags.String("platform", "REQUIRED", "")
+		pluginsDownloadPluginPackageSessionTokenFlag = pluginsDownloadPluginPackageFlags.String("session-token", "", "")
+
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
 		featuresGetProductFeaturesFlags            = flag.NewFlagSet("get-product-features", flag.ExitOnError)
@@ -1099,6 +1156,22 @@ func ParseEndpoint(
 	packagesListVersionsFlags.Usage = packagesListVersionsUsage
 	packagesPublishFlags.Usage = packagesPublishUsage
 
+	pluginsFlags.Usage = pluginsUsage
+	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
+	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
+	pluginsCreatePluginFlags.Usage = pluginsCreatePluginUsage
+	pluginsUpdatePluginFlags.Usage = pluginsUpdatePluginUsage
+	pluginsDeletePluginFlags.Usage = pluginsDeletePluginUsage
+	pluginsAddPluginServerFlags.Usage = pluginsAddPluginServerUsage
+	pluginsUpdatePluginServerFlags.Usage = pluginsUpdatePluginServerUsage
+	pluginsRemovePluginServerFlags.Usage = pluginsRemovePluginServerUsage
+	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
+	pluginsConnectGitHubFlags.Usage = pluginsConnectGitHubUsage
+	pluginsDisconnectGitHubFlags.Usage = pluginsDisconnectGitHubUsage
+	pluginsGetGitHubConnectionFlags.Usage = pluginsGetGitHubConnectionUsage
+	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
+	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
+
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
@@ -1231,6 +1304,8 @@ func ParseEndpoint(
 			svcf = organizationsFlags
 		case "packages":
 			svcf = packagesFlags
+		case "plugins":
+			svcf = pluginsFlags
 		case "features":
 			svcf = featuresFlags
 		case "projects":
@@ -1629,6 +1704,52 @@ func ParseEndpoint(
 
 			case "publish":
 				epf = packagesPublishFlags
+
+			}
+
+		case "plugins":
+			switch epn {
+			case "list-plugins":
+				epf = pluginsListPluginsFlags
+
+			case "get-plugin":
+				epf = pluginsGetPluginFlags
+
+			case "create-plugin":
+				epf = pluginsCreatePluginFlags
+
+			case "update-plugin":
+				epf = pluginsUpdatePluginFlags
+
+			case "delete-plugin":
+				epf = pluginsDeletePluginFlags
+
+			case "add-plugin-server":
+				epf = pluginsAddPluginServerFlags
+
+			case "update-plugin-server":
+				epf = pluginsUpdatePluginServerFlags
+
+			case "remove-plugin-server":
+				epf = pluginsRemovePluginServerFlags
+
+			case "set-plugin-assignments":
+				epf = pluginsSetPluginAssignmentsFlags
+
+			case "connect-git-hub":
+				epf = pluginsConnectGitHubFlags
+
+			case "disconnect-git-hub":
+				epf = pluginsDisconnectGitHubFlags
+
+			case "get-git-hub-connection":
+				epf = pluginsGetGitHubConnectionFlags
+
+			case "publish-plugins":
+				epf = pluginsPublishPluginsFlags
+
+			case "download-plugin-package":
+				epf = pluginsDownloadPluginPackageFlags
 
 			}
 
@@ -2233,6 +2354,52 @@ func ParseEndpoint(
 			case "publish":
 				endpoint = c.Publish()
 				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishApikeyTokenFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
+			}
+		case "plugins":
+			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-plugins":
+				endpoint = c.ListPlugins()
+				data, err = pluginsc.BuildListPluginsPayload(*pluginsListPluginsSessionTokenFlag)
+			case "get-plugin":
+				endpoint = c.GetPlugin()
+				data, err = pluginsc.BuildGetPluginPayload(*pluginsGetPluginIDFlag, *pluginsGetPluginSessionTokenFlag)
+			case "create-plugin":
+				endpoint = c.CreatePlugin()
+				data, err = pluginsc.BuildCreatePluginPayload(*pluginsCreatePluginBodyFlag, *pluginsCreatePluginSessionTokenFlag)
+			case "update-plugin":
+				endpoint = c.UpdatePlugin()
+				data, err = pluginsc.BuildUpdatePluginPayload(*pluginsUpdatePluginBodyFlag, *pluginsUpdatePluginSessionTokenFlag)
+			case "delete-plugin":
+				endpoint = c.DeletePlugin()
+				data, err = pluginsc.BuildDeletePluginPayload(*pluginsDeletePluginIDFlag, *pluginsDeletePluginSessionTokenFlag)
+			case "add-plugin-server":
+				endpoint = c.AddPluginServer()
+				data, err = pluginsc.BuildAddPluginServerPayload(*pluginsAddPluginServerBodyFlag, *pluginsAddPluginServerSessionTokenFlag)
+			case "update-plugin-server":
+				endpoint = c.UpdatePluginServer()
+				data, err = pluginsc.BuildUpdatePluginServerPayload(*pluginsUpdatePluginServerBodyFlag, *pluginsUpdatePluginServerSessionTokenFlag)
+			case "remove-plugin-server":
+				endpoint = c.RemovePluginServer()
+				data, err = pluginsc.BuildRemovePluginServerPayload(*pluginsRemovePluginServerIDFlag, *pluginsRemovePluginServerPluginIDFlag, *pluginsRemovePluginServerSessionTokenFlag)
+			case "set-plugin-assignments":
+				endpoint = c.SetPluginAssignments()
+				data, err = pluginsc.BuildSetPluginAssignmentsPayload(*pluginsSetPluginAssignmentsBodyFlag, *pluginsSetPluginAssignmentsSessionTokenFlag)
+			case "connect-git-hub":
+				endpoint = c.ConnectGitHub()
+				data, err = pluginsc.BuildConnectGitHubPayload(*pluginsConnectGitHubBodyFlag, *pluginsConnectGitHubSessionTokenFlag)
+			case "disconnect-git-hub":
+				endpoint = c.DisconnectGitHub()
+				data, err = pluginsc.BuildDisconnectGitHubPayload(*pluginsDisconnectGitHubSessionTokenFlag)
+			case "get-git-hub-connection":
+				endpoint = c.GetGitHubConnection()
+				data, err = pluginsc.BuildGetGitHubConnectionPayload(*pluginsGetGitHubConnectionSessionTokenFlag)
+			case "publish-plugins":
+				endpoint = c.PublishPlugins()
+				data, err = pluginsc.BuildPublishPluginsPayload(*pluginsPublishPluginsSessionTokenFlag)
+			case "download-plugin-package":
+				endpoint = c.DownloadPluginPackage()
+				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag)
 			}
 		case "features":
 			c := featuresc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4850,6 +5017,303 @@ func packagesPublishUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"version\": \"abc123\",\n      \"visibility\": \"private\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// pluginsUsage displays the usage of the plugins command and its subcommands.
+func pluginsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage distributable plugin bundles of MCP servers and hooks.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] plugins COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-plugins: List all plugins for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    get-plugin: Get a plugin with its servers and assignments.`)
+	fmt.Fprintln(os.Stderr, `    create-plugin: Create a new plugin.`)
+	fmt.Fprintln(os.Stderr, `    update-plugin: Update plugin metadata.`)
+	fmt.Fprintln(os.Stderr, `    delete-plugin: Delete a plugin.`)
+	fmt.Fprintln(os.Stderr, `    add-plugin-server: Add an MCP server to a plugin.`)
+	fmt.Fprintln(os.Stderr, `    update-plugin-server: Update a server's configuration within a plugin.`)
+	fmt.Fprintln(os.Stderr, `    remove-plugin-server: Remove a server from a plugin.`)
+	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
+	fmt.Fprintln(os.Stderr, `    connect-git-hub: Store the GitHub App installation and repository connection for plugin distribution.`)
+	fmt.Fprintln(os.Stderr, `    disconnect-git-hub: Remove the GitHub connection for plugin distribution.`)
+	fmt.Fprintln(os.Stderr, `    get-git-hub-connection: Get the current GitHub connection status for plugin distribution.`)
+	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate platform-specific plugin packages and push them to the connected GitHub repository.`)
+	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP archive of generated plugin packages for the organization, filtered by platform.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s plugins COMMAND --help\n", os.Args[0])
+}
+func pluginsListPluginsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins list-plugins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all plugins for the current organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins list-plugins --session-token \"abc123\"")
+}
+
+func pluginsGetPluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a plugin with its servers and assignments.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-plugin --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func pluginsCreatePluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins create-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new plugin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins create-plugin --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func pluginsUpdatePluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins update-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update plugin metadata.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-plugin --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func pluginsDeletePluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins delete-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a plugin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins delete-plugin --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func pluginsAddPluginServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins add-plugin-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Add an MCP server to a plugin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins add-plugin-server --body '{\n      \"display_name\": \"abc123\",\n      \"external_url\": \"abc123\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy\": \"optional\",\n      \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registry_server_specifier\": \"abc123\",\n      \"sort_order\": 1,\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func pluginsUpdatePluginServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins update-plugin-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a server's configuration within a plugin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-plugin-server --body '{\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy\": \"optional\",\n      \"sort_order\": 1\n   }' --session-token \"abc123\"")
+}
+
+func pluginsRemovePluginServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins remove-plugin-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -plugin-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a server from a plugin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -plugin-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins remove-plugin-server --id \"550e8400-e29b-41d4-a716-446655440000\" --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func pluginsSetPluginAssignmentsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins set-plugin-assignments", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace all assignments for a plugin with the given list of principal URNs.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins set-plugin-assignments --body '{\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_urns\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func pluginsConnectGitHubUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins connect-git-hub", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Store the GitHub App installation and repository connection for plugin distribution.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins connect-git-hub --body '{\n      \"installation_id\": 1,\n      \"repo_name\": \"abc123\",\n      \"repo_owner\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func pluginsDisconnectGitHubUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins disconnect-git-hub", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove the GitHub connection for plugin distribution.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins disconnect-git-hub --session-token \"abc123\"")
+}
+
+func pluginsGetGitHubConnectionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-git-hub-connection", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the current GitHub connection status for plugin distribution.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-git-hub-connection --session-token \"abc123\"")
+}
+
+func pluginsPublishPluginsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins publish-plugins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Generate platform-specific plugin packages and push them to the connected GitHub repository.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --session-token \"abc123\"")
+}
+
+func pluginsDownloadPluginPackageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins download-plugin-package", os.Args[0])
+	fmt.Fprint(os.Stderr, " -platform STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Download a ZIP archive of generated plugin packages for the organization, filtered by platform.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -platform STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-plugin-package --platform \"cursor\" --session-token \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.

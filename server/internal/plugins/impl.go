@@ -1,0 +1,790 @@
+package plugins
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+
+	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
+	gen "github.com/speakeasy-api/gram/server/gen/plugins"
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
+)
+
+var slugPattern = regexp.MustCompile(`[^a-z0-9-]+`)
+
+type Service struct {
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	repo      *repo.Queries
+	auth      *auth.Auth
+	access    *access.Manager
+	github    *ghclient.Client // nil if not configured
+	serverURL string
+}
+
+var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
+
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	accessManager *access.Manager,
+	github *ghclient.Client,
+	serverURL string,
+) *Service {
+	logger = logger.With(attr.SlogComponent("plugins"))
+
+	return &Service{
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/plugins"),
+		logger:    logger,
+		db:        db,
+		repo:      repo.New(db),
+		auth:      auth.New(logger, db, sessions, accessManager),
+		access:    accessManager,
+		github:    github,
+		serverURL: serverURL,
+	}
+}
+
+func Attach(mux goahttp.Muxer, service *Service) {
+	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
+	endpoints.Use(middleware.TraceMethods(service.tracer))
+	srv.Mount(
+		mux,
+		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
+}
+
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
+// --- Plugin CRUD ---
+
+func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPayload) (*gen.ListPluginsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.ListPlugins(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugins").Log(ctx, s.logger)
+	}
+
+	plugins := make([]*gen.Plugin, 0, len(rows))
+	for _, r := range rows {
+		plugins = append(plugins, &gen.Plugin{
+			ID:              r.ID.String(),
+			Name:            r.Name,
+			Slug:            r.Slug,
+			Description:     conv.FromPGText[string](r.Description),
+			ServerCount:     &r.ServerCount,
+			AssignmentCount: &r.AssignmentCount,
+			Servers:         nil,
+			Assignments:     nil,
+			CreatedAt:       formatTime(r.CreatedAt),
+			UpdatedAt:       formatTime(r.UpdatedAt),
+		})
+	}
+
+	return &gen.ListPluginsResult{Plugins: plugins}, nil
+}
+
+func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) (*gen.Plugin, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	pluginID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get plugin").Log(ctx, s.logger)
+	}
+
+	servers, err := s.repo.ListPluginServers(ctx, pluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").Log(ctx, s.logger)
+	}
+
+	assignments, err := s.repo.ListPluginAssignments(ctx, pluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").Log(ctx, s.logger)
+	}
+
+	return pluginToGen(plugin, servers, assignments), nil
+}
+
+func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPayload) (*gen.Plugin, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	slug := generateSlug(payload.Name)
+
+	plugin, err := s.repo.CreatePlugin(ctx, repo.CreatePluginParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		Name:           payload.Name,
+		Slug:           slug,
+		Description:    conv.PtrToPGText(payload.Description),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").Log(ctx, s.logger)
+	}
+
+	return pluginToGen(plugin, nil, nil), nil
+}
+
+func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPayload) (*gen.Plugin, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	pluginID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	plugin, err := s.repo.UpdatePlugin(ctx, repo.UpdatePluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		Name:           payload.Name,
+		Slug:           payload.Slug,
+		Description:    conv.PtrToPGText(payload.Description),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update plugin").Log(ctx, s.logger)
+	}
+
+	servers, err := s.repo.ListPluginServers(ctx, pluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").Log(ctx, s.logger)
+	}
+
+	assignments, err := s.repo.ListPluginAssignments(ctx, pluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").Log(ctx, s.logger)
+	}
+
+	return pluginToGen(plugin, servers, assignments), nil
+}
+
+func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return err
+	}
+
+	pluginID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	if err := s.repo.DeletePlugin(ctx, repo.DeletePluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete plugin").Log(ctx, s.logger)
+	}
+	return nil
+}
+
+// --- Plugin Servers ---
+
+func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginServerPayload) (*gen.PluginServer, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	pluginID, err := uuid.Parse(payload.PluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	// Verify the plugin belongs to this org.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
+	}
+
+	params := repo.AddPluginServerParams{
+		PluginID:                pluginID,
+		ToolsetID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RegistryID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RegistryServerSpecifier: pgtype.Text{String: "", Valid: false},
+		ExternalUrl:             pgtype.Text{String: "", Valid: false},
+		DisplayName:             payload.DisplayName,
+		Policy:                  payload.Policy,
+		SortOrder:               payload.SortOrder,
+	}
+
+	if payload.ToolsetID != nil {
+		id, err := uuid.Parse(*payload.ToolsetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset id").Log(ctx, s.logger)
+		}
+		params.ToolsetID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+	if payload.RegistryID != nil {
+		id, err := uuid.Parse(*payload.RegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry id").Log(ctx, s.logger)
+		}
+		params.RegistryID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+	if payload.RegistryServerSpecifier != nil {
+		params.RegistryServerSpecifier = conv.PtrToPGText(payload.RegistryServerSpecifier)
+	}
+	if payload.ExternalURL != nil {
+		params.ExternalUrl = conv.PtrToPGText(payload.ExternalURL)
+	}
+
+	row, err := s.repo.AddPluginServer(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "add plugin server").Log(ctx, s.logger)
+	}
+
+	return pluginServerToGen(row), nil
+}
+
+func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePluginServerPayload) (*gen.PluginServer, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	serverID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").Log(ctx, s.logger)
+	}
+	pluginID, err := uuid.Parse(payload.PluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	row, err := s.repo.UpdatePluginServer(ctx, repo.UpdatePluginServerParams{
+		ID:          serverID,
+		PluginID:    pluginID,
+		DisplayName: payload.DisplayName,
+		Policy:      payload.Policy,
+		SortOrder:   payload.SortOrder,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update plugin server").Log(ctx, s.logger)
+	}
+
+	return pluginServerToGen(row), nil
+}
+
+func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePluginServerPayload) error {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return err
+	}
+
+	serverID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid server id").Log(ctx, s.logger)
+	}
+	pluginID, err := uuid.Parse(payload.PluginID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	if err := s.repo.RemovePluginServer(ctx, repo.RemovePluginServerParams{
+		ID:       serverID,
+		PluginID: pluginID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove plugin server").Log(ctx, s.logger)
+	}
+	return nil
+}
+
+// --- Assignments ---
+
+func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPluginAssignmentsPayload) (*gen.SetPluginAssignmentsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	pluginID, err := uuid.Parse(payload.PluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	// Verify the plugin belongs to this org.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
+	}
+
+	// Remove all existing assignments, then add the new ones.
+	if _, err := s.repo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "remove existing assignments").Log(ctx, s.logger)
+	}
+
+	var assignments []*gen.PluginAssignment
+	for _, urn := range payload.PrincipalUrns {
+		row, err := s.repo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
+			PluginID:       pluginID,
+			OrganizationID: ac.ActiveOrganizationID,
+			PrincipalUrn:   urn,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").Log(ctx, s.logger)
+		}
+		// ON CONFLICT DO NOTHING can return nil for the row.
+		if row.ID != uuid.Nil {
+			assignments = append(assignments, pluginAssignmentToGen(row))
+		}
+	}
+
+	return &gen.SetPluginAssignmentsResult{Assignments: assignments}, nil
+}
+
+// --- GitHub Connection ---
+
+func (s *Service) ConnectGitHub(ctx context.Context, payload *gen.ConnectGitHubPayload) (*gen.PluginGitHubConnection, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	row, err := s.repo.UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		InstallationID: payload.InstallationID,
+		RepoOwner:      payload.RepoOwner,
+		RepoName:       payload.RepoName,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "upsert github connection").Log(ctx, s.logger)
+	}
+
+	return githubConnectionToGen(row), nil
+}
+
+func (s *Service) DisconnectGitHub(ctx context.Context, payload *gen.DisconnectGitHubPayload) error {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return err
+	}
+
+	if err := s.repo.DeleteGitHubConnection(ctx, ac.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete github connection").Log(ctx, s.logger)
+	}
+	return nil
+}
+
+func (s *Service) GetGitHubConnection(ctx context.Context, payload *gen.GetGitHubConnectionPayload) (*gen.PluginGitHubConnection, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	row, err := s.repo.GetGitHubConnection(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get github connection").Log(ctx, s.logger)
+	}
+
+	return githubConnectionToGen(row), nil
+}
+
+// --- Publish & Download ---
+
+func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPluginsPayload) (*gen.PublishPluginsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	if s.github == nil {
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("github app not configured"), "GitHub App is not configured on this server").Log(ctx, s.logger)
+	}
+
+	ghConn, err := s.repo.GetGitHubConnection(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, err, "no GitHub repository connected").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get github connection").Log(ctx, s.logger)
+	}
+
+	files, err := s.generateAllPlugins(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	commitSHA, err := s.github.PushFiles(
+		ctx,
+		ghConn.InstallationID,
+		ghConn.RepoOwner,
+		ghConn.RepoName,
+		"main",
+		fmt.Sprintf("Update plugin packages (%s)", time.Now().UTC().Format(time.RFC3339)),
+		files,
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "push to github").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "published plugins to github",
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogDataDogGitCommitSHA(commitSHA),
+		attr.SlogDataDogGitRepoURL(ghConn.RepoOwner+"/"+ghConn.RepoName),
+	)
+
+	return &gen.PublishPluginsResult{
+		Published: true,
+		CommitSha: &commitSHA,
+	}, nil
+}
+
+func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.DownloadPluginPackagePayload) (*gen.DownloadPluginPackageResult, io.ReadCloser, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, nil, err
+	}
+
+	pluginInfos, err := s.resolvePluginInfos(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cfg := GenerateConfig{
+		OrgName:   ac.OrganizationSlug,
+		OrgEmail:  "admin@" + ac.OrganizationSlug + ".com",
+		ServerURL: s.serverURL,
+	}
+	if orgName, err := s.repo.GetOrganizationName(ctx, ac.ActiveOrganizationID); err == nil {
+		cfg.OrgName = orgName
+	}
+
+	files, err := GeneratePluginPackagesForPlatform(pluginInfos, cfg, payload.Platform)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate plugin packages").Log(ctx, s.logger)
+	}
+
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for path, content := range files {
+		f, err := w.Create(path)
+		if err != nil {
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "create zip entry").Log(ctx, s.logger)
+		}
+		if _, err := f.Write(content); err != nil {
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "write zip entry").Log(ctx, s.logger)
+		}
+	}
+	if err := w.Close(); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "close zip writer").Log(ctx, s.logger)
+	}
+
+	return &gen.DownloadPluginPackageResult{
+		ContentType:        "application/zip",
+		ContentDisposition: fmt.Sprintf(`attachment; filename="%s-%s-plugins.zip"`, ac.OrganizationSlug, payload.Platform),
+	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+// --- Internal helpers ---
+
+func (s *Service) generateAllPlugins(ctx context.Context, orgID, orgSlug string) (map[string][]byte, error) {
+	pluginInfos, err := s.resolvePluginInfos(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+
+	return GeneratePluginPackages(pluginInfos, s.generateConfig(ctx, orgID, orgSlug))
+}
+
+func (s *Service) resolvePluginInfos(ctx context.Context, orgID string) ([]PluginInfo, error) {
+	rows, err := s.repo.ListPluginsWithServersForOrg(ctx, orgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with servers").Log(ctx, s.logger)
+	}
+
+	type pluginBuild struct {
+		info    PluginInfo
+		servers []PluginServerInfo
+	}
+	pluginMap := make(map[uuid.UUID]*pluginBuild)
+
+	for _, r := range rows {
+		pb, ok := pluginMap[r.PluginID]
+		if !ok {
+			pb = &pluginBuild{
+				info: PluginInfo{
+					Name:        r.PluginName,
+					Slug:        r.PluginSlug,
+					Description: pgTextToString(r.PluginDescription),
+					Servers:     nil,
+				},
+				servers: nil,
+			}
+			pluginMap[r.PluginID] = pb
+		}
+
+		mcpURL, useGramAuth := ResolveServerMCPURL(
+			s.serverURL,
+			pgTextToPtr(r.ToolsetMcpSlug),
+			pgTextToPtr(r.RegistryServerSpecifier),
+			pgTextToPtr(r.ExternalUrl),
+		)
+		if mcpURL != "" {
+			pb.servers = append(pb.servers, PluginServerInfo{
+				DisplayName: r.ServerDisplayName,
+				Policy:      r.ServerPolicy,
+				MCPURL:      mcpURL,
+				UseGramAuth: useGramAuth,
+			})
+		}
+	}
+
+	var pluginInfos []PluginInfo
+	for _, pb := range pluginMap {
+		pb.info.Servers = pb.servers
+		pluginInfos = append(pluginInfos, pb.info)
+	}
+	return pluginInfos, nil
+}
+
+func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) GenerateConfig {
+	cfg := GenerateConfig{
+		OrgName:   orgSlug,
+		OrgEmail:  "admin@" + orgSlug + ".com",
+		ServerURL: s.serverURL,
+	}
+	if orgName, err := s.repo.GetOrganizationName(ctx, orgID); err == nil {
+		cfg.OrgName = orgName
+	}
+	return cfg
+}
+
+func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return nil, errors.New("missing auth context")
+	}
+	return ac, nil
+}
+
+// --- Conversion helpers ---
+
+func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.PluginAssignment) *gen.Plugin {
+	result := &gen.Plugin{
+		ID:              p.ID.String(),
+		Name:            p.Name,
+		Slug:            p.Slug,
+		Description:     conv.FromPGText[string](p.Description),
+		ServerCount:     nil,
+		AssignmentCount: nil,
+		Servers:         nil,
+		Assignments:     nil,
+		CreatedAt:       formatTime(p.CreatedAt),
+		UpdatedAt:       formatTime(p.UpdatedAt),
+	}
+
+	if servers != nil {
+		genServers := make([]*gen.PluginServer, 0, len(servers))
+		for _, s := range servers {
+			genServers = append(genServers, pluginServerToGen(s))
+		}
+		result.Servers = genServers
+	}
+
+	if assignments != nil {
+		genAssignments := make([]*gen.PluginAssignment, 0, len(assignments))
+		for _, a := range assignments {
+			genAssignments = append(genAssignments, pluginAssignmentToGen(a))
+		}
+		result.Assignments = genAssignments
+	}
+
+	return result
+}
+
+func pluginServerToGen(s repo.PluginServer) *gen.PluginServer {
+	result := &gen.PluginServer{
+		ID:                      s.ID.String(),
+		ToolsetID:               nil,
+		RegistryID:              nil,
+		RegistryServerSpecifier: nil,
+		ExternalURL:             nil,
+		DisplayName:             s.DisplayName,
+		Policy:                  s.Policy,
+		SortOrder:               s.SortOrder,
+		CreatedAt:               formatTime(s.CreatedAt),
+	}
+	if s.ToolsetID.Valid {
+		id := s.ToolsetID.UUID.String()
+		result.ToolsetID = &id
+	}
+	if s.RegistryID.Valid {
+		id := s.RegistryID.UUID.String()
+		result.RegistryID = &id
+	}
+	result.RegistryServerSpecifier = conv.FromPGText[string](s.RegistryServerSpecifier)
+	result.ExternalURL = conv.FromPGText[string](s.ExternalUrl)
+	return result
+}
+
+func pluginAssignmentToGen(a repo.PluginAssignment) *gen.PluginAssignment {
+	return &gen.PluginAssignment{
+		ID:           a.ID.String(),
+		PrincipalUrn: a.PrincipalUrn,
+		CreatedAt:    formatTime(a.CreatedAt),
+	}
+}
+
+func githubConnectionToGen(c repo.PluginGithubConnection) *gen.PluginGitHubConnection {
+	return &gen.PluginGitHubConnection{
+		ID:             c.ID.String(),
+		InstallationID: c.InstallationID,
+		RepoOwner:      c.RepoOwner,
+		RepoName:       c.RepoName,
+		CreatedAt:      formatTime(c.CreatedAt),
+	}
+}
+
+func generateSlug(name string) string {
+	slug := strings.ToLower(name)
+	slug = strings.ReplaceAll(slug, " ", "-")
+	slug = slugPattern.ReplaceAllString(slug, "")
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		slug = "plugin"
+	}
+	return slug
+}
+
+func formatTime(t pgtype.Timestamptz) string {
+	if !t.Valid {
+		return ""
+	}
+	return t.Time.UTC().Format(time.RFC3339)
+}
+
+func pgTextToString(t pgtype.Text) string {
+	if !t.Valid {
+		return ""
+	}
+	return t.String
+}
+
+func pgTextToPtr(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+	return &t.String
+}

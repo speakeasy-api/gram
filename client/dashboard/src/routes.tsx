@@ -33,6 +33,8 @@ import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
+import Plugins, { PluginsRoot } from "./pages/org/Plugins";
+import PluginDetail from "./pages/org/PluginDetail";
 import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
@@ -576,6 +578,20 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Roles & Permissions",
         url: "members",
         component: Access,
+      },
+    },
+  },
+  plugins: {
+    title: "Plugins",
+    url: "plugins",
+    icon: "puzzle",
+    component: PluginsRoot,
+    indexComponent: Plugins,
+    subPages: {
+      detail: {
+        title: "Plugin",
+        url: ":pluginId",
+        component: PluginDetail,
       },
     },
   },
