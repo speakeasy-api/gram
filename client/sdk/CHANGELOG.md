@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.32.38
+
+### Patch Changes
+
+- 494f76c: Adds support for tracking skills in hooks dashboard
+
 ## 0.32.20
 
 ### Patch Changes

@@ -54,7 +54,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|update-member-role)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role)",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
@@ -81,7 +81,7 @@ func UsageCommands() []string {
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
 		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout)",
 		"variations (upsert-global|delete-global|list-global)",
 	}
@@ -144,6 +144,10 @@ func ParseEndpoint(
 		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
 		accessListMembersApikeyTokenFlag  = accessListMembersFlags.String("apikey-token", "", "")
 		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
+
+		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
+		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
+		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
 
 		accessUpdateMemberRoleFlags            = flag.NewFlagSet("update-member-role", flag.ExitOnError)
 		accessUpdateMemberRoleBodyFlag         = accessUpdateMemberRoleFlags.String("body", "REQUIRED", "")
@@ -872,6 +876,10 @@ func ParseEndpoint(
 		toolsetsListToolsetsApikeyTokenFlag      = toolsetsListToolsetsFlags.String("apikey-token", "", "")
 		toolsetsListToolsetsProjectSlugInputFlag = toolsetsListToolsetsFlags.String("project-slug-input", "", "")
 
+		toolsetsListToolsetsForOrgFlags            = flag.NewFlagSet("list-toolsets-for-org", flag.ExitOnError)
+		toolsetsListToolsetsForOrgSessionTokenFlag = toolsetsListToolsetsForOrgFlags.String("session-token", "", "")
+		toolsetsListToolsetsForOrgApikeyTokenFlag  = toolsetsListToolsetsForOrgFlags.String("apikey-token", "", "")
+
 		toolsetsUpdateToolsetFlags                = flag.NewFlagSet("update-toolset", flag.ExitOnError)
 		toolsetsUpdateToolsetBodyFlag             = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
 		toolsetsUpdateToolsetSlugFlag             = toolsetsUpdateToolsetFlags.String("slug", "REQUIRED", "")
@@ -966,6 +974,7 @@ func ParseEndpoint(
 	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
 	accessListScopesFlags.Usage = accessListScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
+	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
 
 	agentworkflowsFlags.Usage = agentworkflowsUsage
@@ -1144,6 +1153,7 @@ func ParseEndpoint(
 	toolsetsFlags.Usage = toolsetsUsage
 	toolsetsCreateToolsetFlags.Usage = toolsetsCreateToolsetUsage
 	toolsetsListToolsetsFlags.Usage = toolsetsListToolsetsUsage
+	toolsetsListToolsetsForOrgFlags.Usage = toolsetsListToolsetsForOrgUsage
 	toolsetsUpdateToolsetFlags.Usage = toolsetsUpdateToolsetUsage
 	toolsetsDeleteToolsetFlags.Usage = toolsetsDeleteToolsetUsage
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
@@ -1285,6 +1295,9 @@ func ParseEndpoint(
 
 			case "list-members":
 				epf = accessListMembersFlags
+
+			case "list-grants":
+				epf = accessListGrantsFlags
 
 			case "update-member-role":
 				epf = accessUpdateMemberRoleFlags
@@ -1766,6 +1779,9 @@ func ParseEndpoint(
 			case "list-toolsets":
 				epf = toolsetsListToolsetsFlags
 
+			case "list-toolsets-for-org":
+				epf = toolsetsListToolsetsForOrgFlags
+
 			case "update-toolset":
 				epf = toolsetsUpdateToolsetFlags
 
@@ -1871,6 +1887,9 @@ func ParseEndpoint(
 			case "list-members":
 				endpoint = c.ListMembers()
 				data, err = accessc.BuildListMembersPayload(*accessListMembersApikeyTokenFlag, *accessListMembersSessionTokenFlag)
+			case "list-grants":
+				endpoint = c.ListGrants()
+				data, err = accessc.BuildListGrantsPayload(*accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
 			case "update-member-role":
 				endpoint = c.UpdateMemberRole()
 				data, err = accessc.BuildUpdateMemberRolePayload(*accessUpdateMemberRoleBodyFlag, *accessUpdateMemberRoleApikeyTokenFlag, *accessUpdateMemberRoleSessionTokenFlag)
@@ -2363,6 +2382,9 @@ func ParseEndpoint(
 			case "list-toolsets":
 				endpoint = c.ListToolsets()
 				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsSessionTokenFlag, *toolsetsListToolsetsApikeyTokenFlag, *toolsetsListToolsetsProjectSlugInputFlag)
+			case "list-toolsets-for-org":
+				endpoint = c.ListToolsetsForOrg()
+				data, err = toolsetsc.BuildListToolsetsForOrgPayload(*toolsetsListToolsetsForOrgSessionTokenFlag, *toolsetsListToolsetsForOrgApikeyTokenFlag)
 			case "update-toolset":
 				endpoint = c.UpdateToolset()
 				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetSlugFlag, *toolsetsUpdateToolsetSessionTokenFlag, *toolsetsUpdateToolsetApikeyTokenFlag, *toolsetsUpdateToolsetProjectSlugInputFlag)
@@ -2463,6 +2485,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
+	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -2614,6 +2637,26 @@ func accessListMembersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-members --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the current user's effective grants, including inherited role grants.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessUpdateMemberRoleUsage() {
@@ -5781,6 +5824,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-toolset: Create a new toolset with associated tools`)
 	fmt.Fprintln(os.Stderr, `    list-toolsets: List all toolsets for a project`)
+	fmt.Fprintln(os.Stderr, `    list-toolsets-for-org: List all toolsets across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-toolset: Update a toolset's properties including name, description, and HTTP tools`)
 	fmt.Fprintln(os.Stderr, `    delete-toolset: Delete a toolset by its ID`)
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
@@ -5837,6 +5881,26 @@ func toolsetsListToolsetsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-toolsets --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func toolsetsListToolsetsForOrgUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets list-toolsets-for-org", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all toolsets across the organization`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-toolsets-for-org --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func toolsetsUpdateToolsetUsage() {

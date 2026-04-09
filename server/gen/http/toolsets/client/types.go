@@ -141,6 +141,13 @@ type ListToolsetsResponseBody struct {
 	Toolsets []*ToolsetEntryResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 }
 
+// ListToolsetsForOrgResponseBody is the type of the "toolsets" service
+// "listToolsetsForOrg" endpoint HTTP response body.
+type ListToolsetsForOrgResponseBody struct {
+	// The list of toolsets
+	Toolsets []*ToolsetEntryResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+}
+
 // UpdateToolsetResponseBody is the type of the "toolsets" service
 // "updateToolset" endpoint HTTP response body.
 type UpdateToolsetResponseBody struct {
@@ -862,6 +869,193 @@ type ListToolsetsUnexpectedResponseBody struct {
 // ListToolsetsGatewayErrorResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "gateway_error" error.
 type ListToolsetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgUnauthorizedResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListToolsetsForOrgUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgForbiddenResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the "forbidden"
+// error.
+type ListToolsetsForOrgForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgBadRequestResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "bad_request" error.
+type ListToolsetsForOrgBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgNotFoundResponseBody is the type of the "toolsets" service
+// "listToolsetsForOrg" endpoint HTTP response body for the "not_found" error.
+type ListToolsetsForOrgNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgConflictResponseBody is the type of the "toolsets" service
+// "listToolsetsForOrg" endpoint HTTP response body for the "conflict" error.
+type ListToolsetsForOrgConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListToolsetsForOrgUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgInvalidResponseBody is the type of the "toolsets" service
+// "listToolsetsForOrg" endpoint HTTP response body for the "invalid" error.
+type ListToolsetsForOrgInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgInvariantViolationResponseBody is the type of the
+// "toolsets" service "listToolsetsForOrg" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListToolsetsForOrgInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgUnexpectedResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "unexpected" error.
+type ListToolsetsForOrgUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsForOrgGatewayErrorResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListToolsetsForOrgGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2435,6 +2629,8 @@ type ToolResponseBody struct {
 	FunctionToolDefinition *FunctionToolDefinitionResponseBody `form:"function_tool_definition,omitempty" json:"function_tool_definition,omitempty" xml:"function_tool_definition,omitempty"`
 	// The prompt template
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
+	// The Platform tool definition
+	PlatformToolDefinition *PlatformToolDefinitionResponseBody `form:"platform_tool_definition,omitempty" json:"platform_tool_definition,omitempty" xml:"platform_tool_definition,omitempty"`
 	// The external MCP tool definition
 	ExternalMcpToolDefinition *ExternalMCPToolDefinitionResponseBody `form:"external_mcp_tool_definition,omitempty" json:"external_mcp_tool_definition,omitempty" xml:"external_mcp_tool_definition,omitempty"`
 }
@@ -2647,6 +2843,50 @@ type PromptTemplateResponseBody struct {
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
 	// The suggested tool URNS associated with the prompt template
 	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
+	// The ID of the tool
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The URN of this tool
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// The ID of the project
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The creation date of the tool.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the tool.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+	// MCP tool annotations providing hints about tool behavior
+	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// PlatformToolDefinitionResponseBody is used to define fields on response body
+// types.
+type PlatformToolDefinitionResponseBody struct {
+	// The backing platform tool source (for example: logs)
+	SourceSlug *string `form:"source_slug,omitempty" json:"source_slug,omitempty" xml:"source_slug,omitempty"`
+	// The entity kind that owns this tool's lifecycle
+	OwnerKind *string `form:"owner_kind,omitempty" json:"owner_kind,omitempty" xml:"owner_kind,omitempty"`
+	// Optional owning entity ID
+	OwnerID *string `form:"owner_id,omitempty" json:"owner_id,omitempty" xml:"owner_id,omitempty"`
 	// The ID of the tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The URN of this tool
@@ -3470,6 +3710,172 @@ func NewListToolsetsUnexpected(body *ListToolsetsUnexpectedResponseBody) *goa.Se
 // NewListToolsetsGatewayError builds a toolsets service listToolsets endpoint
 // gateway_error error.
 func NewListToolsetsGatewayError(body *ListToolsetsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgListToolsetsResultOK builds a "toolsets" service
+// "listToolsetsForOrg" endpoint result from a HTTP "OK" response.
+func NewListToolsetsForOrgListToolsetsResultOK(body *ListToolsetsForOrgResponseBody) *toolsets.ListToolsetsResult {
+	v := &toolsets.ListToolsetsResult{}
+	v.Toolsets = make([]*types.ToolsetEntry, len(body.Toolsets))
+	for i, val := range body.Toolsets {
+		if val == nil {
+			v.Toolsets[i] = nil
+			continue
+		}
+		v.Toolsets[i] = unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(val)
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgUnauthorized builds a toolsets service
+// listToolsetsForOrg endpoint unauthorized error.
+func NewListToolsetsForOrgUnauthorized(body *ListToolsetsForOrgUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgForbidden builds a toolsets service listToolsetsForOrg
+// endpoint forbidden error.
+func NewListToolsetsForOrgForbidden(body *ListToolsetsForOrgForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgBadRequest builds a toolsets service listToolsetsForOrg
+// endpoint bad_request error.
+func NewListToolsetsForOrgBadRequest(body *ListToolsetsForOrgBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgNotFound builds a toolsets service listToolsetsForOrg
+// endpoint not_found error.
+func NewListToolsetsForOrgNotFound(body *ListToolsetsForOrgNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgConflict builds a toolsets service listToolsetsForOrg
+// endpoint conflict error.
+func NewListToolsetsForOrgConflict(body *ListToolsetsForOrgConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgUnsupportedMedia builds a toolsets service
+// listToolsetsForOrg endpoint unsupported_media error.
+func NewListToolsetsForOrgUnsupportedMedia(body *ListToolsetsForOrgUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgInvalid builds a toolsets service listToolsetsForOrg
+// endpoint invalid error.
+func NewListToolsetsForOrgInvalid(body *ListToolsetsForOrgInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgInvariantViolation builds a toolsets service
+// listToolsetsForOrg endpoint invariant_violation error.
+func NewListToolsetsForOrgInvariantViolation(body *ListToolsetsForOrgInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgUnexpected builds a toolsets service listToolsetsForOrg
+// endpoint unexpected error.
+func NewListToolsetsForOrgUnexpected(body *ListToolsetsForOrgUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsForOrgGatewayError builds a toolsets service
+// listToolsetsForOrg endpoint gateway_error error.
+func NewListToolsetsForOrgGatewayError(body *ListToolsetsForOrgGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5506,6 +5912,22 @@ func ValidateListToolsetsResponseBody(body *ListToolsetsResponseBody) (err error
 	return
 }
 
+// ValidateListToolsetsForOrgResponseBody runs the validations defined on
+// ListToolsetsForOrgResponseBody
+func ValidateListToolsetsForOrgResponseBody(body *ListToolsetsForOrgResponseBody) (err error) {
+	if body.Toolsets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
+	}
+	for _, e := range body.Toolsets {
+		if e != nil {
+			if err2 := ValidateToolsetEntryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateUpdateToolsetResponseBody runs the validations defined on
 // UpdateToolsetResponseBody
 func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err error) {
@@ -6853,6 +7275,246 @@ func ValidateListToolsetsUnexpectedResponseBody(body *ListToolsetsUnexpectedResp
 // ValidateListToolsetsGatewayErrorResponseBody runs the validations defined on
 // listToolsets_gateway_error_response_body
 func ValidateListToolsetsGatewayErrorResponseBody(body *ListToolsetsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgUnauthorizedResponseBody runs the validations
+// defined on listToolsetsForOrg_unauthorized_response_body
+func ValidateListToolsetsForOrgUnauthorizedResponseBody(body *ListToolsetsForOrgUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgForbiddenResponseBody runs the validations defined
+// on listToolsetsForOrg_forbidden_response_body
+func ValidateListToolsetsForOrgForbiddenResponseBody(body *ListToolsetsForOrgForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgBadRequestResponseBody runs the validations
+// defined on listToolsetsForOrg_bad_request_response_body
+func ValidateListToolsetsForOrgBadRequestResponseBody(body *ListToolsetsForOrgBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgNotFoundResponseBody runs the validations defined
+// on listToolsetsForOrg_not_found_response_body
+func ValidateListToolsetsForOrgNotFoundResponseBody(body *ListToolsetsForOrgNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgConflictResponseBody runs the validations defined
+// on listToolsetsForOrg_conflict_response_body
+func ValidateListToolsetsForOrgConflictResponseBody(body *ListToolsetsForOrgConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgUnsupportedMediaResponseBody runs the validations
+// defined on listToolsetsForOrg_unsupported_media_response_body
+func ValidateListToolsetsForOrgUnsupportedMediaResponseBody(body *ListToolsetsForOrgUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgInvalidResponseBody runs the validations defined
+// on listToolsetsForOrg_invalid_response_body
+func ValidateListToolsetsForOrgInvalidResponseBody(body *ListToolsetsForOrgInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgInvariantViolationResponseBody runs the
+// validations defined on listToolsetsForOrg_invariant_violation_response_body
+func ValidateListToolsetsForOrgInvariantViolationResponseBody(body *ListToolsetsForOrgInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgUnexpectedResponseBody runs the validations
+// defined on listToolsetsForOrg_unexpected_response_body
+func ValidateListToolsetsForOrgUnexpectedResponseBody(body *ListToolsetsForOrgUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsForOrgGatewayErrorResponseBody runs the validations
+// defined on listToolsetsForOrg_gateway_error_response_body
+func ValidateListToolsetsForOrgGatewayErrorResponseBody(body *ListToolsetsForOrgGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8883,6 +9545,11 @@ func ValidateToolResponseBody(body *ToolResponseBody) (err error) {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.PlatformToolDefinition != nil {
+		if err2 := ValidatePlatformToolDefinitionResponseBody(body.PlatformToolDefinition); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.ExternalMcpToolDefinition != nil {
 		if err2 := ValidateExternalMCPToolDefinitionResponseBody(body.ExternalMcpToolDefinition); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9138,6 +9805,58 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	}
 	if len(body.ToolUrnsHint) > 20 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_urns_hint", body.ToolUrnsHint, len(body.ToolUrnsHint), 20, false))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.Canonical != nil {
+		if err2 := ValidateCanonicalToolAttributesResponseBody(body.Canonical); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Variation != nil {
+		if err2 := ValidateToolVariationResponseBody(body.Variation); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidatePlatformToolDefinitionResponseBody runs the validations defined on
+// PlatformToolDefinitionResponseBody
+func ValidatePlatformToolDefinitionResponseBody(body *PlatformToolDefinitionResponseBody) (err error) {
+	if body.SourceSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_slug", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.CanonicalName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Schema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
+	}
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -9572,8 +10291,8 @@ func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "http" || *body.Type == "prompt" || *body.Type == "function" || *body.Type == "externalmcp") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt", "function", "externalmcp"}))
+		if !(*body.Type == "http" || *body.Type == "prompt" || *body.Type == "function" || *body.Type == "platform" || *body.Type == "externalmcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt", "function", "platform", "externalmcp"}))
 		}
 	}
 	return

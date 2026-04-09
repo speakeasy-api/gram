@@ -45,8 +45,8 @@ interface PlaygroundElementsProps {
   model: string;
   /** Additional action buttons to render alongside the share button */
   additionalActions?: React.ReactNode;
-  /** User-provided auth headers for user-provided variables */
-  userProvidedHeaders?: Record<string, string>;
+  /** Slug of the playground environment for user-provided variables */
+  playgroundEnvironmentSlug?: string;
 }
 
 export function PlaygroundElements({
@@ -54,7 +54,7 @@ export function PlaygroundElements({
   environmentSlug,
   model,
   additionalActions,
-  userProvidedHeaders = {},
+  playgroundEnvironmentSlug,
 }: PlaygroundElementsProps) {
   const session = useSession();
   const project = useProject();
@@ -87,6 +87,13 @@ export function PlaygroundElements({
 
   // ToolsetEntry from useListToolsets is structurally compatible with Toolset
   // for the fields useMissingRequiredEnvVars accesses (same pattern as Playground.tsx)
+  //
+  // Intentionally do NOT pass playgroundEnvironmentSlug here. The playground
+  // environment only stores user-provided entries, so system variables would
+  // always appear missing if we pointed the hook at it. User-provided vars
+  // are already treated as always-configured by useMissingRequiredEnvVars
+  // regardless of the environment, so using the default env here is correct
+  // for both kinds of variables.
   const missingAuthCount = useMissingRequiredEnvVars(
     toolset as Toolset | undefined,
     environments,
@@ -151,6 +158,8 @@ export function PlaygroundElements({
     staleTime: 1000 * 60 * 30,
   });
 
+  const effectiveEnvironmentSlug = playgroundEnvironmentSlug ?? environmentSlug;
+
   const mcpAppHeaders = useMemo(() => {
     if (!mcpAppSessionQuery.data) {
       return null;
@@ -159,15 +168,11 @@ export function PlaygroundElements({
     return {
       "Gram-Chat-Session": mcpAppSessionQuery.data,
       "Gram-Project": project.slug,
-      ...(environmentSlug ? { "Gram-Environment": environmentSlug } : {}),
-      ...userProvidedHeaders,
+      ...(effectiveEnvironmentSlug
+        ? { "Gram-Environment": effectiveEnvironmentSlug }
+        : {}),
     };
-  }, [
-    environmentSlug,
-    mcpAppSessionQuery.data,
-    project.slug,
-    userProvidedHeaders,
-  ]);
+  }, [effectiveEnvironmentSlug, mcpAppSessionQuery.data, project.slug]);
 
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {
@@ -201,7 +206,6 @@ export function PlaygroundElements({
           session: getSession,
           headers: {
             "X-Gram-Source": "playground",
-            ...userProvidedHeaders,
           },
         },
         history: {
@@ -210,10 +214,8 @@ export function PlaygroundElements({
           initialThreadId,
         },
         mcp: mcpUrl,
-        gramEnvironment: environmentSlug ?? undefined,
-        environment: {
-          ...userProvidedHeaders,
-        },
+        gramEnvironment:
+          playgroundEnvironmentSlug ?? environmentSlug ?? undefined,
         variant: "standalone",
         model: {
           defaultModel: model as Model,
@@ -223,7 +225,13 @@ export function PlaygroundElements({
           title: "Test Your MCP Server",
           subtitle:
             "This chat has access to the selected MCP server. Use it to test your tools.",
-          suggestions: [],
+          suggestions: [
+            {
+              title: "Explore tools",
+              label: "See what's available",
+              prompt: "What tools does this server have?",
+            },
+          ],
         },
         composer: {
           placeholder: "Send a message...",

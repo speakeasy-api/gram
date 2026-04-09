@@ -265,6 +265,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
+	platformTools gateway.PlatformExecutor,
 	openRouter openrouter.Provisioner,
 	baseChatClient openrouter.CompletionClient,
 ) *Service {
@@ -283,6 +284,7 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 			funcCaller,
+			platformTools,
 		),
 		cache:        cacheImpl,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
@@ -395,6 +397,10 @@ func (s *Service) LoadToolsetTools(
 			}
 		case gateway.ToolKindPrompt:
 			schema = json.RawMessage(`{}`)
+		case gateway.ToolKindPlatform:
+			if plan.Platform != nil {
+				schema = json.RawMessage(plan.Platform.InputSchema)
+			}
 		case gateway.ToolKindExternalMCP:
 			return nil, fmt.Errorf("resolve external mcp tool from agent: %s", baseTool.Name)
 		}
@@ -464,6 +470,10 @@ func (s *Service) LoadToolsByURN(
 		case gateway.ToolKindPrompt:
 			// Prompt tools don't have a schema in the same way
 			schema = json.RawMessage(`{}`)
+		case gateway.ToolKindPlatform:
+			if plan.Platform != nil {
+				schema = json.RawMessage(plan.Platform.InputSchema)
+			}
 		case gateway.ToolKindExternalMCP:
 			return nil, fmt.Errorf("resolve external mcp tool from agent: %s", toolURN.String())
 		}
@@ -594,6 +604,7 @@ func (s *Service) GetCompletionFromMessages(
 		ChatID:         uuid.Nil,
 		UserID:         "",
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 		APIKeyID:       "",
 		JSONSchema:     nil,

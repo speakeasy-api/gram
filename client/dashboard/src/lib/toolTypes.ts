@@ -3,6 +3,7 @@ import {
   ExternalMCPToolDefinition,
   FunctionResourceDefinition,
   FunctionToolDefinition,
+  PlatformToolDefinition,
   Resource as GeneratedResource,
   Tool as GeneratedTool,
   Toolset as GeneratedToolset,
@@ -28,9 +29,14 @@ export type Tool =
   | ({ type: "http" } & HTTPToolDefinition)
   | ({ type: "prompt" } & PromptTemplate)
   | ({ type: "function" } & FunctionToolDefinition)
+  | ({ type: "platform" } & PlatformToolDefinition)
   | ({ type: "external-mcp" } & ExternalMCPToolDefinition & {
         isProxy: boolean;
       });
+export type ToolWithAnnotations = Extract<
+  Tool,
+  { type: "http" | "function" | "platform" }
+>;
 
 export type ToolGroup = {
   key: string;
@@ -42,6 +48,16 @@ export type HttpToolGroup = {
   tools: HttpToolWithDisplayName[];
 };
 
+type ToolDisplayContext = {
+  documentIdToName?: Record<string, string>;
+  documentIdToSlug?: Record<string, string>;
+  functionIdToName?: Record<string, string>;
+};
+
+const PLATFORM_SOURCE_LABELS: Record<string, string> = {
+  logs: "MCP Logs",
+};
+
 export const asTool = (tool: GeneratedTool): Tool | undefined => {
   if (tool.httpToolDefinition) {
     return { type: "http", ...tool.httpToolDefinition };
@@ -49,6 +65,8 @@ export const asTool = (tool: GeneratedTool): Tool | undefined => {
     return { type: "prompt", ...tool.promptTemplate };
   } else if (tool.functionToolDefinition) {
     return { type: "function", ...tool.functionToolDefinition };
+  } else if (tool.platformToolDefinition) {
+    return { type: "platform", ...tool.platformToolDefinition };
   } else if (tool.externalMcpToolDefinition) {
     if (tool.externalMcpToolDefinition.type !== "proxy") {
       return {
@@ -103,6 +121,16 @@ export const useGroupedHttpTools = (
 export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   const { data: deployment } = useLatestDeployment();
 
+  const documentIdToName = useMemo(() => {
+    return deployment?.deployment?.openapiv3Assets?.reduce(
+      (acc, asset) => {
+        acc[asset.id] = asset.name;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+  }, [deployment]);
+
   const documentIdToSlug = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce(
       (acc, asset) => {
@@ -115,25 +143,17 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
 
   const toolGroups = useMemo(() => {
     return tools?.reduce((acc, tool) => {
-      let groupKey = "unknown";
-
-      if (tool.type === "http") {
-        const documentSlug = tool.openapiv3DocumentId
-          ? documentIdToSlug?.[tool.openapiv3DocumentId]
-          : undefined;
-        groupKey = documentSlug || "unknown";
-      } else if (tool.type === "function") {
-        // TODO: As the UX gets built out this should get more granular, tying to which function asset
-        groupKey = "functions";
-      } else if (tool.type === "external-mcp") {
-        groupKey = "external-mcp";
-      } else {
-        groupKey = "custom";
-      }
+      const groupKey = getToolSourceLabel(tool, { documentIdToName });
+      const sourcePrefix = getToolSourcePrefix(tool, {
+        documentIdToSlug,
+      });
 
       const toolWithDisplayName = {
         ...tool,
-        displayName: tool.name.replace(groupKey + "_", ""), // TODO account for _-
+        displayName:
+          sourcePrefix && tool.name.startsWith(sourcePrefix + "_")
+            ? tool.name.slice(sourcePrefix.length + 1)
+            : tool.name,
       };
 
       const group = acc.find((g) => g.key === groupKey);
@@ -148,7 +168,7 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
       }
       return acc;
     }, [] as ToolGroup[]);
-  }, [deployment, tools]);
+  }, [documentIdToName, documentIdToSlug, tools]);
 
   return toolGroups;
 };
@@ -167,6 +187,68 @@ export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
 export const isHttpTool = (tool: Tool) => tool.type === "http";
 export const isPromptTool = (tool: Tool) => tool.type === "prompt";
 export const isFunctionTool = (tool: Tool) => tool.type === "function";
+export const toolSupportsAnnotations = (
+  tool: Tool,
+): tool is ToolWithAnnotations =>
+  tool.type === "http" || tool.type === "function" || tool.type === "platform";
+
+export const getToolSourceLabel = (
+  tool: Tool,
+  context: ToolDisplayContext = {},
+) => {
+  const { documentIdToName, functionIdToName } = context;
+
+  switch (tool.type) {
+    case "http":
+      if (tool.packageName) return tool.packageName;
+      if (tool.openapiv3DocumentId && documentIdToName) {
+        return documentIdToName[tool.openapiv3DocumentId] || "OpenAPI";
+      }
+      if (tool.deploymentId) return tool.deploymentId;
+      return "Custom";
+    case "function":
+      if (tool.functionId && functionIdToName) {
+        return functionIdToName[tool.functionId] || "Functions";
+      }
+      return "Functions";
+    case "platform":
+      return PLATFORM_SOURCE_LABELS[tool.sourceSlug] ?? "Platform";
+    case "external-mcp":
+      return tool.registryServerName || "External MCP";
+    case "prompt":
+      return "Prompts";
+  }
+};
+
+const getToolSourcePrefix = (tool: Tool, context: ToolDisplayContext = {}) => {
+  const { documentIdToSlug } = context;
+
+  switch (tool.type) {
+    case "http":
+      if (tool.packageName) return tool.packageName;
+      if (tool.openapiv3DocumentId && documentIdToSlug) {
+        return documentIdToSlug[tool.openapiv3DocumentId];
+      }
+      return null;
+    default:
+      return null;
+  }
+};
+
+export const getToolTypeLabel = (tool: Tool) => {
+  switch (tool.type) {
+    case "http":
+      return "HTTP";
+    case "function":
+      return "Function";
+    case "platform":
+      return "Platform";
+    case "external-mcp":
+      return "External MCP";
+    case "prompt":
+      return "Prompt";
+  }
+};
 
 export const filterHttpTools = (
   tools: Tool[] | undefined,

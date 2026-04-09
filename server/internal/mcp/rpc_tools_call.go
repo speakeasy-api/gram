@@ -287,6 +287,9 @@ func handleToolsCall(
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
+		if gramEmail != "" {
+			logAttrs[attr.UserEmailKey] = gramEmail
+		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
 		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{

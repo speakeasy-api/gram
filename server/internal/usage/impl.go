@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -34,6 +35,7 @@ type Service struct {
 	tracer        trace.Tracer
 	logger        *slog.Logger
 	auth          *auth.Auth
+	access        *access.Manager
 	serverURL     *url.URL
 	repo          *repo.Queries
 	billingRepo   billing.Repository
@@ -44,13 +46,14 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
 		logger:        logger,
-		auth:          auth.New(logger, db, sessions, accessLoader),
+		auth:          auth.New(logger, db, sessions, accessManager),
+		access:        accessManager,
 		serverURL:     serverURL,
 		repo:          repo.New(db),
 		billingRepo:   billingRepo,
@@ -179,6 +182,9 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
 
 	periodUsage, err := s.billingRepo.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
@@ -218,6 +224,9 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return "", err
+	}
 
 	successURL := fmt.Sprintf("%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug)
 
@@ -232,6 +241,9 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return "", err
 	}
 
 	sessionURL, err := s.billingRepo.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)

@@ -67,7 +67,12 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {
+		return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: organizationID})
+	}, func(ctx context.Context, organizationID string) error {
+		return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: organizationID})
+	})
 
 	return ctx, &testInstance{
 		service:        svc,

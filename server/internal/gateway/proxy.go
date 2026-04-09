@@ -93,15 +93,28 @@ type InstanceToolProxyConfig struct {
 	Cache  cache.Cache
 }
 
+// PlatformExecutor handles execution of Platform tools.
+type PlatformExecutor interface {
+	ExecuteTool(ctx context.Context, plan *ToolCallPlan, requestBody io.Reader) (*PlatformResult, error)
+}
+
+// PlatformResult is the result of executing a Platform tool.
+type PlatformResult struct {
+	StatusCode  int
+	ContentType string
+	Body        []byte
+}
+
 type ToolProxy struct {
-	source     ToolCallSource
-	logger     *slog.Logger
-	tracer     trace.Tracer
-	metrics    *metrics
-	encryption *encryption.Client
-	cache      cache.Cache
-	policy     *guardian.Policy
-	functions  functions.ToolCaller
+	source        ToolCallSource
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	metrics       *metrics
+	encryption    *encryption.Client
+	cache         cache.Cache
+	policy        *guardian.Policy
+	functions     functions.ToolCaller
+	platformTools PlatformExecutor
 }
 
 func NewToolProxy(
@@ -113,19 +126,21 @@ func NewToolProxy(
 	cache cache.Cache,
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
+	platformTools PlatformExecutor,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
 
 	return &ToolProxy{
-		source:     source,
-		logger:     logger,
-		tracer:     tracer,
-		metrics:    newMetrics(meter, logger),
-		encryption: enc,
-		cache:      cache,
-		policy:     policy,
-		functions:  funcCaller,
+		source:        source,
+		logger:        logger,
+		tracer:        tracer,
+		metrics:       newMetrics(meter, logger),
+		encryption:    enc,
+		cache:         cache,
+		policy:        policy,
+		functions:     funcCaller,
+		platformTools: platformTools,
 	}
 }
 
@@ -168,11 +183,157 @@ func (tp *ToolProxy) Do(
 		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP, attrs)
 	case ToolKindPrompt:
 		return tp.doPrompt(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Prompt)
+	case ToolKindPlatform:
+		return tp.doPlatform(ctx, logger, w, requestBody, plan, attrs)
 	case ToolKindExternalMCP:
 		return tp.doExternalMCP(ctx, logger, w, requestBody, env, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
+}
+
+func (tp *ToolProxy) doPlatform(
+	ctx context.Context,
+	logger *slog.Logger,
+	w http.ResponseWriter,
+	requestBody io.Reader,
+	plan *ToolCallPlan,
+	attrRecorder tm.HTTPLogAttributes,
+) error {
+	span := trace.SpanFromContext(ctx)
+	if tp.platformTools == nil {
+		return oops.E(oops.CodeUnexpected, nil, "platform tool executor not configured").Log(ctx, logger)
+	}
+
+	attrRecorder.RecordMethod(http.MethodPost)
+	attrRecorder.RecordRoute(plan.Descriptor.URN.String())
+
+	var responseStatusCode int
+	defer func() {
+		logger.InfoContext(ctx, "platform tool call",
+			attr.SlogHTTPResponseStatusCode(responseStatusCode),
+			attr.SlogHTTPRequestMethod(http.MethodPost),
+		)
+		tp.metrics.RecordToolCall(ctx, plan.Descriptor.OrganizationID, plan.Descriptor.URN, responseStatusCode)
+		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
+	}()
+
+	bodyBytes, err := io.ReadAll(requestBody)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
+	}
+
+	payloadBytes, err := extractPlatformPayload(bodyBytes)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
+	}
+
+	if len(plan.Platform.InputSchema) > 0 {
+		payloadBytes, err = validateAndAttemptHealing(ctx, logger, payloadBytes, string(plan.Platform.InputSchema))
+		if err != nil {
+			logger.InfoContext(ctx, "platform tool request schema failed validation", attr.SlogError(err))
+			responseStatusCode = http.StatusBadRequest
+			attrRecorder.RecordStatusCode(responseStatusCode)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(responseStatusCode)
+			if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
+				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", err.Error()),
+			}); err != nil {
+				logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
+			}
+			return nil
+		}
+	}
+
+	result, err := tp.platformTools.ExecuteTool(ctx, plan, bytes.NewReader(payloadBytes))
+	if err != nil {
+		return fmt.Errorf("execute platform tool: %w", err)
+	}
+
+	if result.StatusCode == 0 {
+		result.StatusCode = http.StatusOK
+	}
+	if result.ContentType == "" {
+		result.ContentType = "application/json"
+	}
+
+	responseStatusCode = result.StatusCode
+	attrRecorder.RecordStatusCode(responseStatusCode)
+	attrRecorder.RecordResponseHeaders(map[string]string{
+		"content-type": result.ContentType,
+	})
+
+	w.Header().Set("Content-Type", result.ContentType)
+	w.WriteHeader(responseStatusCode)
+	if _, err := w.Write(result.Body); err != nil {
+		return fmt.Errorf("write platform tool response: %w", err)
+	}
+
+	return nil
+}
+
+func extractPlatformPayload(bodyBytes []byte) ([]byte, error) {
+	if !looksLikeToolCallEnvelope(bodyBytes) {
+		return bodyBytes, nil
+	}
+
+	var toolCallBody ToolCallBody
+	dec := json.NewDecoder(bytes.NewReader(bodyBytes))
+	dec.UseNumber()
+	if err := dec.Decode(&toolCallBody); err != nil {
+		return nil, fmt.Errorf("decode tool call body: %w", err)
+	}
+
+	return toolCallBody.Body, nil
+}
+
+func looksLikeToolCallEnvelope(bodyBytes []byte) bool {
+	if len(bodyBytes) == 0 {
+		return false
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(bodyBytes, &fields); err != nil {
+		return false
+	}
+
+	var recognizedKeys int
+	for _, key := range []string{
+		"pathParameters",
+		"queryParameters",
+		"headerParameters",
+		"body",
+		"responseFilter",
+		"environmentVariables",
+		"gram-request-summary",
+	} {
+		if _, ok := fields[key]; ok {
+			recognizedKeys++
+		}
+	}
+
+	if recognizedKeys == 0 || recognizedKeys != len(fields) {
+		return false
+	}
+
+	if _, ok := fields["body"]; !ok {
+		return false
+	}
+
+	for _, key := range []string{
+		"pathParameters",
+		"queryParameters",
+		"headerParameters",
+		"responseFilter",
+		"environmentVariables",
+		"gram-request-summary",
+	} {
+		if _, ok := fields[key]; ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (tp *ToolProxy) doFunction(
