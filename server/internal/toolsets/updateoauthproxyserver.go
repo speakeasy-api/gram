@@ -64,6 +64,18 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint cannot be empty").Log(ctx, s.logger)
 	}
 
+	// Reject empty arrays for scopes and auth methods. The create path
+	// (impl.go:1013-1018) requires both to be non-empty for custom providers,
+	// and the update path should not allow putting the proxy into an invalid
+	// state. nil = "don't change" (PATCH skip); non-empty = "replace"; but
+	// empty = "clear to zero" would produce an OAuth proxy that can't function.
+	if form.ScopesSupported != nil && len(form.ScopesSupported) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "scopes_supported cannot be empty").Log(ctx, s.logger)
+	}
+	if form.TokenEndpointAuthMethodsSupported != nil && len(form.TokenEndpointAuthMethodsSupported) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint_auth_methods_supported cannot be empty").Log(ctx, s.logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OAuth proxy servers").Log(ctx, s.logger)

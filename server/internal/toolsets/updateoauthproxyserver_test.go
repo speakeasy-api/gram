@@ -489,29 +489,26 @@ func TestToolsetsService_UpdateOAuthProxyServer_EnvironmentSlugNotFound(t *testi
 	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
 }
 
-func TestToolsetsService_UpdateOAuthProxyServer_ClearScopes(t *testing.T) {
+func TestToolsetsService_UpdateOAuthProxyServer_EmptyScopesRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
 	ctx = withProAccount(t, ctx)
 
-	// The helper creates a proxy with ScopesSupported: ["read", "write"].
 	attached := createPublicToolsetWithCustomOAuthProxy(
 		t, ctx, ti,
-		"Clear Scopes OAuth Proxy Toolset",
-		"clear-scopes-env",
-		"clear-scopes-proxy",
+		"Empty Scopes OAuth Proxy Toolset",
+		"empty-scopes-env",
+		"empty-scopes-proxy",
 	)
 
-	require.Len(t, attached.OauthProxyServer.OauthProxyProviders, 1)
-	require.Equal(t, []string{"read", "write"}, attached.OauthProxyServer.OauthProxyProviders[0].ScopesSupported)
+	beforeCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, auditErr)
 
-	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
-	require.NoError(t, err)
-
-	// Pass an explicit empty (non-nil) slice — COALESCE should pick the empty array
-	// over the existing value, clearing the scopes column entirely.
-	updated, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+	// An explicit empty (non-nil) slice should be rejected — the create path
+	// requires at least one scope for custom providers, and the update path
+	// should not allow putting the proxy into an invalid scopeless state.
+	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
 		SessionToken: nil,
 		ApikeyToken:  nil,
 		Slug:         attached.Slug,
@@ -520,19 +517,45 @@ func TestToolsetsService_UpdateOAuthProxyServer_ClearScopes(t *testing.T) {
 		},
 		ProjectSlugInput: nil,
 	})
-	require.NoError(t, err)
-	require.NotNil(t, updated)
-	require.NotNil(t, updated.OauthProxyServer)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "scopes_supported cannot be empty")
 
-	// Scopes should be empty, not the original ["read", "write"].
-	require.Len(t, updated.OauthProxyServer.OauthProxyProviders, 1)
-	provider := updated.OauthProxyServer.OauthProxyProviders[0]
-	require.Empty(t, provider.ScopesSupported)
+	afterCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, auditErr)
+	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
+}
 
-	// One audit row should have been added.
-	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
+func TestToolsetsService_UpdateOAuthProxyServer_EmptyAuthMethodsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withProAccount(t, ctx)
+
+	attached := createPublicToolsetWithCustomOAuthProxy(
+		t, ctx, ti,
+		"Empty Auth Methods Toolset",
+		"empty-auth-methods-env",
+		"empty-auth-methods-proxy",
+	)
+
+	beforeCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, auditErr)
+
+	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		Slug:         attached.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
+			TokenEndpointAuthMethodsSupported: []string{},
+		},
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "token_endpoint_auth_methods_supported cannot be empty")
+
+	afterCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
+	require.NoError(t, auditErr)
+	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
 }
 
 func TestToolsetsService_UpdateOAuthProxyServer_SoftDeletedProxyRejected(t *testing.T) {
