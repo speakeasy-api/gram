@@ -125,7 +125,9 @@ function TelemetryLogsTab({
               {log.severityText || "INFO"}
             </Badge>
             <div className="flex-1 min-w-0 space-y-1">
-              <div className="text-sm font-medium break-words">{log.body.trim()}</div>
+              <div className="text-sm font-medium break-words">
+                {log.body.trim()}
+              </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>{formatTimestamp(log.timeUnixNano)}</span>
                 {log.service?.name && (
