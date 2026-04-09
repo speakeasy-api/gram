@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -105,7 +106,6 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 	ti.orgs.AssertExpectations(t)
 }
 
-// Test that removing a user that is not a member of the organization returns a not found error.
 func TestService_RemoveUser_NotAMember(t *testing.T) {
 	t.Parallel()
 
@@ -119,10 +119,9 @@ func TestService_RemoveUser_NotAMember(t *testing.T) {
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
 		UserID: "non-member-user-id",
 	})
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	require.Equal(t, "user is not a member of this organization", oopsErr.Error())
 
 	ti.orgs.AssertExpectations(t)
@@ -140,10 +139,53 @@ func TestService_RemoveUser_CannotRemoveSelf(t *testing.T) {
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
 		UserID: authCtx.UserID,
 	})
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestService_RemoveUser_AllowsOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	_, err := userrepo.New(ti.conn).UpsertUser(ctx, userrepo.UpsertUserParams{
+		ID: testOtherUserID, Email: "other@example.com", DisplayName: "Other User",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         testOtherUserID,
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+
+	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	err = ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: testOtherUserID})
+	require.NoError(t, err)
+}
+
+func TestService_RemoveUser_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestService_RemoveUser_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestService_RemoveUser_ForbiddenWhenNotOrgAdmin(t *testing.T) {
@@ -153,5 +195,5 @@ func TestService_RemoveUser_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
-	requireOrgManagementForbidden(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

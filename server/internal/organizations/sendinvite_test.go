@@ -5,11 +5,12 @@ import (
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func TestService_SendInvite(t *testing.T) {
@@ -100,6 +101,55 @@ func TestService_SendInvite_WithRoleSlug(t *testing.T) {
 	require.Equal(t, "test-invitation-id", invite.ID)
 }
 
+func TestService_SendInvite_AllowsOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+
+	expiresAt := time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339)
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	updatedAt := time.Now().UTC().Format(time.RFC3339)
+
+	ti.orgs.On("SendInvitation", mock.Anything, mock.Anything).Return(&thirdpartyworkos.Invitation{
+		ID:             "test-invitation-id",
+		Email:          "test@example.com",
+		State:          thirdpartyworkos.InvitationStatePending,
+		OrganizationID: "org_01WORKOS",
+		InviterUserID:  "user_01WORKOS",
+		ExpiresAt:      expiresAt,
+		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
+	}, nil).Once()
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
+	require.NoError(t, err)
+}
+
+func TestService_SendInvite_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestService_SendInvite_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestService_SendInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	t.Parallel()
 
@@ -107,5 +157,5 @@ func TestService_SendInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
-	requireOrgManagementForbidden(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

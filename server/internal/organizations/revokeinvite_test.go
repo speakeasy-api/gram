@@ -5,6 +5,7 @@ import (
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -63,10 +64,7 @@ func TestService_RevokeInvite_NotFound(t *testing.T) {
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
 		InvitationID: "test-invitation-id",
 	})
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestService_RevokeInvite_WrongOrganization(t *testing.T) {
@@ -88,11 +86,52 @@ func TestService_RevokeInvite_WrongOrganization(t *testing.T) {
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
 		InvitationID: "other-org-invitation-id",
 	})
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
 
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+func TestService_RevokeInvite_AllowsOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+
+	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
+		ID:             "test-invitation-id",
+		Email:          "test@example.com",
+		State:          thirdpartyworkos.InvitationStatePending,
+		OrganizationID: testWorkosOrgID,
+		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339),
+	}, nil).Once()
+	ti.orgs.On("RevokeInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
+		ID: "test-invitation-id", State: thirdpartyworkos.InvitationStateRevoked,
+	}, nil).Once()
+
+	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "test-invitation-id"})
+	require.NoError(t, err)
+}
+
+func TestService_RevokeInvite_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "any-invitation-id"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestService_RevokeInvite_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "any-invitation-id"})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestService_RevokeInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
@@ -102,5 +141,5 @@ func TestService_RevokeInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "any-invitation-id"})
-	requireOrgManagementForbidden(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
