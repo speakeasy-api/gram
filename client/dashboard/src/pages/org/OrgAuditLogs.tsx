@@ -566,6 +566,17 @@ export default function OrgAuditLogs() {
     [logs, tsMode],
   );
 
+  const logFlatIndices = useMemo(() => {
+    const map = new Map<string, number>();
+    let idx = 0;
+    for (const group of dateGroups) {
+      for (const log of group.logs) {
+        map.set(log.id, idx++);
+      }
+    }
+    return map;
+  }, [dateGroups]);
+
   const hasActiveFilters =
     selectedProjectSlug !== "all" ||
     selectedAction !== "all" ||
@@ -579,6 +590,11 @@ export default function OrgAuditLogs() {
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // Reset navigation state when the log list changes (filters, pagination)
+  useEffect(() => {
+    setCurrentLogIndex(null);
+  }, [logs]);
 
   const getSearchableText = useCallback((log: AuditLog): string => {
     const actor = getActorLabel(log);
@@ -1037,39 +1053,31 @@ export default function OrgAuditLogs() {
                 </div>
               ) : (
                 <div>
-                  {(() => {
-                    let flatIndex = 0;
-                    return dateGroups.map((group) => {
-                      let rowIndex = 0;
-                      return (
-                        <React.Fragment key={group.key}>
-                          <DateGroupHeader date={group.date} mode={tsMode} />
-                          {group.logs.map((log) => {
-                            const isOdd = rowIndex % 2 === 1;
-                            rowIndex++;
-                            const idx = flatIndex++;
-                            return (
-                              <AuditLogRow
-                                key={log.id}
-                                log={log}
-                                orgSlug={orgSlug}
-                                timestampMode={tsMode}
-                                isOdd={isOdd}
-                                isHighlighted={idx === currentLogIndex}
-                                rowRef={(el) => {
-                                  if (el) logRefs.current.set(idx, el);
-                                  else logRefs.current.delete(idx);
-                                }}
-                                highlightMatch={
-                                  searchQuery ? highlightMatch : undefined
-                                }
-                              />
-                            );
-                          })}
-                        </React.Fragment>
-                      );
-                    });
-                  })()}
+                  {dateGroups.map((group) => (
+                    <React.Fragment key={group.key}>
+                      <DateGroupHeader date={group.date} mode={tsMode} />
+                      {group.logs.map((log, rowIndex) => {
+                        const idx = logFlatIndices.get(log.id) ?? 0;
+                        return (
+                          <AuditLogRow
+                            key={log.id}
+                            log={log}
+                            orgSlug={orgSlug}
+                            timestampMode={tsMode}
+                            isOdd={rowIndex % 2 === 1}
+                            isHighlighted={idx === currentLogIndex}
+                            rowRef={(el) => {
+                              if (el) logRefs.current.set(idx, el);
+                              else logRefs.current.delete(idx);
+                            }}
+                            highlightMatch={
+                              searchQuery ? highlightMatch : undefined
+                            }
+                          />
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
                 </div>
               )}
             </div>
