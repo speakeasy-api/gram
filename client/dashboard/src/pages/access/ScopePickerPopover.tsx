@@ -533,7 +533,7 @@ function AnnotationGroupPanel({
               type="button"
               onClick={() => toggle(opt.key)}
               className={cn(
-                "flex w-full items-center gap-3 px-3 py-2.5 text-sm cursor-pointer",
+                "flex w-full items-center gap-3 px-3 py-2.5 text-sm cursor-pointer outline-none",
                 isSelected && "font-medium",
               )}
             >
@@ -551,13 +551,13 @@ function AnnotationGroupPanel({
               </div>
             </button>
             {isSelected && (
-              <div className="pl-[66px] pr-3 pb-1">
+              <div className="pl-[66px] pr-3 pb-3">
                 {matchedTools.length === 0 ? (
                   <span className="text-[11px] text-muted-foreground">
                     No tools matched
                   </span>
                 ) : (
-                  <div className="rounded-md border border-border bg-muted/30 overflow-hidden">
+                  <div className="rounded-md border border-border bg-background overflow-hidden">
                     <button
                       type="button"
                       onClick={() => toggleExpanded(opt.key)}
@@ -762,7 +762,7 @@ function HttpMethodGroupPanel({
               <div
                 ref={scrollRef}
                 onWheel={handleWheel}
-                className="max-h-[180px] overflow-y-auto border-t border-border"
+                className="max-h-[180px] overflow-y-auto border-t border-border bg-background"
               >
                 {tools.map((tool) => {
                   const compoundId = `${tool.serverSlug}:${tool.id}`;
