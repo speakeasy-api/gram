@@ -188,6 +188,39 @@ function renderSubject(log: AuditLog, orgSlug: string) {
   return <span className={monoClass}>{getSubjectLabel(log)}</span>;
 }
 
+function describeToolsetUpdate(log: AuditLog): string {
+  const before = log.beforeSnapshot as Record<string, unknown> | undefined;
+  const after = log.afterSnapshot as Record<string, unknown> | undefined;
+  if (!before || !after) return "updated MCP server";
+
+  const changed = new Set<string>();
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) {
+      changed.add(key);
+    }
+  }
+
+  if (changed.has("McpIsPublic") && changed.size <= 2) {
+    const isPublic = after["McpIsPublic"];
+    return `changed MCP server visibility to ${isPublic ? "public" : "private"}`;
+  }
+  if (changed.has("McpEnabled") && changed.size <= 2) {
+    const enabled = after["McpEnabled"];
+    return `${enabled ? "enabled" : "disabled"} MCP for server`;
+  }
+  if (changed.has("Name") && changed.size <= 2) {
+    return `renamed MCP server to ${after["Name"]}`;
+  }
+  if (changed.has("ToolSelectionMode") && changed.size <= 2) {
+    return `changed tool selection mode to ${after["ToolSelectionMode"]}`;
+  }
+  if (changed.has("Description") && changed.size <= 2) {
+    return "updated MCP server description";
+  }
+
+  return "updated MCP server";
+}
+
 function renderVerb(log: AuditLog): string {
   switch (log.action) {
     case "project:create":
@@ -211,7 +244,7 @@ function renderVerb(log: AuditLog): string {
     case "toolset:create":
       return "created MCP server";
     case "toolset:update":
-      return "updated MCP server";
+      return describeToolsetUpdate(log);
     case "toolset:delete":
       return "deleted MCP server";
     case "toolset:attach_external_oauth":
@@ -569,6 +602,15 @@ export default function OrgAuditLogs() {
     return indices;
   }, [deferredSearchQuery, logs, getSearchableText]);
 
+  useEffect(() => {
+    if (
+      searchMatchIndices.length > 0 &&
+      currentSearchIndex >= searchMatchIndices.length
+    ) {
+      setCurrentSearchIndex(0);
+    }
+  }, [searchMatchIndices.length, currentSearchIndex]);
+
   const scrollToLog = useCallback((index: number) => {
     const element = logRefs.current.get(index);
     if (element) {
@@ -620,12 +662,17 @@ export default function OrgAuditLogs() {
     [logs, getSearchableText, scrollToLog],
   );
 
+  const searchRegex = useMemo(() => {
+    if (!searchQuery) return null;
+    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(${escaped})`, "gi");
+  }, [searchQuery]);
+
   const highlightMatch = useCallback(
     (text: string): React.ReactNode => {
-      if (!searchQuery) return text;
+      if (!searchRegex) return text;
 
-      const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+      const parts = text.split(searchRegex);
       return (
         <>
           {parts.map((part, i) =>
@@ -643,7 +690,7 @@ export default function OrgAuditLogs() {
         </>
       );
     },
-    [searchQuery],
+    [searchQuery, searchRegex],
   );
 
   // Keyboard handler
