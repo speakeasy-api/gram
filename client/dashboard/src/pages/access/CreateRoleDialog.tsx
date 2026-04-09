@@ -29,7 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ScopePickerPopover } from "./ScopePickerPopover";
-import type { RoleGrant, Scope } from "./types";
+import type { AnnotationHint, RoleGrant, Scope } from "./types";
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -92,7 +92,16 @@ export function CreateRoleDialog({
   if (editingRole && !initialized) {
     setName(editingRole.name);
     setDescription(editingRole.description);
-    setGrants(grantsFromRole(editingRole));
+    const roleGrants = grantsFromRole(editingRole);
+    setGrants(roleGrants);
+    // Auto-expand groups that have at least one scope selected
+    const grantedScopes = new Set(Object.keys(roleGrants));
+    const autoExpanded = new Set(
+      scopeGroups
+        .filter((g) => g.scopes.some((s) => grantedScopes.has(s.slug)))
+        .map((g) => g.label),
+    );
+    setExpandedGroups(autoExpanded);
     const assignedIds = new Set(
       members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
     );
@@ -144,7 +153,14 @@ export function CreateRoleDialog({
   const setGrantResources = (scope: Scope, resources: string[] | null) => {
     setGrants((prev) => ({
       ...prev,
-      [scope]: { scope, resources },
+      [scope]: { ...prev[scope], scope, resources },
+    }));
+  };
+
+  const setGrantAnnotations = (scope: Scope, annotations: AnnotationHint[]) => {
+    setGrants((prev) => ({
+      ...prev,
+      [scope]: { ...prev[scope], scope, annotations },
     }));
   };
 
@@ -343,12 +359,6 @@ export function CreateRoleDialog({
                             onClick={() => toggleGroup(group.label)}
                             className="flex items-center gap-1"
                           >
-                            <ChevronRight
-                              className={cn(
-                                "h-3.5 w-3.5 transition-transform text-muted-foreground",
-                                isExpanded && "rotate-90",
-                              )}
-                            />
                             <Type
                               variant="body"
                               className="font-medium text-sm"
@@ -363,6 +373,17 @@ export function CreateRoleDialog({
                             </Type>
                           </button>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(group.label)}
+                        >
+                          <ChevronRight
+                            className={cn(
+                              "h-3.5 w-3.5 transition-transform text-muted-foreground",
+                              isExpanded && "rotate-90",
+                            )}
+                          />
+                        </button>
                       </div>
 
                       {/* Expanded scope rows */}
@@ -375,7 +396,7 @@ export function CreateRoleDialog({
                             return (
                               <div
                                 key={scopeDef.slug}
-                                className="flex items-start gap-3 px-3 py-2.5 pl-10 hover:bg-muted/50"
+                                className="flex items-start gap-3 px-3 py-2.5 hover:bg-muted/50"
                               >
                                 <label className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
                                   <Checkbox
@@ -426,6 +447,13 @@ export function CreateRoleDialog({
                                           }
                                           return next;
                                         })
+                                      }
+                                      annotations={grant.annotations}
+                                      onChangeAnnotations={(annotations) =>
+                                        setGrantAnnotations(
+                                          scopeDef.slug,
+                                          annotations,
+                                        )
                                       }
                                     />
                                   )}
