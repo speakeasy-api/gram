@@ -14,6 +14,7 @@ const (
 	ToolKindFunction    ToolKind = "function"
 	ToolKindHTTP        ToolKind = "http"
 	ToolKindPrompt      ToolKind = "prompt"
+	ToolKindPlatform    ToolKind = "platform"
 	ToolKindExternalMCP ToolKind = "externalmcp"
 )
 
@@ -21,6 +22,7 @@ var toolKinds = map[ToolKind]struct{}{
 	ToolKindFunction:    {},
 	ToolKindHTTP:        {},
 	ToolKindPrompt:      {},
+	ToolKindPlatform:    {},
 	ToolKindExternalMCP: {},
 }
 

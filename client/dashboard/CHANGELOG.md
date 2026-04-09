@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.37.2
+
+### Patch Changes
+
+- 494f76c: Adds support for tracking skills in hooks dashboard
+- baa93c7: Store user-provided playground credentials in encrypted server-side environments instead of localStorage. Credentials are scoped per-user per-toolset and resolved server-side when proxying to MCP servers. Also shows the active environment name in the authentication section and adds a starter suggestion prompt.
+- Updated dependencies [494f76c]
+  - @gram/client@0.32.38
+
 ## 0.37.1
 
 ### Patch Changes

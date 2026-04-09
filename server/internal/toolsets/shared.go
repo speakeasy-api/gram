@@ -10,11 +10,13 @@ import (
 
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	resourcesRepo "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	templatesRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
@@ -79,6 +81,13 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 		}
 		return t.extractPromptToolCallPlan(ctx, tool)
 
+	case urn.ToolKindPlatform:
+		tool, ok := platformtools.FindToolDescriptor(toolUrn)
+		if !ok {
+			return nil, fmt.Errorf("get platform tool definition by urn: not found")
+		}
+		return t.extractPlatformToolCallPlan(ctx, projectID, tool)
+
 	case urn.ToolKindExternalMCP:
 		tool, err := t.externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, externalmcpRepo.GetExternalMCPToolDefinitionByURNParams{
 			ToolUrn:   toolUrn.String(),
@@ -92,6 +101,40 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 	default:
 		return nil, fmt.Errorf("unsupported tool kind: %s", toolUrn.Kind)
 	}
+}
+
+func (t *Toolsets) extractPlatformToolCallPlan(ctx context.Context, projectID uuid.UUID, tool platformtools.ToolDescriptor) (*gateway.ToolCallPlan, error) {
+	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+
+	var description *string
+	if tool.Description != "" {
+		description = &tool.Description
+	}
+
+	descriptor := &gateway.ToolDescriptor{
+		ID:               tool.SyntheticID(),
+		Name:             tool.Name,
+		Description:      description,
+		DeploymentID:     "",
+		ProjectID:        projectID.String(),
+		ProjectSlug:      orgData.ProjectSlug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		URN:              tool.ToolURN(),
+	}
+
+	plan := &gateway.PlatformToolCallPlan{
+		SourceSlug:  tool.SourceSlug,
+		Managed:     tool.Managed,
+		OwnerKind:   conv.PtrValOrEmpty(tool.OwnerKind, ""),
+		OwnerID:     conv.PtrValOrEmpty(tool.OwnerID, ""),
+		InputSchema: tool.InputSchema,
+	}
+
+	return gateway.NewPlatformToolCallPlan(descriptor, plan), nil
 }
 
 func (t *Toolsets) extractHTTPToolCallPlan(ctx context.Context, tool toolsRepo.HttpToolDefinition) (*gateway.ToolCallPlan, error) {

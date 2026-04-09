@@ -1,3 +1,6 @@
+// servepublic_clientdance_test.go — OAuth protocol endpoint tests (well-known
+// metadata) and full client-dance integration tests that exercise the
+// 401 → WWW-Authenticate → resource metadata → server metadata discovery chain.
 package mcp_test
 
 import (
@@ -15,9 +18,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+// ---------------------------------------------------------------------------
+// Well-known OAuth server metadata tests
+// ---------------------------------------------------------------------------
 
 func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
 	t.Parallel()
@@ -175,6 +183,10 @@ func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
 		require.NotEmpty(t, w.Body.Bytes())
 	})
 }
+
+// ---------------------------------------------------------------------------
+// Well-known OAuth server metadata — refresh token grant tests
+// ---------------------------------------------------------------------------
 
 func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing.T) {
 	t.Parallel()
@@ -398,6 +410,10 @@ func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing
 	})
 }
 
+// ---------------------------------------------------------------------------
+// Well-known OAuth protected resource metadata tests
+// ---------------------------------------------------------------------------
+
 func TestService_HandleWellKnownOAuthProtectedResourceMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -514,4 +530,152 @@ func TestService_HandleWellKnownOAuthProtectedResourceMetadata(t *testing.T) {
 		require.Contains(t, w.Header().Get("Content-Type"), "application/json")
 		require.NotEmpty(t, w.Body.Bytes())
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Full client-dance integration tests
+// ---------------------------------------------------------------------------
+
+// TestClientDance_ExternalOAuth_FullFlow verifies the end-to-end OAuth
+// discovery chain for external OAuth: unauthenticated initialize returns 401
+// with a WWW-Authenticate header pointing to the protected resource metadata,
+// which in turn references the external authorization server's metadata.
+func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
+	t.Parallel()
+
+	// 1. Stand up a real in-memory OAuth authorization server.
+	authServer := oauthtest.NewAuthorizationServer(t)
+
+	// 2. Create an external OAuth toolset wired to the auth server.
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:       "ext-dance",
+		IsPublic:   true,
+		AuthServer: authServer,
+	})
+
+	mcpSlug := result.Toolset.McpSlug.String
+
+	// 3. Send an initialize request WITHOUT a bearer token — expect 401.
+	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unauthorized")
+
+	// 4. The 401 response must include a WWW-Authenticate header with resource_metadata URL.
+	wwwAuth := w.Header().Get("WWW-Authenticate")
+	require.NotEmpty(t, wwwAuth, "401 must include WWW-Authenticate header")
+	require.Contains(t, wwwAuth, "Bearer resource_metadata=")
+
+	// 5. Call HandleWellKnownOAuthProtectedResourceMetadata and verify it returns
+	//    valid JSON containing the MCP resource URL.
+	prReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"+mcpSlug, nil)
+	prRctx := chi.NewRouteContext()
+	prRctx.URLParams.Add("mcpSlug", mcpSlug)
+	prReq = prReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, prRctx))
+
+	prW := httptest.NewRecorder()
+	err = ti.service.HandleWellKnownOAuthProtectedResourceMetadata(prW, prReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, prW.Code)
+
+	var prMeta map[string]any
+	err = json.Unmarshal(prW.Body.Bytes(), &prMeta)
+	require.NoError(t, err)
+
+	// The resource metadata must contain a "resource" field with the MCP URL.
+	resource, ok := prMeta["resource"].(string)
+	require.True(t, ok, "resource field must be a string")
+	require.Contains(t, resource, mcpSlug, "resource URL should reference the MCP slug")
+
+	// 6. The authorization_servers array must exist and reference the auth server's
+	//    endpoints (stored metadata from the AuthorizationServer).
+	authServers, ok := prMeta["authorization_servers"].([]any)
+	require.True(t, ok, "authorization_servers should be an array")
+	require.NotEmpty(t, authServers, "authorization_servers should not be empty")
+}
+
+// TestClientDance_ProxyOAuth_WWWAuthenticateChain verifies the
+// WWW-Authenticate -> well-known chain for proxy OAuth: unauthenticated
+// initialize returns 401 with WWW-Authenticate, the protected resource
+// metadata endpoint returns valid JSON, and the server metadata endpoint
+// returns the authorization, token, and registration endpoints.
+func TestClientDance_ProxyOAuth_WWWAuthenticateChain(t *testing.T) {
+	t.Parallel()
+
+	// 1. Create a proxy toolset (gram type, public).
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	result := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
+		Slug:     "proxy-dance",
+		IsPublic: true,
+	})
+
+	mcpSlug := result.Toolset.McpSlug.String
+
+	// 2. Send an initialize request WITHOUT a bearer token — expect 401.
+	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unauthorized")
+
+	// 3. The 401 response must include a WWW-Authenticate header with resource_metadata URL.
+	wwwAuth := w.Header().Get("WWW-Authenticate")
+	require.NotEmpty(t, wwwAuth, "401 must include WWW-Authenticate header")
+	require.Contains(t, wwwAuth, "Bearer resource_metadata=")
+
+	// 4. Call HandleWellKnownOAuthProtectedResourceMetadata — verify valid metadata.
+	prReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"+mcpSlug, nil)
+	prRctx := chi.NewRouteContext()
+	prRctx.URLParams.Add("mcpSlug", mcpSlug)
+	prReq = prReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, prRctx))
+
+	prW := httptest.NewRecorder()
+	err = ti.service.HandleWellKnownOAuthProtectedResourceMetadata(prW, prReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, prW.Code)
+
+	var prMeta map[string]any
+	err = json.Unmarshal(prW.Body.Bytes(), &prMeta)
+	require.NoError(t, err)
+
+	resource, ok := prMeta["resource"].(string)
+	require.True(t, ok, "resource field must be a string")
+	require.Contains(t, resource, mcpSlug, "resource URL should reference the MCP slug")
+
+	// 5. Call HandleWellKnownOAuthServerMetadata — verify it returns valid metadata
+	//    with authorization_endpoint, token_endpoint, and registration_endpoint.
+	smReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
+	smRctx := chi.NewRouteContext()
+	smRctx.URLParams.Add("mcpSlug", mcpSlug)
+	smReq = smReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, smRctx))
+
+	smW := httptest.NewRecorder()
+	err = ti.service.HandleWellKnownOAuthServerMetadata(smW, smReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, smW.Code)
+
+	var smMeta map[string]any
+	err = json.Unmarshal(smW.Body.Bytes(), &smMeta)
+	require.NoError(t, err)
+
+	// Verify the key OAuth endpoints are present in server metadata.
+	authEndpoint, ok := smMeta["authorization_endpoint"].(string)
+	require.True(t, ok, "authorization_endpoint must be a string")
+	require.NotEmpty(t, authEndpoint)
+
+	tokenEndpoint, ok := smMeta["token_endpoint"].(string)
+	require.True(t, ok, "token_endpoint must be a string")
+	require.NotEmpty(t, tokenEndpoint)
+
+	regEndpoint, ok := smMeta["registration_endpoint"].(string)
+	require.True(t, ok, "registration_endpoint must be a string")
+	require.NotEmpty(t, regEndpoint)
 }

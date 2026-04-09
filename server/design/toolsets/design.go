@@ -64,6 +64,33 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsets"}`)
 	})
 
+	Method("listToolsetsForOrg", func() {
+		Description("List all toolsets across the organization")
+
+		Security(security.Session)
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListToolsetsResult)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.listForOrg")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listToolsetsForOrg")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForOrg")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsetsForOrg"}`)
+	})
+
 	Method("updateToolset", func() {
 		Description("Update a toolset's properties including name, description, and HTTP tools")
 

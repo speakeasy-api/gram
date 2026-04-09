@@ -86,6 +86,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
+	platformTools gateway.PlatformExecutor,
 	tracking billing.Tracker,
 	telemService *tm.Service,
 	featClient *productfeatures.Client,
@@ -115,6 +116,7 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 			funcCaller,
+			platformTools,
 		),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemService:      telemService,
@@ -435,6 +437,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			}
 			if authCtx.APIKeyID != "" {
 				attrRecorder[attr.APIKeyIDKey] = authCtx.APIKeyID
+			}
+			if authCtx.Email != nil && *authCtx.Email != "" {
+				attrRecorder[attr.UserEmailKey] = *authCtx.Email
 			}
 		}
 

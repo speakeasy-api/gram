@@ -141,6 +141,13 @@ type ListToolsetsResponseBody struct {
 	Toolsets []*ToolsetEntryResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 }
 
+// ListToolsetsForOrgResponseBody is the type of the "toolsets" service
+// "listToolsetsForOrg" endpoint HTTP response body.
+type ListToolsetsForOrgResponseBody struct {
+	// The list of toolsets
+	Toolsets []*ToolsetEntryResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+}
+
 // UpdateToolsetResponseBody is the type of the "toolsets" service
 // "updateToolset" endpoint HTTP response body.
 type UpdateToolsetResponseBody struct {
@@ -862,6 +869,193 @@ type ListToolsetsUnexpectedResponseBody struct {
 // ListToolsetsGatewayErrorResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "gateway_error" error.
 type ListToolsetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgUnauthorizedResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListToolsetsForOrgUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgForbiddenResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the "forbidden"
+// error.
+type ListToolsetsForOrgForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgBadRequestResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "bad_request" error.
+type ListToolsetsForOrgBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgNotFoundResponseBody is the type of the "toolsets" service
+// "listToolsetsForOrg" endpoint HTTP response body for the "not_found" error.
+type ListToolsetsForOrgNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgConflictResponseBody is the type of the "toolsets" service
+// "listToolsetsForOrg" endpoint HTTP response body for the "conflict" error.
+type ListToolsetsForOrgConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListToolsetsForOrgUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgInvalidResponseBody is the type of the "toolsets" service
+// "listToolsetsForOrg" endpoint HTTP response body for the "invalid" error.
+type ListToolsetsForOrgInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgInvariantViolationResponseBody is the type of the
+// "toolsets" service "listToolsetsForOrg" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListToolsetsForOrgInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgUnexpectedResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "unexpected" error.
+type ListToolsetsForOrgUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForOrgGatewayErrorResponseBody is the type of the "toolsets"
+// service "listToolsetsForOrg" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListToolsetsForOrgGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2435,6 +2629,8 @@ type ToolResponseBody struct {
 	FunctionToolDefinition *FunctionToolDefinitionResponseBody `form:"function_tool_definition,omitempty" json:"function_tool_definition,omitempty" xml:"function_tool_definition,omitempty"`
 	// The prompt template
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
+	// The Platform tool definition
+	PlatformToolDefinition *PlatformToolDefinitionResponseBody `form:"platform_tool_definition,omitempty" json:"platform_tool_definition,omitempty" xml:"platform_tool_definition,omitempty"`
 	// The external MCP tool definition
 	ExternalMcpToolDefinition *ExternalMCPToolDefinitionResponseBody `form:"external_mcp_tool_definition,omitempty" json:"external_mcp_tool_definition,omitempty" xml:"external_mcp_tool_definition,omitempty"`
 }
@@ -2647,6 +2843,50 @@ type PromptTemplateResponseBody struct {
 	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
 	// The suggested tool URNS associated with the prompt template
 	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
+	// The ID of the tool
+	ID string `form:"id" json:"id" xml:"id"`
+	// The URN of this tool
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// The ID of the project
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string `form:"canonical_name" json:"canonical_name" xml:"canonical_name"`
+	// Description of the tool
+	Description string `form:"description" json:"description" xml:"description"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema string `form:"schema" json:"schema" xml:"schema"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The creation date of the tool.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tool.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+	// MCP tool annotations providing hints about tool behavior
+	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// PlatformToolDefinitionResponseBody is used to define fields on response body
+// types.
+type PlatformToolDefinitionResponseBody struct {
+	// The backing platform tool source (for example: logs)
+	SourceSlug string `form:"source_slug" json:"source_slug" xml:"source_slug"`
+	// The entity kind that owns this tool's lifecycle
+	OwnerKind *string `form:"owner_kind,omitempty" json:"owner_kind,omitempty" xml:"owner_kind,omitempty"`
+	// Optional owning entity ID
+	OwnerID *string `form:"owner_id,omitempty" json:"owner_id,omitempty" xml:"owner_id,omitempty"`
 	// The ID of the tool
 	ID string `form:"id" json:"id" xml:"id"`
 	// The URN of this tool
@@ -3105,6 +3345,25 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 // the "listToolsets" endpoint of the "toolsets" service.
 func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsetsResponseBody {
 	body := &ListToolsetsResponseBody{}
+	if res.Toolsets != nil {
+		body.Toolsets = make([]*ToolsetEntryResponseBody, len(res.Toolsets))
+		for i, val := range res.Toolsets {
+			if val == nil {
+				body.Toolsets[i] = nil
+				continue
+			}
+			body.Toolsets[i] = marshalTypesToolsetEntryToToolsetEntryResponseBody(val)
+		}
+	} else {
+		body.Toolsets = []*ToolsetEntryResponseBody{}
+	}
+	return body
+}
+
+// NewListToolsetsForOrgResponseBody builds the HTTP response body from the
+// result of the "listToolsetsForOrg" endpoint of the "toolsets" service.
+func NewListToolsetsForOrgResponseBody(res *toolsets.ListToolsetsResult) *ListToolsetsForOrgResponseBody {
+	body := &ListToolsetsForOrgResponseBody{}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*ToolsetEntryResponseBody, len(res.Toolsets))
 		for i, val := range res.Toolsets {
@@ -4176,6 +4435,153 @@ func NewListToolsetsUnexpectedResponseBody(res *goa.ServiceError) *ListToolsetsU
 // the result of the "listToolsets" endpoint of the "toolsets" service.
 func NewListToolsetsGatewayErrorResponseBody(res *goa.ServiceError) *ListToolsetsGatewayErrorResponseBody {
 	body := &ListToolsetsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listToolsetsForOrg" endpoint of the "toolsets"
+// service.
+func NewListToolsetsForOrgUnauthorizedResponseBody(res *goa.ServiceError) *ListToolsetsForOrgUnauthorizedResponseBody {
+	body := &ListToolsetsForOrgUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgForbiddenResponseBody builds the HTTP response body
+// from the result of the "listToolsetsForOrg" endpoint of the "toolsets"
+// service.
+func NewListToolsetsForOrgForbiddenResponseBody(res *goa.ServiceError) *ListToolsetsForOrgForbiddenResponseBody {
+	body := &ListToolsetsForOrgForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgBadRequestResponseBody builds the HTTP response body
+// from the result of the "listToolsetsForOrg" endpoint of the "toolsets"
+// service.
+func NewListToolsetsForOrgBadRequestResponseBody(res *goa.ServiceError) *ListToolsetsForOrgBadRequestResponseBody {
+	body := &ListToolsetsForOrgBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgNotFoundResponseBody builds the HTTP response body from
+// the result of the "listToolsetsForOrg" endpoint of the "toolsets" service.
+func NewListToolsetsForOrgNotFoundResponseBody(res *goa.ServiceError) *ListToolsetsForOrgNotFoundResponseBody {
+	body := &ListToolsetsForOrgNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgConflictResponseBody builds the HTTP response body from
+// the result of the "listToolsetsForOrg" endpoint of the "toolsets" service.
+func NewListToolsetsForOrgConflictResponseBody(res *goa.ServiceError) *ListToolsetsForOrgConflictResponseBody {
+	body := &ListToolsetsForOrgConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listToolsetsForOrg" endpoint of the "toolsets"
+// service.
+func NewListToolsetsForOrgUnsupportedMediaResponseBody(res *goa.ServiceError) *ListToolsetsForOrgUnsupportedMediaResponseBody {
+	body := &ListToolsetsForOrgUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgInvalidResponseBody builds the HTTP response body from
+// the result of the "listToolsetsForOrg" endpoint of the "toolsets" service.
+func NewListToolsetsForOrgInvalidResponseBody(res *goa.ServiceError) *ListToolsetsForOrgInvalidResponseBody {
+	body := &ListToolsetsForOrgInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listToolsetsForOrg" endpoint of the "toolsets"
+// service.
+func NewListToolsetsForOrgInvariantViolationResponseBody(res *goa.ServiceError) *ListToolsetsForOrgInvariantViolationResponseBody {
+	body := &ListToolsetsForOrgInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listToolsetsForOrg" endpoint of the "toolsets"
+// service.
+func NewListToolsetsForOrgUnexpectedResponseBody(res *goa.ServiceError) *ListToolsetsForOrgUnexpectedResponseBody {
+	body := &ListToolsetsForOrgUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForOrgGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listToolsetsForOrg" endpoint of the "toolsets"
+// service.
+func NewListToolsetsForOrgGatewayErrorResponseBody(res *goa.ServiceError) *ListToolsetsForOrgGatewayErrorResponseBody {
+	body := &ListToolsetsForOrgGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5378,6 +5784,16 @@ func NewListToolsetsPayload(sessionToken *string, apikeyToken *string, projectSl
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListToolsetsForOrgPayload builds a toolsets service listToolsetsForOrg
+// endpoint payload.
+func NewListToolsetsForOrgPayload(sessionToken *string, apikeyToken *string) *toolsets.ListToolsetsForOrgPayload {
+	v := &toolsets.ListToolsetsForOrgPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 
 	return v
 }

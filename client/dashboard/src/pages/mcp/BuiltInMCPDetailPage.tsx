@@ -1,12 +1,12 @@
 import { CodeBlock } from "@/components/code";
-import { Page } from "@/components/page-layout";
 import { DetailHero } from "@/components/detail-hero";
+import { Page } from "@/components/page-layout";
+import { Link } from "@/components/ui/link";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
-import { Link } from "@/components/ui/link";
 import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -17,8 +17,8 @@ const BUILT_IN_TOOLS = [
     description: "List all tools for a project",
   },
   {
-    name: "gram_search_logs",
-    description: "Search and list telemetry logs that match a search filter",
+    name: "platform_search_logs",
+    description: "Search and inspect telemetry logs for the current project.",
   },
   {
     name: "gram_list_global_variations",
@@ -127,7 +127,6 @@ export function BuiltInMCPDetailPage() {
           </div>
         </DetailHero>
 
-        {/* Sub-navigation tabs */}
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
@@ -146,7 +145,6 @@ export function BuiltInMCPDetailPage() {
             </div>
           </div>
 
-          {/* Tab Content */}
           <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
             <TabsContent value="overview" className="mt-0 w-full">
               <BuiltInOverviewTab mcpUrl={mcpUrl} />
@@ -212,12 +210,10 @@ function BuiltInToolsTab() {
       </Stack>
 
       <div className="border border-neutral-softest rounded-lg overflow-hidden w-full">
-        {/* Group header */}
         <div className="bg-surface-secondary-default flex items-center pl-4 pr-3 py-4 border-b border-neutral-softest">
           <p className="text-sm leading-6 text-foreground">MCP Logs</p>
         </div>
 
-        {/* Tool rows */}
         {BUILT_IN_TOOLS.map((tool) => (
           <div
             key={tool.name}
