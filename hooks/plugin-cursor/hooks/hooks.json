@@ -8,7 +8,7 @@
     ],
     "beforeSubmitPrompt": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
         "timeout": 10
       }
     ],
@@ -20,19 +20,19 @@
     ],
     "preToolUse": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
         "timeout": 10
       }
     ],
     "postToolUse": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
         "timeout": 10
       }
     ],
     "postToolUseFailure": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "$GRAM_PLUGIN_DIR/hooks/send_hook.sh",
         "timeout": 10
       }
     ]

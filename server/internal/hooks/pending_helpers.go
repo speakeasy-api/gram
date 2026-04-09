@@ -217,15 +217,9 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		hookEvent = "Stop"
 	}
 
-	// For conversation events (no tool), use the hook event name as the display name
-	displayName := toolName
-	if displayName == "" {
-		displayName = hookEvent
-	}
-
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.ToolNameKey:       displayName,
+		attr.ToolNameKey:       toolName,
 		attr.HookEventKey:      hookEvent,
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
@@ -263,8 +257,8 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
 	}
 
-	// Store prompt text for beforeSubmitPrompt events
-	if payload.Prompt != nil && *payload.Prompt != "" {
+	// Store prompt text as log body for beforeSubmitPrompt events only
+	if payload.HookEventName == "beforeSubmitPrompt" && payload.Prompt != nil && *payload.Prompt != "" {
 		attrs[attr.LogBodyKey] = *payload.Prompt
 	}
 

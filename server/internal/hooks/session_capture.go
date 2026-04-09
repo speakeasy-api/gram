@@ -446,6 +446,8 @@ func (s *Service) persistCursorEventToPG(ctx context.Context, payload *gen.Curso
 	case "postToolUse", "postToolUseFailure":
 		err = s.writeCursorToolCallResultToPG(ctx, payload, metadata)
 	default:
+		// stop events only carry token metrics (no message content), so they are
+		// written to ClickHouse for telemetry but not persisted to PostgreSQL.
 		return
 	}
 
@@ -498,7 +500,7 @@ func (s *Service) persistCursorConversationEvent(ctx context.Context, payload *g
 		StorageError:     conv.ToPGTextEmpty(""),
 		MessageID:        conv.ToPGTextEmpty(""),
 		ToolCallID:       conv.ToPGTextEmpty(""),
-		ExternalUserID:   conv.ToPGTextEmpty(conv.PtrValOr(payload.UserEmail, "")),
+		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
 		FinishReason:     conv.ToPGTextEmpty(""),
 		ToolCalls:        nil,
 		Origin:           conv.ToPGTextEmpty(""),

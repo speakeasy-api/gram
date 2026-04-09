@@ -201,6 +201,81 @@ func TestCursor_Stop_ReturnsEmpty(t *testing.T) {
 	require.Nil(t, result.Permission)
 }
 
+func TestCursor_PersistEventRouting_AllEventTypes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	conversationID := "conv-routing-test"
+	userEmail := "dev@example.com"
+	toolName := "Edit"
+	toolUseID := "toolu_routing_test"
+
+	// All event types should route through persistCursorEventToPG without error
+	events := []struct {
+		name    string
+		payload *hooks.CursorPayload
+	}{
+		{
+			name: "beforeSubmitPrompt",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "beforeSubmitPrompt",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+				Prompt:         new("test prompt"),
+			},
+		},
+		{
+			name: "preToolUse",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "preToolUse",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+				ToolName:       &toolName,
+				ToolUseID:      &toolUseID,
+			},
+		},
+		{
+			name: "postToolUse",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "postToolUse",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+				ToolName:       &toolName,
+				ToolUseID:      &toolUseID,
+				ToolResponse:   "success",
+			},
+		},
+		{
+			name: "postToolUseFailure",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "postToolUseFailure",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+				ToolName:       &toolName,
+				ToolUseID:      &toolUseID,
+				Error:          "something failed",
+			},
+		},
+		{
+			name: "stop",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "stop",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+			},
+		},
+	}
+
+	for _, e := range events {
+		result, err := ti.service.Cursor(ctx, e.payload)
+		require.NoError(t, err, "event %s should not error", e.name)
+		require.NotNil(t, result, "event %s should return a result", e.name)
+	}
+}
+
+//go:fix inline
+func strPtr(s string) *string { return new(s) }
+
 func TestBuildCursorTelemetryAttributes_BeforeSubmitPromptNormalization(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
