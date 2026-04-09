@@ -490,37 +490,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS environments_project_id_slug_key
 ON environments (project_id, slug)
 WHERE deleted IS FALSE;
 
-CREATE TABLE IF NOT EXISTS trigger_instances (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  definition_slug TEXT NOT NULL CHECK (definition_slug <> '' AND CHAR_LENGTH(definition_slug) <= 60),
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
-  environment_id uuid,
-  target_kind TEXT NOT NULL CHECK (target_kind <> '' AND CHAR_LENGTH(target_kind) <= 60),
-  target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
-  target_display TEXT NOT NULL CHECK (target_display <> '' AND CHAR_LENGTH(target_display) <= 255),
-  config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  status TEXT NOT NULL CHECK (status IN ('active', 'paused')) DEFAULT 'active',
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT trigger_instances_pkey PRIMARY KEY (id),
-  CONSTRAINT trigger_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL
-);
-
-CREATE INDEX IF NOT EXISTS trigger_instances_project_id_idx
-ON trigger_instances (project_id, created_at DESC)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
-ON trigger_instances (environment_id)
-WHERE deleted IS FALSE;
-
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
@@ -1378,7 +1347,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments
 CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
-  registry_id uuid NOT NULL,
+  registry_id uuid,
+  organization_mcp_collection_registry_id uuid,
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
   registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
@@ -1391,7 +1361,12 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
 
   CONSTRAINT external_mcp_attachments_pkey PRIMARY KEY (id),
   CONSTRAINT external_mcp_attachments_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE,
-  CONSTRAINT external_mcp_attachments_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE SET NULL
+  CONSTRAINT external_mcp_attachments_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_attachments_collection_registry_id_fkey FOREIGN KEY (organization_mcp_collection_registry_id) REFERENCES organization_mcp_collection_registries(id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_attachments_exactly_one_registry CHECK (
+    (registry_id IS NOT NULL)::int +
+    (organization_mcp_collection_registry_id IS NOT NULL)::int = 1
+  )
 );
 
 CREATE INDEX IF NOT EXISTS external_mcp_attachments_deployment_id_idx

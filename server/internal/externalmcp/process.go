@@ -47,12 +47,13 @@ func NewToolExtractor(
 }
 
 type ToolExtractorTaskMCPServer struct {
-	AttachmentID            uuid.UUID
-	RegistryID              uuid.UUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
+	AttachmentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	Name                                string
+	Slug                                string
+	RegistryServerSpecifier             string
+	SelectedRemotes                     []string
 }
 
 type ToolExtractorTask struct {
@@ -72,7 +73,9 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		attr.SlogExternalMCPID(task.MCP.AttachmentID.String()),
 		attr.SlogExternalMCPSlug(task.MCP.Slug),
 		attr.SlogExternalMCPName(task.MCP.Name),
-		attr.SlogMCPRegistryID(task.MCP.RegistryID.String()),
+	}
+	if task.MCP.RegistryID.Valid {
+		slogArgs = append(slogArgs, attr.SlogMCPRegistryID(task.MCP.RegistryID.UUID.String()))
 	}
 
 	internalLogger := te.logger.With(slogArgs...)
@@ -95,7 +98,12 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing external mcp server", task.MCP.Name))
 
-	registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID)
+	if !task.MCP.RegistryID.Valid {
+		logger.InfoContext(ctx, fmt.Sprintf("[%s] skipping external mcp server with no registry_id (collection-backed)", task.MCP.Name))
+		return nil
+	}
+
+	registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID.UUID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).Log(ctx, logger)
 	}
