@@ -79,6 +79,28 @@ ChartJS.register(
 
 import { HooksSetupButton } from "./HooksSetupDialog";
 
+const CHART_COLORS = {
+  label: "#737373", // neutral-500
+  labelFaded: "#A3A3A3", // neutral-400
+  gridLine: "#e5e5e5", // neutral-200
+  tooltipBg: "#171717", // neutral-900
+  tooltipTitle: "#fafafa", // neutral-50
+  tooltipBody: "#d4d4d4", // neutral-300
+  tooltipBorder: "#262626", // neutral-800
+} as const;
+
+const USER_SOURCE_COLORS = [
+  "#38bdf8", // sky-400
+  "#34d399", // emerald-400
+  "#a78bfa", // violet-400
+  "#fb7185", // rose-400
+  "#facc15", // yellow-400
+  "#2dd4bf", // teal-400
+  "#818cf8", // indigo-400
+  "#e879f9", // fuchsia-400
+  "#a3e635", // lime-400
+];
+
 const validPresets: DateRangePreset[] = [
   "15m",
   "1h",
@@ -1669,17 +1691,132 @@ function successRateColor(rate: number): string {
   return "#ef4444";
 }
 
-function successRateClass(rate: number): string {
-  if (rate >= 90) return "text-emerald-600";
-  if (rate >= 70) return "text-amber-500";
-  return "text-red-500";
+type StackedBarDataset = {
+  label: string;
+  data: number[];
+  backgroundColor: string;
+  borderWidth: number;
+  barThickness: number;
+};
+
+function StackedBarChart({
+  title,
+  labels,
+  datasets,
+  handleFilter,
+}: {
+  title: string;
+  labels: string[];
+  datasets: StackedBarDataset[];
+  handleFilter?: (datasetLabel: string, rowLabel: string) => void;
+}) {
+  if (labels.length === 0) return null;
+
+  const barHeight = 24;
+  const spacerHeight = 8;
+  const containerHeight = Math.max(
+    120,
+    labels.length * (barHeight + spacerHeight) + 60,
+  );
+
+  const stackTotalPlugin = {
+    id: "stackTotal",
+    afterDatasetsDraw(chart: ChartJS) {
+      const { ctx, data } = chart;
+      const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
+      ctx.save();
+      ctx.font = "12px";
+      ctx.fillStyle = CHART_COLORS.label;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      lastMeta.data.forEach((bar, i) => {
+        const total = data.datasets.reduce(
+          (sum, ds) => sum + ((ds.data[i] as number) || 0),
+          0,
+        );
+        ctx.fillText(String(total), bar.x + 4, bar.y);
+      });
+      ctx.restore();
+    },
+  };
+
+  const options: ChartOptions<"bar"> = {
+    indexAxis: "y",
+    responsive: true,
+    maintainAspectRatio: false,
+    onClick(_, elements) {
+      if (!elements.length || !handleFilter) return;
+      const { datasetIndex, index } = elements[0];
+      const datasetLabel = datasets[datasetIndex]?.label;
+      const rowLabel = labels[index];
+      if (datasetLabel && rowLabel) handleFilter(datasetLabel, rowLabel);
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: CHART_COLORS.gridLine },
+        ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
+        afterFit(scale) {
+          scale.paddingRight = 30;
+        },
+      },
+      y: {
+        stacked: true,
+        ticks: {
+          color: CHART_COLORS.labelFaded,
+          crossAlign: "far",
+          padding: 2,
+        },
+        grid: { display: false },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "bottom",
+        align: "end",
+        labels: { color: CHART_COLORS.label, boxWidth: 12, padding: 8 },
+      },
+      tooltip: {
+        backgroundColor: CHART_COLORS.tooltipBg,
+        titleColor: CHART_COLORS.tooltipTitle,
+        bodyColor: CHART_COLORS.tooltipBody,
+        borderColor: CHART_COLORS.tooltipBorder,
+        borderWidth: 1,
+        callbacks: {
+          label: (item: TooltipItem<"bar">) =>
+            ` ${item.dataset.label}: ${item.parsed.x}`,
+        },
+      },
+    },
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <h3 className="text font-semibold">{title}</h3>
+      <div style={{ height: containerHeight }}>
+        <Bar
+          plugins={[stackTotalPlugin]}
+          data={{ labels, datasets }}
+          options={{
+            ...options,
+            onHover(event, elements) {
+              const el = event.native?.target as HTMLElement | null;
+              if (el) el.style.cursor = elements.length ? "pointer" : "default";
+            },
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 function ServerActivityChart({
+  title,
   traces,
   serverNameMappings,
   handleFilter,
 }: {
+  title: string;
   traces: HookTrace[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   handleFilter?: (userEmail: string, serverName: string) => void;
@@ -1734,108 +1871,23 @@ function ServerActivityChart({
     return { labels: chartLabels, datasets: chartDatasets };
   }, [traces, serverNameMappings.rawToDisplay]);
 
-  if (labels.length === 0) return null;
-
-  const barHeight = 24;
-  const spacerHeight = 8;
-  const containerHeight = Math.max(
-    120,
-    labels.length * (barHeight + spacerHeight) + 60,
-  );
-
-  const stackTotalPlugin = {
-    id: "stackTotal",
-    afterDatasetsDraw(chart: ChartJS) {
-      const { ctx, data } = chart;
-      const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
-      ctx.save();
-      ctx.font = "12px";
-      ctx.fillStyle = CHART_COLORS.tickLabel;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      lastMeta.data.forEach((bar, i) => {
-        const total = data.datasets.reduce(
-          (sum, ds) => sum + ((ds.data[i] as number) || 0),
-          0,
-        );
-        ctx.fillText(String(total), bar.x + 4, bar.y);
-      });
-      ctx.restore();
-    },
-  };
-
-  const options: ChartOptions<"bar"> = {
-    indexAxis: "y",
-    responsive: true,
-    maintainAspectRatio: false,
-    onClick(_, elements) {
-      if (!elements.length || !handleFilter) return;
-      const { datasetIndex, index } = elements[0];
-      const userEmail = datasets[datasetIndex]?.label;
-      const serverName = labels[index];
-      if (userEmail && serverName) handleFilter(userEmail, serverName);
-    },
-    scales: {
-      x: {
-        stacked: true,
-        grid: { color: CHART_COLORS.gridLine },
-        ticks: { color: CHART_COLORS.tickLabel, precision: 0 },
-        afterFit(scale) {
-          scale.paddingRight = 30;
-        },
-      },
-      y: {
-        stacked: true,
-        ticks: { color: CHART_COLORS.tickLabel, crossAlign: "far", padding: 2 },
-        grid: { display: false },
-      },
-    },
-    plugins: {
-      legend: {
-        position: "bottom",
-        align: "end",
-        labels: {
-          color: CHART_COLORS.tickLabel,
-          boxWidth: 12,
-          padding: 8,
-        },
-      },
-      tooltip: {
-        backgroundColor: CHART_COLORS.tooltipBg,
-        titleColor: CHART_COLORS.tooltipTitle,
-        bodyColor: CHART_COLORS.tooltipBody,
-        borderColor: CHART_COLORS.tooltipBorder,
-        borderWidth: 1,
-        callbacks: {
-          label: (item: TooltipItem<"bar">) =>
-            ` ${item.dataset.label}: ${item.parsed.x}`,
-        },
-      },
-    },
-  };
-
   return (
-    <div style={{ height: containerHeight }}>
-      <Bar
-        plugins={[stackTotalPlugin]}
-        data={{ labels, datasets }}
-        options={{
-          ...options,
-          onHover(event, elements) {
-            const el = event.native?.target as HTMLElement | null;
-            if (el) el.style.cursor = elements.length ? "pointer" : "default";
-          },
-        }}
-      />
-    </div>
+    <StackedBarChart
+      title={title}
+      labels={labels}
+      datasets={datasets}
+      handleFilter={handleFilter}
+    />
   );
 }
 
 function SourceVolumeChart({
+  title,
   traces,
   serverNameMappings,
   handleFilter,
 }: {
+  title: string;
   traces: HookTrace[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   handleFilter?: (serverName: string, source: string) => void;
@@ -1892,100 +1944,13 @@ function SourceVolumeChart({
     return { labels: chartLabels, datasets: chartDatasets };
   }, [traces, serverNameMappings.rawToDisplay]);
 
-  if (labels.length === 0) return null;
-
-  const barHeight = 24;
-  const spacerHeight = 8;
-  const containerHeight = Math.max(
-    120,
-    labels.length * (barHeight + spacerHeight) + 60,
-  );
-
-  const stackTotalPlugin = {
-    id: "stackTotal",
-    afterDatasetsDraw(chart: ChartJS) {
-      const { ctx, data } = chart;
-      const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
-      ctx.save();
-      ctx.font = "12px";
-      ctx.fillStyle = CHART_COLORS.tickLabel;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      lastMeta.data.forEach((bar, i) => {
-        const total = data.datasets.reduce(
-          (sum, ds) => sum + ((ds.data[i] as number) || 0),
-          0,
-        );
-        ctx.fillText(String(total), bar.x + 4, bar.y);
-      });
-      ctx.restore();
-    },
-  };
-
-  const options: ChartOptions<"bar"> = {
-    indexAxis: "y",
-    responsive: true,
-    maintainAspectRatio: false,
-    onClick(_, elements) {
-      if (!elements.length || !handleFilter) return;
-      const { datasetIndex, index } = elements[0];
-      const serverName = datasets[datasetIndex]?.label;
-      const source = labels[index];
-      if (serverName && source) handleFilter(serverName, source);
-    },
-    scales: {
-      x: {
-        stacked: true,
-        grid: { color: CHART_COLORS.gridLine },
-        ticks: { color: CHART_COLORS.tickLabel, precision: 0 },
-        afterFit(scale) {
-          scale.paddingRight = 30;
-        },
-      },
-      y: {
-        stacked: true,
-        ticks: { color: CHART_COLORS.tickLabel, crossAlign: "far", padding: 2 },
-        grid: { display: false },
-      },
-    },
-    plugins: {
-      legend: {
-        position: "bottom",
-        align: "end",
-        labels: {
-          color: CHART_COLORS.tickLabel,
-          boxWidth: 12,
-          padding: 8,
-        },
-      },
-      tooltip: {
-        backgroundColor: CHART_COLORS.tooltipBg,
-        titleColor: CHART_COLORS.tooltipTitle,
-        bodyColor: CHART_COLORS.tooltipBody,
-        borderColor: CHART_COLORS.tooltipBorder,
-        borderWidth: 1,
-        callbacks: {
-          label: (item: TooltipItem<"bar">) =>
-            ` ${item.dataset.label}: ${item.parsed.x}`,
-        },
-      },
-    },
-  };
-
   return (
-    <div style={{ height: containerHeight }}>
-      <Bar
-        plugins={[stackTotalPlugin]}
-        data={{ labels, datasets }}
-        options={{
-          ...options,
-          onHover(event, elements) {
-            const el = event.native?.target as HTMLElement | null;
-            if (el) el.style.cursor = elements.length ? "pointer" : "default";
-          },
-        }}
-      />
-    </div>
+    <StackedBarChart
+      title={title}
+      labels={labels}
+      datasets={datasets}
+      handleFilter={handleFilter}
+    />
   );
 }
 
@@ -2050,32 +2015,12 @@ function BarList<T extends { key: string; value: number }>({
   );
 }
 
-const CHART_COLORS = {
-  label: "#737373", // neutral-500
-  labelFaded: "#A3A3A3", // neutral-400
-  gridLine: "#e5e5e5", // neutral-200
-  tooltipBg: "#171717", // neutral-900
-  tooltipTitle: "#fafafa", // neutral-50
-  tooltipBody: "#d4d4d4", // neutral-300
-  tooltipBorder: "#262626", // neutral-800
-} as const;
-
-const USER_SOURCE_COLORS = [
-  "#38bdf8", // sky-400
-  "#34d399", // emerald-400
-  "#a78bfa", // violet-400
-  "#fb7185", // rose-400
-  "#facc15", // yellow-400
-  "#2dd4bf", // teal-400
-  "#818cf8", // indigo-400
-  "#e879f9", // fuchsia-400
-  "#a3e635", // lime-400
-];
-
 function UserVolumeList({
+  title,
   traces,
   handleFilter,
 }: {
+  title: string;
   traces: HookTrace[];
   handleFilter?: (source: string, userEmail: string) => void;
 }) {
@@ -2128,101 +2073,13 @@ function UserVolumeList({
     return { labels: chartLabels, datasets: chartDatasets };
   }, [traces]);
 
-  if (labels.length === 0) return null;
-
-  const barHeight = 24;
-  const spacerHeight = 10;
-  const legendHeight = 64;
-  const containerHeight = Math.max(
-    120,
-    labels.length * (barHeight + spacerHeight) + legendHeight,
-  );
-
-  const stackTotalPlugin = {
-    id: "stackTotal",
-    afterDatasetsDraw(chart: ChartJS) {
-      const { ctx, data } = chart;
-      const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
-      ctx.save();
-      ctx.font = "12px";
-      ctx.fillStyle = CHART_COLORS.label;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      lastMeta.data.forEach((bar, i) => {
-        const total = data.datasets.reduce(
-          (sum, ds) => sum + ((ds.data[i] as number) || 0),
-          0,
-        );
-        ctx.fillText(String(total), bar.x + 4, bar.y);
-      });
-      ctx.restore();
-    },
-  };
-
-  const options: ChartOptions<"bar"> = {
-    indexAxis: "y",
-    responsive: true,
-    onClick(_, elements) {
-      if (!elements.length || !handleFilter) return;
-      const { datasetIndex, index } = elements[0];
-      const source = datasets[datasetIndex]?.label;
-      const userEmail = labels[index];
-      if (source && userEmail) handleFilter(source, userEmail);
-    },
-    maintainAspectRatio: false,
-    scales: {
-      x: {
-        stacked: true,
-        grid: { color: CHART_COLORS.gridLine },
-        ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
-        afterFit(scale) {
-          scale.paddingRight = 30;
-        },
-      },
-      y: {
-        stacked: true,
-        ticks: { color: CHART_COLORS.label, crossAlign: "far", padding: 2 },
-        grid: { display: false },
-      },
-    },
-    plugins: {
-      legend: {
-        position: "bottom",
-        align: "end",
-        labels: {
-          color: CHART_COLORS.label,
-          boxWidth: 12,
-          padding: 8,
-        },
-      },
-      tooltip: {
-        backgroundColor: CHART_COLORS.tooltipBg,
-        titleColor: CHART_COLORS.tooltipTitle,
-        bodyColor: CHART_COLORS.tooltipBody,
-        borderColor: CHART_COLORS.tooltipBorder,
-        borderWidth: 1,
-        callbacks: {
-          label: (item: TooltipItem<"bar">) =>
-            ` ${item.dataset.label}: ${item.parsed.x}`,
-        },
-      },
-    },
-  };
-
   return (
-    <div style={{ height: containerHeight }}>
-      <Bar
-        plugins={[stackTotalPlugin]}
-        data={{ labels, datasets }}
-        options={{
-          ...options,
-          onHover(event, elements) {
-            const el = event.native?.target as HTMLElement | null;
-            if (el) el.style.cursor = elements.length ? "pointer" : "default";
-          },
-        }}
-      />
-    </div>
+    <StackedBarChart
+      title={title}
+      labels={labels}
+      datasets={datasets}
+      handleFilter={handleFilter}
+    />
   );
 }
 
@@ -2578,26 +2435,20 @@ function HooksAnalytics({
       {/* Bar Charts */}
       {hasServers && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-            <h3 className="text font-semibold">Source usage per User</h3>
-            <UserVolumeList traces={groupedTraces} />
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-            <h3 className="text font-semibold">MCP Server usage per User</h3>
-            <ServerActivityChart
-              traces={groupedTraces}
-              serverNameMappings={serverNameMappings}
-            />
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-            <h3 className="text font-semibold align-baseline space-x-2">
-              Source usage per MCP Server
-            </h3>
-            <SourceVolumeChart
-              traces={groupedTraces}
-              serverNameMappings={serverNameMappings}
-            />
-          </div>
+          <UserVolumeList
+            title="Source Usage per User"
+            traces={groupedTraces}
+          />
+          <ServerActivityChart
+            title="MCP Server Usage per User"
+            traces={groupedTraces}
+            serverNameMappings={serverNameMappings}
+          />
+          <SourceVolumeChart
+            title="Source Usage per MCP Server"
+            traces={groupedTraces}
+            serverNameMappings={serverNameMappings}
+          />
         </div>
       )}
 
