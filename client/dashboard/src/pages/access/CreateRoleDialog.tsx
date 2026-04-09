@@ -63,6 +63,8 @@ export function CreateRoleDialog({
   const [showMembers, setShowMembers] = useState(false);
   const [showPermissions, setShowPermissions] = useState(true);
   const [initialized, setInitialized] = useState(false);
+  // Track which MCP scopes have "Custom" mode selected (UI-only state)
+  const [customScopes, setCustomScopes] = useState<Set<string>>(new Set());
 
   const queryClient = useQueryClient();
   const { data: membersData } = useMembers();
@@ -240,6 +242,7 @@ export function CreateRoleDialog({
     setSelectedMembers(new Set());
     setShowMembers(false);
     setShowPermissions(true);
+    setCustomScopes(new Set());
     setInitialized(false);
     onOpenChange(false);
   };
@@ -409,6 +412,20 @@ export function CreateRoleDialog({
                                           scopeDef.slug,
                                           resources,
                                         )
+                                      }
+                                      customMode={customScopes.has(
+                                        scopeDef.slug,
+                                      )}
+                                      onCustomModeChange={(custom) =>
+                                        setCustomScopes((prev) => {
+                                          const next = new Set(prev);
+                                          if (custom) {
+                                            next.add(scopeDef.slug);
+                                          } else {
+                                            next.delete(scopeDef.slug);
+                                          }
+                                          return next;
+                                        })
                                       }
                                     />
                                   )}

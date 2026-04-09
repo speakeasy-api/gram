@@ -4,11 +4,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import { Check, ChevronDown } from "lucide-react";
-import { useMemo } from "react";
+import { Check, ChevronDown, ChevronRight, X } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ResourceType } from "./types";
 
 interface ScopePickerPopoverProps {
@@ -17,12 +18,26 @@ interface ScopePickerPopoverProps {
   /** null = unrestricted; string[] = allowlist */
   resources: string[] | null;
   onChangeResources: (resources: string[] | null) => void;
+  /** Whether "Custom" mode is active (MCP scopes only) */
+  customMode?: boolean;
+  onCustomModeChange?: (custom: boolean) => void;
+}
+
+interface ServerTool {
+  id: string;
+  name: string;
+}
+
+interface Server {
+  id: string;
+  name: string;
+  tools: ServerTool[];
 }
 
 interface ServerGroup {
   projectId: string;
   projectName: string;
-  servers: { id: string; name: string }[];
+  servers: Server[];
 }
 
 function useMCPServers(enabled: boolean) {
@@ -41,7 +56,11 @@ function useMCPServers(enabled: boolean) {
         group = { projectId: t.projectId, projectName, servers: [] };
         groups.set(t.projectId, group);
       }
-      group.servers.push({ id: t.slug, name: t.name });
+      group.servers.push({
+        id: t.slug,
+        name: t.name,
+        tools: t.tools.map((tool) => ({ id: tool.id, name: tool.name })),
+      });
     }
     return [...groups.values()];
   }, [data, organization.projects]);
@@ -51,6 +70,8 @@ export function ScopePickerPopover({
   resourceType,
   resources,
   onChangeResources,
+  customMode,
+  onCustomModeChange,
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
@@ -69,7 +90,7 @@ export function ScopePickerPopover({
     id: p.id,
     name: p.name,
   }));
-  const label = getLabel(resourceType, resources);
+  const label = getLabel(resourceType, resources, customMode);
 
   const toggleResource = (id: string) => {
     if (resources === null) return;
@@ -79,7 +100,7 @@ export function ScopePickerPopover({
   };
 
   return (
-    <Popover>
+    <Popover modal={false}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -91,28 +112,51 @@ export function ScopePickerPopover({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-56 p-1 max-h-[300px] overflow-y-auto"
+        className={cn(
+          "p-1 transition-[min-width] duration-200 ease-out w-56 min-w-56",
+          customMode
+            ? "min-w-[400px] overflow-hidden"
+            : "max-h-[300px] overflow-y-auto",
+        )}
       >
         {/* Scope mode options */}
-        <ScopeOption
-          label={resourceType === "project" ? "All projects" : "All servers"}
-          selected={isUnrestricted}
-          onClick={() => onChangeResources(null)}
-        />
-        <ScopeOption
-          label={
-            resourceType === "project"
-              ? "Specific projects"
-              : "Specific servers"
-          }
-          selected={!isUnrestricted}
-          onClick={() => {
-            if (isUnrestricted) onChangeResources([]);
-          }}
-        />
+        <div className="pb-1">
+          <ScopeOption
+            label={resourceType === "project" ? "All projects" : "All servers"}
+            selected={isUnrestricted && !customMode}
+            onClick={() => {
+              if (customMode) onCustomModeChange?.(false);
+              onChangeResources(null);
+            }}
+          />
+          <ScopeOption
+            label={
+              resourceType === "project"
+                ? "Specific projects"
+                : "Specific servers"
+            }
+            selected={!isUnrestricted && !customMode}
+            onClick={() => {
+              if (customMode) onCustomModeChange?.(false);
+              if (isUnrestricted) onChangeResources([]);
+            }}
+          />
 
-        {/* Resource list when scoped */}
-        {!isUnrestricted && (
+          {/* Custom option for MCP scopes */}
+          {resourceType === "mcp" && (
+            <ScopeOption
+              label="Specific tools"
+              selected={!!customMode}
+              onClick={() => {
+                onCustomModeChange?.(true);
+                if (isUnrestricted) onChangeResources([]);
+              }}
+            />
+          )}
+        </div>
+
+        {/* Resource list when scoped to specific resources */}
+        {!isUnrestricted && !customMode && (
           <>
             <div className="my-1 h-px bg-border" />
             {resourceType === "project"
@@ -143,8 +187,159 @@ export function ScopePickerPopover({
                 ))}
           </>
         )}
+
+        {/* Custom mode — tabbed fine-grained picker */}
+        {customMode && (
+          <>
+            <Tabs defaultValue="select" className="gap-0 -mx-1 -mb-1">
+              <TabsList className="w-full rounded-none bg-transparent p-1 gap-1 border-y border-border">
+                <TabsTrigger
+                  value="select"
+                  className="flex-1 rounded-sm border-none shadow-none py-1.5 text-xs hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                >
+                  Manual selection
+                </TabsTrigger>
+                <TabsTrigger
+                  value="auto-groups"
+                  className="flex-1 rounded-sm border-none shadow-none py-1.5 text-xs hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                >
+                  Auto Groups
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="select" className="p-0">
+                <ToolSelectionPanel
+                  mcpServers={mcpServers}
+                  resources={resources ?? []}
+                  onToggle={toggleResource}
+                />
+              </TabsContent>
+              <TabsContent value="auto-groups" className="px-2 py-2">
+                <div className="text-xs text-muted-foreground">
+                  No auto groups configured
+                </div>
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+function ToolSelectionPanel({
+  mcpServers,
+  resources,
+  onToggle,
+}: {
+  mcpServers: ServerGroup[];
+  resources: string[];
+  onToggle: (id: string) => void;
+}) {
+  const allServers = useMemo(
+    () => mcpServers.flatMap((g) => g.servers),
+    [mcpServers],
+  );
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(
+    allServers[0]?.id ?? null,
+  );
+  const [search, setSearch] = useState("");
+  const selectedServer = allServers.find((s) => s.id === selectedServerId);
+  const tools = selectedServer?.tools ?? [];
+  const filteredTools = useMemo(
+    () =>
+      search
+        ? tools.filter((t) =>
+            t.name.toLowerCase().includes(search.toLowerCase()),
+          )
+        : tools,
+    [tools, search],
+  );
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop += e.deltaY;
+    }
+  }, []);
+
+  return (
+    <div className="flex">
+      {/* Left column — server list */}
+      <div className="w-[120px] shrink-0 border-r border-border overflow-y-auto">
+        <div className="flex items-center px-2 h-9 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+          Servers
+        </div>
+        {allServers.map((server) => {
+          const isActive = selectedServerId === server.id;
+          return (
+            <button
+              key={server.id}
+              type="button"
+              onClick={() => {
+                setSelectedServerId(server.id);
+                setSearch("");
+              }}
+              className={cn(
+                "flex w-full items-center justify-between px-2 py-1.5 text-xs cursor-pointer hover:bg-muted/50 truncate",
+                isActive && "bg-muted font-medium",
+              )}
+            >
+              <span className="truncate">{server.name}</span>
+              {isActive && (
+                <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Right column — tools for selected server */}
+      <div className="flex-1 min-w-0 flex flex-col min-h-0">
+        <div className="flex items-center gap-1 px-2 h-9 border-b border-border">
+          <input
+            type="text"
+            placeholder="Search tools…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-transparent text-xs placeholder:text-muted-foreground outline-none"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+        <div
+          ref={scrollRef}
+          onWheel={handleWheel}
+          className="min-h-[300px] max-h-[300px] overflow-y-auto pb-2"
+        >
+          {filteredTools.length === 0 ? (
+            <div className="px-2 py-3 text-xs text-muted-foreground">
+              {tools.length === 0 ? "No tools found" : "No matching tools"}
+            </div>
+          ) : (
+            filteredTools.map((tool) => {
+              const toolId = `${selectedServerId}:${tool.name}`;
+              return (
+                <ResourceCheckbox
+                  key={tool.id}
+                  id={toolId}
+                  name={tool.name}
+                  checked={resources.includes(toolId)}
+                  onToggle={onToggle}
+                  compact
+                />
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -153,27 +348,30 @@ function ResourceCheckbox({
   name,
   checked,
   onToggle,
+  compact,
 }: {
   id: string;
   name: string;
   checked: boolean;
   onToggle: (id: string) => void;
+  compact?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={() => onToggle(id)}
       className={cn(
-        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
+        "flex w-full items-center gap-2 px-2 hover:bg-accent cursor-pointer",
+        compact ? "text-xs rounded-none py-1.5" : "text-sm rounded-sm py-1.5",
         checked && "font-medium",
       )}
     >
       <Checkbox
         checked={checked}
-        className="pointer-events-none"
+        className="pointer-events-none focus-visible:ring-0 focus-visible:border-input"
         tabIndex={-1}
       />
-      <span>{name}</span>
+      <span className="truncate">{name}</span>
     </button>
   );
 }
@@ -207,7 +405,9 @@ function ScopeOption({
 function getLabel(
   resourceType: ResourceType,
   resources: string[] | null,
+  customMode?: boolean,
 ): string {
+  if (customMode) return "Specific tools";
   if (resources === null) {
     return resourceType === "project" ? "All projects" : "All servers";
   }
