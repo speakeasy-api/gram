@@ -741,7 +741,7 @@ function HooksInnerContent({
           </div>
 
           {/* Filter and Search Row */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="bg-primary-foreground sticky top-0 z-10 flex flex-wrap items-center gap-2">
             <MultiSearch
               value={serverInput}
               onChange={setServerInput}
@@ -1791,7 +1791,7 @@ function StackedBarChart({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+    <div className="border-border bg-card space-y-4 rounded-lg border p-4">
       <h3 className="text font-semibold">{title}</h3>
       <div style={{ height: containerHeight }}>
         <Bar
@@ -2434,7 +2434,7 @@ function HooksAnalytics({
 
       {/* Bar Charts */}
       {hasServers && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <UserVolumeList
             title="Source Usage per User"
             traces={groupedTraces}
