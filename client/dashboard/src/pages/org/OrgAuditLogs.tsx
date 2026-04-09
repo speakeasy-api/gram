@@ -618,14 +618,10 @@ export default function OrgAuditLogs() {
     return indices;
   }, [deferredSearchQuery, logs, getSearchableText]);
 
-  useEffect(() => {
-    if (
-      searchMatchIndices.length > 0 &&
-      currentSearchIndex >= searchMatchIndices.length
-    ) {
-      setCurrentSearchIndex(0);
-    }
-  }, [searchMatchIndices.length, currentSearchIndex]);
+  const effectiveSearchIndex =
+    searchMatchIndices.length > 0
+      ? Math.min(currentSearchIndex, searchMatchIndices.length - 1)
+      : 0;
 
   const scrollToLog = useCallback((index: number) => {
     const element = logRefs.current.get(index);
@@ -641,12 +637,12 @@ export default function OrgAuditLogs() {
 
       let newIndex: number;
       if (direction === "next") {
-        newIndex = (currentSearchIndex + 1) % searchMatchIndices.length;
+        newIndex = (effectiveSearchIndex + 1) % searchMatchIndices.length;
       } else {
         newIndex =
-          currentSearchIndex === 0
+          effectiveSearchIndex === 0
             ? searchMatchIndices.length - 1
-            : currentSearchIndex - 1;
+            : effectiveSearchIndex - 1;
       }
 
       setCurrentSearchIndex(newIndex);
@@ -655,7 +651,7 @@ export default function OrgAuditLogs() {
         scrollToLog(targetIndex);
       }
     },
-    [currentSearchIndex, searchMatchIndices, scrollToLog],
+    [effectiveSearchIndex, searchMatchIndices, scrollToLog],
   );
 
   const handleSearchChange = useCallback(
@@ -983,7 +979,7 @@ export default function OrgAuditLogs() {
                           ESC
                         </span>
                         <span className="text-[10px] text-muted-foreground mx-0.5">
-                          {currentSearchIndex + 1}/{searchMatchIndices.length}
+                          {effectiveSearchIndex + 1}/{searchMatchIndices.length}
                         </span>
                         <div className="flex items-center">
                           <button
