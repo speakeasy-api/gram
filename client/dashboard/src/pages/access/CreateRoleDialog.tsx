@@ -355,7 +355,11 @@ export function CreateRoleDialog({
                       className="border border-border rounded-md"
                     >
                       {/* Group header */}
-                      <div className="flex items-center justify-between px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.label)}
+                        className="flex w-full items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/50 rounded-t-md"
+                      >
                         <div className="flex items-center gap-2">
                           <Checkbox
                             disabled={isSystemRole}
@@ -366,41 +370,29 @@ export function CreateRoleDialog({
                                   ? "indeterminate"
                                   : false
                             }
-                            onCheckedChange={() =>
-                              toggleGroupCheckbox(group.label)
-                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleGroupCheckbox(group.label);
+                            }}
+                            className="cursor-pointer"
                           />
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(group.label)}
-                            className="flex items-center gap-1"
+                          <Type variant="body" className="font-medium text-sm">
+                            {group.label}
+                          </Type>
+                          <Type
+                            variant="body"
+                            className="text-muted-foreground text-sm"
                           >
-                            <Type
-                              variant="body"
-                              className="font-medium text-sm"
-                            >
-                              {group.label}
-                            </Type>
-                            <Type
-                              variant="body"
-                              className="text-muted-foreground text-sm"
-                            >
-                              ({selectedInGroup}/{group.scopes.length})
-                            </Type>
-                          </button>
+                            ({selectedInGroup}/{group.scopes.length})
+                          </Type>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => toggleGroup(group.label)}
-                        >
-                          <ChevronRight
-                            className={cn(
-                              "h-3.5 w-3.5 transition-transform text-muted-foreground",
-                              isExpanded && "rotate-90",
-                            )}
-                          />
-                        </button>
-                      </div>
+                        <ChevronRight
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform text-muted-foreground",
+                            isExpanded && "rotate-90",
+                          )}
+                        />
+                      </button>
 
                       {/* Expanded scope rows */}
                       {isExpanded && (

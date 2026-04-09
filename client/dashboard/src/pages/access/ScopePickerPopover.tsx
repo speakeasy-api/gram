@@ -178,9 +178,12 @@ export function ScopePickerPopover({
         align="end"
         sideOffset={8}
         className={cn(
-          "p-1.5 w-56 min-w-56 transition-[min-width] duration-200 ease-in-out overflow-hidden",
-          customMode ? "min-w-[620px]" : "max-h-[300px] overflow-y-auto",
+          "p-1.5 overflow-hidden transition-[width] duration-500",
+          customMode ? "w-[520px]" : "w-56 max-h-[300px] overflow-y-auto",
         )}
+        style={{
+          transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
+        }}
       >
         {/* Scope mode options */}
         <div className="pb-1.5">
@@ -366,7 +369,7 @@ function ToolSelectionPanel({
   return (
     <div className="flex">
       {/* Left column — server list */}
-      <div className="w-[240px] shrink-0 border-r border-border overflow-y-auto">
+      <div className="w-[160px] shrink-0 border-r border-border overflow-y-auto">
         <div className="flex items-center gap-1.5 px-3 h-10 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
           <Globe className="h-3 w-3" />
           Server List
@@ -382,11 +385,11 @@ function ToolSelectionPanel({
                 setSearch("");
               }}
               className={cn(
-                "flex w-full items-center justify-between px-3 h-10 text-xs font-mono cursor-pointer hover:bg-muted/50 truncate",
+                "flex w-full items-center justify-between px-3 h-10 text-sm cursor-pointer hover:bg-muted/50 truncate",
                 isActive && "bg-muted font-medium",
               )}
             >
-              <span className="truncate font-mono text-xs">{server.slug}</span>
+              <span className="truncate">{server.name}</span>
               {isActive && (
                 <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
               )}
