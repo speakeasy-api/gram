@@ -12,6 +12,12 @@
         "timeout": 10
       }
     ],
+    "afterAgentThought": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ],
     "preToolUse": [
       {
         "command": "./hooks/send_hook.sh",
