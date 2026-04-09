@@ -490,6 +490,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS environments_project_id_slug_key
 ON environments (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS trigger_instances (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  definition_slug TEXT NOT NULL CHECK (definition_slug <> '' AND CHAR_LENGTH(definition_slug) <= 60),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
+  environment_id uuid,
+  target_kind TEXT NOT NULL CHECK (target_kind <> '' AND CHAR_LENGTH(target_kind) <= 60),
+  target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
+  target_display TEXT NOT NULL CHECK (target_display <> '' AND CHAR_LENGTH(target_display) <= 255),
+  config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL CHECK (status IN ('active', 'paused')) DEFAULT 'active',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trigger_instances_pkey PRIMARY KEY (id),
+  CONSTRAINT trigger_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS trigger_instances_project_id_idx
+ON trigger_instances (project_id, created_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
+ON trigger_instances (environment_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
