@@ -22,6 +22,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/toolsets/server"
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -62,6 +63,7 @@ type Service struct {
 	repo            *repo.Queries
 	environmentRepo *environmentsRepo.Queries
 	auth            *auth.Auth
+	access          *access.Manager
 	toolsets        *Toolsets
 	domainsRepo     *domainsRepo.Queries
 	usageRepo       *usageRepo.Queries
@@ -72,7 +74,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
@@ -80,7 +82,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:          logger,
 		db:              db,
 		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, accessLoader),
+		auth:            auth.New(logger, db, sessions, accessManager),
+		access:          accessManager,
 		environmentRepo: environmentsRepo.New(db),
 		toolsets:        NewToolsets(db),
 		domainsRepo:     domainsRepo.New(db),
@@ -109,6 +112,10 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.OrganizationSlug == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logger := s.logger
@@ -214,6 +221,10 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	toolsets, err := s.repo.ListToolsetsByProject(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").Log(ctx, s.logger)
@@ -239,6 +250,10 @@ func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListTools
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
 	toolsets, err := s.repo.ListToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets for organization").Log(ctx, s.logger)
@@ -262,6 +277,10 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
@@ -495,6 +514,10 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return err
+	}
+
 	logger := s.logger
 
 	dbtx, err := s.db.Begin(ctx)
@@ -542,6 +565,10 @@ func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	return mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
 }
 
@@ -549,6 +576,10 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
@@ -726,6 +757,10 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	if authCtx.AccountType == "free" {
 		return nil, oops.E(oops.CodeForbidden, nil, "free accounts cannot add external OAuth servers").Log(ctx, s.logger)
 	}
@@ -816,6 +851,10 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logger := s.logger
@@ -943,6 +982,10 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
