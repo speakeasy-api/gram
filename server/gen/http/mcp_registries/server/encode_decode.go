@@ -2567,9 +2567,16 @@ func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.Exter
 		Version:           v.Version,
 		Description:       v.Description,
 		RegistryID:        v.RegistryID,
+		RegistryType:      v.RegistryType,
 		Title:             v.Title,
 		IconURL:           v.IconURL,
 		Meta:              v.Meta,
+	}
+	{
+		var zero string
+		if res.RegistryType == zero {
+			res.RegistryType = "external"
+		}
 	}
 	if v.Tools != nil {
 		res.Tools = make([]*ExternalMCPToolResponseBody, len(v.Tools))

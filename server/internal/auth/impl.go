@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	externalMcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -51,14 +52,15 @@ type AuthConfigurations struct {
 
 // Service for gram dashboard authentication endpoints
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	sessions     *sessions.Manager
-	cfg          AuthConfigurations
-	projectsRepo *projectsRepo.Queries
-	envRepo      *envRepo.Queries
-	orgRepo      *orgRepo.Queries
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	sessions        *sessions.Manager
+	cfg             AuthConfigurations
+	projectsRepo    *projectsRepo.Queries
+	envRepo         *envRepo.Queries
+	orgRepo         *orgRepo.Queries
+	externalMcpRepo *externalMcpRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -73,14 +75,15 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
-		logger:       logger,
-		db:           db,
-		sessions:     sessions,
-		cfg:          cfg,
-		projectsRepo: projectsRepo.New(db),
-		envRepo:      envRepo.New(db),
-		orgRepo:      orgRepo.New(db),
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		logger:          logger,
+		db:              db,
+		sessions:        sessions,
+		cfg:             cfg,
+		projectsRepo:    projectsRepo.New(db),
+		envRepo:         envRepo.New(db),
+		orgRepo:         orgRepo.New(db),
+		externalMcpRepo: externalMcpRepo.New(db),
 	}
 }
 
@@ -338,7 +341,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	for _, org := range userInfo.Organizations {
 		// TODO: Not the cleanest but a temporary measue while in POC phase.
 		// This may actually be bettter executed from elsewhere
-		projectRows, err := s.getProjectsOrSetupDefaults(ctx, org.ID)
+		projectRows, err := s.getProjectsOrSetupDefaults(ctx, org.ID, org.Slug)
 		if err != nil {
 			return nil, err
 		}
@@ -450,7 +453,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	return nil
 }
 
-func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]projectsRepo.Project, error) {
+func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID, orgSlug string) ([]projectsRepo.Project, error) {
 	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, organizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing projects").Log(ctx, s.logger)
@@ -476,7 +479,42 @@ func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID
 		projects = append(projects, project)
 	}
 
+	if err := s.setupDefaultCollection(ctx, organizationID, orgSlug); err != nil {
+		s.logger.WarnContext(ctx, "failed to setup default collection", attr.SlogError(err))
+	}
+
 	return projects, nil
+}
+
+func (s *Service) setupDefaultCollection(ctx context.Context, organizationID, orgSlug string) error {
+	_, err := s.externalMcpRepo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, externalMcpRepo.GetOrganizationMcpCollectionBySlugAndOrgParams{
+		Slug:           "registry",
+		OrganizationID: organizationID,
+	})
+	if err == nil {
+		return nil // already exists
+	}
+
+	collection, err := s.externalMcpRepo.CreateOrganizationMcpCollection(ctx, externalMcpRepo.CreateOrganizationMcpCollectionParams{
+		OrganizationID: organizationID,
+		Name:           "Registry",
+		Description:    conv.ToPGText("Default registry for your organisation"),
+		Slug:           "registry",
+		Visibility:     "private",
+	})
+	if err != nil {
+		return fmt.Errorf("create default collection: %w", err)
+	}
+
+	_, err = s.externalMcpRepo.CreateOrganizationMcpCollectionRegistry(ctx, externalMcpRepo.CreateOrganizationMcpCollectionRegistryParams{
+		CollectionID: collection.ID,
+		Namespace:    orgSlug,
+	})
+	if err != nil {
+		return fmt.Errorf("create default collection registry: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) createDefaultProject(ctx context.Context, organizationID string) (projectsRepo.Project, error) {

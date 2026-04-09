@@ -306,6 +306,13 @@ export function AddServerDialog({
     }
   }, [open]);
 
+  // Clean up Radix body scroll-lock on unmount (e.g. when navigating away mid-dialog)
+  useEffect(() => {
+    return () => {
+      document.body.style.removeProperty("pointer-events");
+    };
+  }, []);
+
   // Notify parent when all toolsets are done
   const allToolsetsDone =
     releaseState.phase === "complete" &&
@@ -373,8 +380,8 @@ export function AddServerDialog({
     );
   }
 
-  // Wait for enriched servers to be ready
-  if (enrichedServers.length === 0) return null;
+  // Don't unmount while the dialog is open or closing — Radix needs the DOM to animate
+  if (enrichedServers.length === 0 && !open) return null;
 
   const isSingle = enrichedServers.length === 1;
   // Check if we came from multi-remote flow (some servers have selectedRemotes)

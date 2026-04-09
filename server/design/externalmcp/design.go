@@ -378,8 +378,12 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 		Example("1.0.0")
 	})
 	Attribute("description", String, "Description of what the server does")
-	Attribute("registry_id", String, "ID of the registry this server came from", func() {
+	Attribute("registry_id", String, "ID of the registry or collection this server came from", func() {
 		Format(FormatUUID)
+	})
+	Attribute("registry_type", String, "Type of registry: 'external' for public registries, 'internal' for Gram-hosted collections", func() {
+		Default("external")
+		Enum("external", "internal")
 	})
 	Attribute("title", String, "Display name for the server")
 	Attribute("icon_url", String, "URL to the server's icon", func() {

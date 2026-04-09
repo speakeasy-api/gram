@@ -4,6 +4,21 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * The type of registry: 'external' for public registries (e.g. PulseMCP), 'internal' for Gram-hosted collections.
+ */
+export const AddExternalMCPFormRegistryType = {
+  External: "external",
+  Internal: "internal",
+} as const;
+/**
+ * The type of registry: 'external' for public registries (e.g. PulseMCP), 'internal' for Gram-hosted collections.
+ */
+export type AddExternalMCPFormRegistryType = ClosedEnum<
+  typeof AddExternalMCPFormRegistryType
+>;
 
 export type AddExternalMCPForm = {
   /**
@@ -11,13 +26,17 @@ export type AddExternalMCPForm = {
    */
   name: string;
   /**
-   * The ID of the MCP registry the server is from.
+   * The ID of the MCP registry or collection the server is from.
    */
   registryId: string;
   /**
    * The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
    */
   registryServerSpecifier: string;
+  /**
+   * The type of registry: 'external' for public registries (e.g. PulseMCP), 'internal' for Gram-hosted collections.
+   */
+  registryType?: AddExternalMCPFormRegistryType | undefined;
   /**
    * URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.
    */
@@ -29,10 +48,16 @@ export type AddExternalMCPForm = {
 };
 
 /** @internal */
+export const AddExternalMCPFormRegistryType$outboundSchema: z.ZodMiniEnum<
+  typeof AddExternalMCPFormRegistryType
+> = z.enum(AddExternalMCPFormRegistryType);
+
+/** @internal */
 export type AddExternalMCPForm$Outbound = {
   name: string;
   registry_id: string;
   registry_server_specifier: string;
+  registry_type: string;
   selected_remotes?: Array<string> | undefined;
   slug: string;
 };
@@ -46,6 +71,10 @@ export const AddExternalMCPForm$outboundSchema: z.ZodMiniType<
     name: z.string(),
     registryId: z.string(),
     registryServerSpecifier: z.string(),
+    registryType: z._default(
+      AddExternalMCPFormRegistryType$outboundSchema,
+      "external",
+    ),
     selectedRemotes: z.optional(z.array(z.string())),
     slug: z.string(),
   }),
@@ -53,6 +82,7 @@ export const AddExternalMCPForm$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       registryId: "registry_id",
       registryServerSpecifier: "registry_server_specifier",
+      registryType: "registry_type",
       selectedRemotes: "selected_remotes",
     });
   }),

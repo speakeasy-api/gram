@@ -10,8 +10,11 @@ package types
 type DeploymentExternalMCP struct {
 	// The ID of the deployment external MCP record.
 	ID string
-	// The ID of the MCP registry the server is from.
+	// The ID of the MCP registry or collection the server is from.
 	RegistryID string
+	// The type of registry: 'external' for public registries, 'internal' for
+	// Gram-hosted collections.
+	RegistryType string
 	// The display name for the external MCP server.
 	Name string
 	// A URL-friendly identifier used for tool prefixing.

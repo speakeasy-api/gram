@@ -147,7 +147,12 @@ var DeploymentExternalMCP = Type("DeploymentExternalMCP", func() {
 		Description("The ID of the deployment external MCP record.")
 	})
 	Attribute("registry_id", String, func() {
-		Description("The ID of the MCP registry the server is from.")
+		Description("The ID of the MCP registry or collection the server is from.")
+	})
+	Attribute("registry_type", String, func() {
+		Description("The type of registry: 'external' for public registries, 'internal' for Gram-hosted collections.")
+		Default("external")
+		Enum("external", "internal")
 	})
 	Attribute("name", String, func() {
 		Description("The display name for the external MCP server.")

@@ -266,6 +266,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			Version:           s.Server.Version,
 			Description:       s.Server.Description,
 			RegistryID:        registryID,
+			RegistryType:      "external",
 			Title:             s.Server.Title,
 			IconURL:           iconURL,
 			Meta:              s.Meta,

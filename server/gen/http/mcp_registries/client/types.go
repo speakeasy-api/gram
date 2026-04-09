@@ -87,8 +87,11 @@ type GetServerDetailsResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the registry this server came from
+	// ID of the registry or collection this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// Type of registry: 'external' for public registries, 'internal' for
+	// Gram-hosted collections
+	RegistryType *string `form:"registry_type,omitempty" json:"registry_type,omitempty" xml:"registry_type,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -2246,8 +2249,11 @@ type ExternalMCPServerResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the registry this server came from
+	// ID of the registry or collection this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// Type of registry: 'external' for public registries, 'internal' for
+	// Gram-hosted collections
+	RegistryType *string `form:"registry_type,omitempty" json:"registry_type,omitempty" xml:"registry_type,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -2849,6 +2855,12 @@ func NewGetServerDetailsExternalMCPServerOK(body *GetServerDetailsResponseBody) 
 		Title:             body.Title,
 		IconURL:           body.IconURL,
 		Meta:              body.Meta,
+	}
+	if body.RegistryType != nil {
+		v.RegistryType = *body.RegistryType
+	}
+	if body.RegistryType == nil {
+		v.RegistryType = "external"
 	}
 	if body.Tools != nil {
 		v.Tools = make([]*types.ExternalMCPTool, len(body.Tools))
@@ -4199,6 +4211,11 @@ func ValidateGetServerDetailsResponseBody(body *GetServerDetailsResponseBody) (e
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
+	}
+	if body.RegistryType != nil {
+		if !(*body.RegistryType == "external" || *body.RegistryType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registry_type", *body.RegistryType, []any{"external", "internal"}))
+		}
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
@@ -6997,6 +7014,11 @@ func ValidateExternalMCPServerResponseBody(body *ExternalMCPServerResponseBody) 
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
+	}
+	if body.RegistryType != nil {
+		if !(*body.RegistryType == "external" || *body.RegistryType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registry_type", *body.RegistryType, []any{"external", "internal"}))
+		}
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))

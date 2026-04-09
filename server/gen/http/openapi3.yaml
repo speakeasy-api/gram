@@ -15366,12 +15366,19 @@ components:
                     example: My Slack Integration
                 registry_id:
                     type: string
-                    description: The ID of the MCP registry the server is from.
+                    description: The ID of the MCP registry or collection the server is from.
                     format: uuid
                 registry_server_specifier:
                     type: string
                     description: The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
                     example: slack
+                registry_type:
+                    type: string
+                    description: 'The type of registry: ''external'' for public registries (e.g. PulseMCP), ''internal'' for Gram-hosted collections.'
+                    default: external
+                    enum:
+                        - external
+                        - internal
                 selected_remotes:
                     type: array
                     items:
@@ -16950,10 +16957,17 @@ components:
                     description: The display name for the external MCP server.
                 registry_id:
                     type: string
-                    description: The ID of the MCP registry the server is from.
+                    description: The ID of the MCP registry or collection the server is from.
                 registry_server_specifier:
                     type: string
                     description: The canonical server name used to look up the server in the registry.
+                registry_type:
+                    type: string
+                    description: 'The type of registry: ''external'' for public registries, ''internal'' for Gram-hosted collections.'
+                    default: external
+                    enum:
+                        - external
+                        - internal
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -17325,12 +17339,19 @@ components:
                     description: Opaque metadata from the registry
                 registry_id:
                     type: string
-                    description: ID of the registry this server came from
+                    description: ID of the registry or collection this server came from
                     format: uuid
                 registry_specifier:
                     type: string
                     description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
                     example: io.modelcontextprotocol.anonymous/exa
+                registry_type:
+                    type: string
+                    description: 'Type of registry: ''external'' for public registries, ''internal'' for Gram-hosted collections'
+                    default: external
+                    enum:
+                        - external
+                        - internal
                 remotes:
                     type: array
                     items:

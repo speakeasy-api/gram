@@ -40,6 +40,7 @@ type upsertPackage struct {
 
 type upsertExternalMCP struct {
 	registryID              uuid.UUID
+	registryType            string
 	name                    string
 	slug                    string
 	registryServerSpecifier string
@@ -288,6 +289,7 @@ func amendDeployment(
 		_, err := depRepo.UpsertDeploymentExternalMCP(ctx, repo.UpsertDeploymentExternalMCPParams{
 			DeploymentID:            id,
 			RegistryID:              e.registryID,
+			RegistryType:            e.registryType,
 			Name:                    e.name,
 			Slug:                    e.slug,
 			RegistryServerSpecifier: e.registryServerSpecifier,

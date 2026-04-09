@@ -1719,8 +1719,11 @@ type DeploymentPackageResponseBody struct {
 type DeploymentExternalMCPResponseBody struct {
 	// The ID of the deployment external MCP record.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The ID of the MCP registry the server is from.
+	// The ID of the MCP registry or collection the server is from.
 	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// The type of registry: 'external' for public registries, 'internal' for
+	// Gram-hosted collections.
+	RegistryType string `form:"registry_type" json:"registry_type" xml:"registry_type"`
 	// The display name for the external MCP server.
 	Name string `form:"name" json:"name" xml:"name"`
 	// A URL-friendly identifier used for tool prefixing.
@@ -1855,8 +1858,11 @@ type AddDeploymentPackageFormRequestBody struct {
 
 // AddExternalMCPFormRequestBody is used to define fields on request body types.
 type AddExternalMCPFormRequestBody struct {
-	// The ID of the MCP registry the server is from.
+	// The ID of the MCP registry or collection the server is from.
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// The type of registry: 'external' for public registries (e.g. PulseMCP),
+	// 'internal' for Gram-hosted collections.
+	RegistryType *string `form:"registry_type,omitempty" json:"registry_type,omitempty" xml:"registry_type,omitempty"`
 	// The display name for the external MCP server.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-friendly identifier used for tool prefixing (e.g., 'exa').
@@ -3551,6 +3557,11 @@ func ValidateAddExternalMCPFormRequestBody(body *AddExternalMCPFormRequestBody) 
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
+	}
+	if body.RegistryType != nil {
+		if !(*body.RegistryType == "external" || *body.RegistryType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registry_type", *body.RegistryType, []any{"external", "internal"}))
+		}
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))

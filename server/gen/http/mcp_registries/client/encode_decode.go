@@ -2663,6 +2663,12 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 		IconURL:           v.IconURL,
 		Meta:              v.Meta,
 	}
+	if v.RegistryType != nil {
+		res.RegistryType = *v.RegistryType
+	}
+	if v.RegistryType == nil {
+		res.RegistryType = "external"
+	}
 	if v.Tools != nil {
 		res.Tools = make([]*types.ExternalMCPTool, len(v.Tools))
 		for i, val := range v.Tools {

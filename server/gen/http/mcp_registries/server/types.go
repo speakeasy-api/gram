@@ -89,8 +89,11 @@ type GetServerDetailsResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the registry this server came from
+	// ID of the registry or collection this server came from
 	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// Type of registry: 'external' for public registries, 'internal' for
+	// Gram-hosted collections
+	RegistryType string `form:"registry_type" json:"registry_type" xml:"registry_type"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -2248,8 +2251,11 @@ type ExternalMCPServerResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the registry this server came from
+	// ID of the registry or collection this server came from
 	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// Type of registry: 'external' for public registries, 'internal' for
+	// Gram-hosted collections
+	RegistryType string `form:"registry_type" json:"registry_type" xml:"registry_type"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -2347,9 +2353,16 @@ func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDet
 		Version:           res.Version,
 		Description:       res.Description,
 		RegistryID:        res.RegistryID,
+		RegistryType:      res.RegistryType,
 		Title:             res.Title,
 		IconURL:           res.IconURL,
 		Meta:              res.Meta,
+	}
+	{
+		var zero string
+		if body.RegistryType == zero {
+			body.RegistryType = "external"
+		}
 	}
 	if res.Tools != nil {
 		body.Tools = make([]*ExternalMCPToolResponseBody, len(res.Tools))

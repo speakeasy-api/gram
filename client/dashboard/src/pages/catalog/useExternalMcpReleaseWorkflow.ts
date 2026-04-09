@@ -163,6 +163,11 @@ export function useExternalMcpReleaseWorkflow({
     const singleRemote: ServerConfig[] = [];
 
     for (const server of servers) {
+      // Skip servers already installed in the target project
+      if (existingSpecifiers.has(server.registrySpecifier)) {
+        continue;
+      }
+
       const remotes = server.remotes ?? [];
       if (remotes.length > 1) {
         multiRemote.push({
@@ -189,7 +194,7 @@ export function useExternalMcpReleaseWorkflow({
     } else {
       setPhase("configure");
     }
-  }, [servers]);
+  }, [servers, existingSpecifiers]);
 
   // Poll deployment status — pass gramProject for cross-project batch flow
   const { data: deploymentData } = useDeployment(
@@ -280,7 +285,7 @@ export function useExternalMcpReleaseWorkflow({
               createToolsetRequestBody: {
                 name: config.name,
                 description:
-                  config.server.description ??
+                  config.server.description ||
                   `MCP server: ${config.server.registrySpecifier}`,
                 toolUrns,
               },
@@ -453,10 +458,13 @@ export function useExternalMcpReleaseWorkflow({
               const slug = generateSlug(config.server.registrySpecifier);
               return {
                 registryId: config.server.registryId,
+                registryType: config.server.registryType,
                 name: config.name,
                 slug,
                 registryServerSpecifier: config.server.registrySpecifier,
-                selectedRemotes: config.selectedRemotes?.map((r) => r.url),
+                selectedRemotes:
+                  config.selectedRemotes?.map((r) => r.url) ??
+                  config.server.remotes?.map((r) => r.url),
               };
             }),
           },
@@ -490,11 +498,15 @@ export function useExternalMcpReleaseWorkflow({
     hasTransitionedRef.current = false;
     setCurrentServerIndex(0);
 
-    // Re-partition servers into multi/single remote
+    // Re-partition servers into multi/single remote, skipping already-installed
     const multiRemote: MultiRemoteServerConfig[] = [];
     const singleRemote: ServerConfig[] = [];
 
     for (const server of servers) {
+      if (existingSpecifiers.has(server.registrySpecifier)) {
+        continue;
+      }
+
       const remotes = server.remotes ?? [];
       if (remotes.length > 1) {
         multiRemote.push({

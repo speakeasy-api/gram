@@ -115,9 +115,14 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment external mcp").Log(ctx, logger)
 			}
 
+			registryType := "external"
+			if r.ExternalMcpRegistryType.Valid {
+				registryType = r.ExternalMcpRegistryType.String
+			}
 			attachedExternalMCPs = append(attachedExternalMCPs, &types.DeploymentExternalMCP{
 				ID:                      externalMCPID.String(),
 				RegistryID:              r.ExternalMcpRegistryID.UUID.String(),
+				RegistryType:            registryType,
 				Name:                    r.ExternalMcpName.String,
 				Slug:                    types.Slug(r.ExternalMcpSlug.String),
 				RegistryServerSpecifier: r.ExternalMcpRegistryServerSpecifier.String,

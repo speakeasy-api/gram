@@ -264,10 +264,17 @@ run();
 
 ### [McpRegistries](docs/sdks/mcpregistries/README.md)
 
+* [attachServer](docs/sdks/mcpregistries/README.md#attachserver) - attachServer mcpRegistries
 * [clearCache](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
+* [createCollection](docs/sdks/mcpregistries/README.md#createcollection) - createCollection mcpRegistries
+* [deleteCollection](docs/sdks/mcpregistries/README.md#deletecollection) - deleteCollection mcpRegistries
+* [detachServer](docs/sdks/mcpregistries/README.md#detachserver) - detachServer mcpRegistries
 * [getServerDetails](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 * [listCatalog](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
+* [listCollections](docs/sdks/mcpregistries/README.md#listcollections) - listCollections mcpRegistries
 * [listRegistries](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+* [serve](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
+* [updateCollection](docs/sdks/mcpregistries/README.md#updatecollection) - updateCollection mcpRegistries
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
@@ -463,10 +470,17 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpMetadataExport`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
+- [`mcpRegistriesAttachServer`](docs/sdks/mcpregistries/README.md#attachserver) - attachServer mcpRegistries
 - [`mcpRegistriesClearCache`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
+- [`mcpRegistriesCreateCollection`](docs/sdks/mcpregistries/README.md#createcollection) - createCollection mcpRegistries
+- [`mcpRegistriesDeleteCollection`](docs/sdks/mcpregistries/README.md#deletecollection) - deleteCollection mcpRegistries
+- [`mcpRegistriesDetachServer`](docs/sdks/mcpregistries/README.md#detachserver) - detachServer mcpRegistries
 - [`mcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
+- [`mcpRegistriesListCollections`](docs/sdks/mcpregistries/README.md#listcollections) - listCollections mcpRegistries
 - [`mcpRegistriesListRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+- [`mcpRegistriesServe`](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
+- [`mcpRegistriesUpdateCollection`](docs/sdks/mcpregistries/README.md#updatecollection) - updateCollection mcpRegistries
 - [`organizationsGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -638,6 +652,7 @@ To learn about this feature and how to get started, check
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
+- [`useListMCPCollections`](docs/sdks/mcpregistries/README.md#listcollections) - listCollections mcpRegistries
 - [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 - [`useListOrganizationUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
@@ -652,8 +667,14 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
+- [`useMcpRegistriesAttachServerMutation`](docs/sdks/mcpregistries/README.md#attachserver) - attachServer mcpRegistries
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
+- [`useMcpRegistriesCreateCollectionMutation`](docs/sdks/mcpregistries/README.md#createcollection) - createCollection mcpRegistries
+- [`useMcpRegistriesDeleteCollectionMutation`](docs/sdks/mcpregistries/README.md#deletecollection) - deleteCollection mcpRegistries
+- [`useMcpRegistriesDetachServerMutation`](docs/sdks/mcpregistries/README.md#detachserver) - detachServer mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
+- [`useMcpRegistriesServe`](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
+- [`useMcpRegistriesUpdateCollectionMutation`](docs/sdks/mcpregistries/README.md#updatecollection) - updateCollection mcpRegistries
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects

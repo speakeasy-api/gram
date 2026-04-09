@@ -60,7 +60,7 @@ import {
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
 import { Badge, Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircleIcon,
@@ -82,6 +82,16 @@ import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
+import {
+  useCollections,
+  useAttachServer,
+  useDetachServer,
+} from "@/pages/collections/hooks";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  buildMcpRegistriesServeQuery,
+  useGramContext,
+} from "@gram/client/react-query";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -1269,6 +1279,11 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         </Block>
       </PageSection>
 
+      {/* Publishing - only show for non-catalog toolsets */}
+      {!toolset.toolUrns?.some((u) => u.startsWith("tools:externalmcp:")) && (
+        <MCPPublishingSection toolset={toolset} />
+      )}
+
       <PageSection
         heading="Actions"
         description="Export or configure your MCP server."
@@ -1438,6 +1453,167 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 // Keep the old MCPDetails for backward compatibility (can be removed later)
 export function MCPDetails({ toolset }: { toolset: Toolset }) {
   return <MCPSettingsTab toolset={toolset} />;
+}
+
+function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
+  const gramClient = useGramContext();
+  const { data: collections, isLoading: collectionsLoading } = useCollections();
+  const attachServer = useAttachServer();
+  const detachServer = useDetachServer();
+  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch servers for each collection to determine which ones this toolset is in
+  const serveQueries = useQueries({
+    queries: collections.map((c) => ({
+      ...buildMcpRegistriesServeQuery(gramClient, { collectionSlug: c.slug! }),
+      enabled: !!c.slug,
+    })),
+  });
+
+  // Build a set of collection IDs that this toolset is published to
+  const publishedCollectionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (let i = 0; i < collections.length; i++) {
+      const servers = serveQueries[i]?.data?.servers ?? [];
+      for (const s of servers) {
+        const parts = s.registrySpecifier?.split("/") ?? [];
+        const slug = parts[parts.length - 1];
+        if (slug === toolset.mcpSlug) {
+          ids.add(collections[i].id);
+          break;
+        }
+      }
+    }
+    return ids;
+  }, [collections, serveQueries, toolset.mcpSlug]);
+
+  // Initialize local state from server state on first load
+  const effectiveSelected = selectedIds ?? publishedCollectionIds;
+
+  const hasChanges = useMemo(() => {
+    if (!selectedIds) return false;
+    if (selectedIds.size !== publishedCollectionIds.size) return true;
+    for (const id of selectedIds) {
+      if (!publishedCollectionIds.has(id)) return true;
+    }
+    return false;
+  }, [selectedIds, publishedCollectionIds]);
+
+  const toggleCollection = (collectionId: string) => {
+    setSelectedIds((prev) => {
+      const current = prev ?? new Set(publishedCollectionIds);
+      const next = new Set(current);
+      if (next.has(collectionId)) {
+        next.delete(collectionId);
+      } else {
+        next.add(collectionId);
+      }
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    if (!selectedIds) return;
+    setIsSaving(true);
+    try {
+      const toAttach = [...selectedIds].filter(
+        (id) => !publishedCollectionIds.has(id),
+      );
+      const toDetach = [...publishedCollectionIds].filter(
+        (id) => !selectedIds.has(id),
+      );
+
+      await Promise.all([
+        ...toAttach.map((collectionId) =>
+          attachServer.mutateAsync({
+            request: {
+              attachServerRequestBody: { collectionId, toolsetId: toolset.id },
+            },
+          }),
+        ),
+        ...toDetach.map((collectionId) =>
+          detachServer.mutateAsync({
+            request: {
+              attachServerRequestBody: { collectionId, toolsetId: toolset.id },
+            },
+          }),
+        ),
+      ]);
+      setSelectedIds(null);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    setSelectedIds(null);
+  };
+
+  const isLoading = collectionsLoading || serveQueries.some((q) => q.isLoading);
+
+  return (
+    <PageSection
+      heading="Publishing"
+      description="Publish this server to collections so it can be discovered and installed by others in your organization."
+    >
+      <Block label="Collections" className="p-0">
+        <BlockInner>
+          {isLoading ? (
+            <Type muted small>
+              Loading collections...
+            </Type>
+          ) : collections.length === 0 ? (
+            <Type muted small>
+              No collections available.
+            </Type>
+          ) : (
+            <Stack direction="vertical" gap={2}>
+              {collections.map((collection) => (
+                <label
+                  key={collection.id}
+                  className="flex items-center gap-3 cursor-pointer"
+                >
+                  <Checkbox
+                    checked={effectiveSelected.has(collection.id)}
+                    disabled={isSaving}
+                    onCheckedChange={() => toggleCollection(collection.id)}
+                  />
+                  <Stack direction="vertical" gap={0}>
+                    <Type small className="font-medium">
+                      {collection.name}
+                    </Type>
+                    {collection.description && (
+                      <Type muted small>
+                        {collection.description}
+                      </Type>
+                    )}
+                  </Stack>
+                </label>
+              ))}
+            </Stack>
+          )}
+        </BlockInner>
+        {hasChanges && (
+          <BlockInner>
+            <Stack direction="horizontal" gap={2}>
+              <Button size="sm" disabled={isSaving} onClick={handleSave}>
+                <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={isSaving}
+                onClick={handleDiscard}
+              >
+                <Button.Text>Discard</Button.Text>
+              </Button>
+            </Stack>
+          </BlockInner>
+        )}
+      </Block>
+    </PageSection>
+  );
 }
 
 function PageSection({

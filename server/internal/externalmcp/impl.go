@@ -251,6 +251,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		Version:           details.Version,
 		Description:       details.Description,
 		RegistryID:        registryID.String(),
+		RegistryType:      "external",
 		Title:             nil, // Not available from details endpoint
 		IconURL:           nil, // Not available from details endpoint
 		Meta:              nil, // Not available from details endpoint
@@ -431,6 +432,7 @@ func (s *Service) Serve(ctx context.Context, payload *gen.ServePayload) (*gen.Se
 			Version:           "1.0.0",
 			Description:       desc,
 			RegistryID:        collection.ID.String(),
+			RegistryType:      "internal",
 			Title:             &t.Name,
 			IconURL:           nil,
 			Meta:              nil,
