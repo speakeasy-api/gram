@@ -896,6 +896,24 @@ type ToolsetVersion struct {
 	Deleted       bool
 }
 
+type TriggerInstance struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	DefinitionSlug string
+	Name           string
+	EnvironmentID  uuid.NullUUID
+	TargetKind     string
+	TargetRef      string
+	TargetDisplay  string
+	ConfigJson     []byte
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type User struct {
 	ID          string
 	Email       string
