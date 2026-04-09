@@ -88,8 +88,8 @@ func (q *Queries) CreateTriggerInstance(ctx context.Context, arg CreateTriggerIn
 const deleteTriggerInstance = `-- name: DeleteTriggerInstance :one
 UPDATE trigger_instances
 SET
-    deleted_at = now(),
-    updated_at = now()
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
@@ -238,7 +238,7 @@ const setTriggerInstanceStatus = `-- name: SetTriggerInstanceStatus :one
 UPDATE trigger_instances
 SET
     status = $1,
-    updated_at = now()
+    updated_at = clock_timestamp()
 WHERE id = $2
   AND project_id = $3
   AND deleted IS FALSE
@@ -278,34 +278,39 @@ const updateTriggerInstance = `-- name: UpdateTriggerInstance :one
 UPDATE trigger_instances
 SET
     name = COALESCE($1, name),
-    environment_id = COALESCE($2::uuid, environment_id),
-    target_kind = COALESCE($3, target_kind),
-    target_ref = COALESCE($4, target_ref),
-    target_display = COALESCE($5, target_display),
-    config_json = COALESCE($6, config_json),
-    status = COALESCE($7, status),
-    updated_at = now()
-WHERE id = $8
-  AND project_id = $9
+    environment_id = CASE
+        WHEN $2::boolean THEN $3::uuid
+        ELSE environment_id
+    END,
+    target_kind = COALESCE($4, target_kind),
+    target_ref = COALESCE($5, target_ref),
+    target_display = COALESCE($6, target_display),
+    config_json = COALESCE($7, config_json),
+    status = COALESCE($8, status),
+    updated_at = clock_timestamp()
+WHERE id = $9
+  AND project_id = $10
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateTriggerInstanceParams struct {
-	Name          pgtype.Text
-	EnvironmentID uuid.NullUUID
-	TargetKind    pgtype.Text
-	TargetRef     pgtype.Text
-	TargetDisplay pgtype.Text
-	ConfigJson    []byte
-	Status        pgtype.Text
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
+	Name                pgtype.Text
+	UpdateEnvironmentID bool
+	EnvironmentID       uuid.NullUUID
+	TargetKind          pgtype.Text
+	TargetRef           pgtype.Text
+	TargetDisplay       pgtype.Text
+	ConfigJson          []byte
+	Status              pgtype.Text
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
 }
 
 func (q *Queries) UpdateTriggerInstance(ctx context.Context, arg UpdateTriggerInstanceParams) (TriggerInstance, error) {
 	row := q.db.QueryRow(ctx, updateTriggerInstance,
 		arg.Name,
+		arg.UpdateEnvironmentID,
 		arg.EnvironmentID,
 		arg.TargetKind,
 		arg.TargetRef,

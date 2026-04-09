@@ -47,13 +47,16 @@ WHERE ti.id = @id
 UPDATE trigger_instances
 SET
     name = COALESCE(sqlc.narg('name'), name),
-    environment_id = COALESCE(sqlc.narg('environment_id')::uuid, environment_id),
+    environment_id = CASE
+        WHEN @update_environment_id::boolean THEN sqlc.narg('environment_id')::uuid
+        ELSE environment_id
+    END,
     target_kind = COALESCE(sqlc.narg('target_kind'), target_kind),
     target_ref = COALESCE(sqlc.narg('target_ref'), target_ref),
     target_display = COALESCE(sqlc.narg('target_display'), target_display),
     config_json = COALESCE(sqlc.narg('config_json'), config_json),
     status = COALESCE(sqlc.narg('status'), status),
-    updated_at = now()
+    updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
@@ -63,7 +66,7 @@ RETURNING *;
 UPDATE trigger_instances
 SET
     status = @status,
-    updated_at = now()
+    updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
@@ -72,8 +75,8 @@ RETURNING *;
 -- name: DeleteTriggerInstance :one
 UPDATE trigger_instances
 SET
-    deleted_at = now(),
-    updated_at = now()
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
