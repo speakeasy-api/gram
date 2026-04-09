@@ -29,7 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ScopePickerPopover } from "./ScopePickerPopover";
-import type { AnnotationHint, RoleGrant, Scope } from "./types";
+import type { AnnotationHint, CustomTab, RoleGrant, Scope } from "./types";
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -93,7 +93,6 @@ export function CreateRoleDialog({
     setName(editingRole.name);
     setDescription(editingRole.description);
     const roleGrants = grantsFromRole(editingRole);
-    setGrants(roleGrants);
     // Auto-expand groups that have at least one scope selected
     const grantedScopes = new Set(Object.keys(roleGrants));
     const autoExpanded = new Set(
@@ -102,6 +101,23 @@ export function CreateRoleDialog({
         .map((g) => g.label),
     );
     setExpandedGroups(autoExpanded);
+    // Restore custom mode and active tab for MCP scopes with tool-level selections
+    const restoredCustom = new Set<string>();
+    for (const [scope, grant] of Object.entries(roleGrants)) {
+      if (!scope.startsWith("mcp:")) continue;
+      const hasAnnotations = grant.annotations && grant.annotations.length > 0;
+      const hasToolIds = grant.resources?.some((r) => r.includes(":")) ?? false;
+      if (hasAnnotations || hasToolIds) {
+        restoredCustom.add(scope);
+        // Infer which tab was active
+        let tab: CustomTab = "select";
+        if (hasAnnotations) tab = "auto-groups";
+        else if (hasToolIds) tab = "http-method";
+        roleGrants[scope] = { ...grant, customTab: tab };
+      }
+    }
+    setGrants(roleGrants);
+    setCustomScopes(restoredCustom);
     const assignedIds = new Set(
       members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
     );
@@ -454,6 +470,16 @@ export function CreateRoleDialog({
                                           scopeDef.slug,
                                           annotations,
                                         )
+                                      }
+                                      customTab={grant.customTab}
+                                      onCustomTabChange={(tab) =>
+                                        setGrants((prev) => ({
+                                          ...prev,
+                                          [scopeDef.slug]: {
+                                            ...prev[scopeDef.slug]!,
+                                            customTab: tab,
+                                          },
+                                        }))
                                       }
                                     />
                                   )}

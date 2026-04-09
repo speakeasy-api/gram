@@ -13,7 +13,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  CircleDot,
+  SquareAsterisk,
   Globe,
   Repeat,
   Shield,
@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { AnnotationHint, ResourceType } from "./types";
+import type { AnnotationHint, CustomTab, ResourceType } from "./types";
 
 interface ScopePickerPopoverProps {
   /** The resource type determines which resource list to show */
@@ -36,6 +36,9 @@ interface ScopePickerPopoverProps {
   /** Selected annotation hints for auto-group matching */
   annotations?: AnnotationHint[];
   onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
+  /** Which custom tab is active */
+  customTab?: CustomTab;
+  onCustomTabChange?: (tab: CustomTab) => void;
 }
 
 interface ServerTool {
@@ -103,6 +106,8 @@ export function ScopePickerPopover({
   onCustomModeChange,
   annotations,
   onChangeAnnotations,
+  customTab,
+  onCustomTabChange,
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
@@ -154,7 +159,7 @@ export function ScopePickerPopover({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-xs hover:bg-muted/50 transition-colors shrink-0 h-7"
+          className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs hover:bg-background transition-colors shrink-0 h-7"
         >
           <span className="truncate max-w-[120px]">{label}</span>
           <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
@@ -162,11 +167,10 @@ export function ScopePickerPopover({
       </PopoverTrigger>
       <PopoverContent
         align="end"
+        sideOffset={8}
         className={cn(
-          "p-1.5 transition-[min-width] duration-200 ease-out w-56 min-w-56",
-          customMode
-            ? "min-w-[480px] overflow-hidden"
-            : "max-h-[300px] overflow-y-auto",
+          "p-1.5 w-56 min-w-56 transition-[min-width] duration-200 ease-in-out overflow-hidden",
+          customMode ? "min-w-[520px]" : "max-h-[300px] overflow-y-auto",
         )}
       >
         {/* Scope mode options */}
@@ -175,7 +179,10 @@ export function ScopePickerPopover({
             label={resourceType === "project" ? "All projects" : "All servers"}
             selected={isUnrestricted && !customMode}
             onClick={() => {
-              if (customMode) onCustomModeChange?.(false);
+              if (customMode) {
+                onCustomModeChange?.(false);
+                onChangeAnnotations?.([]);
+              }
               onChangeResources(null);
             }}
           />
@@ -187,8 +194,13 @@ export function ScopePickerPopover({
             }
             selected={!isUnrestricted && !customMode}
             onClick={() => {
-              if (customMode) onCustomModeChange?.(false);
-              if (isUnrestricted) onChangeResources([]);
+              if (customMode) {
+                onCustomModeChange?.(false);
+                onChangeResources([]);
+                onChangeAnnotations?.([]);
+              } else if (isUnrestricted) {
+                onChangeResources([]);
+              }
             }}
           />
 
@@ -242,13 +254,12 @@ export function ScopePickerPopover({
         {customMode && (
           <>
             <Tabs
-              defaultValue={
-                annotations && annotations.length > 0 ? "auto-groups" : "select"
-              }
+              value={customTab ?? "select"}
               className="gap-0 -mx-1.5 -mb-1.5"
-              onValueChange={() => {
+              onValueChange={(value) => {
                 onChangeResources([]);
                 onChangeAnnotations?.([]);
+                onCustomTabChange?.(value as CustomTab);
               }}
             >
               <TabsList className="w-full h-auto rounded-none bg-transparent px-1.5 py-1 gap-2 border-y border-border">
@@ -272,7 +283,7 @@ export function ScopePickerPopover({
                   value="http-method"
                   className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
                 >
-                  <CircleDot className="h-3.5 w-3.5" />
+                  <SquareAsterisk className="h-3.5 w-3.5" />
                   By HTTP method
                 </TabsTrigger>
               </TabsList>
@@ -868,12 +879,12 @@ function getLabel(
   if (customMode) {
     const count = customToolCount ?? 0;
     if (count === 0) return "Select...";
-    return `${count} tool${count === 1 ? "" : "s"}`;
+    return `${count} tool${count === 1 ? "" : "s"} selected`;
   }
   if (resources === null) {
     return resourceType === "project" ? "All projects" : "All servers";
   }
   if (resources.length === 0) return "Select...";
   const noun = resourceType === "project" ? "project" : "server";
-  return `${resources.length} ${noun}${resources.length === 1 ? "" : "s"}`;
+  return `${resources.length} ${noun}${resources.length === 1 ? "" : "s"} selected`;
 }

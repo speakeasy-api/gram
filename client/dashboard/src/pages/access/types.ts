@@ -18,6 +18,9 @@ export type AnnotationHint =
   | "idempotentHint"
   | "openWorldHint";
 
+/** The three tool-selection tabs in custom mode. */
+export type CustomTab = "select" | "auto-groups" | "http-method";
+
 /** A single grant within a role: a scope + optional resource allowlist. */
 export interface RoleGrant {
   scope: Scope;
@@ -25,4 +28,6 @@ export interface RoleGrant {
   resources: string[] | null;
   /** Selected annotation hints for auto-group matching (MCP scopes only) */
   annotations?: AnnotationHint[];
+  /** Which custom tab was last active (UI-only, not persisted to backend) */
+  customTab?: CustomTab;
 }
