@@ -1676,43 +1676,158 @@ function successRateClass(rate: number): string {
 }
 
 function ServerActivityChart({
-  servers,
+  traces,
   serverNameMappings,
+  handleFilter,
 }: {
-  servers: HooksServerSummary[];
+  traces: HookTrace[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  handleFilter?: (userEmail: string, serverName: string) => void;
 }) {
-  const items = useMemo(
-    () =>
-      servers
-        .map((s) => ({
-          key: !s.serverName
-            ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-            : (serverNameMappings.rawToDisplay.get(s.serverName) ??
-              s.serverName),
-          value: s.successCount + s.failureCount,
-          successRate: (1 - s.failureRate) * 100,
-        }))
-        .sort((a, b) => b.value - a.value),
-    [servers, serverNameMappings.rawToDisplay],
+  const { labels, datasets } = useMemo(() => {
+    // Build userEmail → toolSource → count
+    const userMap = new Map<string, Map<string, number>>();
+    const serverSet = new Set<string>();
+    for (const t of traces) {
+      const user = t.userEmail || "unknown";
+      const server = t.toolSource ?? "";
+      const displayName = !server
+        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+        : (serverNameMappings.rawToDisplay.get(server) ?? server);
+      serverSet.add(displayName);
+      const inner = userMap.get(user) ?? new Map<string, number>();
+      inner.set(displayName, (inner.get(displayName) ?? 0) + 1);
+      userMap.set(user, inner);
+    }
+
+    // Sort users by total count desc
+    const sortedUsers = Array.from(userMap.entries())
+      .map(([user, serverCounts]) => ({
+        user,
+        total: Array.from(serverCounts.values()).reduce((a, b) => a + b, 0),
+        serverCounts,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    // Sort servers by total usage desc for consistent legend ordering
+    const sortedServers = Array.from(serverSet).sort((a, b) => {
+      const aTotal = sortedUsers.reduce(
+        (s, u) => s + (u.serverCounts.get(a) ?? 0),
+        0,
+      );
+      const bTotal = sortedUsers.reduce(
+        (s, u) => s + (u.serverCounts.get(b) ?? 0),
+        0,
+      );
+      return bTotal - aTotal;
+    });
+
+    const chartLabels = sortedUsers.map((u) => u.user);
+    const chartDatasets = sortedServers.map((server, i) => ({
+      label: server,
+      barThickness: 24,
+      data: sortedUsers.map((u) => u.serverCounts.get(server) ?? 0),
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      borderWidth: 0,
+    }));
+
+    return { labels: chartLabels, datasets: chartDatasets };
+  }, [traces, serverNameMappings.rawToDisplay]);
+
+  if (labels.length === 0) return null;
+
+  const barHeight = 24;
+  const spacerHeight = 8;
+  const containerHeight = Math.max(
+    120,
+    labels.length * (barHeight + spacerHeight) + 60,
   );
 
+  const stackTotalPlugin = {
+    id: "stackTotal",
+    afterDatasetsDraw(chart: ChartJS) {
+      const { ctx, data } = chart;
+      const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
+      ctx.save();
+      ctx.font = "12px";
+      ctx.fillStyle = CHART_COLORS.tickLabel;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      lastMeta.data.forEach((bar, i) => {
+        const total = data.datasets.reduce(
+          (sum, ds) => sum + ((ds.data[i] as number) || 0),
+          0,
+        );
+        ctx.fillText(String(total), bar.x + 4, bar.y);
+      });
+      ctx.restore();
+    },
+  };
+
+  const options: ChartOptions<"bar"> = {
+    indexAxis: "y",
+    responsive: true,
+    maintainAspectRatio: false,
+    onClick(_, elements) {
+      if (!elements.length || !handleFilter) return;
+      const { datasetIndex, index } = elements[0];
+      const userEmail = datasets[datasetIndex]?.label;
+      const serverName = labels[index];
+      if (userEmail && serverName) handleFilter(userEmail, serverName);
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: CHART_COLORS.gridLine },
+        ticks: { color: CHART_COLORS.tickLabel, precision: 0 },
+        afterFit(scale) {
+          scale.paddingRight = 30;
+        },
+      },
+      y: {
+        stacked: true,
+        ticks: { color: CHART_COLORS.tickLabel, crossAlign: "far", padding: 2 },
+        grid: { display: false },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "bottom",
+        align: "end",
+        labels: {
+          color: CHART_COLORS.tickLabel,
+          boxWidth: 12,
+          padding: 8,
+        },
+      },
+      tooltip: {
+        backgroundColor: CHART_COLORS.tooltipBg,
+        titleColor: CHART_COLORS.tooltipTitle,
+        bodyColor: CHART_COLORS.tooltipBody,
+        borderColor: CHART_COLORS.tooltipBorder,
+        borderWidth: 1,
+        callbacks: {
+          label: (item: TooltipItem<"bar">) =>
+            ` ${item.dataset.label}: ${item.parsed.x}`,
+        },
+      },
+    },
+  };
+
   return (
-    <BarList
-      items={items}
-      barClassName="bg-blue-500"
-      renderLabel={(item) => <span className="truncate">{item.key}</span>}
-      renderRight={(item) => (
-        <span
-          className={cn(
-            "w-10 text-right text-xs font-medium tabular-nums",
-            successRateClass(item.successRate),
-          )}
-        >
-          {item.successRate.toFixed(0)}%
-        </span>
-      )}
-    />
+    <div style={{ height: containerHeight }}>
+      <Bar
+        plugins={[stackTotalPlugin]}
+        data={{ labels, datasets }}
+        options={{
+          ...options,
+          onHover(event, elements) {
+            const el = event.native?.target as HTMLElement | null;
+            if (el) el.style.cursor = elements.length ? "pointer" : "default";
+          },
+        }}
+      />
+    </div>
   );
 }
 
@@ -2360,17 +2475,17 @@ function HooksAnalytics({
             <UserVolumeList traces={groupedTraces} />
           </div>
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+            <h3 className="text font-semibold">MCP Server Usage per User</h3>
+            <ServerActivityChart
+              traces={groupedTraces}
+              serverNameMappings={serverNameMappings}
+            />
+          </div>
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text space-x-2 align-baseline font-semibold">
               Activity by Source
             </h3>
             <SourceVolumeChart traces={groupedTraces} />
-          </div>
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Activity by MCP Server</h3>
-            <ServerActivityChart
-              servers={derivedServers}
-              serverNameMappings={serverNameMappings}
-            />
           </div>
         </div>
       )}
