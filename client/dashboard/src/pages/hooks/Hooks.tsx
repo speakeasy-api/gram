@@ -29,7 +29,6 @@ import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksT
 import type {
   GetHooksSummaryResult,
   HooksServerSummary,
-  HooksUserSummary,
   HookTraceSummary as HookTrace,
   LogFilter,
   SkillSummary,
@@ -54,6 +53,7 @@ import {
   Legend,
   Chart as ChartJS,
   type TooltipItem,
+  type ChartOptions,
 } from "chart.js";
 import { Bar, Line } from "react-chartjs-2";
 import { Filter, Settings } from "lucide-react";
@@ -76,6 +76,7 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
+
 import { HooksSetupButton } from "./HooksSetupDialog";
 
 const validPresets: DateRangePreset[] = [
@@ -1826,35 +1827,179 @@ function BarList<T extends { key: string; value: number }>({
   );
 }
 
-function UserVolumeList({ users }: { users: HooksUserSummary[] }) {
-  const items = useMemo(
-    () =>
-      users
-        .map((u) => ({
-          key: u.userEmail,
-          value: u.successCount + u.failureCount,
-          successRate: (1 - u.failureRate) * 100,
-        }))
-        .sort((a, b) => b.value - a.value),
-    [users],
+const CHART_COLORS = {
+  label: "#737373", // neutral-500
+  labelFaded: "#A3A3A3", // neutral-400
+  gridLine: "#e5e5e5", // neutral-200
+  tooltipBg: "#171717", // neutral-900
+  tooltipTitle: "#fafafa", // neutral-50
+  tooltipBody: "#d4d4d4", // neutral-300
+  tooltipBorder: "#262626", // neutral-800
+} as const;
+
+const USER_SOURCE_COLORS = [
+  "#38bdf8", // sky-400
+  "#34d399", // emerald-400
+  "#a78bfa", // violet-400
+  "#fb7185", // rose-400
+  "#facc15", // yellow-400
+  "#2dd4bf", // teal-400
+  "#818cf8", // indigo-400
+  "#e879f9", // fuchsia-400
+  "#a3e635", // lime-400
+];
+
+function UserVolumeList({
+  traces,
+  handleFilter,
+}: {
+  traces: HookTrace[];
+  handleFilter?: (source: string, userEmail: string) => void;
+}) {
+  const { labels, datasets } = useMemo(() => {
+    // Build userEmail → hookSource → count
+    const userMap = new Map<string, Map<string, number>>();
+    const sourceSet = new Set<string>();
+    for (const t of traces) {
+      const user = t.userEmail;
+      if (!user) continue;
+      const source = t.hookSource ?? "unknown";
+      sourceSet.add(source);
+      const inner = userMap.get(user) ?? new Map<string, number>();
+      inner.set(source, (inner.get(source) ?? 0) + 1);
+      userMap.set(user, inner);
+    }
+
+    // Sort users by total count desc
+    const sortedUsers = Array.from(userMap.entries())
+      .map(([email, sourceCounts]) => ({
+        email,
+        total: Array.from(sourceCounts.values()).reduce((a, b) => a + b, 0),
+        sourceCounts,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    // Sort sources by total usage desc for consistent legend ordering
+    const sortedSources = Array.from(sourceSet).sort((a, b) => {
+      const aTotal = sortedUsers.reduce(
+        (s, u) => s + (u.sourceCounts.get(a) ?? 0),
+        0,
+      );
+      const bTotal = sortedUsers.reduce(
+        (s, u) => s + (u.sourceCounts.get(b) ?? 0),
+        0,
+      );
+      return bTotal - aTotal;
+    });
+
+    const chartLabels = sortedUsers.map((u) => u.email);
+
+    const chartDatasets = sortedSources.map((source, i) => ({
+      label: source,
+      barThickness: 24,
+      data: sortedUsers.map((u) => u.sourceCounts.get(source) ?? 0),
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      borderWidth: 0,
+    }));
+
+    return { labels: chartLabels, datasets: chartDatasets };
+  }, [traces]);
+
+  if (labels.length === 0) return null;
+
+  const barHeight = 24;
+  const spacerHeight = 10;
+  const legendHeight = 64;
+  const containerHeight = Math.max(
+    120,
+    labels.length * (barHeight + spacerHeight) + legendHeight,
   );
 
+  const stackTotalPlugin = {
+    id: "stackTotal",
+    afterDatasetsDraw(chart: ChartJS) {
+      const { ctx, data } = chart;
+      const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
+      ctx.save();
+      ctx.font = "12px";
+      ctx.fillStyle = CHART_COLORS.label;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      lastMeta.data.forEach((bar, i) => {
+        const total = data.datasets.reduce(
+          (sum, ds) => sum + ((ds.data[i] as number) || 0),
+          0,
+        );
+        ctx.fillText(String(total), bar.x + 4, bar.y);
+      });
+      ctx.restore();
+    },
+  };
+
+  const options: ChartOptions<"bar"> = {
+    indexAxis: "y",
+    responsive: true,
+    onClick(_, elements) {
+      if (!elements.length || !handleFilter) return;
+      const { datasetIndex, index } = elements[0];
+      const source = datasets[datasetIndex]?.label;
+      const userEmail = labels[index];
+      if (source && userEmail) handleFilter(source, userEmail);
+    },
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: CHART_COLORS.gridLine },
+        ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
+        afterFit(scale) {
+          scale.paddingRight = 30;
+        },
+      },
+      y: {
+        stacked: true,
+        ticks: { color: CHART_COLORS.label, crossAlign: "far", padding: 2 },
+        grid: { display: false },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "bottom",
+        align: "end",
+        labels: {
+          color: CHART_COLORS.label,
+          boxWidth: 12,
+          padding: 8,
+        },
+      },
+      tooltip: {
+        backgroundColor: CHART_COLORS.tooltipBg,
+        titleColor: CHART_COLORS.tooltipTitle,
+        bodyColor: CHART_COLORS.tooltipBody,
+        borderColor: CHART_COLORS.tooltipBorder,
+        borderWidth: 1,
+        callbacks: {
+          label: (item: TooltipItem<"bar">) =>
+            ` ${item.dataset.label}: ${item.parsed.x}`,
+        },
+      },
+    },
+  };
+
   return (
-    <BarList
-      items={items}
-      barClassName="bg-[hsl(214,69%,50%)]"
-      renderLabel={(item) => <span className="truncate">{item.key}</span>}
-      renderRight={(item) => (
-        <span
-          className={cn(
-            "w-10 text-right text-xs font-medium tabular-nums",
-            successRateClass(item.successRate),
-          )}
-        >
-          {item.successRate.toFixed(0)}%
-        </span>
-      )}
-    />
+    <div style={{ height: containerHeight }}>
+      <Bar
+        plugins={[stackTotalPlugin]}
+        data={{ labels, datasets }}
+        options={{
+          ...options,
+          onHover(event, elements) {
+            const el = event.native?.target as HTMLElement | null;
+            if (el) el.style.cursor = elements.length ? "pointer" : "default";
+          },
+        }}
+      />
+    </div>
   );
 }
 
@@ -2133,28 +2278,6 @@ function HooksAnalytics({
     );
   }, [groupedTraces]);
 
-  const derivedUsers = useMemo(() => {
-    const map = new Map<string, { success: number; failure: number }>();
-    for (const t of groupedTraces) {
-      const key = t.userEmail ?? "";
-      if (!key) continue;
-      const entry = map.get(key) ?? { success: 0, failure: 0 };
-      if (t.hookStatus === "success") entry.success += 1;
-      else entry.failure += 1;
-      map.set(key, entry);
-    }
-    return Array.from(map.entries()).map(
-      ([userEmail, { success, failure }]) => ({
-        userEmail,
-        eventCount: success + failure,
-        successCount: success,
-        failureCount: failure,
-        failureRate: success + failure > 0 ? failure / (success + failure) : 0,
-        uniqueTools: 0,
-      }),
-    );
-  }, [groupedTraces]);
-
   const kpis = useMemo(() => {
     const avgSuccessRate =
       derivedServers.length > 0
@@ -2234,7 +2357,7 @@ function HooksAnalytics({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">Activity by User</h3>
-            <UserVolumeList users={derivedUsers} />
+            <UserVolumeList traces={groupedTraces} />
           </div>
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text space-x-2 align-baseline font-semibold">
