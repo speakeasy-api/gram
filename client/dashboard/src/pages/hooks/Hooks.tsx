@@ -87,19 +87,60 @@ const CHART_COLORS = {
   tooltipTitle: "#fafafa", // neutral-50
   tooltipBody: "#d4d4d4", // neutral-300
   tooltipBorder: "#262626", // neutral-800
+  stackedBorder: "#ffffff", // white
 } as const;
 
 const USER_SOURCE_COLORS = [
-  "#38bdf8", // sky-400
-  "#34d399", // emerald-400
-  "#a78bfa", // violet-400
-  "#fb7185", // rose-400
-  "#facc15", // yellow-400
-  "#2dd4bf", // teal-400
-  "#818cf8", // indigo-400
-  "#e879f9", // fuchsia-400
-  "#a3e635", // lime-400
+  "#7dd3fc", // sky-300
+  "#6ee7b7", // emerald-300
+  "#c4b5fd", // violet-300
+  "#fda4af", // rose-300
+  "#fde047", // yellow-300
+  "#5eead4", // teal-300
+  "#a5b4fc", // indigo-300
+  "#f0abfc", // fuchsia-300
+  "#bef264", // lime-300
 ];
+
+// ---------------------------------------------------------------------------
+// Shared Chart.js config building blocks
+// ---------------------------------------------------------------------------
+
+// Derive deep-partial plugin types from ChartOptions (which uses _DeepPartialObject internally)
+// so that partial objects are accepted by `satisfies` without needing all required properties.
+type _BarLegend = Exclude<
+  NonNullable<ChartOptions<"bar">["plugins"]>["legend"],
+  false
+>;
+type _BarTooltip = NonNullable<ChartOptions<"bar">["plugins"]>["tooltip"];
+
+const SHARED_LEGEND_LABELS = {
+  boxWidth: 12,
+  boxHeight: 12,
+  useBorderRadius: true,
+  borderRadius: 2,
+  padding: 16,
+  color: CHART_COLORS.label,
+  font: { size: 12 },
+} satisfies NonNullable<_BarLegend>["labels"];
+
+const SHARED_LEGEND = {
+  position: "top",
+  align: "end",
+  labels: SHARED_LEGEND_LABELS,
+} satisfies NonNullable<_BarLegend>;
+
+const SHARED_TOOLTIP = {
+  backgroundColor: CHART_COLORS.tooltipBg,
+  titleColor: CHART_COLORS.tooltipTitle,
+  bodyColor: CHART_COLORS.tooltipBody,
+  borderColor: CHART_COLORS.tooltipBorder,
+  borderWidth: 1,
+  padding: 12,
+  boxPadding: 4,
+} satisfies _BarTooltip;
+
+// ---------------------------------------------------------------------------
 
 const validPresets: DateRangePreset[] = [
   "15m",
@@ -1695,6 +1736,7 @@ type StackedBarDataset = {
   label: string;
   data: number[];
   backgroundColor: string;
+  borderColor: string;
   borderWidth: number;
   barThickness: number;
 };
@@ -1771,17 +1813,9 @@ function StackedBarChart({
       },
     },
     plugins: {
-      legend: {
-        position: "bottom",
-        align: "end",
-        labels: { color: CHART_COLORS.label, boxWidth: 12, padding: 8 },
-      },
+      legend: SHARED_LEGEND,
       tooltip: {
-        backgroundColor: CHART_COLORS.tooltipBg,
-        titleColor: CHART_COLORS.tooltipTitle,
-        bodyColor: CHART_COLORS.tooltipBody,
-        borderColor: CHART_COLORS.tooltipBorder,
-        borderWidth: 1,
+        ...SHARED_TOOLTIP,
         callbacks: {
           label: (item: TooltipItem<"bar">) =>
             ` ${item.dataset.label}: ${item.parsed.x}`,
@@ -1865,7 +1899,8 @@ function ServerActivityChart({
       barThickness: 24,
       data: sortedUsers.map((u) => u.serverCounts.get(server) ?? 0),
       backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderWidth: 0,
+      borderColor: CHART_COLORS.stackedBorder,
+      borderWidth: 1,
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
@@ -1938,7 +1973,8 @@ function SourceVolumeChart({
       barThickness: 24,
       data: sortedServers.map((s) => s.sourceCounts.get(source) ?? 0),
       backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderWidth: 0,
+      borderColor: CHART_COLORS.stackedBorder,
+      borderWidth: 1,
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
@@ -2067,7 +2103,8 @@ function UserVolumeList({
       barThickness: 24,
       data: sortedUsers.map((u) => u.sourceCounts.get(source) ?? 0),
       backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderWidth: 0,
+      borderColor: CHART_COLORS.stackedBorder,
+      borderWidth: 1,
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
@@ -2130,12 +2167,7 @@ function ServerErrorRateChart({
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "rgba(0,0,0,0.85)",
-        titleColor: "#fff",
-        bodyColor: "#e5e7eb",
-        borderColor: "rgba(255,255,255,0.1)",
-        borderWidth: 1,
-        padding: 10,
+        ...SHARED_TOOLTIP,
         callbacks: {
           label: (ctx: TooltipItem<"bar">) => {
             const item = items[ctx.dataIndex];
@@ -2151,15 +2183,15 @@ function ServerErrorRateChart({
       x: {
         min: 0,
         max: 100,
-        grid: { color: "rgba(128,128,128,0.15)" },
+        grid: { color: CHART_COLORS.gridLine },
         ticks: {
-          color: "#64748b",
+          color: CHART_COLORS.labelFaded,
           callback: (v: number | string) => `${v}%`,
         },
       },
       y: {
         grid: { display: false },
-        ticks: { color: "#94a3b8", font: { size: 12 } },
+        ticks: { color: CHART_COLORS.labelFaded, font: { size: 12 } },
       },
     },
   };
@@ -2206,7 +2238,8 @@ function buildMultiLineData(
   keyFn: (t: HookTrace) => string | null | undefined,
   timeRangeMs: number,
 ) {
-  if (traces.length === 0) return { labels: [], datasets: [] };
+  if (traces.length === 0)
+    return { labels: [], tooltipLabels: [], datasets: [] };
 
   const bucketMs =
     timeRangeMs <= 24 * 60 * 60 * 1000 ? 5 * 60 * 1000 : 60 * 60 * 1000;
@@ -2223,7 +2256,8 @@ function buildMultiLineData(
     seriesMap.set(key, series);
   }
 
-  if (seriesMap.size === 0) return { labels: [], datasets: [] };
+  if (seriesMap.size === 0)
+    return { labels: [], tooltipLabels: [], datasets: [] };
 
   const allTimestamps = new Set<number>();
   for (const series of seriesMap.values()) {
@@ -2281,30 +2315,11 @@ function MultiLineChart({
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: { mode: "index" as const, intersect: false },
+    interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: {
-        position: "top" as const,
-        align: "end" as const,
-        labels: {
-          boxWidth: 12,
-          boxHeight: 12,
-          useBorderRadius: true,
-          borderRadius: 2,
-          padding: 16,
-          color: "#9ca3af",
-          font: { size: 12 },
-        },
-      },
+      legend: SHARED_LEGEND,
       tooltip: {
-        backgroundColor: "rgba(0, 0, 0, 0.85)",
-        titleColor: "#fff",
-        bodyColor: "#e5e7eb",
-        borderColor: "rgba(255, 255, 255, 0.1)",
-        borderWidth: 1,
-        padding: 12,
-        boxPadding: 4,
-        usePointStyle: true,
+        ...SHARED_TOOLTIP,
         callbacks: {
           title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
         },
