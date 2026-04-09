@@ -589,7 +589,7 @@ function HooksContent() {
               </div>
             </Page.Body>
           ) : (
-            <Page.Body fullWidth noPadding overflowHidden className="flex-1">
+            <Page.Body fullWidth noPadding className="flex-1">
               <EnterpriseGate
                 icon="workflow"
                 description="Hooks are available on the Enterprise plan. Book a time to get started."
