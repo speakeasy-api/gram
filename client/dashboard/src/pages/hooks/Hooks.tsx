@@ -2201,59 +2201,84 @@ function ToolErrorList({ traces }: { traces: HookTrace[] }) {
   );
 }
 
-function UniqueUsersTimeSeries({
-  traces,
-  from,
-  to,
-}: {
-  traces: HookTrace[];
-  from: Date;
-  to: Date;
-}) {
-  const timeRangeMs = to.getTime() - from.getTime();
+function buildMultiLineData(
+  traces: HookTrace[],
+  keyFn: (t: HookTrace) => string | null | undefined,
+  timeRangeMs: number,
+) {
+  if (traces.length === 0) return { labels: [], datasets: [] };
 
-  const { labels, data } = useMemo(() => {
-    if (traces.length === 0) return { labels: [], data: [] };
+  const bucketMs =
+    timeRangeMs <= 24 * 60 * 60 * 1000 ? 5 * 60 * 1000 : 60 * 60 * 1000;
+  const seriesMap = new Map<string, Map<number, number>>();
 
-    const bucketMs =
-      timeRangeMs <= 24 * 60 * 60 * 1000 ? 5 * 60 * 1000 : 60 * 60 * 1000;
-    const buckets = new Map<number, Set<string>>();
+  for (const t of traces) {
+    const ms = Number(t.startTimeUnixNano) / 1_000_000;
+    if (!ms) continue;
+    const key = keyFn(t);
+    if (!key) continue;
+    const bucket = Math.floor(ms / bucketMs) * bucketMs;
+    const series = seriesMap.get(key) ?? new Map<number, number>();
+    series.set(bucket, (series.get(bucket) ?? 0) + 1);
+    seriesMap.set(key, series);
+  }
 
-    for (const t of traces) {
-      const ms = Number(t.startTimeUnixNano) / 1_000_000;
-      if (!ms || !t.userEmail) continue;
-      const bucket = Math.floor(ms / bucketMs) * bucketMs;
-      const users = buckets.get(bucket) ?? new Set<string>();
-      users.add(t.userEmail);
-      buckets.set(bucket, users);
-    }
+  if (seriesMap.size === 0) return { labels: [], datasets: [] };
 
-    const sorted = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]);
+  const allTimestamps = new Set<number>();
+  for (const series of seriesMap.values()) {
+    for (const ts of series.keys()) allTimestamps.add(ts);
+  }
+  const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
+  const labels = sortedTs.map((ts) =>
+    formatChartLabel(new Date(ts), timeRangeMs),
+  );
+  const tooltipLabels = sortedTs.map((ts) =>
+    new Date(ts).toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  );
+
+  const datasets = Array.from(seriesMap.entries()).map(([key, series], i) => {
+    const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length];
     return {
-      labels: sorted.map(([ts]) => formatChartLabel(new Date(ts), timeRangeMs)),
-      data: sorted.map(([, users]) => users.size),
+      label: key,
+      data: sortedTs.map((ts) => series.get(ts) ?? 0),
+      borderColor: color,
+      backgroundColor: color + "1a",
+      pointBackgroundColor: color,
+      fill: false,
+      tension: 0.45,
+      borderWidth: 1.5,
+      pointRadius: 0,
+      pointHoverRadius: 4,
     };
-  }, [traces, timeRangeMs]);
+  });
 
-  const chartData = {
-    labels,
-    datasets: [
-      {
-        label: " Active Users",
-        data,
-        borderColor: "#f59e0b",
-        backgroundColor: "rgba(245, 158, 11, 0.1)",
-        pointBackgroundColor: "#f59e0b",
-        fill: true,
-        tension: 0.45,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      },
-    ],
-  };
+  return { labels, tooltipLabels, datasets };
+}
 
-  const options = {
+function MultiLineChart({
+  labels,
+  tooltipLabels,
+  datasets,
+}: {
+  labels: string[];
+  tooltipLabels: string[];
+  datasets: ReturnType<typeof buildMultiLineData>["datasets"];
+}) {
+  if (labels.length === 0) {
+    return (
+      <div className="text-muted-foreground flex h-24 items-center justify-center text-sm">
+        No data
+      </div>
+    );
+  }
+
+  const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index" as const, intersect: false },
@@ -2281,8 +2306,7 @@ function UniqueUsersTimeSeries({
         boxPadding: 4,
         usePointStyle: true,
         callbacks: {
-          label: (ctx: TooltipItem<"line">) =>
-            ` Active Users: ${Math.round(ctx.parsed.y ?? 0)}`,
+          title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
         },
       },
     },
@@ -2303,18 +2327,68 @@ function UniqueUsersTimeSeries({
     },
   };
 
-  if (labels.length === 0) {
-    return (
-      <div className="text-muted-foreground flex h-24 items-center justify-center text-sm">
-        No data
-      </div>
-    );
-  }
-
   return (
     <div style={{ position: "relative", height: 200 }}>
-      <Line data={chartData} options={options} />
+      <Line data={{ labels, datasets }} options={options} />
     </div>
+  );
+}
+
+function ServerUsageTimeSeries({
+  traces,
+  from,
+  to,
+  serverNameMappings,
+}: {
+  traces: HookTrace[];
+  from: Date;
+  to: Date;
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
+}) {
+  const timeRangeMs = to.getTime() - from.getTime();
+  const { labels, tooltipLabels, datasets } = useMemo(
+    () =>
+      buildMultiLineData(
+        traces,
+        (t) => {
+          const raw = t.toolSource ?? "";
+          return !raw
+            ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+            : (serverNameMappings.rawToDisplay.get(raw) ?? raw);
+        },
+        timeRangeMs,
+      ),
+    [traces, timeRangeMs, serverNameMappings.rawToDisplay],
+  );
+  return (
+    <MultiLineChart
+      labels={labels}
+      tooltipLabels={tooltipLabels}
+      datasets={datasets}
+    />
+  );
+}
+
+function UserUsageTimeSeries({
+  traces,
+  from,
+  to,
+}: {
+  traces: HookTrace[];
+  from: Date;
+  to: Date;
+}) {
+  const timeRangeMs = to.getTime() - from.getTime();
+  const { labels, tooltipLabels, datasets } = useMemo(
+    () => buildMultiLineData(traces, (t) => t.userEmail, timeRangeMs),
+    [traces, timeRangeMs],
+  );
+  return (
+    <MultiLineChart
+      labels={labels}
+      tooltipLabels={tooltipLabels}
+      datasets={datasets}
+    />
   );
 }
 
@@ -2452,11 +2526,22 @@ function HooksAnalytics({
         </div>
       )}
 
-      {/* Unique Users Over Time */}
+      {/* Usage Over Time */}
       {groupedTraces.length > 0 && (
-        <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-          <h3 className="text font-semibold">Active Users Over Time</h3>
-          <UniqueUsersTimeSeries traces={groupedTraces} from={from} to={to} />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+            <h3 className="text font-semibold">Server Usage Over Time</h3>
+            <ServerUsageTimeSeries
+              traces={groupedTraces}
+              from={from}
+              to={to}
+              serverNameMappings={serverNameMappings}
+            />
+          </div>
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+            <h3 className="text font-semibold">User Usage Over Time</h3>
+            <UserUsageTimeSeries traces={groupedTraces} from={from} to={to} />
+          </div>
         </div>
       )}
 
