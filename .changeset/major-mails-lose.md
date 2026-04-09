@@ -2,4 +2,4 @@
 "server": minor
 ---
 
-Add UserPromptSubmit and Stop hook capture for Cursor
+Add UserPromptSubmit, afterAgentThought and afterAgentResponse hooks capture for Cursor
