@@ -41,6 +41,7 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 		h.AddExternalOAuthServer(),
 		h.RemoveOAuthServer(),
 		h.AddOAuthProxyServer(),
+		h.UpdateOAuthProxyServer(),
 	)
 
 	return &ToolsetsClient{client: client}
