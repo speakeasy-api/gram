@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization } from "@/contexts/Auth";
+import { getServerURL } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import {
@@ -57,6 +58,7 @@ interface ServerTool {
 interface Server {
   id: string;
   name: string;
+  slug: string;
   tools: ServerTool[];
 }
 
@@ -71,20 +73,27 @@ function useMCPServers(enabled: boolean) {
   const { data } = useListToolsetsForOrg(undefined, undefined, { enabled });
 
   return useMemo((): ServerGroup[] => {
-    const projectNames = new Map(
-      organization.projects.map((p) => [p.id, p.name]),
+    const projectInfo = new Map(
+      organization.projects.map((p) => [p.id, { name: p.name, slug: p.slug }]),
     );
+    const baseUrl = getServerURL();
     const groups = new Map<string, ServerGroup>();
     for (const t of data?.toolsets ?? []) {
-      const projectName = projectNames.get(t.projectId) ?? "Unknown";
+      const project = projectInfo.get(t.projectId);
+      const projectName = project?.name ?? "Unknown";
       let group = groups.get(t.projectId);
       if (!group) {
         group = { projectId: t.projectId, projectName, servers: [] };
         groups.set(t.projectId, group);
       }
+      const fullUrl = t.mcpSlug
+        ? `${baseUrl}/mcp/${t.mcpSlug}`
+        : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
+      const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
       group.servers.push({
         id: t.slug,
         name: t.name,
+        slug: mcpUrl,
         tools: t.tools.map((tool) => ({
           id: tool.id,
           name: tool.name,
@@ -170,7 +179,7 @@ export function ScopePickerPopover({
         sideOffset={8}
         className={cn(
           "p-1.5 w-56 min-w-56 transition-[min-width] duration-200 ease-in-out overflow-hidden",
-          customMode ? "min-w-[520px]" : "max-h-[300px] overflow-y-auto",
+          customMode ? "min-w-[620px]" : "max-h-[300px] overflow-y-auto",
         )}
       >
         {/* Scope mode options */}
@@ -262,7 +271,7 @@ export function ScopePickerPopover({
                 onCustomTabChange?.(value as CustomTab);
               }}
             >
-              <TabsList className="w-full h-auto rounded-none bg-transparent px-1.5 py-1 gap-2 border-y border-border">
+              <TabsList className="w-full h-auto rounded-none bg-transparent px-1.5 py-1.5 gap-2 border-y border-border">
                 <TabsTrigger
                   value="select"
                   className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
@@ -357,7 +366,7 @@ function ToolSelectionPanel({
   return (
     <div className="flex">
       {/* Left column — server list */}
-      <div className="w-[160px] shrink-0 border-r border-border overflow-y-auto">
+      <div className="w-[240px] shrink-0 border-r border-border overflow-y-auto">
         <div className="flex items-center gap-1.5 px-3 h-10 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
           <Globe className="h-3 w-3" />
           Server List
@@ -373,11 +382,11 @@ function ToolSelectionPanel({
                 setSearch("");
               }}
               className={cn(
-                "flex w-full items-center justify-between px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 truncate",
+                "flex w-full items-center justify-between px-3 h-10 text-xs font-mono cursor-pointer hover:bg-muted/50 truncate",
                 isActive && "bg-muted font-medium",
               )}
             >
-              <span className="truncate">{server.name}</span>
+              <span className="truncate font-mono text-xs">{server.slug}</span>
               {isActive && (
                 <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
               )}
@@ -831,7 +840,7 @@ function ResourceCheckbox({
       onClick={() => onToggle(id)}
       className={cn(
         "flex w-full items-center gap-2 px-3 hover:bg-accent cursor-pointer",
-        compact ? "text-sm rounded-none py-2" : "text-sm rounded-sm py-2",
+        compact ? "text-sm rounded-none h-10" : "text-sm rounded-sm py-2",
         checked && "font-medium",
       )}
     >
