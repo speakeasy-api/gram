@@ -527,14 +527,9 @@ func invitationToGenAccept(inv *workos.Invitation, organizationName string) *gen
 	}
 }
 
-func organizationUserToGen(row *orgrepo.OrganizationUserRelationship) *gen.OrganizationUser {
+func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.OrganizationUser {
 	if row == nil {
 		return nil
-	}
-	var workosMem *string
-	if row.WorkosMembershipID.Valid {
-		s := row.WorkosMembershipID.String
-		workosMem = &s
 	}
 	createdAt := ""
 	if row.CreatedAt.Valid {
@@ -548,7 +543,10 @@ func organizationUserToGen(row *orgrepo.OrganizationUserRelationship) *gen.Organ
 		ID:                 strconv.FormatInt(row.ID, 10),
 		OrganizationID:     row.OrganizationID,
 		UserID:             row.UserID,
-		WorkosMembershipID: workosMem,
+		Name:               row.UserDisplayName,
+		Email:              row.UserEmail,
+		PhotoURL:           conv.FromPGText[string](row.UserPhotoUrl),
+		WorkosMembershipID: conv.FromPGText[string](row.WorkosMembershipID),
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
 	}

@@ -1,4 +1,5 @@
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog } from "@/components/ui/dialog";
 import {
   Popover,
   PopoverContent,
@@ -14,6 +15,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Maximize2,
   SquareAsterisk,
   Globe,
   Repeat,
@@ -120,6 +122,8 @@ export function ScopePickerPopover({
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
@@ -131,28 +135,15 @@ export function ScopePickerPopover({
   }
 
   const isUnrestricted = resources === null;
+  const isMcp = resourceType === "mcp";
   const projectList = organization.projects.map((p) => ({
     id: p.id,
     name: p.name,
   }));
   const customToolCount = useMemo(() => {
     if (!customMode) return 0;
-    // Count manually selected tools
-    const manualCount = (resources ?? []).length;
-    // Count tools matched by annotations (deduplicated)
-    const allTools = mcpServers.flatMap((g) =>
-      g.servers.flatMap((s) => s.tools),
-    );
-    const annotationMatched = new Set<string>();
-    for (const hint of annotations ?? []) {
-      for (const t of allTools) {
-        if (t.annotations?.[hint] === true) {
-          annotationMatched.add(t.id);
-        }
-      }
-    }
-    return manualCount + annotationMatched.size;
-  }, [customMode, resources, annotations, mcpServers]);
+    return (resources ?? []).length;
+  }, [customMode, resources]);
 
   const label = getLabel(resourceType, resources, customMode, customToolCount);
 
@@ -163,169 +154,229 @@ export function ScopePickerPopover({
     onChangeResources(next);
   };
 
-  return (
-    <Popover modal={false}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs hover:bg-background transition-colors shrink-0 h-7"
-        >
-          <span className="truncate max-w-[120px]">{label}</span>
-          <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={8}
-        className={cn(
-          "p-1.5 overflow-hidden transition-[width] duration-500",
-          customMode ? "w-[520px]" : "w-56 max-h-[300px] overflow-y-auto",
+  const pickerContent = (
+    <>
+      {/* Scope mode options */}
+      <div className="pb-1.5">
+        <ScopeOption
+          label={resourceType === "project" ? "All projects" : "All servers"}
+          selected={isUnrestricted && !customMode}
+          onClick={() => {
+            if (customMode) {
+              onCustomModeChange?.(false);
+              onChangeAnnotations?.([]);
+            }
+            onChangeResources(null);
+          }}
+        />
+        <ScopeOption
+          label={
+            resourceType === "project"
+              ? "Specific projects"
+              : "Specific servers"
+          }
+          selected={!isUnrestricted && !customMode}
+          onClick={() => {
+            if (customMode) {
+              onCustomModeChange?.(false);
+              onChangeResources([]);
+              onChangeAnnotations?.([]);
+            } else if (isUnrestricted) {
+              onChangeResources([]);
+            }
+          }}
+        />
+
+        {/* Custom option for MCP scopes */}
+        {isMcp && (
+          <ScopeOption
+            label="Specific tools"
+            selected={!!customMode}
+            onClick={() => {
+              onCustomModeChange?.(true);
+              if (isUnrestricted) onChangeResources([]);
+            }}
+          />
         )}
-        style={{
-          transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
+      </div>
+
+      {/* Resource list when scoped to specific resources */}
+      {!isUnrestricted && !customMode && (
+        <>
+          <div className="my-1 h-px bg-border" />
+          {resourceType === "project"
+            ? projectList.map((resource) => (
+                <ResourceCheckbox
+                  key={resource.id}
+                  id={resource.id}
+                  name={resource.name}
+                  checked={resources.includes(resource.id)}
+                  onToggle={toggleResource}
+                />
+              ))
+            : mcpServers.map((group) => (
+                <div key={group.projectId}>
+                  <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium">
+                    {group.projectName}
+                  </div>
+                  {group.servers.map((server) => (
+                    <ResourceCheckbox
+                      key={server.id}
+                      id={server.id}
+                      name={server.name}
+                      checked={resources.includes(server.id)}
+                      onToggle={toggleResource}
+                    />
+                  ))}
+                </div>
+              ))}
+        </>
+      )}
+
+      {/* Custom mode — tabbed fine-grained picker */}
+      {customMode && (
+        <>
+          <Tabs
+            value={customTab ?? "select"}
+            className="gap-0 -mx-1.5 -mb-1.5"
+            onValueChange={(value) => {
+              onChangeResources([]);
+              onChangeAnnotations?.([]);
+              onCustomTabChange?.(value as CustomTab);
+            }}
+          >
+            <TabsList className="w-full h-auto rounded-none bg-transparent px-1.5 py-1.5 gap-2 border-y border-border">
+              <TabsTrigger
+                value="select"
+                className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                All tools
+              </TabsTrigger>
+              <div className="w-px self-stretch my-1 bg-border/40" />
+              <TabsTrigger
+                value="auto-groups"
+                className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <Tag className="h-3.5 w-3.5" />
+                By annotation
+              </TabsTrigger>
+              <div className="w-px self-stretch my-1 bg-border/40" />
+              <TabsTrigger
+                value="http-method"
+                className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <SquareAsterisk className="h-3.5 w-3.5" />
+                By HTTP method
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="select" className="p-0">
+              <ToolSelectionPanel
+                mcpServers={mcpServers}
+                resources={resources ?? []}
+                onToggle={toggleResource}
+              />
+            </TabsContent>
+            <TabsContent value="auto-groups" className="px-2 py-1">
+              <AnnotationGroupPanel
+                annotations={annotations ?? []}
+                onChangeAnnotations={(newAnnotations) => {
+                  onChangeAnnotations?.(newAnnotations);
+                  // Resolve matched annotations to compound tool IDs so the
+                  // backend receives real resource identifiers it can enforce.
+                  const matchedIds: string[] = [];
+                  for (const group of mcpServers) {
+                    for (const server of group.servers) {
+                      for (const tool of server.tools) {
+                        if (
+                          newAnnotations.some(
+                            (hint) => tool.annotations?.[hint] === true,
+                          )
+                        ) {
+                          matchedIds.push(`${server.id}:${tool.name}`);
+                        }
+                      }
+                    }
+                  }
+                  onChangeResources(matchedIds);
+                }}
+                mcpServers={mcpServers}
+              />
+            </TabsContent>
+            <TabsContent value="http-method" className="px-2 py-1">
+              <HttpMethodGroupPanel
+                mcpServers={mcpServers}
+                resources={resources ?? []}
+                onToggle={toggleResource}
+                onChangeResources={onChangeResources}
+              />
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <Popover modal={false} open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs hover:bg-background transition-colors shrink-0 h-7"
+          >
+            <span className="truncate max-w-[120px]">{label}</span>
+            <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className={cn(
+            "p-1.5 overflow-hidden transition-[width] duration-500",
+            customMode ? "w-[520px]" : "w-56 max-h-[300px] overflow-y-auto",
+          )}
+          style={{
+            transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
+          }}
+        >
+          {isMcp && (
+            <div className="-mx-1.5 -mt-1.5 mb-1 flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b border-border rounded-t-lg">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Configure Access
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPopoverOpen(false);
+                  setExpanded(true);
+                }}
+                className="h-5 w-5 inline-flex items-center justify-center rounded-sm hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <Maximize2 className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+          {pickerContent}
+        </PopoverContent>
+      </Popover>
+
+      <Dialog
+        open={expanded}
+        onOpenChange={(open) => {
+          if (!open) setExpanded(false);
         }}
       >
-        {/* Scope mode options */}
-        <div className="pb-1.5">
-          <ScopeOption
-            label={resourceType === "project" ? "All projects" : "All servers"}
-            selected={isUnrestricted && !customMode}
-            onClick={() => {
-              if (customMode) {
-                onCustomModeChange?.(false);
-                onChangeAnnotations?.([]);
-              }
-              onChangeResources(null);
-            }}
-          />
-          <ScopeOption
-            label={
-              resourceType === "project"
-                ? "Specific projects"
-                : "Specific servers"
-            }
-            selected={!isUnrestricted && !customMode}
-            onClick={() => {
-              if (customMode) {
-                onCustomModeChange?.(false);
-                onChangeResources([]);
-                onChangeAnnotations?.([]);
-              } else if (isUnrestricted) {
-                onChangeResources([]);
-              }
-            }}
-          />
-
-          {/* Custom option for MCP scopes */}
-          {resourceType === "mcp" && (
-            <ScopeOption
-              label="Specific tools"
-              selected={!!customMode}
-              onClick={() => {
-                onCustomModeChange?.(true);
-                if (isUnrestricted) onChangeResources([]);
-              }}
-            />
-          )}
-        </div>
-
-        {/* Resource list when scoped to specific resources */}
-        {!isUnrestricted && !customMode && (
-          <>
-            <div className="my-1 h-px bg-border" />
-            {resourceType === "project"
-              ? projectList.map((resource) => (
-                  <ResourceCheckbox
-                    key={resource.id}
-                    id={resource.id}
-                    name={resource.name}
-                    checked={resources.includes(resource.id)}
-                    onToggle={toggleResource}
-                  />
-                ))
-              : mcpServers.map((group) => (
-                  <div key={group.projectId}>
-                    <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium">
-                      {group.projectName}
-                    </div>
-                    {group.servers.map((server) => (
-                      <ResourceCheckbox
-                        key={server.id}
-                        id={server.id}
-                        name={server.name}
-                        checked={resources.includes(server.id)}
-                        onToggle={toggleResource}
-                      />
-                    ))}
-                  </div>
-                ))}
-          </>
-        )}
-
-        {/* Custom mode — tabbed fine-grained picker */}
-        {customMode && (
-          <>
-            <Tabs
-              value={customTab ?? "select"}
-              className="gap-0 -mx-1.5 -mb-1.5"
-              onValueChange={(value) => {
-                onChangeResources([]);
-                onChangeAnnotations?.([]);
-                onCustomTabChange?.(value as CustomTab);
-              }}
-            >
-              <TabsList className="w-full h-auto rounded-none bg-transparent px-1.5 py-1.5 gap-2 border-y border-border">
-                <TabsTrigger
-                  value="select"
-                  className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
-                >
-                  <Wrench className="h-3.5 w-3.5" />
-                  All tools
-                </TabsTrigger>
-                <div className="w-px self-stretch my-1 bg-border/40" />
-                <TabsTrigger
-                  value="auto-groups"
-                  className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
-                >
-                  <Tag className="h-3.5 w-3.5" />
-                  By annotation
-                </TabsTrigger>
-                <div className="w-px self-stretch my-1 bg-border/40" />
-                <TabsTrigger
-                  value="http-method"
-                  className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
-                >
-                  <SquareAsterisk className="h-3.5 w-3.5" />
-                  By HTTP method
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="select" className="p-0">
-                <ToolSelectionPanel
-                  mcpServers={mcpServers}
-                  resources={resources ?? []}
-                  onToggle={toggleResource}
-                />
-              </TabsContent>
-              <TabsContent value="auto-groups" className="px-2 py-1">
-                <AnnotationGroupPanel
-                  annotations={annotations ?? []}
-                  onChangeAnnotations={onChangeAnnotations}
-                  mcpServers={mcpServers}
-                />
-              </TabsContent>
-              <TabsContent value="http-method" className="px-2 py-1">
-                <HttpMethodGroupPanel
-                  mcpServers={mcpServers}
-                  resources={resources ?? []}
-                  onToggle={toggleResource}
-                  onChangeResources={onChangeResources}
-                />
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+        <Dialog.Content className="sm:max-w-4xl w-[90vw] max-h-[85vh] p-0 flex flex-col overflow-hidden gap-0">
+          <div className="flex items-center px-4 py-3 bg-muted/50 border-b border-border pr-12">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Configure Access
+            </span>
+          </div>
+          <div className="p-1.5 flex-1 overflow-y-auto">{pickerContent}</div>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }
 

@@ -14,6 +14,7 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
+import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import {
   invalidateAllMembers,
   useMembers,
@@ -45,6 +46,78 @@ function grantsFromRole(role: Role): Record<string, RoleGrant> {
   return result;
 }
 
+const ANNOTATION_HINTS: AnnotationHint[] = [
+  "readOnlyHint",
+  "destructiveHint",
+  "idempotentHint",
+  "openWorldHint",
+];
+
+/**
+ * Infer which custom tab was used from saved compound resource IDs
+ * by comparing against the current tool data.
+ */
+function inferCustomTab(
+  resources: string[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toolsets: any[],
+): { tab: CustomTab; annotations?: AnnotationHint[] } {
+  if (!resources.length || !toolsets.length) return { tab: "select" };
+
+  const resourceSet = new Set(resources);
+
+  // Build annotation → compound IDs and server → tool names lookup
+  const annotationIds = new Map<AnnotationHint, Set<string>>();
+  const namesByServer = new Map<string, Set<string>>();
+
+  for (const ts of toolsets) {
+    const names = new Set<string>();
+    namesByServer.set(ts.slug, names);
+    for (const tool of ts.tools) {
+      names.add(tool.name);
+      for (const hint of ANNOTATION_HINTS) {
+        if (tool.annotations?.[hint] === true) {
+          let s = annotationIds.get(hint);
+          if (!s) {
+            s = new Set();
+            annotationIds.set(hint, s);
+          }
+          s.add(`${ts.slug}:${tool.name}`);
+        }
+      }
+    }
+  }
+
+  // Check if resources exactly match one or more annotation groups
+  const matched: AnnotationHint[] = [];
+  const union = new Set<string>();
+  for (const hint of ANNOTATION_HINTS) {
+    const ids = annotationIds.get(hint);
+    if (ids && ids.size > 0 && [...ids].every((id) => resourceSet.has(id))) {
+      matched.push(hint);
+      ids.forEach((id) => union.add(id));
+    }
+  }
+  if (matched.length > 0 && union.size === resourceSet.size) {
+    return { tab: "auto-groups", annotations: matched };
+  }
+
+  // Check if any resource suffix doesn't match a tool name — indicates HTTP method tab
+  // (HTTP method tab uses serverSlug:toolId, while All tools uses serverSlug:toolName)
+  for (const r of resources) {
+    const i = r.indexOf(":");
+    if (i < 0) continue;
+    const slug = r.substring(0, i);
+    const suffix = r.substring(i + 1);
+    const names = namesByServer.get(slug);
+    if (names && !names.has(suffix)) {
+      return { tab: "http-method" };
+    }
+  }
+
+  return { tab: "select" };
+}
+
 export function CreateRoleDialog({
   open,
   onOpenChange,
@@ -74,6 +147,7 @@ export function CreateRoleDialog({
     (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
   );
   const { data: scopesData } = useListScopes();
+  const { data: toolsetsData } = useListToolsetsForOrg();
 
   const scopeGroups = useMemo(() => {
     const scopes = scopesData?.scopes ?? [];
@@ -103,18 +177,18 @@ export function CreateRoleDialog({
     setExpandedGroups(autoExpanded);
     // Restore custom mode and active tab for MCP scopes with tool-level selections
     const restoredCustom = new Set<string>();
+    const allToolsets = toolsetsData?.toolsets ?? [];
     for (const [scope, grant] of Object.entries(roleGrants)) {
       if (!scope.startsWith("mcp:")) continue;
-      const hasAnnotations = grant.annotations && grant.annotations.length > 0;
       const hasToolIds = grant.resources?.some((r) => r.includes(":")) ?? false;
-      if (hasAnnotations || hasToolIds) {
-        restoredCustom.add(scope);
-        // Infer which tab was active
-        let tab: CustomTab = "select";
-        if (hasAnnotations) tab = "auto-groups";
-        else if (hasToolIds) tab = "http-method";
-        roleGrants[scope] = { ...grant, customTab: tab };
-      }
+      if (!hasToolIds) continue;
+      restoredCustom.add(scope);
+      const detected = inferCustomTab(grant.resources ?? [], allToolsets);
+      roleGrants[scope] = {
+        ...grant,
+        customTab: detected.tab,
+        ...(detected.annotations ? { annotations: detected.annotations } : {}),
+      };
     }
     setGrants(roleGrants);
     setCustomScopes(restoredCustom);

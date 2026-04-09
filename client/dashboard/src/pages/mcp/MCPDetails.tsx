@@ -82,6 +82,7 @@ import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
+import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -165,6 +166,7 @@ export function MCPDetailPage() {
       "prompts",
       "authentication",
       "performance",
+      "team-access",
       "settings",
     ];
     return hash && validTabs.includes(hash) ? hash : "overview";
@@ -317,6 +319,9 @@ export function MCPDetailPage() {
                 <PageTabsTrigger value="performance">
                   Performance
                 </PageTabsTrigger>
+                <PageTabsTrigger value="team-access">
+                  Team Access
+                </PageTabsTrigger>
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
@@ -346,6 +351,10 @@ export function MCPDetailPage() {
 
             <TabsContent value="performance" className="mt-0 w-full">
               <MCPPerformanceTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="team-access" className="mt-0 w-full">
+              <MCPTeamAccessTab toolset={toolset} />
             </TabsContent>
 
             <TabsContent value="settings" className="mt-0 w-full">
