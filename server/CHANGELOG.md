@@ -1,5 +1,16 @@
 # server
 
+## 0.38.0
+
+### Minor Changes
+
+- 0e42ed2: Add UserPromptSubmit, afterAgentThought and afterAgentResponse hooks capture for Cursor
+- 61cc193: Add team invite flow with accept page, configurable expiry, and security hardening
+
+### Patch Changes
+
+- 0b296d6: Stop serializing the full role object into the after_snapshot column of the audit log when a role is created. This data bloats the database unnecessarily. A future dashboard update will link directly to the role instead for this audit log event.
+
 ## 0.37.0
 
 ### Minor Changes
