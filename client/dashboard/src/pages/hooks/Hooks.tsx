@@ -1959,13 +1959,14 @@ function HooksAnalytics({
   }, [groupedTraces]);
 
   const kpis = useMemo(() => {
-    const totalSuccesses = derivedServers.reduce((s, r) => s + r.successCount, 0);
-    const avgSuccessRate =
-      totalEvents > 0
-        ? (totalSuccesses / derivedServers.reduce((s, r) => s + r.eventCount, 0)) * 100
-        : null;
-
     const totalEvents = derivedServers.reduce((s, r) => s + r.eventCount, 0);
+
+    const totalSuccesses = derivedServers.reduce(
+      (s, r) => s + r.successCount,
+      0,
+    );
+    const avgSuccessRate =
+      totalEvents > 0 ? (totalSuccesses / totalEvents) * 100 : null;
 
     const activeUsers = new Set(
       groupedTraces.map((t) => t.userEmail).filter(Boolean),
