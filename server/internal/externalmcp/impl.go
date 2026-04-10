@@ -20,6 +20,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -35,6 +36,7 @@ type Service struct {
 	db             *pgxpool.Pool
 	repo           *repo.Queries
 	auth           *auth.Auth
+	access         *access.Manager
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
 }
@@ -42,7 +44,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
@@ -50,7 +52,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:         logger,
 		db:             db,
 		repo:           repo.New(db),
-		auth:           auth.New(logger, db, sessions, accessLoader),
+		auth:           auth.New(logger, db, sessions, accessManager),
+		access:         accessManager,
 		sessions:       sessions,
 		registryClient: registryClient,
 	}
@@ -148,6 +151,10 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	// If a specific registry is requested, fetch just that one
 	if payload.RegistryID != nil {
 		registryID, err := uuid.Parse(*payload.RegistryID)
@@ -222,6 +229,10 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	registryID, err := uuid.Parse(payload.RegistryID)
