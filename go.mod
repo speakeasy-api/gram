@@ -63,6 +63,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/redis v0.41.0
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/workos/workos-go/v6 v6.5.0
+	github.com/yuin/goldmark v1.4.13
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.67.0
 	go.opentelemetry.io/otel v1.42.0

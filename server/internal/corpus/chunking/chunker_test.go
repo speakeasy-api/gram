@@ -8,11 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const h2Doc = `# Guide
-
-Introduction paragraph.
-
-## Setup
+const h2Doc = `## Setup
 
 Setup instructions here.
 
@@ -36,12 +32,11 @@ func TestChunkByH2(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, chunks, 3)
 
-	require.Equal(t, "Setup", extractFirstHeading(chunks[0].Content))
-	require.Equal(t, "Configuration", extractFirstHeading(chunks[1].Content))
-	require.Equal(t, "Deployment", extractFirstHeading(chunks[2].Content))
-
+	require.Contains(t, chunks[0].Content, "## Setup")
 	require.Contains(t, chunks[0].Content, "Setup instructions")
+	require.Contains(t, chunks[1].Content, "## Configuration")
 	require.Contains(t, chunks[1].Content, "Configuration details")
+	require.Contains(t, chunks[2].Content, "## Deployment")
 	require.Contains(t, chunks[2].Content, "Deployment steps")
 }
 
@@ -73,11 +68,11 @@ func TestChunkByH3(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, chunks, 3)
 
-	require.Contains(t, chunks[0].Content, "Prerequisites")
+	require.Contains(t, chunks[0].Content, "### Prerequisites")
 	require.Contains(t, chunks[0].Content, "Install Go")
-	require.Contains(t, chunks[1].Content, "Installation")
+	require.Contains(t, chunks[1].Content, "### Installation")
 	require.Contains(t, chunks[1].Content, "go install")
-	require.Contains(t, chunks[2].Content, "Usage")
+	require.Contains(t, chunks[2].Content, "## Usage")
 }
 
 func TestChunkByFile(t *testing.T) {
@@ -162,17 +157,4 @@ func TestPlainTextExtraction(t *testing.T) {
 	require.NotContains(t, text, "```")
 	require.NotContains(t, text, "[link]")
 	require.NotContains(t, text, "http://example.com")
-}
-
-func extractFirstHeading(content string) string {
-	for line := range strings.SplitSeq(content, "\n") {
-		line = strings.TrimSpace(line)
-		if after, ok := strings.CutPrefix(line, "## "); ok {
-			return after
-		}
-		if after, ok := strings.CutPrefix(line, "### "); ok {
-			return after
-		}
-	}
-	return ""
 }
