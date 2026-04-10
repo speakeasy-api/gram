@@ -341,6 +341,7 @@ export function RBACDevToolbar() {
                           </div>
 
                           {/* Resource picker */}
+                          {/* TODO: verify resource-scoped overrides are enforced end-to-end (header → backend → UI) */}
                           {isExpanded && scopeState.enabled && (
                             <ResourcePicker
                               knownResources={knownResources}
