@@ -215,12 +215,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 // to avoid a brief flash of the authenticated skeleton (e.g. after logout).
 const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite", "/book-demo"];
 
-/** Quick cookie-presence check — if there is no session cookie the user is
- *  definitely not authenticated, so we can skip the app skeleton on any route
- *  (not just the known unauthenticated paths). */
-const hasSessionCookie = () =>
-  document.cookie.split("; ").some((c) => c.startsWith("gram_session="));
-
 // Paths that are authenticated but don't require org/project slug context.
 const SLUG_EXEMPT_PATHS = ["/slack/register"];
 
@@ -239,12 +233,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
   if (isLoading || (!session && !error)) {
-    // Don't show the authenticated app skeleton when we can tell the user
-    // isn't logged in. This covers:
-    //  • explicit unauthenticated routes (e.g. after logout navigates to /login)
-    //  • any route when the session cookie is absent (e.g. visiting "/" cold)
+    // Don't show the authenticated app skeleton on routes that always redirect
+    // (root "/" and unauthenticated pages like /login). This avoids a jarring
+    // skeleton flash for logged-out users before the redirect to /login fires.
     if (
-      !hasSessionCookie() ||
+      location.pathname === "/" ||
       UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))
     ) {
       return null;
