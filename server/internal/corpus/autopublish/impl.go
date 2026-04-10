@@ -45,14 +45,12 @@ type DraftsPublisher interface {
 
 // Service manages auto-publish configuration and eligible draft queries.
 type Service struct {
-	db   *pgxpool.Pool
 	repo *repo.Queries
 }
 
 // NewService creates a new auto-publish service.
 func NewService(db *pgxpool.Pool) *Service {
 	return &Service{
-		db:   db,
 		repo: repo.New(db),
 	}
 }
@@ -68,14 +66,7 @@ func (s *Service) GetConfig(ctx context.Context, projectID uuid.UUID) (Config, e
 		return Config{}, fmt.Errorf("get auto-publish config: %w", err)
 	}
 
-	return Config{
-		Enabled:          row.Enabled,
-		IntervalMinutes:  row.IntervalMinutes,
-		MinUpvotes:       row.MinUpvotes,
-		AuthorTypeFilter: conv.FromPGText[string](row.AuthorTypeFilter),
-		LabelFilter:      row.LabelFilter,
-		MinAgeHours:      row.MinAgeHours,
-	}, nil
+	return configFromRow(row), nil
 }
 
 // SetConfig upserts the auto-publish configuration for a project.
@@ -94,14 +85,7 @@ func (s *Service) SetConfig(ctx context.Context, projectID uuid.UUID, orgID stri
 		return Config{}, fmt.Errorf("upsert auto-publish config: %w", err)
 	}
 
-	return Config{
-		Enabled:          row.Enabled,
-		IntervalMinutes:  row.IntervalMinutes,
-		MinUpvotes:       row.MinUpvotes,
-		AuthorTypeFilter: conv.FromPGText[string](row.AuthorTypeFilter),
-		LabelFilter:      row.LabelFilter,
-		MinAgeHours:      row.MinAgeHours,
-	}, nil
+	return configFromRow(row), nil
 }
 
 // QueryEligibleDrafts returns drafts matching the auto-publish filter criteria.
@@ -117,4 +101,15 @@ func (s *Service) QueryEligibleDrafts(ctx context.Context, projectID uuid.UUID, 
 	}
 
 	return drafts, nil
+}
+
+func configFromRow(row repo.CorpusAutoPublishConfig) Config {
+	return Config{
+		Enabled:          row.Enabled,
+		IntervalMinutes:  row.IntervalMinutes,
+		MinUpvotes:       row.MinUpvotes,
+		AuthorTypeFilter: conv.FromPGText[string](row.AuthorTypeFilter),
+		LabelFilter:      row.LabelFilter,
+		MinAgeHours:      row.MinAgeHours,
+	}
 }
