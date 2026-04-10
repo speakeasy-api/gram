@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -41,6 +42,7 @@ type Service struct {
 	chatSessions      *chatsessions.Manager
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
+	access            *access.Manager
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -56,7 +58,7 @@ func NewService(
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
-	posthogClient PosthogClient, accessLoader auth.AccessLoader) *Service {
+	posthogClient PosthogClient, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
 
@@ -65,7 +67,7 @@ func NewService(
 	// API auth methods (APIKeyAuth, JWTAuth) will return unauthorized errors.
 	var a *auth.Auth
 	if sessions != nil {
-		a = auth.New(logger, db, sessions, accessLoader)
+		a = auth.New(logger, db, sessions, accessManager)
 	}
 
 	return &Service{
@@ -79,6 +81,7 @@ func NewService(
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
 		posthog:           posthogClient,
 		chatSessions:      chatSessions,
+		access:            accessManager,
 	}
 }
 
@@ -436,6 +439,10 @@ func (s *Service) GetProjectMetricsSummary(ctx context.Context, payload *telem_g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
@@ -522,6 +529,10 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
@@ -580,6 +591,10 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
@@ -775,6 +790,10 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
@@ -982,6 +1001,10 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
@@ -1030,6 +1053,10 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
@@ -1076,6 +1103,10 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
