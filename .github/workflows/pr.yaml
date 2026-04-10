@@ -234,8 +234,8 @@ jobs:
   atlas-push:
     name: Push migrations to Atlas Registry
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes]
-    if: needs.changes.outputs.migrations == 'true'
+    needs: [changes, server-build-lint]
+    if: needs.changes.outputs.server == 'true'
     permissions:
       contents: read
       pull-requests: write
