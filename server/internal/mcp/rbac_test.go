@@ -21,11 +21,12 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
+	apiKey := ti.createTestAPIKey(ctx, t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-denied-"+uuid.NewString()[:8])
 
 	ctx = withExactAccessGrants(t, ctx, ti)
 
-	_, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	_, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), apiKey, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "forbidden")
 }
@@ -34,11 +35,12 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithUnrelatedGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
+	apiKey := ti.createTestAPIKey(ctx, t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-unrelated-"+uuid.NewString()[:8])
 
 	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPConnect, Resource: uuid.NewString()})
 
-	_, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	_, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), apiKey, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "forbidden")
 }
@@ -47,11 +49,12 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithWriteGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
+	apiKey := ti.createTestAPIKey(ctx, t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-write-implies-connect-"+uuid.NewString()[:8])
 
 	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPWrite, Resource: toolset.ID.String()})
 
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), apiKey, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 }
@@ -60,11 +63,12 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithConnectGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
+	apiKey := ti.createTestAPIKey(ctx, t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-allowed-"+uuid.NewString()[:8])
 
 	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPConnect, Resource: toolset.ID.String()})
 
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), apiKey, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 }
