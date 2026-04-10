@@ -54,7 +54,13 @@ export function usePlaygroundEnvironment(
   // We normalize on the client to match the server's transformation
   // (server/internal/conv/from.go:163), otherwise IDs containing
   // characters like underscores would diverge between client and server.
-  const slug = toServerSlug(`playground-${user.id}-${toolset.slug}`);
+  // Use a short prefix ("pg-") and only the first 8 hex chars of the
+  // user ID to stay within the 40-character slug limit enforced by the
+  // server (server/design/shared/datatypes.go).
+  const slug = toServerSlug(`pg-${user.id.slice(0, 8)}-${toolset.slug}`).slice(
+    0,
+    40,
+  );
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
