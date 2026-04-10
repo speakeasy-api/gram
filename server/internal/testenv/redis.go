@@ -62,7 +62,6 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 		client := redis.NewClient(&redis.Options{
 			Addr:         net.JoinHostPort(host, port),
 			DB:           db,
-			Protocol:     2, // Use RESP2 to skip the HELLO 3 handshake that fails when Docker port-forwarding briefly returns HTTP
 			DialTimeout:  1 * time.Second,
 			ReadTimeout:  300 * time.Millisecond,
 			WriteTimeout: 1 * time.Second,
