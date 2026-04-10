@@ -15,6 +15,20 @@ import { useParams } from "react-router";
 import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 type LogLevel = "WARN" | "INFO" | "DEBUG" | "ERROR" | "OK" | "SKIP";
+
+const levelColors = {
+  INFO: { dot: "bg-blue-500", text: "text-blue-700", bg: "bg-blue-50" },
+  WARN: { dot: "bg-yellow-500", text: "text-yellow-700", bg: "bg-yellow-50" },
+  ERROR: { dot: "bg-red-500", text: "text-red-700", bg: "bg-red-50" },
+  SKIP: { dot: "bg-slate-400", text: "text-slate-600", bg: "bg-slate-100" },
+  OK: { dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50" },
+  DEBUG: { dot: "bg-gray-400", text: "text-gray-600", bg: "bg-gray-100" },
+} as const;
+
+function getLevelColors(level: LogLevel) {
+  return levelColors[level] ?? levelColors.INFO;
+}
+
 type LogFocus = "all" | "warns" | "errors" | "skipped";
 
 interface ParsedLogEntry {
@@ -709,7 +723,7 @@ export const LogsTabContent = ({
                           `fallback-${globalIndex}`
                         }
                         className={cn(
-                          "px-3 py-2 transition-colors relative",
+                          "px-3 py-1.5 transition-colors relative",
                           "hover:bg-muted/20",
                           isError && "bg-destructive/10 text-destructive",
                           isWarn && "bg-warning/10 text-warning",
@@ -718,11 +732,21 @@ export const LogsTabContent = ({
                             "border-l-4 border-l-foreground pl-2",
                         )}
                       >
-                        <div className="flex items-start gap-4">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           <span
                             className={cn(
-                              "text-muted-foreground tabular-nums",
-                              (isError || isWarn) && "text-inherit",
+                              "size-1.5 shrink-0 rounded-full",
+                              getLevelColors(log.level).dot,
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "text-[11px] tabular-nums shrink-0",
+                              isError
+                                ? "text-red-700"
+                                : isWarn
+                                  ? "text-yellow-700"
+                                  : "text-muted-foreground/60",
                             )}
                           >
                             {formatLogTimestamp(
@@ -731,19 +755,14 @@ export const LogsTabContent = ({
                           </span>
                           <span
                             className={cn(
-                              "font-medium uppercase",
-                              isError && "text-destructive",
-                              isWarn && "text-warning",
-                              isSkipped && "text-muted-foreground",
-                              !isError &&
-                                !isWarn &&
-                                !isSkipped &&
-                                "text-muted-foreground",
+                              "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+                              getLevelColors(log.level).bg,
+                              getLevelColors(log.level).text,
                             )}
                           >
-                            [{log.level}]
+                            {log.level}
                           </span>
-                          <span className="flex-1">
+                          <span className="min-w-0 flex-1">
                             {highlightMatch(log.message)}
                           </span>
                         </div>
@@ -768,7 +787,7 @@ export const LogsTabContent = ({
                   }}
                   key={visibleEvents[index]?.id || `fallback-${index}`}
                   className={cn(
-                    "px-3 py-2 transition-colors relative",
+                    "px-3 py-1.5 transition-colors relative",
                     "hover:bg-muted/20",
                     isError && "bg-destructive/10 text-destructive",
                     isWarn && "bg-warning/10 text-warning",
@@ -776,30 +795,35 @@ export const LogsTabContent = ({
                     isHighlighted && "border-l-4 border-l-foreground pl-2",
                   )}
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <span
                       className={cn(
-                        "text-muted-foreground tabular-nums",
-                        (isError || isWarn) && "text-inherit",
+                        "size-1.5 shrink-0 rounded-full",
+                        getLevelColors(log.level).dot,
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "text-[11px] tabular-nums shrink-0",
+                        isError
+                          ? "text-red-700"
+                          : isWarn
+                            ? "text-yellow-700"
+                            : "text-muted-foreground/60",
                       )}
                     >
                       {formatLogTimestamp(visibleEvents[index]!.createdAt)}
                     </span>
                     <span
                       className={cn(
-                        "font-medium uppercase",
-                        isError && "text-destructive",
-                        isWarn && "text-warning",
-                        isSkipped && "text-muted-foreground",
-                        !isError &&
-                          !isWarn &&
-                          !isSkipped &&
-                          "text-muted-foreground",
+                        "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+                        getLevelColors(log.level).bg,
+                        getLevelColors(log.level).text,
                       )}
                     >
-                      [{log.level}]
+                      {log.level}
                     </span>
-                    <span className="flex-1">
+                    <span className="min-w-0 flex-1">
                       {highlightMatch(log.message)}
                     </span>
                   </div>
