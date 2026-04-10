@@ -693,7 +693,7 @@ function HooksInnerContent({
   userEmailInput,
   setUserEmailInput,
   activeFilters,
-  // addFilter,
+  addFilter,
   removeFilter,
   selectedHookTypes,
   onHookTypesChange,
@@ -841,6 +841,8 @@ function HooksInnerContent({
                 from={from}
                 to={to}
                 compact={isLogsVisible}
+                addFilter={addFilter}
+                onHookTypesChange={onHookTypesChange}
               />
             </div>
 
@@ -2453,12 +2455,16 @@ function HooksAnalytics({
   from,
   to,
   compact = false,
+  addFilter,
+  onHookTypesChange,
 }: {
   groupedTraces: HookTrace[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
   compact?: boolean;
+  addFilter: (chip: FilterChip) => void;
+  onHookTypesChange: (types: TypesToInclude[]) => void;
 }) {
   const derivedServers = useMemo(() => {
     const map = new Map<
@@ -2521,6 +2527,46 @@ function HooksAnalytics({
 
   const hasServers = derivedServers.length > 0;
 
+  type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
+
+  const makeFilterHandler = useCallback(
+    (config: FilterAxisConfig) => (datasetLabel: string, rowLabel: string) => {
+      const localToolsDisplayName =
+        serverNameMappings.rawToDisplay.get("") ?? "Local Tools";
+      const apply = (value: string, filterType: "server" | "user") => {
+        if (!value || value === "unknown") return;
+        if (filterType === "server") {
+          if (value === localToolsDisplayName) {
+            onHookTypesChange(["local"]);
+            return;
+          }
+          const rawFilters = serverNameMappings.displayToRaws.get(value) ?? [
+            value,
+          ];
+          addFilter({
+            display: value,
+            filters: rawFilters,
+            path: "gram.tool_call.source",
+          });
+        } else {
+          addFilter({ display: value, filters: [value], path: "user.email" });
+        }
+      };
+      for (const [filterType, axis] of Object.entries(config) as [
+        "server" | "user",
+        "dataset" | "row",
+      ][]) {
+        apply(axis === "dataset" ? datasetLabel : rowLabel, filterType);
+      }
+    },
+    [
+      addFilter,
+      onHookTypesChange,
+      serverNameMappings.rawToDisplay,
+      serverNameMappings.displayToRaws,
+    ],
+  );
+
   return (
     <div className="space-y-4">
       {/* KPI Cards */}
@@ -2581,16 +2627,19 @@ function HooksAnalytics({
           <UserVolumeList
             title="Source Usage per User"
             traces={groupedTraces}
+            handleFilter={makeFilterHandler({ user: "row" })}
           />
           <ServerActivityChart
             title="Server Usage per User"
             traces={groupedTraces}
             serverNameMappings={serverNameMappings}
+            handleFilter={makeFilterHandler({ server: "dataset", user: "row" })}
           />
           <SourceVolumeChart
             title="Source Usage per MCP Server"
             traces={groupedTraces}
             serverNameMappings={serverNameMappings}
+            handleFilter={makeFilterHandler({ server: "row" })}
           />
         </div>
       )}
