@@ -102,6 +102,7 @@ export default defineConfig(({ command }) => {
       environment: "happy-dom",
       globals: true,
       css: false,
+      setupFiles: [path.resolve(__dirname, "src/test-setup.ts")],
     },
     plugins: [react(), tailwindcss()],
     resolve: {
