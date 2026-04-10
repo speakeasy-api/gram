@@ -600,6 +600,54 @@ export const LogsTabContent = ({
           )}
 
           <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              {searchQuery ? (
+                <>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                      N
+                    </kbd>
+                    <span>/</span>
+                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                      ⇧N
+                    </kbd>
+                    <span className="ml-0.5">results</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                      ESC
+                    </kbd>
+                    <span>clear</span>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                      J
+                    </kbd>
+                    <span>/</span>
+                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                      K
+                    </kbd>
+                    <span className="ml-0.5">navigate</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                      G
+                    </kbd>
+                    <span>first</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                      ⇧G
+                    </kbd>
+                    <span>last</span>
+                  </span>
+                </>
+              )}
+            </div>
+
             <button
               onClick={() => setGroupBySource(!groupBySource)}
               className={cn(
@@ -670,8 +718,8 @@ export const LogsTabContent = ({
                 )
               ) : (
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                  <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
-                    ⌘F
+                  <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm font-mono">
+                    /
                   </span>
                 </div>
               )}
@@ -836,46 +884,6 @@ export const LogsTabContent = ({
         {showBottomFade && (
           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent pointer-events-none rounded-b-lg" />
         )}
-      </div>
-
-      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex items-center gap-4">
-          {searchQuery ? (
-            <>
-              <div className="flex items-center gap-1">
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">N</kbd>
-                <span>/</span>
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">⇧N</kbd>
-                <span className="ml-1">navigate results</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">ESC</kbd>
-                <span>clear search</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-1">
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">⌘F</kbd>
-                <span>or</span>
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">/</kbd>
-                <span>to search</span>
-              </div>
-              {!groupBySource && (
-                <div className="flex items-center gap-1">
-                  <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">^G</kbd>
-                  <span>group by source</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">J</kbd>
-                <span>/</span>
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">K</kbd>
-                <span className="ml-1">navigate logs</span>
-              </div>
-            </>
-          )}
-        </div>
       </div>
     </>
   );
