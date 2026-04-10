@@ -16,10 +16,12 @@ import {
   ChevronDown,
   ChevronRight,
   Maximize2,
+  Minimize2,
   SquareAsterisk,
   Globe,
   Repeat,
   Shield,
+  SquareLibrary,
   Tag,
   Wrench,
   X,
@@ -124,6 +126,10 @@ export function ScopePickerPopover({
   const mcpServers = useMCPServers(resourceType === "mcp");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const customToolCount = useMemo(() => {
+    if (!customMode) return 0;
+    return (resources ?? []).length;
+  }, [customMode, resources]);
 
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
@@ -140,10 +146,6 @@ export function ScopePickerPopover({
     id: p.id,
     name: p.name,
   }));
-  const customToolCount = useMemo(() => {
-    if (!customMode) return 0;
-    return (resources ?? []).length;
-  }, [customMode, resources]);
 
   const label = getLabel(resourceType, resources, customMode, customToolCount);
 
@@ -238,7 +240,7 @@ export function ScopePickerPopover({
         <>
           <Tabs
             value={customTab ?? "select"}
-            className="gap-0 -mx-1.5 -mb-1.5"
+            className="gap-0 -mx-1.5 -mb-1.5 flex-1 flex flex-col min-h-0"
             onValueChange={(value) => {
               onChangeResources([]);
               onChangeAnnotations?.([]);
@@ -269,15 +271,26 @@ export function ScopePickerPopover({
                 <SquareAsterisk className="h-3.5 w-3.5" />
                 By HTTP method
               </TabsTrigger>
+              <div className="w-px self-stretch my-1 bg-border/40" />
+              <TabsTrigger
+                value="collection"
+                className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <SquareLibrary className="h-3.5 w-3.5" />
+                By collection
+              </TabsTrigger>
             </TabsList>
-            <TabsContent value="select" className="p-0">
+            <TabsContent value="select" className="p-0 flex-1 min-h-0">
               <ToolSelectionPanel
                 mcpServers={mcpServers}
                 resources={resources ?? []}
                 onToggle={toggleResource}
               />
             </TabsContent>
-            <TabsContent value="auto-groups" className="px-2 py-1">
+            <TabsContent
+              value="auto-groups"
+              className="px-2 py-1 flex-1 min-h-0 overflow-y-auto"
+            >
               <AnnotationGroupPanel
                 annotations={annotations ?? []}
                 onChangeAnnotations={(newAnnotations) => {
@@ -303,8 +316,22 @@ export function ScopePickerPopover({
                 mcpServers={mcpServers}
               />
             </TabsContent>
-            <TabsContent value="http-method" className="px-2 py-1">
+            <TabsContent
+              value="http-method"
+              className="px-2 py-1 flex-1 min-h-0 overflow-y-auto"
+            >
               <HttpMethodGroupPanel
+                mcpServers={mcpServers}
+                resources={resources ?? []}
+                onToggle={toggleResource}
+                onChangeResources={onChangeResources}
+              />
+            </TabsContent>
+            <TabsContent
+              value="collection"
+              className="px-2 py-1 flex-1 min-h-0 overflow-y-auto"
+            >
+              <CollectionGroupPanel
                 mcpServers={mcpServers}
                 resources={resources ?? []}
                 onToggle={toggleResource}
@@ -334,30 +361,28 @@ export function ScopePickerPopover({
           sideOffset={8}
           className={cn(
             "p-1.5 overflow-hidden transition-[width] duration-500",
-            customMode ? "w-[520px]" : "w-56 max-h-[300px] overflow-y-auto",
+            customMode ? "w-[620px]" : "w-56 max-h-[300px] overflow-y-auto",
           )}
           style={{
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
           }}
         >
+          {pickerContent}
           {isMcp && (
-            <div className="-mx-1.5 -mt-1.5 mb-1 flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b border-border rounded-t-lg">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Configure Access
-              </span>
+            <div className="-mx-1.5 -mb-1.5 mt-1 border-t border-border rounded-b-lg">
               <button
                 type="button"
                 onClick={() => {
                   setPopoverOpen(false);
                   setExpanded(true);
                 }}
-                className="h-5 w-5 inline-flex items-center justify-center rounded-sm hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                className="flex w-full items-center justify-center gap-1.5 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer rounded-b-lg"
               >
                 <Maximize2 className="h-3 w-3" />
+                Open in full screen
               </button>
             </div>
           )}
-          {pickerContent}
         </PopoverContent>
       </Popover>
 
@@ -367,13 +392,25 @@ export function ScopePickerPopover({
           if (!open) setExpanded(false);
         }}
       >
-        <Dialog.Content className="sm:max-w-4xl w-[90vw] max-h-[85vh] p-0 flex flex-col overflow-hidden gap-0">
-          <div className="flex items-center px-4 py-3 bg-muted/50 border-b border-border pr-12">
+        <Dialog.Content className="sm:max-w-5xl w-[90vw] h-[85vh] p-0 flex flex-col overflow-hidden gap-0 [&>.absolute]:hidden">
+          <div className="flex items-center justify-between px-4 py-4 bg-muted/50 border-b border-border">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Configure Access
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                setExpanded(false);
+                setPopoverOpen(true);
+              }}
+              className="h-6 w-6 inline-flex items-center justify-center rounded-sm opacity-70 hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity cursor-pointer"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </button>
           </div>
-          <div className="p-1.5 flex-1 overflow-y-auto">{pickerContent}</div>
+          <div className="p-1.5 flex-1 overflow-hidden flex flex-col min-h-0 [&_.tool-scroll]:min-h-0 [&_.tool-scroll]:max-h-none [&_.tool-scroll]:flex-1">
+            {pickerContent}
+          </div>
         </Dialog.Content>
       </Dialog>
     </>
@@ -418,7 +455,7 @@ function ToolSelectionPanel({
   }, []);
 
   return (
-    <div className="flex">
+    <div className="flex h-full">
       {/* Left column — server list */}
       <div className="w-[160px] shrink-0 border-r border-border overflow-y-auto">
         <div className="flex items-center gap-1.5 px-3 h-10 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
@@ -472,7 +509,7 @@ function ToolSelectionPanel({
         <div
           ref={scrollRef}
           onWheel={handleWheel}
-          className="min-h-[300px] max-h-[300px] overflow-y-auto pb-2"
+          className="tool-scroll min-h-[300px] max-h-[300px] overflow-y-auto pb-2"
         >
           {filteredTools.length === 0 ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">
@@ -866,6 +903,151 @@ function HttpMethodGroupPanel({
                     </button>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CollectionGroupPanel({
+  mcpServers,
+  resources,
+  onToggle,
+  onChangeResources,
+}: {
+  mcpServers: ServerGroup[];
+  resources: string[];
+  onToggle: (id: string) => void;
+  onChangeResources: (resources: string[]) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop += e.deltaY;
+    }
+  }, []);
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (projectId: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  };
+
+  if (mcpServers.length === 0) {
+    return (
+      <div className="py-6 text-center text-sm text-muted-foreground">
+        No collections found
+      </div>
+    );
+  }
+
+  return (
+    <div className="py-1">
+      <div className="px-2 py-2 text-sm text-muted-foreground">
+        Select tools by collection:
+      </div>
+      {mcpServers.map((group) => {
+        const isExpanded = expanded.has(group.projectId);
+        const allToolIds = group.servers.flatMap((s) =>
+          s.tools.map((t) => `${s.id}:${t.name}`),
+        );
+        const selectedCount = allToolIds.filter((id) =>
+          resources.includes(id),
+        ).length;
+        const allSelected =
+          selectedCount === allToolIds.length && allToolIds.length > 0;
+
+        const toggleAll = () => {
+          if (allSelected) {
+            const removeSet = new Set(allToolIds);
+            onChangeResources(resources.filter((r) => !removeSet.has(r)));
+          } else {
+            const existing = new Set(resources);
+            const toAdd = allToolIds.filter((id) => !existing.has(id));
+            onChangeResources([...resources, ...toAdd]);
+          }
+        };
+
+        return (
+          <div key={group.projectId} className="rounded-sm hover:bg-accent">
+            <div className="flex w-full items-center gap-3 px-3 py-2.5 text-sm">
+              <Checkbox
+                checked={
+                  allSelected
+                    ? true
+                    : selectedCount > 0
+                      ? "indeterminate"
+                      : false
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleAll();
+                }}
+                className="cursor-pointer"
+              />
+              <button
+                type="button"
+                onClick={() => toggleExpanded(group.projectId)}
+                className="flex flex-1 items-center gap-2 cursor-pointer min-w-0"
+              >
+                <span className="font-medium truncate">
+                  {group.projectName}
+                </span>
+                <span className="text-muted-foreground font-normal">
+                  {selectedCount} of {allToolIds.length} selected
+                </span>
+                <ChevronRight
+                  className={cn(
+                    "h-3.5 w-3.5 text-muted-foreground transition-transform ml-auto shrink-0",
+                    isExpanded && "rotate-90",
+                  )}
+                />
+              </button>
+            </div>
+            {isExpanded && (
+              <div
+                ref={scrollRef}
+                onWheel={handleWheel}
+                className="max-h-[180px] overflow-y-auto border-t border-border bg-background"
+              >
+                {group.servers.map((server) => (
+                  <div key={server.id}>
+                    <div className="px-3 py-1.5 text-[10px] text-muted-foreground font-medium uppercase tracking-wider bg-muted/30">
+                      {server.name}
+                    </div>
+                    {server.tools.map((tool) => {
+                      const compoundId = `${server.id}:${tool.name}`;
+                      const isChecked = resources.includes(compoundId);
+                      return (
+                        <button
+                          key={compoundId}
+                          type="button"
+                          onClick={() => onToggle(compoundId)}
+                          className={cn(
+                            "flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent cursor-pointer",
+                            isChecked && "font-medium",
+                          )}
+                        >
+                          <Checkbox
+                            checked={isChecked}
+                            className="pointer-events-none focus-visible:ring-0 focus-visible:border-input"
+                            tabIndex={-1}
+                          />
+                          <span className="truncate flex-1 text-left">
+                            {tool.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             )}
           </div>
