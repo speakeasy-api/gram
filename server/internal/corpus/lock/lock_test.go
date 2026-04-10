@@ -19,16 +19,20 @@ func newTestLocker(t *testing.T) *Locker {
 }
 
 func TestAcquire(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	locker := newTestLocker(t)
 
 	lock, err := locker.Acquire(ctx, "test:acquire", 30*time.Second)
 	require.NoError(t, err)
 	require.NotNil(t, lock)
-	require.Greater(t, lock.FencingToken(), int64(0))
+	require.Positive(t, lock.FencingToken())
 }
 
 func TestAcquire_AlreadyHeld(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	locker := newTestLocker(t)
 
@@ -45,6 +49,8 @@ func TestAcquire_AlreadyHeld(t *testing.T) {
 }
 
 func TestRelease(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	locker := newTestLocker(t)
 
@@ -63,6 +69,8 @@ func TestRelease(t *testing.T) {
 }
 
 func TestRenew(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	locker := newTestLocker(t)
 
@@ -85,6 +93,8 @@ func TestRenew(t *testing.T) {
 }
 
 func TestExpiry(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	locker := newTestLocker(t)
 
@@ -104,6 +114,8 @@ func TestExpiry(t *testing.T) {
 }
 
 func TestFencingToken(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	locker := newTestLocker(t)
 
@@ -124,6 +136,8 @@ func TestFencingToken(t *testing.T) {
 }
 
 func TestFencingToken_RejectsStaleHolder(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	locker := newTestLocker(t)
 
