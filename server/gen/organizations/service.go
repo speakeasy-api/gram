@@ -130,6 +130,12 @@ type OrganizationUser struct {
 	OrganizationID string
 	// Gram user ID.
 	UserID string
+	// User display name.
+	Name string
+	// User email address.
+	Email string
+	// User photo URL.
+	PhotoURL *string
 	// WorkOS organization membership ID when known.
 	WorkosMembershipID *string
 	CreatedAt          string

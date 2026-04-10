@@ -37,6 +37,8 @@ func TestService_ListUsers(t *testing.T) {
 		if u.UserID == authCtx.UserID && u.OrganizationID == authCtx.ActiveOrganizationID {
 			found = true
 			require.NotEmpty(t, u.ID)
+			require.NotEmpty(t, u.Name)
+			require.NotEmpty(t, u.Email)
 			require.NotEmpty(t, u.CreatedAt)
 			require.NotEmpty(t, u.UpdatedAt)
 			break
