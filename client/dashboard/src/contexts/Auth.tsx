@@ -233,10 +233,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
   if (isLoading || (!session && !error)) {
-    // Don't show the authenticated app skeleton on unauthenticated routes
-    // (e.g. after logout navigates to /login). The session check will resolve
-    // quickly and render the correct page without a jarring skeleton flash.
-    if (UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))) {
+    // Don't show the authenticated app skeleton on routes that always redirect
+    // (root "/" and unauthenticated pages like /login). This avoids a jarring
+    // skeleton flash for logged-out users before the redirect to /login fires.
+    if (
+      location.pathname === "/" ||
+      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))
+    ) {
       return null;
     }
     return <AppLoadingShell />;
