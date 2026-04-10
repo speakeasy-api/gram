@@ -1340,8 +1340,6 @@ function FileDetail({ file }: { file: ContextFile }) {
 
 // ── Source Badge ───────────────────────────────────────────────────────────
 
-// ── Feedback & Annotations (moved to FeedbackPanel.tsx, AnnotationsPanel.tsx)
-
 function LayerToggle({
   active,
   onClick,

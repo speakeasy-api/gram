@@ -1,29 +1,13 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  createTestQueryClient,
+  extractFetchUrl,
+  TestQueryWrapper,
+} from "@/test-utils";
+import type { QueryClient } from "@tanstack/react-query";
 import { FeedbackPanel } from "./FeedbackPanel";
-
-function createQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
-    },
-  });
-}
-
-function Wrapper({
-  children,
-  queryClient,
-}: {
-  children: React.ReactNode;
-  queryClient: QueryClient;
-}) {
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
 
 const MOCK_FEEDBACK = {
   upvotes: 12,
@@ -59,7 +43,7 @@ describe("FeedbackPanel", () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    queryClient = createQueryClient();
+    queryClient = createTestQueryClient();
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -69,7 +53,7 @@ describe("FeedbackPanel", () => {
 
   test("renders vote counts from API", async () => {
     fetchSpy.mockImplementation(async (input) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
+      const url = extractFetchUrl(input);
       if (url.includes("/rpc/corpus.getFeedback")) {
         return new Response(JSON.stringify(MOCK_FEEDBACK), {
           status: 200,
@@ -86,9 +70,9 @@ describe("FeedbackPanel", () => {
     });
 
     render(
-      <Wrapper queryClient={queryClient}>
+      <TestQueryWrapper queryClient={queryClient}>
         <FeedbackPanel filePath="docs/guide.md" />
-      </Wrapper>,
+      </TestQueryWrapper>,
     );
 
     await waitFor(() => {
@@ -101,7 +85,7 @@ describe("FeedbackPanel", () => {
     const user = userEvent.setup();
 
     fetchSpy.mockImplementation(async (input) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
+      const url = extractFetchUrl(input);
       if (url.includes("/rpc/corpus.getFeedback")) {
         return new Response(JSON.stringify(MOCK_FEEDBACK), {
           status: 200,
@@ -124,9 +108,9 @@ describe("FeedbackPanel", () => {
     });
 
     render(
-      <Wrapper queryClient={queryClient}>
+      <TestQueryWrapper queryClient={queryClient}>
         <FeedbackPanel filePath="docs/guide.md" />
-      </Wrapper>,
+      </TestQueryWrapper>,
     );
 
     await waitFor(() => {
@@ -137,18 +121,16 @@ describe("FeedbackPanel", () => {
     await user.click(upvoteButton);
 
     await waitFor(() => {
-      const calls = fetchSpy.mock.calls.filter((call) => {
-        const url =
-          typeof call[0] === "string" ? call[0] : (call[0] as Request).url;
-        return url.includes("/rpc/corpus.voteFeedback");
-      });
+      const calls = fetchSpy.mock.calls.filter((call) =>
+        extractFetchUrl(call[0]).includes("/rpc/corpus.voteFeedback"),
+      );
       expect(calls).toHaveLength(1);
     });
   });
 
   test("renders comment thread", async () => {
     fetchSpy.mockImplementation(async (input) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
+      const url = extractFetchUrl(input);
       if (url.includes("/rpc/corpus.getFeedback")) {
         return new Response(JSON.stringify(MOCK_FEEDBACK), {
           status: 200,
@@ -165,9 +147,9 @@ describe("FeedbackPanel", () => {
     });
 
     render(
-      <Wrapper queryClient={queryClient}>
+      <TestQueryWrapper queryClient={queryClient}>
         <FeedbackPanel filePath="docs/guide.md" />
-      </Wrapper>,
+      </TestQueryWrapper>,
     );
 
     await waitFor(() => {
@@ -179,8 +161,6 @@ describe("FeedbackPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("alice")).toBeInTheDocument();
     expect(screen.getByText("doc-bot")).toBeInTheDocument();
-
-    // Agent badge should be present for doc-bot
     expect(screen.getByText("Agent")).toBeInTheDocument();
   });
 });

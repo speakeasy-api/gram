@@ -1,4 +1,4 @@
-import { getServerURL } from "@/lib/utils";
+import { rpc } from "@/lib/rpc";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export type Annotation = {
@@ -11,22 +11,6 @@ export type Annotation = {
 
 export function annotationsQueryKey(filePath: string) {
   return ["corpus", "annotations", filePath] as const;
-}
-
-async function rpc<T>(
-  method: string,
-  body: Record<string, unknown>,
-): Promise<T> {
-  const res = await fetch(`${getServerURL()}/rpc/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`RPC ${method} failed: ${res.status}`);
-  }
-  return res.json() as Promise<T>;
 }
 
 /**

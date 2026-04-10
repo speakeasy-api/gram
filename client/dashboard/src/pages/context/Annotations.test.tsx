@@ -1,29 +1,13 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  createTestQueryClient,
+  extractFetchUrl,
+  TestQueryWrapper,
+} from "@/test-utils";
+import type { QueryClient } from "@tanstack/react-query";
 import { AnnotationsPanel } from "./AnnotationsPanel";
-
-function createQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
-    },
-  });
-}
-
-function Wrapper({
-  children,
-  queryClient,
-}: {
-  children: React.ReactNode;
-  queryClient: QueryClient;
-}) {
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
 
 const MOCK_ANNOTATIONS = [
   {
@@ -47,7 +31,7 @@ describe("AnnotationsPanel", () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    queryClient = createQueryClient();
+    queryClient = createTestQueryClient();
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -57,7 +41,7 @@ describe("AnnotationsPanel", () => {
 
   test("renders annotation list from API", async () => {
     fetchSpy.mockImplementation(async (input) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
+      const url = extractFetchUrl(input);
       if (url.includes("/rpc/corpus.listAnnotations")) {
         return new Response(JSON.stringify({ annotations: MOCK_ANNOTATIONS }), {
           status: 200,
@@ -68,9 +52,9 @@ describe("AnnotationsPanel", () => {
     });
 
     render(
-      <Wrapper queryClient={queryClient}>
+      <TestQueryWrapper queryClient={queryClient}>
         <AnnotationsPanel filePath="docs/guide.md" />
-      </Wrapper>,
+      </TestQueryWrapper>,
     );
 
     await waitFor(() => {
@@ -90,7 +74,7 @@ describe("AnnotationsPanel", () => {
     const user = userEvent.setup();
 
     fetchSpy.mockImplementation(async (input) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
+      const url = extractFetchUrl(input);
       if (url.includes("/rpc/corpus.listAnnotations")) {
         return new Response(JSON.stringify({ annotations: MOCK_ANNOTATIONS }), {
           status: 200,
@@ -116,36 +100,30 @@ describe("AnnotationsPanel", () => {
     });
 
     render(
-      <Wrapper queryClient={queryClient}>
+      <TestQueryWrapper queryClient={queryClient}>
         <AnnotationsPanel filePath="docs/guide.md" />
-      </Wrapper>,
+      </TestQueryWrapper>,
     );
 
-    // Wait for annotations to load
     await waitFor(() => {
       expect(
         screen.getByText("This section needs a code example."),
       ).toBeInTheDocument();
     });
 
-    // Click "Add Annotation" to show the form
     const addButton = screen.getByRole("button", { name: /add annotation/i });
     await user.click(addButton);
 
-    // Fill in the annotation text
     const textarea = screen.getByPlaceholderText(/add a note/i);
     await user.type(textarea, "New annotation text");
 
-    // Submit the annotation
     const submitButton = screen.getByRole("button", { name: /submit/i });
     await user.click(submitButton);
 
     await waitFor(() => {
-      const calls = fetchSpy.mock.calls.filter((call) => {
-        const url =
-          typeof call[0] === "string" ? call[0] : (call[0] as Request).url;
-        return url.includes("/rpc/corpus.createAnnotation");
-      });
+      const calls = fetchSpy.mock.calls.filter((call) =>
+        extractFetchUrl(call[0]).includes("/rpc/corpus.createAnnotation"),
+      );
       expect(calls).toHaveLength(1);
     });
   });
