@@ -1,0 +1,95 @@
+{
+  "languages": {
+    "JavaScript": {
+      "formatter": {
+        "external": {
+          "command": "./node_modules/.bin/oxfmt",
+          "arguments": [
+            "-c",
+            ".oxfmtrc.json",
+            "--stdin-filepath",
+            "{buffer_path}"
+          ]
+        }
+      }
+    },
+    "TypeScript": {
+      "formatter": {
+        "external": {
+          "command": "./node_modules/.bin/oxfmt",
+          "arguments": [
+            "-c",
+            ".oxfmtrc.json",
+            "--stdin-filepath",
+            "{buffer_path}"
+          ]
+        }
+      }
+    },
+    "JSX": {
+      "formatter": {
+        "external": {
+          "command": "./node_modules/.bin/oxfmt",
+          "arguments": [
+            "-c",
+            ".oxfmtrc.json",
+            "--stdin-filepath",
+            "{buffer_path}"
+          ]
+        }
+      }
+    },
+    "TSX": {
+      "formatter": {
+        "external": {
+          "command": "./node_modules/.bin/oxfmt",
+          "arguments": [
+            "-c",
+            ".oxfmtrc.json",
+            "--stdin-filepath",
+            "{buffer_path}"
+          ]
+        }
+      }
+    },
+    "JSON": {
+      "formatter": {
+        "external": {
+          "command": "./node_modules/.bin/oxfmt",
+          "arguments": [
+            "-c",
+            ".oxfmtrc.json",
+            "--stdin-filepath",
+            "{buffer_path}"
+          ]
+        }
+      }
+    },
+    "CSS": {
+      "formatter": {
+        "external": {
+          "command": "./node_modules/.bin/oxfmt",
+          "arguments": [
+            "-c",
+            ".oxfmtrc.json",
+            "--stdin-filepath",
+            "{buffer_path}"
+          ]
+        }
+      }
+    },
+    "Markdown": {
+      "formatter": {
+        "external": {
+          "command": "./node_modules/.bin/oxfmt",
+          "arguments": [
+            "-c",
+            ".oxfmtrc.json",
+            "--stdin-filepath",
+            "{buffer_path}"
+          ]
+        }
+      }
+    }
+  }
+}

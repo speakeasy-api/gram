@@ -10,6 +10,7 @@ junit-report.xml
 .assets
 .vscode/*
 .zed/*
+!.zed/settings.json
 !.vscode/extensions.json
 *.code-workspace
 .idea
