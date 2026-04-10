@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/corpus/drafts/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -159,79 +158,55 @@ func (s *Service) Publish(ctx context.Context, projectID uuid.UUID, orgID string
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	// Fetch drafts to publish
 	openDrafts, err := s.repo.ListOpenDraftsByProject(ctx, projectID)
 	if err != nil {
 		return "", fmt.Errorf("list open drafts: %w", err)
 	}
 
-	// Filter to requested IDs
 	idSet := make(map[uuid.UUID]bool, len(draftIDs))
 	for _, id := range draftIDs {
 		idSet[id] = true
 	}
 
-	// Build file tree: start from current git HEAD if exists, then apply changes
+	// CommitFiles replaces the entire tree. Create/update drafts add content;
+	// delete drafts are excluded so the file disappears from the tree.
 	files := make(map[string][]byte)
+	hasChanges := false
 
-	// Try to read existing tree
 	for _, d := range openDrafts {
 		if !idSet[d.ID] {
 			continue
 		}
-
+		hasChanges = true
 		switch d.Operation {
 		case OpCreate, OpUpdate:
 			if d.Content.Valid {
 				files[d.FilePath] = []byte(d.Content.String)
 			}
 		case OpDelete:
-			// Mark for deletion by not including in files
+			// Omit from files map — CommitFiles replaces the tree, so the file is removed
 		}
 	}
 
-	// For non-delete operations, we need to preserve existing files
-	// Read all existing files and merge
-	existingFiles := make(map[string][]byte)
-	// Try reading existing blobs for files we're not modifying
-	for _, d := range openDrafts {
-		if !idSet[d.ID] {
-			continue
-		}
-		if d.Operation == OpDelete {
-			existingFiles[d.FilePath] = nil // mark for deletion
-		}
-	}
-
-	// Read existing repo state if possible
-	// We need to get all current files and overlay our changes
-	allFiles := make(map[string][]byte)
-
-	// For each file not being changed, try to preserve from HEAD
-	// This is a simplified approach - the full impl would read the entire tree
-	// For now, just commit the changed files (works for create operations)
-	maps.Copy(allFiles, files)
-
-	if len(allFiles) == 0 && len(existingFiles) == 0 {
+	if !hasChanges {
 		return "", fmt.Errorf("no changes to publish")
 	}
 
-	commitSHA, err := s.git.CommitFiles(allFiles, fmt.Sprintf("publish %d draft(s)", len(draftIDs)))
+	commitSHA, err := s.git.CommitFiles(files, fmt.Sprintf("publish %d draft(s)", len(draftIDs)))
 	if err != nil {
 		return "", fmt.Errorf("commit files: %w", err)
 	}
 
-	// Single transaction: mark drafts published + create outbox row
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin tx: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	txRepo := s.repo.WithTx(tx)
 
 	_, err = txRepo.MarkDraftsPublished(ctx, repo.MarkDraftsPublishedParams{
-		CommitSha: pgtype.Text{String: commitSHA, Valid: true},
+		CommitSha: conv.ToPGText(commitSHA),
 		Ids:       draftIDs,
 		ProjectID: projectID,
 	})
