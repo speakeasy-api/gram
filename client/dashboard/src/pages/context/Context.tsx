@@ -900,9 +900,6 @@ function DraftCommentItem({
   );
 }
 
-// ── Observability Tab ─────────────────────────────────────────────────────
-// Extracted to ./ObservabilityTab.tsx — uses API hooks instead of mock data.
-
 // ── Shared SkillPreview ───────────────────────────────────────────────────
 
 function SkillPreview({

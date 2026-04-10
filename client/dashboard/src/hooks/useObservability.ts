@@ -2,7 +2,7 @@ import { useSearchLogsMutation } from "@gram/client/react-query";
 import { useGetObservabilityOverview } from "@gram/client/react-query";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 
 export type SearchLogsData = {
   logs: TelemetryLogRecord[];
@@ -45,16 +45,13 @@ export function useSearchLogs(): SearchLogsData {
     search();
   }, [search]);
 
-  return useMemo(
-    () => ({
-      logs: mutation.data?.logs ?? [],
-      nextCursor: mutation.data?.nextCursor,
-      isLoading: mutation.isPending,
-      error: mutation.error ? (mutation.error as Error) : null,
-      search,
-    }),
-    [mutation.data, mutation.isPending, mutation.error, search],
-  );
+  return {
+    logs: mutation.data?.logs ?? [],
+    nextCursor: mutation.data?.nextCursor,
+    isLoading: mutation.isPending,
+    error: mutation.error ? (mutation.error as Error) : null,
+    search,
+  };
 }
 
 /**
@@ -72,12 +69,9 @@ export function useObservabilityOverview(options: {
     },
   });
 
-  return useMemo(
-    () => ({
-      overview: query.data,
-      isLoading: query.isLoading,
-      error: query.error ? (query.error as Error) : null,
-    }),
-    [query.data, query.isLoading, query.error],
-  );
+  return {
+    overview: query.data,
+    isLoading: query.isLoading,
+    error: query.error ? (query.error as Error) : null,
+  };
 }

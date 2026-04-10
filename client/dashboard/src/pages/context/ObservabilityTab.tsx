@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
+import { LayerToggle } from "@/components/file-browser/FileBrowser";
 import { Type } from "@/components/ui/type";
-import { cn } from "@/lib/utils";
 import {
   useObservabilityOverview,
   useSearchLogs,
@@ -28,7 +28,6 @@ export function ObservabilityTab() {
 
   return (
     <div className="space-y-4">
-      {/* Summary stats */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
           label="Total Chats"
@@ -48,7 +47,6 @@ export function ObservabilityTab() {
         />
       </div>
 
-      {/* Sub-tab toggle */}
       <div className="flex items-center gap-1">
         <LayerToggle
           active={subTab === "search-logs"}
@@ -88,13 +86,6 @@ function StatCard({ label, value }: { label: string; value: string }) {
       </Type>
     </div>
   );
-}
-
-// ── LatencyBadge ──────────────────────────────────────────────────────────
-
-function LatencyBadge({ ms }: { ms: number }) {
-  const variant = ms < 40 ? "default" : ms < 60 ? "secondary" : "destructive";
-  return <Badge variant={variant}>{ms}ms</Badge>;
 }
 
 // ── SearchLogsTable ───────────────────────────────────────────────────────
@@ -152,32 +143,6 @@ function SearchLogsTable({ logs }: { logs: TelemetryLogRecord[] }) {
         </table>
       </div>
     </div>
-  );
-}
-
-// ── LayerToggle ───────────────────────────────────────────────────────────
-
-function LayerToggle({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "px-2 py-0.5 text-xs rounded-md transition-colors",
-        active
-          ? "bg-foreground text-background"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
