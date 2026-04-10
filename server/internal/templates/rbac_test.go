@@ -146,18 +146,13 @@ func TestTemplates_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
 
-	_, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+	name := "nonexistent-template"
+	err := ti.service.DeleteTemplate(ctx, &gen.DeleteTemplatePayload{
+		ID:               nil,
+		Name:             &name,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
-		Name:             "test-template",
-		Prompt:           "hello",
-		Description:      nil,
-		Arguments:        nil,
-		Engine:           "",
-		Kind:             "",
-		ToolsHint:        nil,
-		ToolUrnsHint:     nil,
 	})
 	require.NoError(t, err)
 }
