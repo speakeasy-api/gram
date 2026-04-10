@@ -1,12 +1,8 @@
--- Replace polymorphic registry_type column with nullable foreign keys
+-- Add nullable FK columns for polymorphic registry references
 -- Exactly one of registry_id or organization_mcp_collection_registry_id must be set
 
--- Drop old FK (was already dropped, but be safe with IF EXISTS)
+-- Drop old FK to recreate with CASCADE
 ALTER TABLE "external_mcp_attachments" DROP CONSTRAINT IF EXISTS "external_mcp_attachments_registry_id_fkey";
-
--- Drop registry_type column and its check constraint
-ALTER TABLE "external_mcp_attachments" DROP CONSTRAINT IF EXISTS "external_mcp_attachments_registry_type_check";
-ALTER TABLE "external_mcp_attachments" DROP COLUMN IF EXISTS "registry_type";
 
 -- Add nullable collection registry column
 ALTER TABLE "external_mcp_attachments" ADD COLUMN "organization_mcp_collection_registry_id" uuid;
