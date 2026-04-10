@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -84,7 +83,7 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	funcs := testenv.NewFunctionsTestOrchestrator(t, assetStorage)
 	tigrisStore := assets.NewTigrisStore(assetStorage)
-	mcpRegistryClient := externalmcptest.NewMCPRegistryClient(t, logger, tracerProvider)
+	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))

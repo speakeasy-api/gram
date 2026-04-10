@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -74,4 +75,21 @@ func NewMeterProvider(t *testing.T) metric.MeterProvider {
 	t.Helper()
 
 	return metricnoop.NewMeterProvider()
+}
+
+func NewMCPRegistryClient(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider) *externalmcp.RegistryClient {
+	t.Helper()
+
+	pulseURL, err := url.Parse("https://api.pulsemcp.com")
+	require.NoError(t, err, "expected pulse URL to parse")
+
+	client := externalmcp.NewRegistryClient(
+		NewLogger(t),
+		tracerProvider,
+		externalmcp.NewPulseBackend(pulseURL, "test-tenant-id", conv.NewSecret([]byte("test-api-key"))),
+		nil,
+	)
+	require.NoError(t, err, "expected mcp registry client to initialize without error")
+
+	return client
 }
