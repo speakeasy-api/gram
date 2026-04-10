@@ -2,9 +2,11 @@ package drafts_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
+	"sort"
 	"testing"
 
 	gogit "github.com/go-git/go-git/v6"
@@ -123,17 +125,17 @@ func (r *testGitRepo) CommitFiles(files map[string][]byte, message string) (stri
 		obj.SetSize(int64(len(content)))
 		w, err := obj.Writer()
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("blob writer: %w", err)
 		}
 		if _, err := w.Write(content); err != nil {
-			return "", err
+			return "", fmt.Errorf("write blob: %w", err)
 		}
 		if err := w.Close(); err != nil {
-			return "", err
+			return "", fmt.Errorf("close blob: %w", err)
 		}
 		blobHash, err := storer.SetEncodedObject(obj)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("store blob: %w", err)
 		}
 		entries = append(entries, object.TreeEntry{
 			Name: path,
@@ -142,14 +144,15 @@ func (r *testGitRepo) CommitFiles(files map[string][]byte, message string) (stri
 		})
 	}
 
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 	tree := &object.Tree{Entries: entries, Hash: plumbing.ZeroHash}
 	treeObj := storer.NewEncodedObject()
 	if err := tree.Encode(treeObj); err != nil {
-		return "", err
+		return "", fmt.Errorf("encode tree: %w", err)
 	}
 	treeHash, err := storer.SetEncodedObject(treeObj)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("store tree: %w", err)
 	}
 
 	var parents []plumbing.Hash
@@ -172,18 +175,18 @@ func (r *testGitRepo) CommitFiles(files map[string][]byte, message string) (stri
 
 	commitObj := storer.NewEncodedObject()
 	if err := commit.Encode(commitObj); err != nil {
-		return "", err
+		return "", fmt.Errorf("encode commit: %w", err)
 	}
 	commitHash, err := storer.SetEncodedObject(commitObj)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("store commit: %w", err)
 	}
 
 	if err := storer.SetReference(plumbing.NewHashReference(plumbing.Master, commitHash)); err != nil {
-		return "", err
+		return "", fmt.Errorf("set master ref: %w", err)
 	}
 	if err := storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.Master)); err != nil {
-		return "", err
+		return "", fmt.Errorf("set HEAD symref: %w", err)
 	}
 
 	return commitHash.String(), nil
@@ -192,36 +195,41 @@ func (r *testGitRepo) CommitFiles(files map[string][]byte, message string) (stri
 func (r *testGitRepo) ReadBlob(ref string, path string) ([]byte, error) {
 	hash, err := r.repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve ref: %w", err)
 	}
 	commit, err := r.repo.CommitObject(*hash)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get commit: %w", err)
 	}
 	file, err := commit.File(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get file %s: %w", path, err)
 	}
 	reader, err := file.Reader()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open reader: %w", err)
 	}
 	defer func() { _ = reader.Close() }()
-	return io.ReadAll(reader)
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("read blob: %w", err)
+	}
+	return data, nil
 }
 
 func (r *testGitRepo) readAllFiles(ref string) (map[string][]byte, error) {
 	hash, err := r.repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve ref: %w", err)
 	}
 	commit, err := r.repo.CommitObject(*hash)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get commit: %w", err)
 	}
 	tree, err := commit.Tree()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get tree: %w", err)
 	}
 	files := make(map[string][]byte)
 	for _, entry := range tree.Entries {

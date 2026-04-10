@@ -123,7 +123,7 @@ func TestDeleteDraft(t *testing.T) {
 
 	all, err := ti.svc.List(ctx, ti.projectID, nil)
 	require.NoError(t, err)
-	require.Len(t, all, 0)
+	require.Empty(t, all)
 }
 
 func TestPublishDraft_CreatesFile(t *testing.T) {
