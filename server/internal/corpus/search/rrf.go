@@ -1,6 +1,6 @@
 package search
 
-import "sort"
+import "slices"
 
 // RRFResult holds an item ID and its combined RRF score.
 type RRFResult struct {
@@ -27,11 +27,20 @@ func RRF(lists [][]string, weights []float64, k float64) []RRFResult {
 		results = append(results, RRFResult{ID: id, Score: score})
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		if results[i].Score != results[j].Score {
-			return results[i].Score > results[j].Score
+	slices.SortFunc(results, func(a, b RRFResult) int {
+		if a.Score > b.Score {
+			return -1
 		}
-		return results[i].ID < results[j].ID
+		if a.Score < b.Score {
+			return 1
+		}
+		if a.ID < b.ID {
+			return -1
+		}
+		if a.ID > b.ID {
+			return 1
+		}
+		return 0
 	})
 
 	return results

@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 // SearchParams defines the parameters for a hybrid search.
@@ -103,41 +106,42 @@ func (s *Service) Search(ctx context.Context, params SearchParams) (*SearchRespo
 		return nil, fmt.Errorf("decode cursor: %w", err)
 	}
 
-	// Build metadata filter clause.
-	metaArgs := make([]any, 0)
-	metaClause := ""
-	argIdx := 3 // $1=projectID, $2=query/embedding param
-	if len(params.Metadata) > 0 {
-		for k, v := range params.Metadata {
-			if metaClause != "" {
-				metaClause += " AND "
+	metaClause, metaArgs := buildMetadataFilter(params.Metadata)
+
+	doFTS := params.FTSWeight > 0 && params.Query != ""
+	doVec := params.VecWeight > 0 && len(params.Embedding.Slice()) > 0
+
+	var ftsRanked, vecRanked []rankedChunkID
+
+	// Run FTS and vector searches concurrently when both are needed.
+	g, gctx := errgroup.WithContext(ctx)
+
+	if doFTS {
+		g.Go(func() error {
+			ranked, ftsErr := s.ftsSearch(gctx, projectID, params.Query, metaClause, metaArgs)
+			if ftsErr != nil {
+				s.logger.ErrorContext(gctx, "fts search", attr.SlogError(ftsErr))
+				return fmt.Errorf("fts search: %w", ftsErr)
 			}
-			metaClause += fmt.Sprintf("metadata->>$%d = $%d", argIdx, argIdx+1)
-			metaArgs = append(metaArgs, k, v)
-			argIdx += 2
-		}
-		metaClause = " AND " + metaClause
+			ftsRanked = ranked
+			return nil
+		})
 	}
 
-	var ftsRanked []rankedChunkID
-	var vecRanked []rankedChunkID
-
-	// FTS search.
-	if params.FTSWeight > 0 && params.Query != "" {
-		ftsRanked, err = s.ftsSearch(ctx, projectID, params.Query, metaClause, metaArgs)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "fts search", attr.SlogError(err))
-			return nil, fmt.Errorf("fts search: %w", err)
-		}
+	if doVec {
+		g.Go(func() error {
+			ranked, vecErr := s.vectorSearch(gctx, projectID, params.Embedding, metaClause, metaArgs)
+			if vecErr != nil {
+				s.logger.ErrorContext(gctx, "vector search", attr.SlogError(vecErr))
+				return fmt.Errorf("vector search: %w", vecErr)
+			}
+			vecRanked = ranked
+			return nil
+		})
 	}
 
-	// Vector search.
-	if params.VecWeight > 0 && len(params.Embedding.Slice()) > 0 {
-		vecRanked, err = s.vectorSearch(ctx, projectID, params.Embedding, metaClause, metaArgs)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "vector search", attr.SlogError(err))
-			return nil, fmt.Errorf("vector search: %w", err)
-		}
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("search: %w", err)
 	}
 
 	// RRF blending.
@@ -145,20 +149,12 @@ func (s *Service) Search(ctx context.Context, params SearchParams) (*SearchRespo
 	var weights []float64
 
 	if len(ftsRanked) > 0 {
-		ids := make([]string, len(ftsRanked))
-		for i, r := range ftsRanked {
-			ids[i] = r.chunkID
-		}
-		lists = append(lists, ids)
+		lists = append(lists, extractIDs(ftsRanked))
 		weights = append(weights, params.FTSWeight)
 	}
 
 	if len(vecRanked) > 0 {
-		ids := make([]string, len(vecRanked))
-		for i, r := range vecRanked {
-			ids[i] = r.chunkID
-		}
-		lists = append(lists, ids)
+		lists = append(lists, extractIDs(vecRanked))
 		weights = append(weights, params.VecWeight)
 	}
 
@@ -216,10 +212,45 @@ type rankedChunkID struct {
 	chunkID string
 }
 
+func extractIDs(ranked []rankedChunkID) []string {
+	ids := make([]string, len(ranked))
+	for i, r := range ranked {
+		ids[i] = r.chunkID
+	}
+	return ids
+}
+
+// buildMetadataFilter constructs a parameterized SQL clause and args for JSONB metadata filtering.
+// Metadata keys are sorted for deterministic query generation.
+func buildMetadataFilter(metadata map[string]string) (string, []any) {
+	if len(metadata) == 0 {
+		return "", nil
+	}
+
+	// Sort keys for deterministic SQL generation.
+	keys := make([]string, 0, len(metadata))
+	for k := range metadata {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	args := make([]any, 0, len(metadata)*2)
+	clause := ""
+	argIdx := 3 // $1=projectID, $2=query/embedding param
+	for _, k := range keys {
+		if clause != "" {
+			clause += " AND "
+		}
+		clause += fmt.Sprintf("metadata->>$%d = $%d", argIdx, argIdx+1)
+		args = append(args, k, metadata[k])
+		argIdx += 2
+	}
+	return " AND " + clause, args
+}
+
 // ftsSearch runs a full-text search with phrase proximity boosting.
 func (s *Service) ftsSearch(ctx context.Context, projectID uuid.UUID, query string, metaClause string, metaArgs []any) ([]rankedChunkID, error) {
-	// Use plainto_tsquery for word matching and phraseto_tsquery for proximity boosting.
-	// Combined score: ts_rank(plain) + 2*ts_rank(phrase) gives proximity a 2x boost.
+	// Combined ranking: ts_rank(plain) + 2*ts_rank(phrase) gives proximity a 2x boost.
 	sql := `SELECT chunk_id FROM corpus_chunks
 		WHERE project_id = $1
 		  AND content_tsvector @@ plainto_tsquery('english', $2)` + metaClause + `
@@ -227,28 +258,7 @@ func (s *Service) ftsSearch(ctx context.Context, projectID uuid.UUID, query stri
 		        + 2.0 * ts_rank(content_tsvector, phraseto_tsquery('english', $2))) DESC
 		LIMIT ` + fmt.Sprintf("%d", maxFTSRows)
 
-	args := make([]any, 0, 2+len(metaArgs))
-	args = append(args, projectID, query)
-	args = append(args, metaArgs...)
-
-	rows, err := s.db.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, fmt.Errorf("fts query: %w", err)
-	}
-	defer rows.Close()
-
-	var results []rankedChunkID
-	for rows.Next() {
-		var r rankedChunkID
-		if err := rows.Scan(&r.chunkID); err != nil {
-			return nil, fmt.Errorf("scan fts row: %w", err)
-		}
-		results = append(results, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("fts rows iteration: %w", err)
-	}
-	return results, nil
+	return s.scanRankedIDs(ctx, sql, projectID, query, metaArgs)
 }
 
 // vectorSearch runs a cosine similarity search on embeddings.
@@ -259,13 +269,18 @@ func (s *Service) vectorSearch(ctx context.Context, projectID uuid.UUID, embeddi
 		ORDER BY embedding <=> $2
 		LIMIT ` + fmt.Sprintf("%d", maxVecRows)
 
+	return s.scanRankedIDs(ctx, sql, projectID, embedding, metaArgs)
+}
+
+// scanRankedIDs executes a query that returns chunk_id rows and collects them in order.
+func (s *Service) scanRankedIDs(ctx context.Context, sql string, projectID uuid.UUID, param any, metaArgs []any) ([]rankedChunkID, error) {
 	args := make([]any, 0, 2+len(metaArgs))
-	args = append(args, projectID, embedding)
+	args = append(args, projectID, param)
 	args = append(args, metaArgs...)
 
 	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, fmt.Errorf("vector query: %w", err)
+		return nil, fmt.Errorf("ranked query: %w", err)
 	}
 	defer rows.Close()
 
@@ -273,12 +288,12 @@ func (s *Service) vectorSearch(ctx context.Context, projectID uuid.UUID, embeddi
 	for rows.Next() {
 		var r rankedChunkID
 		if err := rows.Scan(&r.chunkID); err != nil {
-			return nil, fmt.Errorf("scan vector row: %w", err)
+			return nil, fmt.Errorf("scan ranked row: %w", err)
 		}
 		results = append(results, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("vector rows iteration: %w", err)
+		return nil, fmt.Errorf("ranked rows iteration: %w", err)
 	}
 	return results, nil
 }
@@ -322,20 +337,20 @@ func (s *Service) GetChunk(ctx context.Context, projectID string, chunkID string
 		return nil, fmt.Errorf("parse project ID: %w", err)
 	}
 
-	// Fetch the target chunk and its neighbors (previous and next by chunk_id in the same file)
-	// using window functions.
+	// Window functions compute prev/next neighbors in the same file in a single query.
 	sql := `WITH ordered AS (
 		SELECT chunk_id, file_path, COALESCE(heading_path, '') AS heading_path,
 			   COALESCE(breadcrumb, '') AS breadcrumb, content, content_text, metadata,
-			   LAG(chunk_id) OVER (PARTITION BY file_path ORDER BY chunk_id) AS prev_chunk_id,
-			   LAG(heading_path) OVER (PARTITION BY file_path ORDER BY chunk_id) AS prev_heading_path,
-			   LAG(breadcrumb) OVER (PARTITION BY file_path ORDER BY chunk_id) AS prev_breadcrumb,
-			   LEAD(chunk_id) OVER (PARTITION BY file_path ORDER BY chunk_id) AS next_chunk_id,
-			   LEAD(heading_path) OVER (PARTITION BY file_path ORDER BY chunk_id) AS next_heading_path,
-			   LEAD(breadcrumb) OVER (PARTITION BY file_path ORDER BY chunk_id) AS next_breadcrumb
+			   LAG(chunk_id) OVER w AS prev_chunk_id,
+			   LAG(heading_path) OVER w AS prev_heading_path,
+			   LAG(breadcrumb) OVER w AS prev_breadcrumb,
+			   LEAD(chunk_id) OVER w AS next_chunk_id,
+			   LEAD(heading_path) OVER w AS next_heading_path,
+			   LEAD(breadcrumb) OVER w AS next_breadcrumb
 		FROM corpus_chunks
 		WHERE project_id = $1
 		  AND file_path = (SELECT file_path FROM corpus_chunks WHERE project_id = $1 AND chunk_id = $2)
+		WINDOW w AS (PARTITION BY file_path ORDER BY chunk_id)
 	)
 	SELECT chunk_id, file_path, heading_path, breadcrumb, content, content_text, metadata,
 		   prev_chunk_id, prev_heading_path, prev_breadcrumb,
@@ -369,27 +384,20 @@ func (s *Service) GetChunk(ctx context.Context, projectID string, chunkID string
 	if prevChunkID != nil {
 		chunk.Prev = &NeighborChunk{
 			ChunkID:     *prevChunkID,
-			HeadingPath: deref(prevHeading),
-			Breadcrumb:  deref(prevBreadcrumb),
+			HeadingPath: conv.PtrValOr(prevHeading, ""),
+			Breadcrumb:  conv.PtrValOr(prevBreadcrumb, ""),
 		}
 	}
 
 	if nextChunkID != nil {
 		chunk.Next = &NeighborChunk{
 			ChunkID:     *nextChunkID,
-			HeadingPath: deref(nextHeading),
-			Breadcrumb:  deref(nextBreadcrumb),
+			HeadingPath: conv.PtrValOr(nextHeading, ""),
+			Breadcrumb:  conv.PtrValOr(nextBreadcrumb, ""),
 		}
 	}
 
 	return &chunk, nil
-}
-
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 // DecodeCursor decodes a base64-encoded pagination cursor into offset.
