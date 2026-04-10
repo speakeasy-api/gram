@@ -1725,12 +1725,6 @@ function HookTraceRow({
   );
 }
 
-function successRateColor(rate: number): string {
-  if (rate >= 90) return "#10b981";
-  if (rate >= 70) return "#f59e0b";
-  return "#ef4444";
-}
-
 type StackedBarDataset = {
   label: string;
   data: number[];
@@ -2131,47 +2125,73 @@ function UserVolumeList({
 }
 
 function ServerErrorRateChart({
-  servers,
+  title,
+  traces,
   serverNameMappings,
 }: {
-  servers: HooksServerSummary[];
+  title: string;
+  traces: HookTrace[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
-  const items = useMemo(
-    () =>
-      servers
-        .filter((s) => s.failureCount > 0)
-        .map((s) => ({
-          label: !s.serverName
-            ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-            : (serverNameMappings.rawToDisplay.get(s.serverName) ??
-              s.serverName),
-          errorRate: s.failureRate * 100,
-          errorCount: s.failureCount,
-          total: s.successCount + s.failureCount,
-        }))
-        .sort((a, b) => b.errorRate - a.errorRate),
-    [servers, serverNameMappings.rawToDisplay],
-  );
+  const { labels, datasets } = useMemo(() => {
+    // Build: serverDisplay → toolName → errorCount (failures only)
+    const serverMap = new Map<string, Map<string, number>>();
+    const toolSet = new Set<string>();
+    for (const t of traces) {
+      if (t.hookStatus !== "failure") continue;
+      const raw = t.toolSource ?? "";
+      const displayName = !raw
+        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+        : (serverNameMappings.rawToDisplay.get(raw) ?? raw);
+      const tool = t.toolName ?? "unknown";
+      toolSet.add(tool);
+      const inner = serverMap.get(displayName) ?? new Map<string, number>();
+      inner.set(tool, (inner.get(tool) ?? 0) + 1);
+      serverMap.set(displayName, inner);
+    }
 
-  const height = Math.max(120, items.length * 28 + 40);
+    // Sort servers by total error count desc
+    const sortedServers = Array.from(serverMap.entries())
+      .map(([displayName, toolCounts]) => ({
+        displayName,
+        total: Array.from(toolCounts.values()).reduce((a, b) => a + b, 0),
+        toolCounts,
+      }))
+      .sort((a, b) => b.total - a.total);
 
-  const chartData = {
-    labels: items.map((i) => i.label),
-    datasets: [
-      {
-        data: items.map((i) => i.errorRate),
-        backgroundColor: items.map((i) => successRateColor(100 - i.errorRate)),
-        borderWidth: 0,
-        borderRadius: 3,
-        barThickness: 16,
-      },
-    ],
-  };
+    // Sort tools by total errors desc
+    const sortedTools = Array.from(toolSet).sort((a, b) => {
+      const aTotal = sortedServers.reduce(
+        (s, srv) => s + (srv.toolCounts.get(a) ?? 0),
+        0,
+      );
+      const bTotal = sortedServers.reduce(
+        (s, srv) => s + (srv.toolCounts.get(b) ?? 0),
+        0,
+      );
+      return bTotal - aTotal;
+    });
 
-  const options = {
-    indexAxis: "y" as const,
-    animation: false as const,
+    const chartLabels = sortedServers.map((s) => s.displayName);
+    const errorColor = "#ef4444";
+    const chartDatasets = sortedTools.map((tool) => ({
+      label: tool,
+      barThickness: 16,
+      data: sortedServers.map((s) => s.toolCounts.get(tool) ?? 0),
+      backgroundColor: errorColor + "1a",
+      borderColor: errorColor,
+      borderWidth: 1.5,
+      hoverBackgroundColor: errorColor + "33",
+      hoverBorderColor: errorColor,
+    }));
+
+    return { labels: chartLabels, datasets: chartDatasets };
+  }, [traces, serverNameMappings.rawToDisplay]);
+
+  const height = Math.max(120, labels.length * (24 + 8) + 60);
+
+  const options: ChartOptions<"bar"> = {
+    indexAxis: "y",
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -2179,44 +2199,41 @@ function ServerErrorRateChart({
       tooltip: {
         ...SHARED_TOOLTIP,
         callbacks: {
-          label: (ctx: TooltipItem<"bar">) => {
-            const item = items[ctx.dataIndex];
-            return [
-              ` Error rate: ${(ctx.parsed.x ?? 0).toFixed(1)}%`,
-              ` Errors: ${item?.errorCount.toLocaleString()} of ${item?.total.toLocaleString()}`,
-            ];
-          },
+          title: (items) => items[0]?.label ?? "",
+          label: (ctx: TooltipItem<"bar">) =>
+            ` ${ctx.dataset.label}: ${(ctx.parsed.x ?? 0).toLocaleString()} errors`,
         },
       },
     },
     scales: {
       x: {
-        min: 0,
-        max: 100,
+        stacked: true,
         grid: { color: CHART_COLORS.gridLine },
-        ticks: {
-          color: CHART_COLORS.labelFaded,
-          callback: (v: number | string) => `${v}%`,
+        ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
+        afterFit(scale) {
+          scale.paddingRight = 30;
         },
       },
       y: {
+        stacked: true,
         grid: { display: false },
         ticks: { color: CHART_COLORS.labelFaded, font: { size: 12 } },
       },
     },
   };
 
-  if (items.length === 0) {
-    return (
-      <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
-        No errors in this period
-      </div>
-    );
-  }
-
   return (
-    <div style={{ position: "relative", height }}>
-      <Bar data={chartData} options={options} />
+    <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+      <h3 className="text font-semibold">{title}</h3>
+      {labels.length === 0 ? (
+        <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
+          No errors in this period
+        </div>
+      ) : (
+        <div style={{ position: "relative", height }}>
+          <Bar data={{ labels, datasets }} options={options} />
+        </div>
+      )}
     </div>
   );
 }
@@ -2573,13 +2590,11 @@ function HooksAnalytics({
       {/* Error Analysis */}
       {hasServers && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Servers by Error Rate</h3>
-            <ServerErrorRateChart
-              servers={derivedServers}
-              serverNameMappings={serverNameMappings}
-            />
-          </div>
+          <ServerErrorRateChart
+            title="Errors per Server and Tool"
+            traces={groupedTraces}
+            serverNameMappings={serverNameMappings}
+          />
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">Tools by Error Count</h3>
             <ToolErrorList traces={groupedTraces} />
