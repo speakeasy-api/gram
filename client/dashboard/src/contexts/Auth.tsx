@@ -276,10 +276,14 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Known org-level route paths that should not be treated as project slugs
   const ORG_ROUTE_PATHS = [
     "billing",
+    "team",
     "api-keys",
     "domains",
     "logs",
     "projects",
+    "audit-logs",
+    "access",
+    "admin-settings",
   ];
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],

@@ -1,21 +1,33 @@
-import { NavMenu } from "@/components/nav-menu";
+import { NavButton, NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useIsAdmin, useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
+import { Icon } from "@speakeasy-api/moonshine";
+import { ExternalLink } from "lucide-react";
 import * as React from "react";
 
 export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
   const isAdmin = useIsAdmin();
   const telemetry = useTelemetry();
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  const isTeamPageEnabled =
+    telemetry.isFeatureEnabled("gram-team-page") ?? false;
+
+  const externalTeamUrl =
+    organization?.userWorkspaceSlugs &&
+    organization.userWorkspaceSlugs.length > 0
+      ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
+      : "https://app.speakeasy.com";
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -32,7 +44,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <NavMenu
               items={[
                 orgRoutes.billing,
-                orgRoutes.team,
+                ...(isTeamPageEnabled ? [orgRoutes.team] : []),
                 orgRoutes.apiKeys,
                 orgRoutes.domains,
                 orgRoutes.logs,
@@ -40,7 +52,24 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 ...(isRbacEnabled ? [orgRoutes.access] : []),
                 ...(isAdmin ? [orgRoutes.adminSettings] : []),
               ]}
-            />
+            >
+              {!isTeamPageEnabled && (
+                <SidebarMenuItem>
+                  <NavButton
+                    title="Team"
+                    titleNode={
+                      <span className="flex items-center gap-1.5">
+                        Team
+                        <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                      </span>
+                    }
+                    href={externalTeamUrl}
+                    target="_blank"
+                    Icon={(props) => <Icon name="users-round" {...props} />}
+                  />
+                </SidebarMenuItem>
+              )}
+            </NavMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

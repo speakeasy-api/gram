@@ -77,24 +77,12 @@ export default function Team() {
   });
 
   const removeMemberMutation = useRemoveOrganizationUserMutation({
-    onSuccess: async () => {
-      await invalidateTeamData();
-      toast.success(
-        `${memberToRemove?.name ?? memberToRemove?.email} has been removed`,
-      );
-      setMemberToRemove(null);
-    },
     onError: () => {
       toast.error("Failed to remove member");
     },
   });
 
   const revokeInviteMutation = useRevokeInviteMutation({
-    onSuccess: async () => {
-      await invalidateTeamData();
-      toast.success(`Invite to ${inviteToCancel?.email} has been cancelled`);
-      setInviteToCancel(null);
-    },
     onError: () => {
       toast.error("Failed to cancel invite");
     },
@@ -127,21 +115,41 @@ export default function Team() {
   const handleRemoveMember = () => {
     if (!memberToRemove || memberToRemove.email === user.email) return;
 
-    removeMemberMutation.mutate({
-      request: {
-        userId: memberToRemove.userId,
+    const displayName = memberToRemove.name ?? memberToRemove.email;
+    removeMemberMutation.mutate(
+      {
+        request: {
+          userId: memberToRemove.userId,
+        },
       },
-    });
+      {
+        onSuccess: async () => {
+          await invalidateTeamData();
+          toast.success(`${displayName} has been removed`);
+          setMemberToRemove(null);
+        },
+      },
+    );
   };
 
   const handleRevokeInvite = () => {
     if (!inviteToCancel) return;
 
-    revokeInviteMutation.mutate({
-      request: {
-        invitationId: inviteToCancel.id,
+    const email = inviteToCancel.email;
+    revokeInviteMutation.mutate(
+      {
+        request: {
+          invitationId: inviteToCancel.id,
+        },
       },
-    });
+      {
+        onSuccess: async () => {
+          await invalidateTeamData();
+          toast.success(`Invite to ${email} has been cancelled`);
+          setInviteToCancel(null);
+        },
+      },
+    );
   };
 
   const memberColumns: Column<OrganizationUser>[] = [
