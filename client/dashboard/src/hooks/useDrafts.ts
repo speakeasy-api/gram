@@ -17,21 +17,72 @@ export type ApiDraft = {
 };
 
 export function apiDraftToDisplay(draft: ApiDraft): DraftDocument {
-  throw new Error("not implemented");
+  const isCreate = draft.operation === "create";
+
+  return {
+    id: draft.id,
+    title: draft.file_path.split("/").pop() ?? draft.file_path,
+    author: draft.source ?? "unknown",
+    authorType: (draft.author_type as "human" | "agent") ?? "human",
+    createdAt: draft.created_at,
+    updatedAt: draft.updated_at,
+    filePath: isCreate ? null : draft.file_path,
+    proposedPath: isCreate ? draft.file_path : undefined,
+    content: draft.content ?? "",
+    upvotes: 0,
+    downvotes: 0,
+    userVote: null,
+    comments: [],
+    status: draft.status,
+    labels: draft.labels ?? [],
+  };
 }
 
+const API_BASE = "/v1/projects";
+
 export async function fetchDrafts(
-  _projectId: string,
-  _token: string,
-  _status?: string,
+  projectId: string,
+  token: string,
+  status?: string,
 ): Promise<DraftDocument[]> {
-  throw new Error("not implemented");
+  let url = `${API_BASE}/${projectId}/corpus/drafts`;
+  if (status) {
+    url += `?status=${encodeURIComponent(status)}`;
+  }
+
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch drafts: ${resp.status}`);
+  }
+
+  const apiDrafts: ApiDraft[] = await resp.json();
+  return apiDrafts.map(apiDraftToDisplay);
 }
 
 export async function publishDrafts(
-  _projectId: string,
-  _token: string,
-  _draftIds: string[],
+  projectId: string,
+  token: string,
+  draftIds: string[],
 ): Promise<{ commitSha: string }> {
-  throw new Error("not implemented");
+  const resp = await fetch(`${API_BASE}/${projectId}/corpus/drafts/publish`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ draft_ids: draftIds }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Failed to publish drafts: ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  return { commitSha: data.commit_sha };
 }
