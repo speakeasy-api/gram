@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"math"
 	"os"
 	"testing"
 
@@ -111,22 +110,6 @@ func (ti *testInstance) seedChunk(t *testing.T, ctx context.Context, chunkID str
 		ContentFingerprint:  "fp-" + chunkID,
 	})
 	require.NoError(t, err)
-}
-
-// makeEmbedding creates a 3072-dim vector with the given value at position 0
-// and zeros elsewhere, then normalizes.
-func makeEmbedding(val float32) pgvector.Vector {
-	dims := 3072
-	vec := make([]float32, dims)
-	vec[0] = val
-	// Normalize for cosine similarity.
-	mag := float32(math.Sqrt(float64(val * val)))
-	if mag > 0 {
-		for i := range vec {
-			vec[i] /= mag
-		}
-	}
-	return pgvector.NewVector(vec)
 }
 
 // makeEmbeddingAt creates a normalized 3072-dim vector with a 1.0 at the given index.
