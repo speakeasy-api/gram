@@ -2238,26 +2238,79 @@ function ServerErrorRateChart({
   );
 }
 
-function ToolErrorList({ traces }: { traces: HookTrace[] }) {
-  const items = useMemo(() => {
-    const map = new Map<string, number>();
+function UserErrorChart({
+  title,
+  traces,
+  serverNameMappings,
+}: {
+  title: string;
+  traces: HookTrace[];
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
+}) {
+  const { labels, datasets } = useMemo(() => {
+    const userMap = new Map<string, Map<string, number>>();
+    const serverSet = new Set<string>();
     for (const t of traces) {
       if (t.hookStatus !== "failure") continue;
-      const tool = t.toolName ?? "unknown";
-      map.set(tool, (map.get(tool) ?? 0) + 1);
+      const user = t.userEmail || "unknown";
+      const raw = t.toolSource ?? "";
+      const displayName = !raw
+        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+        : (serverNameMappings.rawToDisplay.get(raw) ?? raw);
+      serverSet.add(displayName);
+      const inner = userMap.get(user) ?? new Map<string, number>();
+      inner.set(displayName, (inner.get(displayName) ?? 0) + 1);
+      userMap.set(user, inner);
     }
-    return Array.from(map.entries())
-      .map(([key, value]) => ({ key, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [traces]);
 
-  return (
-    <BarList
-      items={items}
-      barClassName="bg-red-500"
-      renderLabel={(item) => <span className="truncate">{item.key}</span>}
-    />
-  );
+    const sortedUsers = Array.from(userMap.entries())
+      .map(([user, serverCounts]) => ({
+        user,
+        total: Array.from(serverCounts.values()).reduce((a, b) => a + b, 0),
+        serverCounts,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const sortedServers = Array.from(serverSet).sort((a, b) => {
+      const aTotal = sortedUsers.reduce(
+        (s, u) => s + (u.serverCounts.get(a) ?? 0),
+        0,
+      );
+      const bTotal = sortedUsers.reduce(
+        (s, u) => s + (u.serverCounts.get(b) ?? 0),
+        0,
+      );
+      return bTotal - aTotal;
+    });
+
+    const chartLabels = sortedUsers.map((u) => u.user);
+    const chartDatasets = sortedServers.map((server, i) => ({
+      label: server,
+      barThickness: 24,
+      data: sortedUsers.map((u) => u.serverCounts.get(server) ?? 0),
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "1a",
+      borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      borderWidth: 1.5,
+      hoverBackgroundColor:
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "33",
+      hoverBorderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+    }));
+
+    return { labels: chartLabels, datasets: chartDatasets };
+  }, [traces, serverNameMappings.rawToDisplay]);
+
+  if (labels.length === 0) {
+    return (
+      <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+        <h3 className="text font-semibold">{title}</h3>
+        <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
+          No errors in this period
+        </div>
+      </div>
+    );
+  }
+
+  return <StackedBarChart title={title} labels={labels} datasets={datasets} />;
 }
 
 function buildMultiLineData(
@@ -2595,10 +2648,11 @@ function HooksAnalytics({
             traces={groupedTraces}
             serverNameMappings={serverNameMappings}
           />
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Tools by Error Count</h3>
-            <ToolErrorList traces={groupedTraces} />
-          </div>
+          <UserErrorChart
+            title="Errors per User"
+            traces={groupedTraces}
+            serverNameMappings={serverNameMappings}
+          />
         </div>
       )}
     </div>
