@@ -1603,3 +1603,186 @@ ON audit_logs (organization_id, seq DESC);
 
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
 ON audit_logs (organization_id, project_id, seq DESC);
+
+-- =============================================================================
+-- Content Corpus tables
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS corpus_drafts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  file_path TEXT NOT NULL CHECK (file_path <> ''),
+  content TEXT,
+  operation TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  source TEXT,
+  author_type TEXT,
+  labels JSONB,
+  commit_sha TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT corpus_drafts_pkey PRIMARY KEY (id),
+  CONSTRAINT corpus_drafts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT corpus_drafts_operation_check CHECK (operation IN ('create', 'update', 'delete')),
+  CONSTRAINT corpus_drafts_status_check CHECK (status IN ('open', 'published', 'rejected'))
+);
+
+CREATE INDEX IF NOT EXISTS corpus_drafts_project_id_status_idx
+ON corpus_drafts (project_id, status);
+
+CREATE TABLE IF NOT EXISTS corpus_publish_events (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  commit_sha TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT corpus_publish_events_pkey PRIMARY KEY (id),
+  CONSTRAINT corpus_publish_events_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT corpus_publish_events_status_check CHECK (status IN ('pending', 'indexing', 'indexed', 'failed'))
+);
+
+CREATE INDEX IF NOT EXISTS corpus_publish_events_project_id_status_idx
+ON corpus_publish_events (project_id, status);
+
+CREATE TABLE IF NOT EXISTS corpus_chunks (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  chunk_id TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  heading_path TEXT,
+  breadcrumb TEXT,
+  content TEXT NOT NULL,
+  content_text TEXT NOT NULL,
+  content_tsvector tsvector NOT NULL GENERATED ALWAYS AS (to_tsvector('english', content_text)) STORED,
+  embedding vector(3072),
+  metadata JSONB,
+  strategy TEXT,
+  manifest_fingerprint TEXT,
+  content_fingerprint TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT corpus_chunks_pkey PRIMARY KEY (id),
+  CONSTRAINT corpus_chunks_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT corpus_chunks_project_id_chunk_id_key UNIQUE (project_id, chunk_id)
+);
+
+CREATE INDEX IF NOT EXISTS corpus_chunks_content_tsvector_idx
+ON corpus_chunks USING gin (content_tsvector);
+
+CREATE TABLE IF NOT EXISTS corpus_index_state (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  last_indexed_sha TEXT,
+  embedding_model TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT corpus_index_state_pkey PRIMARY KEY (id),
+  CONSTRAINT corpus_index_state_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT corpus_index_state_project_id_key UNIQUE (project_id)
+);
+
+CREATE TABLE IF NOT EXISTS corpus_feedback (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  file_path TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  direction TEXT NOT NULL,
+  labels JSONB,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT corpus_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT corpus_feedback_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT corpus_feedback_project_id_file_path_user_id_key UNIQUE (project_id, file_path, user_id),
+  CONSTRAINT corpus_feedback_direction_check CHECK (direction IN ('up', 'down'))
+);
+
+CREATE TABLE IF NOT EXISTS corpus_feedback_comments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  file_path TEXT NOT NULL,
+  author_id TEXT NOT NULL,
+  author_type TEXT NOT NULL,
+  content TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT corpus_feedback_comments_pkey PRIMARY KEY (id),
+  CONSTRAINT corpus_feedback_comments_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT corpus_feedback_comments_author_type_check CHECK (author_type IN ('human', 'agent'))
+);
+
+CREATE INDEX IF NOT EXISTS corpus_feedback_comments_project_id_file_path_idx
+ON corpus_feedback_comments (project_id, file_path);
+
+CREATE TABLE IF NOT EXISTS corpus_annotations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  file_path TEXT NOT NULL,
+  author_id TEXT NOT NULL,
+  author_type TEXT NOT NULL,
+  content TEXT NOT NULL,
+  line_start INTEGER,
+  line_end INTEGER,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT corpus_annotations_pkey PRIMARY KEY (id),
+  CONSTRAINT corpus_annotations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT corpus_annotations_author_type_check CHECK (author_type IN ('human', 'agent'))
+);
+
+CREATE INDEX IF NOT EXISTS corpus_annotations_project_id_file_path_idx
+ON corpus_annotations (project_id, file_path);
+
+CREATE TABLE IF NOT EXISTS corpus_auto_publish_configs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  enabled boolean NOT NULL DEFAULT false,
+  interval_minutes INTEGER NOT NULL DEFAULT 10,
+  min_upvotes INTEGER NOT NULL DEFAULT 0,
+  author_type_filter TEXT,
+  label_filter JSONB,
+  min_age_hours INTEGER NOT NULL DEFAULT 0,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT corpus_auto_publish_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT corpus_auto_publish_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT corpus_auto_publish_configs_project_id_key UNIQUE (project_id)
+);
