@@ -72,7 +72,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authctx.ProjectID)
 
 	svc := autopublish.NewService(conn)
-	draftsSvc := drafts.NewService(conn, &stubGitRepo{})
+	draftsSvc := drafts.NewService(conn, &stubGitRepo{}, &stubWriteLock{})
 
 	return ctx, &testInstance{
 		svc:       svc,
@@ -94,3 +94,9 @@ func (s *stubGitRepo) CommitFiles(_ map[string][]byte, _ string) (string, error)
 func (s *stubGitRepo) ReadBlob(_ string, _ string) ([]byte, error) {
 	return nil, nil
 }
+
+// stubWriteLock satisfies drafts.WriteLock for tests.
+type stubWriteLock struct{}
+
+func (s *stubWriteLock) Lock(_ context.Context, _ string) error   { return nil }
+func (s *stubWriteLock) Unlock(_ context.Context, _ string) error { return nil }
