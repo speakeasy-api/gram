@@ -27,6 +27,7 @@ import {
 } from "./contexts/CommandPalette";
 import { SdkProvider, useSlugs } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
+import { RBACDevToolbar } from "./components/rbac-dev-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
@@ -94,6 +95,7 @@ export default function App() {
                     <AppContent />
                     <Toaster />
                     <CommandPalette />
+                    {import.meta.env.DEV && <RBACDevToolbar />}
                   </SdkProvider>
                 </NuqsAdapter>
               </BrowserRouter>
