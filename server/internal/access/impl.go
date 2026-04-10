@@ -265,14 +265,13 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	}
 
 	if err := audit.LogAccessRoleCreate(ctx, s.db, audit.LogAccessRoleCreateEvent{
-		OrganizationID:    ac.ActiveOrganizationID,
-		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName:  ac.Email,
-		ActorSlug:         nil,
-		RoleID:            wr.ID,
-		RoleName:          createdRole.Name,
-		RoleSlug:          wr.Slug,
-		RoleSnapshotAfter: createdRole,
+		OrganizationID:   ac.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		RoleID:           wr.ID,
+		RoleName:         createdRole.Name,
+		RoleSlug:         wr.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log access role creation").Log(ctx, logger)
 	}
