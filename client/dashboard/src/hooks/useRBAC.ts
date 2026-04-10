@@ -2,7 +2,7 @@ import { getRBACScopeOverrideHeader } from "@/components/rbac-dev-toolbar";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type { Scope };
 
@@ -20,12 +20,36 @@ export function useRBAC() {
     import.meta.env.DEV && getRBACScopeOverrideHeader() !== null;
   const isRbacEnabled = featureFlagEnabled || devOverrideActive;
 
+  // Re-render when the dev toolbar changes scopes in localStorage.
+  const [overrideVersion, setOverrideVersion] = useState(0);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const handler = () => setOverrideVersion((v) => v + 1);
+    window.addEventListener("rbac-override-change", handler);
+    return () => window.removeEventListener("rbac-override-change", handler);
+  }, []);
+
+  // Only fetch from server when RBAC is feature-flagged on (not dev override).
+  // The dev toolbar synthesises grants client-side so it works without server support.
   const { data, isLoading } = useGrants(undefined, undefined, {
-    enabled: isRbacEnabled,
+    enabled: isRbacEnabled && !devOverrideActive,
     staleTime: 30_000,
   });
 
-  const grants = data?.grants;
+  const grants = useMemo(() => {
+    if (devOverrideActive) {
+      const header = getRBACScopeOverrideHeader();
+      if (!header) return [];
+      return header.split(",").map((part) => {
+        const [scope, resourcesStr] = part.split("=");
+        return {
+          scope: scope as Scope,
+          resources: resourcesStr ? resourcesStr.split("|") : undefined,
+        };
+      });
+    }
+    return data?.grants;
+  }, [devOverrideActive, data?.grants, overrideVersion]);
 
   /**
    * Check if the user has a given scope, optionally scoped to a resource ID.

@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import {
   PageTabsTrigger,
   Tabs,
@@ -60,39 +61,41 @@ export default function Access() {
   }
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs substitutions={tabDisplayNames} />
-      </Page.Header>
-      <Page.Body>
-        <div className="-mt-4">
-          <Type variant="body" className="text-muted-foreground mb-2">
-            Manage access control for your team by defining roles and assigning
-            permissions.
-          </Type>
-        </div>
-
-        <Tabs value={currentTab} onValueChange={handleTabChange}>
-          <div className="border-border -mx-8 border-b px-8">
-            <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
-              <PageTabsTrigger value="roles">
-                Roles{roleCount != null ? ` (${roleCount})` : ""}
-              </PageTabsTrigger>
-              <PageTabsTrigger value="members">
-                Members{memberCount != null ? ` (${memberCount})` : ""}
-              </PageTabsTrigger>
-            </TabsList>
+    <RequireScope scope="org:read" level="page">
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs substitutions={tabDisplayNames} />
+        </Page.Header>
+        <Page.Body>
+          <div className="-mt-4">
+            <Type variant="body" className="text-muted-foreground mb-2">
+              Manage access control for your team by defining roles and
+              assigning permissions.
+            </Type>
           </div>
 
-          <TabsContent value="roles" className="mt-6">
-            <RolesTab />
-          </TabsContent>
+          <Tabs value={currentTab} onValueChange={handleTabChange}>
+            <div className="border-b border-border -mx-8 px-8">
+              <TabsList className="bg-transparent p-0 h-auto rounded-none justify-start gap-4 text-sm">
+                <PageTabsTrigger value="roles">
+                  Roles{roleCount != null ? ` (${roleCount})` : ""}
+                </PageTabsTrigger>
+                <PageTabsTrigger value="members">
+                  Members{memberCount != null ? ` (${memberCount})` : ""}
+                </PageTabsTrigger>
+              </TabsList>
+            </div>
 
-          <TabsContent value="members" className="mt-6">
-            <MembersTab />
-          </TabsContent>
-        </Tabs>
-      </Page.Body>
-    </Page>
+            <TabsContent value="roles" className="mt-6">
+              <RolesTab />
+            </TabsContent>
+
+            <TabsContent value="members" className="mt-6">
+              <MembersTab />
+            </TabsContent>
+          </Tabs>
+        </Page.Body>
+      </Page>
+    </RequireScope>
   );
 }
