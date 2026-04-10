@@ -1245,12 +1245,12 @@ type ListAttributeKeysParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListAttributeKeys(ctx context.Context, arg ListAttributeKeysParams) ([]string, error) {
-	sb := sq.Select("DISTINCT arrayJoin(JSONAllPaths(attributes)) AS path").
-		From("telemetry_logs").
+	sb := sq.Select("attribute_key").
+		From("attribute_keys").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		OrderBy("path")
+		Where("last_seen_unix_nano >= ?", arg.TimeStart).
+		Where("first_seen_unix_nano <= ?", arg.TimeEnd).
+		OrderBy("attribute_key")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
