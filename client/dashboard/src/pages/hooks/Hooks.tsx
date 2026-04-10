@@ -22,7 +22,6 @@ import {
   TimeRangePicker,
   type DateRangePreset,
 } from "@gram-ai/elements";
-import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
 import type {
   HookTraceSummary as HookTrace,
@@ -340,24 +339,6 @@ function HooksContent() {
     [customRange, dateRange],
   );
 
-  // Fetch hooks summary
-  const { refetch: refetchSummary, isLogsDisabled: isSummaryLogsDisabled } =
-    useLogsEnabledErrorCheck(
-      useQuery({
-        queryKey: ["hooks-summary", from.toISOString(), to.toISOString()],
-        queryFn: () =>
-          unwrapAsync(
-            telemetryGetHooksSummary(client, {
-              getProjectMetricsSummaryPayload: {
-                from,
-                to,
-              },
-            }),
-          ),
-        throwOnError: false,
-      }),
-    );
-
   // Build attribute filters from active filter chips
   const logFilters = useMemo(() => {
     const filters: LogFilter[] = [];
@@ -579,11 +560,10 @@ function HooksContent() {
   );
 
   const refetch = useCallback(() => {
-    refetchSummary();
     refetchLogs();
-  }, [refetchSummary, refetchLogs]);
+  }, [refetchLogs]);
 
-  const isLogsDisabled = isSummaryLogsDisabled || isLogsLogsDisabled;
+  const isLogsDisabled = isLogsLogsDisabled;
   const isLoading = isFetching && groupedTraces.length === 0;
 
   return (
