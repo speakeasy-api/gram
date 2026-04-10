@@ -1142,6 +1142,43 @@ jobs:
         if: success()
         run: pnpm store prune
 
+  # Gate job: aggregates all check results into a single required status check.
+  # This allows domain-specific jobs to skip (via job-level `if`) without blocking
+  # merge, since skipped jobs don't report a status to rulesets.
+  ci-gate:
+    name: CI Gate
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    if: always()
+    needs:
+      - changes
+      - server-build-lint
+      - server-test
+      - docker-build-server
+      - docker-build-client
+      - client-build-lint
+      - ts-sdk-build-lint
+      - cli-build-lint
+      - plog-build-lint
+      - functions-build-host
+      - functions-image
+      - ts-framework-test
+      - elements-build-lint
+      - elements-test
+      - elements-examples
+      - atlas-lint
+      - atlas-push
+    steps:
+      - name: Check results
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          for result in $results; do
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "CI failed: found job with result '$result'"
+              exit 1
+            fi
+          done
+          echo "All CI checks passed or were skipped."
+
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [docker-build-server]
