@@ -2,10 +2,14 @@ package autopublish
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/corpus/autopublish/repo"
 )
 
@@ -55,19 +59,62 @@ func NewService(db *pgxpool.Pool) *Service {
 
 // GetConfig retrieves the auto-publish configuration for a project.
 // Returns the default (disabled) config if none is set.
-func (s *Service) GetConfig(_ context.Context, _ uuid.UUID) (Config, error) {
-	// TODO: implement
-	return Config{}, nil
+func (s *Service) GetConfig(ctx context.Context, projectID uuid.UUID) (Config, error) {
+	row, err := s.repo.GetAutoPublishConfig(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return DefaultConfig(), nil
+		}
+		return Config{}, fmt.Errorf("get auto-publish config: %w", err)
+	}
+
+	return Config{
+		Enabled:          row.Enabled,
+		IntervalMinutes:  row.IntervalMinutes,
+		MinUpvotes:       row.MinUpvotes,
+		AuthorTypeFilter: conv.FromPGText[string](row.AuthorTypeFilter),
+		LabelFilter:      row.LabelFilter,
+		MinAgeHours:      row.MinAgeHours,
+	}, nil
 }
 
 // SetConfig upserts the auto-publish configuration for a project.
-func (s *Service) SetConfig(_ context.Context, _ uuid.UUID, _ string, _ Config) (Config, error) {
-	// TODO: implement
-	return Config{}, nil
+func (s *Service) SetConfig(ctx context.Context, projectID uuid.UUID, orgID string, cfg Config) (Config, error) {
+	row, err := s.repo.UpsertAutoPublishConfig(ctx, repo.UpsertAutoPublishConfigParams{
+		ProjectID:        projectID,
+		OrganizationID:   orgID,
+		Enabled:          cfg.Enabled,
+		IntervalMinutes:  cfg.IntervalMinutes,
+		MinUpvotes:       cfg.MinUpvotes,
+		AuthorTypeFilter: conv.PtrToPGText(cfg.AuthorTypeFilter),
+		LabelFilter:      cfg.LabelFilter,
+		MinAgeHours:      cfg.MinAgeHours,
+	})
+	if err != nil {
+		return Config{}, fmt.Errorf("upsert auto-publish config: %w", err)
+	}
+
+	return Config{
+		Enabled:          row.Enabled,
+		IntervalMinutes:  row.IntervalMinutes,
+		MinUpvotes:       row.MinUpvotes,
+		AuthorTypeFilter: conv.FromPGText[string](row.AuthorTypeFilter),
+		LabelFilter:      row.LabelFilter,
+		MinAgeHours:      row.MinAgeHours,
+	}, nil
 }
 
 // QueryEligibleDrafts returns drafts matching the auto-publish filter criteria.
-func (s *Service) QueryEligibleDrafts(_ context.Context, _ uuid.UUID, _ Config) ([]Draft, error) {
-	// TODO: implement
-	return nil, nil
+func (s *Service) QueryEligibleDrafts(ctx context.Context, projectID uuid.UUID, cfg Config) ([]Draft, error) {
+	drafts, err := s.repo.QueryEligibleDrafts(ctx, repo.QueryEligibleDraftsParams{
+		ProjectID:        projectID,
+		MinUpvotes:       cfg.MinUpvotes,
+		AuthorTypeFilter: conv.PtrToPGText(cfg.AuthorTypeFilter),
+		MinAgeHours:      cfg.MinAgeHours,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query eligible drafts: %w", err)
+	}
+
+	return drafts, nil
 }
