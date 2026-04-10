@@ -1,3 +1,4 @@
+import { getRBACScopeOverrideHeader } from "@/components/rbac-dev-toolbar";
 import { handleError } from "@/lib/errors";
 import { getServerURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
@@ -72,6 +73,11 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
 
         if (projectSlug && !newRequest.headers.get("gram-project")) {
           newRequest.headers.set("gram-project", projectSlug);
+        }
+
+        const scopeOverride = getRBACScopeOverrideHeader();
+        if (scopeOverride) {
+          newRequest.headers.set("X-Gram-Scope-Override", scopeOverride);
         }
 
         return fetch(newRequest);

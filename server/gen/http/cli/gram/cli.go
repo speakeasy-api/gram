@@ -15,7 +15,6 @@ import (
 
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
-	agentworkflowsc "github.com/speakeasy-api/gram/server/gen/http/agentworkflows/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	auditlogsc "github.com/speakeasy-api/gram/server/gen/http/auditlogs/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
@@ -55,7 +54,6 @@ func UsageCommands() []string {
 	return []string{
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role)",
-		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
@@ -91,9 +89,9 @@ func UsageCommands() []string {
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "auth callback --code \"abc123\" --state \"abc123\"" + "\n" +
 		""
 }
 
@@ -153,23 +151,6 @@ func ParseEndpoint(
 		accessUpdateMemberRoleBodyFlag         = accessUpdateMemberRoleFlags.String("body", "REQUIRED", "")
 		accessUpdateMemberRoleApikeyTokenFlag  = accessUpdateMemberRoleFlags.String("apikey-token", "", "")
 		accessUpdateMemberRoleSessionTokenFlag = accessUpdateMemberRoleFlags.String("session-token", "", "")
-
-		agentworkflowsFlags = flag.NewFlagSet("agentworkflows", flag.ContinueOnError)
-
-		agentworkflowsCreateResponseFlags                = flag.NewFlagSet("create-response", flag.ExitOnError)
-		agentworkflowsCreateResponseBodyFlag             = agentworkflowsCreateResponseFlags.String("body", "REQUIRED", "")
-		agentworkflowsCreateResponseApikeyTokenFlag      = agentworkflowsCreateResponseFlags.String("apikey-token", "", "")
-		agentworkflowsCreateResponseProjectSlugInputFlag = agentworkflowsCreateResponseFlags.String("project-slug-input", "", "")
-
-		agentworkflowsGetResponseFlags                = flag.NewFlagSet("get-response", flag.ExitOnError)
-		agentworkflowsGetResponseResponseIDFlag       = agentworkflowsGetResponseFlags.String("response-id", "REQUIRED", "")
-		agentworkflowsGetResponseApikeyTokenFlag      = agentworkflowsGetResponseFlags.String("apikey-token", "", "")
-		agentworkflowsGetResponseProjectSlugInputFlag = agentworkflowsGetResponseFlags.String("project-slug-input", "", "")
-
-		agentworkflowsDeleteResponseFlags                = flag.NewFlagSet("delete-response", flag.ExitOnError)
-		agentworkflowsDeleteResponseResponseIDFlag       = agentworkflowsDeleteResponseFlags.String("response-id", "REQUIRED", "")
-		agentworkflowsDeleteResponseApikeyTokenFlag      = agentworkflowsDeleteResponseFlags.String("apikey-token", "", "")
-		agentworkflowsDeleteResponseProjectSlugInputFlag = agentworkflowsDeleteResponseFlags.String("project-slug-input", "", "")
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -984,11 +965,6 @@ func ParseEndpoint(
 	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
 
-	agentworkflowsFlags.Usage = agentworkflowsUsage
-	agentworkflowsCreateResponseFlags.Usage = agentworkflowsCreateResponseUsage
-	agentworkflowsGetResponseFlags.Usage = agentworkflowsGetResponseUsage
-	agentworkflowsDeleteResponseFlags.Usage = agentworkflowsDeleteResponseUsage
-
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
 	assetsUploadImageFlags.Usage = assetsUploadImageUsage
@@ -1201,8 +1177,6 @@ func ParseEndpoint(
 			svcf = aboutFlags
 		case "access":
 			svcf = accessFlags
-		case "agentworkflows":
-			svcf = agentworkflowsFlags
 		case "assets":
 			svcf = assetsFlags
 		case "auditlogs":
@@ -1309,19 +1283,6 @@ func ParseEndpoint(
 
 			case "update-member-role":
 				epf = accessUpdateMemberRoleFlags
-
-			}
-
-		case "agentworkflows":
-			switch epn {
-			case "create-response":
-				epf = agentworkflowsCreateResponseFlags
-
-			case "get-response":
-				epf = agentworkflowsGetResponseFlags
-
-			case "delete-response":
-				epf = agentworkflowsDeleteResponseFlags
 
 			}
 
@@ -1904,19 +1865,6 @@ func ParseEndpoint(
 			case "update-member-role":
 				endpoint = c.UpdateMemberRole()
 				data, err = accessc.BuildUpdateMemberRolePayload(*accessUpdateMemberRoleBodyFlag, *accessUpdateMemberRoleApikeyTokenFlag, *accessUpdateMemberRoleSessionTokenFlag)
-			}
-		case "agentworkflows":
-			c := agentworkflowsc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "create-response":
-				endpoint = c.CreateResponse()
-				data, err = agentworkflowsc.BuildCreateResponsePayload(*agentworkflowsCreateResponseBodyFlag, *agentworkflowsCreateResponseApikeyTokenFlag, *agentworkflowsCreateResponseProjectSlugInputFlag)
-			case "get-response":
-				endpoint = c.GetResponse()
-				data, err = agentworkflowsc.BuildGetResponsePayload(*agentworkflowsGetResponseResponseIDFlag, *agentworkflowsGetResponseApikeyTokenFlag, *agentworkflowsGetResponseProjectSlugInputFlag)
-			case "delete-response":
-				endpoint = c.DeleteResponse()
-				data, err = agentworkflowsc.BuildDeleteResponsePayload(*agentworkflowsDeleteResponseResponseIDFlag, *agentworkflowsDeleteResponseApikeyTokenFlag, *agentworkflowsDeleteResponseProjectSlugInputFlag)
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2693,85 +2641,6 @@ func accessUpdateMemberRoleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-role --body '{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-// agentworkflowsUsage displays the usage of the agentworkflows command and its
-// subcommands.
-func agentworkflowsUsage() {
-	fmt.Fprintln(os.Stderr, `OpenAI Responses API compatible endpoint for running agent workflows.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agentworkflows COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create-response: Create a new agent response. Executes an agent workflow with the provided input and tools.`)
-	fmt.Fprintln(os.Stderr, `    get-response: Get the status of an async agent response by its ID.`)
-	fmt.Fprintln(os.Stderr, `    delete-response: Deletes any response associated with a given agent run.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s agentworkflows COMMAND --help\n", os.Args[0])
-}
-func agentworkflowsCreateResponseUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] agentworkflows create-response", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a new agent response. Executes an agent workflow with the provided input and tools.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func agentworkflowsGetResponseUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] agentworkflows get-response", os.Args[0])
-	fmt.Fprint(os.Stderr, " -response-id STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the status of an async agent response by its ID.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -response-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agentworkflows get-response --response-id \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func agentworkflowsDeleteResponseUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] agentworkflows delete-response", os.Args[0])
-	fmt.Fprint(os.Stderr, " -response-id STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Deletes any response associated with a given agent run.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -response-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agentworkflows delete-response --response-id \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

@@ -69,10 +69,15 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL;
 
 -- name: ListOrganizationUsers :many
-SELECT *
-FROM organization_user_relationships
-WHERE organization_id = @organization_id
-  AND deleted_at IS NULL;
+SELECT
+  our.*,
+  u.email AS user_email,
+  u.display_name AS user_display_name,
+  u.photo_url AS user_photo_url
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted_at IS NULL;
 
 -- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships

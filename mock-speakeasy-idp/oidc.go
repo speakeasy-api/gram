@@ -20,6 +20,7 @@ type OidcConfig struct {
 	ClientID     string
 	ClientSecret string
 	ExternalURL  string
+	GramSiteURL  string // Gram frontend URL for post-invite redirect (e.g. https://localhost:5173)
 }
 
 // IsOidcMode returns true when OIDC credentials are configured.
