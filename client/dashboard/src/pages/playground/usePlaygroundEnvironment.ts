@@ -54,10 +54,12 @@ export function usePlaygroundEnvironment(
   // We normalize on the client to match the server's transformation
   // (server/internal/conv/from.go:163), otherwise IDs containing
   // characters like underscores would diverge between client and server.
-  // Use a short prefix ("pg-") and only the first 8 hex chars of the
-  // user ID to stay within the 40-character slug limit enforced by the
-  // server (server/design/shared/datatypes.go).
-  const slug = toServerSlug(`pg-${user.id.slice(0, 8)}-${toolset.slug}`).slice(
+  // Use a short prefix ("pg-") and only the last 8 chars of the user
+  // ID to stay within the 40-character slug limit enforced by the
+  // server (server/design/shared/datatypes.go). We take the suffix
+  // because IDs are lexicographically sortable (timestamp-prefixed),
+  // so the trailing random component provides better uniqueness.
+  const slug = toServerSlug(`pg-${user.id.slice(-8)}-${toolset.slug}`).slice(
     0,
     40,
   );
