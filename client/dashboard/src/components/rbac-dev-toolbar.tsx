@@ -2,7 +2,7 @@ import { useOrganization } from "@/contexts/Auth";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Shield, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
 
@@ -279,11 +279,17 @@ export function RBACDevToolbar() {
                         resources: null,
                       };
                       const isExpanded = expandedScope === def.scope;
-                      const hasResources =
-                        def.resourceType === "project" && projects.length > 0;
                       const isRestricted =
                         scopeState.resources !== null &&
                         scopeState.resources.length > 0;
+                      const knownResources =
+                        def.resourceType === "project" ||
+                        def.resourceType === "mcp"
+                          ? projects.map((p) => ({
+                              id: p.id,
+                              label: p.slug,
+                            }))
+                          : [];
 
                       return (
                         <div key={def.scope}>
@@ -313,33 +319,31 @@ export function RBACDevToolbar() {
                                 )}
                               </div>
                             </div>
-                            {hasResources && scopeState.enabled && (
-                              <button
-                                type="button"
-                                className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExpandedScope(
-                                    isExpanded ? null : def.scope,
-                                  );
-                                }}
-                              >
-                                {isExpanded ? (
-                                  <ChevronUp className="w-3 h-3" />
-                                ) : (
-                                  <ChevronDown className="w-3 h-3" />
-                                )}
-                              </button>
-                            )}
+                            {scopeState.enabled &&
+                              def.resourceType !== "org" && (
+                                <button
+                                  type="button"
+                                  className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedScope(
+                                      isExpanded ? null : def.scope,
+                                    );
+                                  }}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-3 h-3" />
+                                  ) : (
+                                    <ChevronDown className="w-3 h-3" />
+                                  )}
+                                </button>
+                              )}
                           </div>
 
                           {/* Resource picker */}
-                          {isExpanded && hasResources && scopeState.enabled && (
+                          {isExpanded && scopeState.enabled && (
                             <ResourcePicker
-                              resources={projects.map((p) => ({
-                                id: p.id,
-                                label: p.slug,
-                              }))}
+                              knownResources={knownResources}
                               selected={scopeState.resources}
                               onChange={(resources) =>
                                 setScopeResources(def.scope, resources)
@@ -381,68 +385,146 @@ export function RBACDevToolbar() {
 }
 
 function ResourcePicker({
-  resources,
+  knownResources,
   selected,
   onChange,
 }: {
-  resources: { id: string; label: string }[];
+  knownResources: { id: string; label: string }[];
   selected: string[] | null;
   onChange: (resources: string[] | null) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const isAll = selected === null;
 
+  const alreadySelected = new Set(selected ?? []);
+
+  // Filter known resources by query, exclude already-selected
+  const suggestions = knownResources.filter((r) => {
+    if (alreadySelected.has(r.id)) return false;
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return r.label.toLowerCase().includes(q) || r.id.toLowerCase().includes(q);
+  });
+
+  const selectResource = (id: string) => {
+    onChange([...(selected ?? []), id]);
+    setQuery("");
+    setOpen(false);
+    inputRef.current?.focus();
+  };
+
+  const removeResource = (id: string) => {
+    const next = (selected ?? []).filter((s) => s !== id);
+    onChange(next.length === 0 ? null : next);
+  };
+
+  // Resolve label for a selected ID
+  const labelFor = (id: string) =>
+    knownResources.find((r) => r.id === id)?.label ?? id;
+
   return (
-    <div className="ml-7 mr-2 mb-1.5 rounded-lg border border-dashed border-border bg-muted/30 p-2 space-y-1">
-      <div className="flex items-center justify-between mb-1">
+    <div className="ml-7 mr-2 mb-1.5 rounded-lg border border-dashed border-border bg-muted/30 p-2 space-y-1.5">
+      <div className="flex items-center justify-between">
         <span className="text-[10px] font-medium text-muted-foreground">
           Resources
         </span>
         <button
           type="button"
           className={`text-[10px] transition-colors ${isAll ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
-          onClick={() => onChange(null)}
+          onClick={() => {
+            onChange(null);
+            setQuery("");
+          }}
         >
-          All
+          All (wildcard)
         </button>
       </div>
-      {resources.map((r) => {
-        const isSelected = isAll || selected?.includes(r.id);
-        return (
-          <div
-            key={r.id}
-            className="flex items-center gap-1.5 cursor-pointer group"
-            onClick={() => {
-              if (isAll) {
-                // Switching from unrestricted → only this one
-                onChange([r.id]);
-              } else if (isSelected) {
-                const next = selected.filter((id) => id !== r.id);
-                onChange(next.length === 0 ? null : next);
-              } else {
-                onChange([...(selected ?? []), r.id]);
-              }
-            }}
-          >
-            <div className={`
-                w-3 h-3 rounded-sm border flex items-center justify-center text-[8px] transition-all
-                ${isSelected ? "bg-blue-500 border-blue-500 text-white" : "border-muted-foreground/30 group-hover:border-muted-foreground/50"}
-              `}>{isSelected && "✓"}</div>
-            <span className="text-[11px] font-mono text-foreground truncate">
-              {r.label}
-            </span>
-            {isSelected && !isAll && (
+
+      {/* Selected resource chips */}
+      {!isAll && selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map((id) => (
+            <span
+              key={id}
+              className="inline-flex items-center gap-0.5 text-[10px] font-mono bg-foreground/10 text-foreground px-1.5 py-0.5 rounded"
+            >
+              {labelFor(id)}
               <X
-                className="w-2.5 h-2.5 ml-auto text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const next = (selected ?? []).filter((id) => id !== r.id);
-                  onChange(next.length === 0 ? null : next);
-                }}
+                className="w-2.5 h-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={() => removeResource(id)}
               />
-            )}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Typeahead input */}
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => {
+            // Delay to allow click on dropdown item
+            setTimeout(() => setOpen(false), 150);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && query.trim()) {
+              e.preventDefault();
+              // If there's an exact match in suggestions, select it
+              const match = suggestions.find(
+                (r) =>
+                  r.label.toLowerCase() === query.toLowerCase() ||
+                  r.id.toLowerCase() === query.toLowerCase(),
+              );
+              selectResource(match ? match.id : query.trim());
+            }
+            if (
+              e.key === "Backspace" &&
+              !query &&
+              selected &&
+              selected.length > 0
+            ) {
+              removeResource(selected[selected.length - 1]);
+            }
+          }}
+          placeholder={
+            isAll ? "type to restrict to specific resources…" : "add resource…"
+          }
+          className="w-full text-[11px] font-mono bg-background border border-border rounded px-1.5 py-1 text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/30"
+        />
+
+        {/* Dropdown */}
+        {open && suggestions.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-0.5 z-10 bg-background border border-border rounded shadow-lg max-h-[140px] overflow-y-auto">
+            {suggestions.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className="w-full text-left px-2 py-1 hover:bg-muted/50 transition-colors flex items-center gap-2"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectResource(r.id);
+                }}
+              >
+                <span className="text-[11px] font-mono text-foreground truncate">
+                  {r.label}
+                </span>
+                <span className="text-[9px] text-muted-foreground truncate ml-auto">
+                  {r.id}
+                </span>
+              </button>
+            ))}
           </div>
-        );
-      })}
+        )}
+      </div>
     </div>
   );
 }
