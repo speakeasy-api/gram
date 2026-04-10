@@ -1992,65 +1992,6 @@ function SourceVolumeChart({
 }
 
 // Shared ranked bar list used by volume/error breakdown charts
-function BarList<T extends { key: string; value: number }>({
-  items,
-  maxVisible = 5,
-  barClassName = "bg-primary",
-  renderLabel,
-  renderRight,
-}: {
-  items: T[];
-  maxVisible?: number;
-  barClassName?: string;
-  renderLabel: (item: T) => React.ReactNode;
-  renderRight?: (item: T) => React.ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const maxValue = items[0]?.value ?? 1;
-  const visible = expanded ? items : items.slice(0, maxVisible);
-
-  if (items.length === 0) {
-    return (
-      <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
-        No data
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2.5">
-      {visible.map((item) => (
-        <div key={item.key} className="flex min-w-0 items-center gap-3">
-          <div className="text-muted-foreground flex w-28 min-w-0 shrink-0 items-center justify-end gap-1.5 text-xs">
-            {renderLabel(item)}
-          </div>
-          <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
-            <div
-              className={cn("h-full rounded-full", barClassName)}
-              style={{
-                width: `${Math.max(2, (item.value / maxValue) * 100)}%`,
-              }}
-            />
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="text-muted-foreground w-8 text-right text-xs tabular-nums">
-              {item.value.toLocaleString()}
-            </span>
-            {renderRight?.(item)}
-          </div>
-        </div>
-      ))}
-      {items.length > maxVisible && (
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="text-muted-foreground hover:text-foreground mt-1 text-xs transition-colors"
-        >
-          {expanded ? "Show less" : `+${items.length - maxVisible} more`}
-        </button>
-      )}
-    </div>
-  );
-}
 
 function UserVolumeList({
   title,
