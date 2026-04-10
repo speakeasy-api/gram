@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
@@ -96,6 +97,11 @@ export default defineConfig(({ command }) => {
             "/v1": serverUrl,
           }
         : undefined,
+    },
+    test: {
+      environment: "happy-dom",
+      globals: true,
+      css: false,
     },
     plugins: [react(), tailwindcss()],
     resolve: {
