@@ -7,6 +7,7 @@ package database
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pgvector/pgvector-go"
 	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
@@ -144,6 +145,120 @@ type ChatUserFeedback struct {
 	UserResolutionNotes pgtype.Text
 	ChatResolutionID    uuid.NullUUID
 	CreatedAt           pgtype.Timestamptz
+}
+
+type CorpusAnnotation struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	FilePath       string
+	AuthorID       string
+	AuthorType     string
+	Content        string
+	LineStart      pgtype.Int4
+	LineEnd        pgtype.Int4
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type CorpusAutoPublishConfig struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	Enabled          bool
+	IntervalMinutes  int32
+	MinUpvotes       int32
+	AuthorTypeFilter pgtype.Text
+	LabelFilter      []byte
+	MinAgeHours      int32
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type CorpusChunk struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	ChunkID             string
+	FilePath            string
+	HeadingPath         pgtype.Text
+	Breadcrumb          pgtype.Text
+	Content             string
+	ContentText         string
+	ContentTsvector     interface{}
+	Embedding           pgvector.Vector
+	Metadata            []byte
+	Strategy            pgtype.Text
+	ManifestFingerprint pgtype.Text
+	ContentFingerprint  string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+}
+
+type CorpusDraft struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	FilePath       string
+	Content        pgtype.Text
+	Operation      string
+	Status         string
+	Source         pgtype.Text
+	AuthorType     pgtype.Text
+	Labels         []byte
+	CommitSha      pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type CorpusFeedback struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	FilePath       string
+	UserID         string
+	Direction      string
+	Labels         []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type CorpusFeedbackComment struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	FilePath       string
+	AuthorID       string
+	AuthorType     string
+	Content        string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type CorpusIndexState struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	LastIndexedSha pgtype.Text
+	EmbeddingModel pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type CorpusPublishEvent struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	CommitSha      string
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type CustomDomain struct {
