@@ -68,7 +68,12 @@ async function readDirRecursive(dirPath: string): Promise<ContextNode[]> {
       nodes.push({
         type: "file",
         name,
-        kind: name.endsWith(".json") ? "mcp-docs-config" : "markdown",
+        kind:
+          name === ".docs-mcp.json"
+            ? "mcp-docs-config"
+            : name === "SKILL.md"
+              ? "skill"
+              : "markdown",
         size: stat.size,
         updatedAt: new Date().toISOString(),
         versions: [],
