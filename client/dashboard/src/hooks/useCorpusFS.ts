@@ -1,17 +1,22 @@
 import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 import { fs } from "@zenfs/core";
+import { getServerURL } from "@/lib/utils";
 import type { ContextNode, DocsMcpConfig } from "@/pages/context/mock-data";
 
-const CORPUS_BASE = "/corpus";
+const ZENFS_BASE = "/corpus";
 
 function repoDir(projectId: string): string {
-  return `${CORPUS_BASE}/${projectId}`;
+  return `${ZENFS_BASE}/${projectId}`;
 }
 
+/**
+ * Clone the corpus git repo into ZenFS.
+ * The server mounts git smart HTTP at /corpus/git/{project_id}/.
+ */
 export async function cloneCorpus(
   projectId: string,
-  token: string,
+  token?: string,
 ): Promise<void> {
   const dir = repoDir(projectId);
 
@@ -19,15 +24,17 @@ export async function cloneCorpus(
     fs,
     http,
     dir,
-    url: `/v1/projects/${projectId}/corpus.git`,
+    url: `${getServerURL()}/corpus/git/${projectId}`,
     depth: 1,
-    onAuth: () => ({ username: "token", password: token }),
+    ...(token
+      ? { onAuth: () => ({ username: "token", password: token }) }
+      : {}),
   });
 }
 
 export async function fetchCorpus(
   projectId: string,
-  token: string,
+  token?: string,
 ): Promise<void> {
   const dir = repoDir(projectId);
 
@@ -35,7 +42,9 @@ export async function fetchCorpus(
     fs,
     http,
     dir,
-    onAuth: () => ({ username: "token", password: token }),
+    ...(token
+      ? { onAuth: () => ({ username: "token", password: token }) }
+      : {}),
   });
 }
 

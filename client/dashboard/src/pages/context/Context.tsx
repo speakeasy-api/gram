@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useProject, useSession } from "@/contexts/Auth";
 import { Dialog } from "@/components/ui/dialog";
 import {
   PageTabsTrigger,
@@ -9,6 +10,8 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { cloneCorpus, readCorpusTree } from "@/hooks/useCorpusFS";
+import { fetchDrafts, publishDrafts } from "@/hooks/useDrafts";
 import { cn } from "@/lib/utils";
 import { Icon, ResizablePanel } from "@speakeasy-api/moonshine";
 import {
@@ -48,8 +51,6 @@ import {
   formatRelativeTime,
   getEffectiveConfig,
   MOCK_ALL_ROLES,
-  MOCK_CONTEXT_TREE,
-  MOCK_DRAFT_DOCUMENTS,
   parseSkillFrontmatter,
   resolvePath,
 } from "./mock-data";
@@ -62,9 +63,85 @@ const RESIZABLE_PANEL_CLASS =
   "[&>[role='separator']]:w-px [&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:border-0 [&>[role='separator']]:hover:bg-primary [&>[role='separator']]:relative [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:cursor-col-resize";
 
 export default function ContextPage() {
-  const totalDrafts = MOCK_DRAFT_DOCUMENTS.filter(
-    (d) => d.status === "open",
-  ).length;
+  const project = useProject();
+  const { session } = useSession();
+
+  // ── Corpus tree from git ────────────────────────────────────────────────
+  const [corpusTree, setCorpusTree] = useState<ContextFolder | null>(null);
+  const [corpusLoading, setCorpusLoading] = useState(true);
+  const [corpusError, setCorpusError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!project.id) return;
+    let cancelled = false;
+
+    (async () => {
+      setCorpusLoading(true);
+      setCorpusError(null);
+      try {
+        await cloneCorpus(project.id, session || undefined);
+        const children = await readCorpusTree(project.id);
+        if (!cancelled) {
+          setCorpusTree({
+            type: "folder",
+            name: "docs",
+            children,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          // Empty repo is not an error — show empty tree
+          const msg = err instanceof Error ? err.message : String(err);
+          if (
+            msg.includes("Could not find") ||
+            msg.includes("empty") ||
+            msg.includes("404") ||
+            msg.includes("HttpError")
+          ) {
+            setCorpusTree({
+              type: "folder",
+              name: "docs",
+              children: [],
+              updatedAt: new Date().toISOString(),
+            });
+          } else {
+            setCorpusError(msg);
+          }
+        }
+      } finally {
+        if (!cancelled) setCorpusLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, session]);
+
+  // ── Drafts from API ────────────────────────────────────────────────────
+  const [drafts, setDrafts] = useState<DraftDocument[]>([]);
+  const [draftsLoading, setDraftsLoading] = useState(true);
+
+  const loadDrafts = useCallback(async () => {
+    if (!project.id) return;
+    setDraftsLoading(true);
+    try {
+      const result = await fetchDrafts(project.id);
+      setDrafts(result);
+    } catch {
+      // Silently fall back to empty — API may not be deployed yet
+      setDrafts([]);
+    } finally {
+      setDraftsLoading(false);
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    loadDrafts();
+  }, [loadDrafts]);
+
+  const totalDrafts = drafts.filter((d) => d.status === "open").length;
 
   return (
     <Page>
@@ -92,13 +169,22 @@ export default function ContextPage() {
             </div>
           </div>
           <TabsContent value="content" className="flex-1 min-h-0">
-            <ContentTab />
+            <ContentTab
+              tree={corpusTree}
+              loading={corpusLoading}
+              error={corpusError}
+            />
           </TabsContent>
           <TabsContent
             value="pending-changes"
             className="flex-1 min-h-0 p-8 overflow-y-auto"
           >
-            <PendingChangesTab />
+            <PendingChangesTab
+              drafts={drafts}
+              loading={draftsLoading}
+              projectId={project.id}
+              onPublished={loadDrafts}
+            />
           </TabsContent>
           <TabsContent
             value="observability"
@@ -114,14 +200,30 @@ export default function ContextPage() {
 
 // ── Content Tab ────────────────────────────────────────────────────────────
 
-function ContentTab() {
+const EMPTY_TREE: ContextFolder = {
+  type: "folder",
+  name: "docs",
+  children: [],
+  updatedAt: new Date().toISOString(),
+};
+
+function ContentTab({
+  tree,
+  loading,
+  error,
+}: {
+  tree: ContextFolder | null;
+  loading: boolean;
+  error: string | null;
+}) {
   const [selectedFile, setSelectedFile] = useState<ContextFile | null>(null);
   const [selectedPath, setSelectedPath] = useState<string[]>([]);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
   const [viewAsRole, setViewAsRole] = useState<string | null>(null);
 
-  const effectiveConfig = getEffectiveConfig(MOCK_CONTEXT_TREE, selectedPath);
-  const selectedFolder = resolvePath(MOCK_CONTEXT_TREE, selectedPath);
+  const contextTree = tree ?? EMPTY_TREE;
+  const effectiveConfig = getEffectiveConfig(contextTree, selectedPath);
+  const selectedFolder = resolvePath(contextTree, selectedPath);
 
   const handleFileSelect = (file: ContextFile, path: string[]) => {
     setSelectedFile(file);
@@ -195,15 +297,30 @@ function ContentTab() {
               )}
             </div>
             <div className="flex-1 overflow-y-auto py-1">
-              <TreeNode
-                node={MOCK_CONTEXT_TREE}
-                depth={0}
-                selectedFile={selectedFile}
-                onFileSelect={handleFileSelect}
-                onFolderSelect={handleFolderSelect}
-                parentPath={[]}
-                viewAsRole={viewAsRole}
-              />
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Type small muted>
+                    Loading corpus...
+                  </Type>
+                </div>
+              ) : error ? (
+                <div className="flex items-center justify-center py-8">
+                  <Type small muted className="text-destructive">
+                    {error}
+                  </Type>
+                </div>
+              ) : (
+                <TreeNode
+                  node={contextTree}
+                  depth={0}
+                  selectedFile={selectedFile}
+                  onFileSelect={handleFileSelect}
+                  onFolderSelect={handleFolderSelect}
+                  parentPath={[]}
+                  viewAsRole={viewAsRole}
+                  configs={collectConfigs(contextTree)}
+                />
+              )}
             </div>
           </div>
         </ResizablePanel.Pane>
@@ -265,11 +382,13 @@ function collectConfigs(folder: ContextFolder): DocsMcpConfig[] {
   return configs;
 }
 
-const ALL_CONFIGS = collectConfigs(MOCK_CONTEXT_TREE);
-
 /** Check if a path is denied for a role across all .docs-mcp.json configs. */
-function isPathDeniedForRole(role: string, nodePath: string): boolean {
-  return ALL_CONFIGS.some((config) => {
+function isPathDeniedForRole(
+  configs: DocsMcpConfig[],
+  role: string,
+  nodePath: string,
+): boolean {
+  return configs.some((config) => {
     if (!config.accessControl) return false;
     const rule = config.accessControl.find((r) => r.role === role);
     if (!rule) return false;
@@ -288,6 +407,7 @@ function TreeNode({
   onFolderSelect,
   parentPath,
   viewAsRole,
+  configs,
 }: {
   node: ContextNode;
   depth: number;
@@ -296,6 +416,7 @@ function TreeNode({
   onFolderSelect: (path: string[]) => void;
   parentPath: string[];
   viewAsRole?: string | null;
+  configs?: DocsMcpConfig[];
 }) {
   const [expanded, setExpanded] = useState(depth < 1);
 
@@ -306,7 +427,9 @@ function TreeNode({
       : [...parentPath, node.name].join("/") +
         (node.type === "folder" ? "/" : "");
   const isDenied =
-    viewAsRole != null && nodePath && isPathDeniedForRole(viewAsRole, nodePath);
+    viewAsRole != null &&
+    nodePath &&
+    isPathDeniedForRole(configs ?? [], viewAsRole, nodePath);
 
   // Files indent past the chevron column so they align with the folder name,
   // not the chevron. Folders: base + chevron(w-3) + gap(1.5) + folder-icon.
@@ -402,6 +525,7 @@ function TreeNode({
               onFolderSelect={onFolderSelect}
               parentPath={folderPath}
               viewAsRole={viewAsRole}
+              configs={configs}
             />
           ))}
         </div>
@@ -414,11 +538,37 @@ function TreeNode({
 
 type YoloSchedule = "off" | "24h" | "weekly";
 
-function PendingChangesTab() {
-  const drafts = MOCK_DRAFT_DOCUMENTS;
+function PendingChangesTab({
+  drafts,
+  loading: _loading,
+  projectId,
+  onPublished,
+}: {
+  drafts: DraftDocument[];
+  loading: boolean;
+  projectId: string;
+  onPublished: () => void;
+}) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("hot");
   const [yoloSchedule, setYoloSchedule] = useState<YoloSchedule>("off");
+  const [publishing, setPublishing] = useState(false);
+
+  const handlePublish = useCallback(
+    async (draftId: string) => {
+      if (!projectId || publishing) return;
+      setPublishing(true);
+      try {
+        await publishDrafts(projectId, undefined, [draftId]);
+        onPublished();
+      } catch (err) {
+        console.error("Failed to publish draft:", err);
+      } finally {
+        setPublishing(false);
+      }
+    },
+    [projectId, publishing, onPublished],
+  );
 
   const sorted = useMemo(() => {
     const open = drafts.filter((d) => d.status === "open");
@@ -523,6 +673,7 @@ function PendingChangesTab() {
             onToggle={() =>
               setExpandedId(expandedId === draft.id ? null : draft.id)
             }
+            onPublish={handlePublish}
           />
         ))}
       </div>
@@ -605,10 +756,12 @@ function DraftDocumentCard({
   draft,
   expanded,
   onToggle,
+  onPublish,
 }: {
   draft: DraftDocument;
   expanded: boolean;
   onToggle: () => void;
+  onPublish?: (draftId: string) => void;
 }) {
   const score = draft.upvotes - draft.downvotes;
   const isEdit = draft.filePath !== null;
@@ -692,7 +845,12 @@ function DraftDocumentCard({
               </Type>
             </button>
             <div className="flex gap-1 shrink-0">
-              <Button size="sm" variant="outline" className="h-6 px-2 text-xs">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs"
+                onClick={() => onPublish?.(draft.id)}
+              >
                 Publish
               </Button>
               <Button
