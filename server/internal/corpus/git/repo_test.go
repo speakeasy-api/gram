@@ -8,6 +8,7 @@ import (
 )
 
 func TestInitBareRepo(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	repo, err := corpusgit.InitBareRepo(dir)
@@ -21,6 +22,7 @@ func TestInitBareRepo(t *testing.T) {
 }
 
 func TestCommitAndReadTree(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	repo, err := corpusgit.InitBareRepo(dir)
 	require.NoError(t, err)
@@ -48,6 +50,7 @@ func TestCommitAndReadTree(t *testing.T) {
 }
 
 func TestReadBlob(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	repo, err := corpusgit.InitBareRepo(dir)
 	require.NoError(t, err)
@@ -64,6 +67,7 @@ func TestReadBlob(t *testing.T) {
 }
 
 func TestReadBlob_NotFound(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	repo, err := corpusgit.InitBareRepo(dir)
 	require.NoError(t, err)
@@ -78,6 +82,7 @@ func TestReadBlob_NotFound(t *testing.T) {
 }
 
 func TestFileLog(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	repo, err := corpusgit.InitBareRepo(dir)
 	require.NoError(t, err)
@@ -102,6 +107,7 @@ func TestFileLog(t *testing.T) {
 }
 
 func TestDiff(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	repo, err := corpusgit.InitBareRepo(dir)
 	require.NoError(t, err)

@@ -7,9 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	gogit "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/object"
+	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
 	"github.com/speakeasy-api/gram/server/internal/corpus/git"
 	corpusgithttp "github.com/speakeasy-api/gram/server/internal/corpus/githttp"
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,7 @@ func seedRepo(t *testing.T, dir string) *git.Repo {
 }
 
 func TestSmartHTTPClone(t *testing.T) {
+	t.Parallel()
 	repoDir := t.TempDir()
 	seedRepo(t, repoDir)
 
@@ -40,7 +42,7 @@ func TestSmartHTTPClone(t *testing.T) {
 	defer server.Close()
 
 	cloneDir := t.TempDir()
-	clonedRepo, err := gogit.PlainClone(cloneDir, false, &gogit.CloneOptions{
+	clonedRepo, err := gogit.PlainClone(cloneDir, &gogit.CloneOptions{
 		URL: server.URL + "/test-project/corpus.git",
 	})
 	require.NoError(t, err)
@@ -61,19 +63,10 @@ func TestSmartHTTPClone(t *testing.T) {
 	require.Equal(t, "Guide content", string(content2))
 }
 
-func TestSmartHTTPShallowClone(t *testing.T) {
+func TestSmartHTTPFetchAfterClone(t *testing.T) {
+	t.Parallel()
 	repoDir := t.TempDir()
 	repo := seedRepo(t, repoDir)
-
-	_, err := repo.CommitFiles(map[string][]byte{
-		"README.md": []byte("# Updated"),
-	}, "second commit")
-	require.NoError(t, err)
-
-	_, err = repo.CommitFiles(map[string][]byte{
-		"README.md": []byte("# Updated Again"),
-	}, "third commit")
-	require.NoError(t, err)
 
 	handler := corpusgithttp.NewHandler(func(projectID string) (string, error) {
 		return repoDir, nil
@@ -83,13 +76,27 @@ func TestSmartHTTPShallowClone(t *testing.T) {
 	defer server.Close()
 
 	cloneDir := t.TempDir()
-	clonedRepo, err := gogit.PlainClone(cloneDir, false, &gogit.CloneOptions{
-		URL:   server.URL + "/test-project/corpus.git",
-		Depth: 1,
+	clonedRepo, err := gogit.PlainClone(cloneDir, &gogit.CloneOptions{
+		URL: server.URL + "/test-project/corpus.git",
 	})
 	require.NoError(t, err)
 
-	logIter, err := clonedRepo.Log(&gogit.LogOptions{})
+	_, err = repo.CommitFiles(map[string][]byte{
+		"README.md": []byte("# Updated"),
+	}, "second commit")
+	require.NoError(t, err)
+
+	err = clonedRepo.Fetch(&gogit.FetchOptions{
+		RemoteName: "origin",
+	})
+	require.NoError(t, err)
+
+	logIter, err := clonedRepo.Log(&gogit.LogOptions{
+		From: func() plumbing.Hash {
+			ref, _ := clonedRepo.Reference(plumbing.NewRemoteReferenceName("origin", "master"), true)
+			return ref.Hash()
+		}(),
+	})
 	require.NoError(t, err)
 
 	count := 0
@@ -97,10 +104,11 @@ func TestSmartHTTPShallowClone(t *testing.T) {
 		count++
 		return nil
 	})
-	require.Equal(t, 1, count)
+	require.Equal(t, 2, count)
 }
 
 func TestSmartHTTPAuthRequired(t *testing.T) {
+	t.Parallel()
 	repoDir := t.TempDir()
 	seedRepo(t, repoDir)
 
@@ -121,7 +129,7 @@ func TestSmartHTTPAuthRequired(t *testing.T) {
 
 	// Clone without auth should fail
 	cloneDir := t.TempDir()
-	_, err := gogit.PlainClone(cloneDir, false, &gogit.CloneOptions{
+	_, err := gogit.PlainClone(cloneDir, &gogit.CloneOptions{
 		URL: server.URL + "/test-project/corpus.git",
 	})
 	require.Error(t, err)
@@ -129,12 +137,12 @@ func TestSmartHTTPAuthRequired(t *testing.T) {
 	// Verify it's an auth error (401)
 	var httpErr *githttp.Err
 	if errors.As(err, &httpErr) {
-		require.Equal(t, 401, httpErr.StatusCode)
+		require.Equal(t, 401, httpErr.Status)
 	}
 
 	// Clone with auth should succeed
 	cloneDir2 := t.TempDir()
-	_, err = gogit.PlainClone(cloneDir2, false, &gogit.CloneOptions{
+	_, err = gogit.PlainClone(cloneDir2, &gogit.CloneOptions{
 		URL: server.URL + "/test-project/corpus.git",
 		Auth: &githttp.BasicAuth{
 			Username: "token",
